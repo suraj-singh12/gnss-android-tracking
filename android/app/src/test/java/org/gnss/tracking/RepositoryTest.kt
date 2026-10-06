@@ -182,4 +182,170 @@ class RepositoryTest {
         assertEquals(pending.json, repository.next(3)!!.json)
         assertFalse(db.dao().row(pending.sequence)!!.quarantined)
     }
+
+    private fun ackResponse(json: String): Response {
+        val message = Protocol.decodeMessage(json)
+        val ack =
+            Protocol.parse(javaClass.classLoader!!.getResource("ack-stored.json")!!.readText())
+        ack.addProperty("device_id", message.device_id)
+        ack.addProperty("message_id", message.message_id)
+        ack.addProperty("sequence", message.sequence)
+        return Response(200, ack.toString())
+    }
+
+    @Test
+    fun reconnectRetriesFreshCurrentBeforeBacklogWithoutAnotherSnapshot() = runBlocking {
+        val clock = FakeClock()
+        repository.settings("A", "B", "http://192.168.1.2", 10)
+        val backlog = repository.snapshot(clock.now - 100, null, Health())
+        val current = repository.snapshot(clock.now, null, Health())
+        val payloads = mutableListOf<String>()
+        var captures = 0
+        val sender =
+            Sender(
+                repository,
+                Transport { _, json ->
+                    payloads.add(json)
+                    if (payloads.size == 1) throw java.io.IOException("Wi-Fi lost")
+                    ackResponse(json)
+                },
+                clock,
+            ) {
+                captures++
+                repository.snapshot(clock.now, null, Health())
+            }
+        sender.step()
+        val failed = db.dao().row(current.sequence)!!
+        assertTrue(failed.nextAttemptMillis > clock.now)
+        assertEquals(backlog.sequence, repository.next(clock.now)!!.sequence)
+        clock.now += 100 // Network comes back before the persisted retry deadline.
+        sender.connectivityRestored()
+        assertEquals(failed.copy(nextAttemptMillis = 0), db.dao().row(current.sequence))
+        sender.step()
+        sender.step()
+        assertEquals(listOf(current.json, current.json, backlog.json), payloads)
+        assertEquals(0, captures)
+        assertEquals(2L, repository.state().sequence)
+        assertEquals(2, db.dao().all().size)
+    }
+
+    @Test
+    fun reconnectRetriesSosBeforeCurrentAndBacklog() = runBlocking {
+        val clock = FakeClock()
+        repository.settings("A", "B", "http://192.168.1.2", 10)
+        val fixture =
+            Protocol.decodeMessage(
+                    javaClass.classLoader!!.getResource("sos-no-fix.json")!!.readText()
+                )
+                .copy(device_id = repository.state().deviceId, captured_at = utc(clock.now))
+        val sos =
+            Outbound(
+                fixture.sequence,
+                fixture.message_id,
+                "sos",
+                clock.now,
+                Protocol.encode(fixture),
+            )
+        // Seed the reserved SOS structure; the production trigger remains out of scope.
+        db.dao().update(repository.state().copy(sequence = sos.sequence))
+        db.dao().insert(sos)
+        val backlog = repository.snapshot(clock.now - 100, null, Health())
+        val current = repository.snapshot(clock.now, null, Health())
+        val payloads = mutableListOf<String>()
+        var captures = 0
+        val sender =
+            Sender(
+                repository,
+                Transport { _, json ->
+                    payloads.add(json)
+                    if (payloads.size == 1) throw java.io.IOException("Wi-Fi lost")
+                    ackResponse(json)
+                },
+                clock,
+            ) {
+                captures++
+                repository.snapshot(clock.now, null, Health())
+            }
+        sender.step()
+        assertTrue(db.dao().row(sos.sequence)!!.nextAttemptMillis > clock.now)
+        clock.now += 100
+        sender.connectivityRestored()
+        repeat(3) { sender.step() }
+        assertEquals(listOf(sos.json, sos.json, current.json, backlog.json), payloads)
+        assertEquals(0, captures)
+        assertEquals(3, db.dao().all().size)
+    }
+
+    @Test
+    fun transientFailureKeepsBackoffWithoutConnectivityRestoration() = runBlocking {
+        val clock = FakeClock()
+        repository.settings("A", "B", "http://192.168.1.2", 10)
+        repository.snapshot(clock.now - 100, null, Health())
+        val current = repository.snapshot(clock.now, null, Health())
+        val payloads = mutableListOf<String>()
+        val sender =
+            Sender(
+                repository,
+                Transport { _, json ->
+                    payloads.add(json)
+                    if (payloads.size == 1) throw java.io.IOException("Wi-Fi lost")
+                    ackResponse(json)
+                },
+                clock,
+            ) {
+                error("Fresh current should not be recaptured")
+            }
+        sender.step()
+        val failed = db.dao().row(current.sequence)!!
+        clock.now += 999
+        sender.step()
+        assertEquals(listOf(current.json), payloads)
+        assertEquals(failed, db.dao().row(current.sequence))
+        clock.now += 1
+        sender.step()
+        assertEquals(listOf(current.json, current.json), payloads)
+        assertNotNull(db.dao().row(current.sequence)!!.deliveredAt)
+    }
+
+    @Test
+    fun reconnectResetPersistsWithoutRevivingQuarantineOrReceiverPause() = runBlocking {
+        val clock = FakeClock()
+        repository.settings("A", "B", "http://192.168.1.2", 10)
+        val generation = repository.state().endpointGeneration
+        val transient = repository.snapshot(clock.now, null, Health())
+        val quarantined = repository.snapshot(clock.now, null, Health())
+        val delivered = repository.snapshot(clock.now, null, Health())
+        for (row in listOf(transient, quarantined, delivered)) {
+            repository.fail(row, "Saved failure", clock.now + 30000, row == quarantined, generation)
+        }
+        repository.accept(delivered, receipt(delivered), generation)
+        repository.pauseReceiver("Incompatible receiver", generation)
+        val before = db.dao().all()
+        val stateBefore = repository.state()
+        var requests = 0
+        val sender =
+            Sender(
+                repository,
+                Transport { _, _ ->
+                    requests++
+                    error("Paused receiver must not transmit")
+                },
+                clock,
+            ) {
+                error("Paused receiver must not capture")
+            }
+        sender.connectivityRestored()
+        sender.step()
+        assertEquals(0, requests)
+        db.close()
+        open()
+        assertEquals(stateBefore, repository.state())
+        assertEquals(
+            before.map {
+                if (it.sequence == transient.sequence) it.copy(nextAttemptMillis = 0) else it
+            },
+            db.dao().all(),
+        )
+        assertTrue(db.dao().row(quarantined.sequence)!!.quarantined)
+    }
 }

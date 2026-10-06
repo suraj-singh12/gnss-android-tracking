@@ -147,6 +147,9 @@ class Sender(
 
     suspend fun connectivityRestored() =
         mutex.withLock {
+            // Clear durable transient deadlines before selecting recovery work. Otherwise
+            // an eligible backlog row can jump ahead of a delayed SOS/current row.
+            store.resetTransientRetryTiming()
             recovering = true
             if (!endpointBlocked) waitUntil = 0
         }

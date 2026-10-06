@@ -54,6 +54,14 @@ class MemoryStore : MessageStore {
             ?: eligible.minByOrNull { it.sequence }
     }
 
+    override suspend fun resetTransientRetryTiming() {
+        for (index in rows.indices) {
+            val row = rows[index]
+            if (row.deliveredAt == null && !row.quarantined)
+                rows[index] = row.copy(nextAttemptMillis = 0)
+        }
+    }
+
     override suspend fun accept(row: Outbound, receipt: Receipt, generation: Long) {
         delivered.add(row.sequence)
         rows[rows.indexOfFirst { it.sequence == row.sequence }] =

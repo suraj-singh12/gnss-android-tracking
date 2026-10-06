@@ -94,6 +94,9 @@ interface TrackingDao {
     )
     suspend fun releasePending()
 
+    @Query("UPDATE outbox SET nextAttemptMillis=0 WHERE deliveredAt IS NULL AND quarantined=0")
+    suspend fun resetTransientRetryTiming()
+
     @Query("SELECT * FROM outbox ORDER BY sequence") suspend fun all(): List<Outbound>
 }
 
@@ -115,6 +118,8 @@ interface MessageStore {
     suspend fun next(now: Long, currentAfter: Long = 0): Outbound?
 
     suspend fun newest(): Outbound?
+
+    suspend fun resetTransientRetryTiming()
 
     suspend fun accept(row: Outbound, receipt: Receipt, generation: Long)
 
@@ -172,6 +177,8 @@ class Repository(val db: TrackingDatabase, private val clock: Clock = SystemCloc
         }
 
     override suspend fun newest() = dao.newest()
+
+    override suspend fun resetTransientRetryTiming() = dao.resetTransientRetryTiming()
 
     override suspend fun next(now: Long, currentAfter: Long): Outbound? {
         dao.sos(now)?.let {
