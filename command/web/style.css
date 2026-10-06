@@ -1,0 +1,274 @@
+:root {
+  font:
+    16px system-ui,
+    sans-serif;
+  color: #202d3a;
+  background: #f4f6f8;
+  font-variant-numeric: tabular-nums;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding: 16px 24px;
+  background: white;
+  border-bottom: 1px solid #d6dde3;
+}
+.brand {
+  font-weight: 750;
+  letter-spacing: 0.08em;
+}
+.brand span {
+  display: block;
+  font-size: 12px;
+  letter-spacing: 0;
+  color: #586776;
+  margin-top: 4px;
+}
+.controls {
+  display: flex;
+  gap: 8px;
+}
+button,
+input {
+  font: inherit;
+  border: 1px solid #a6b2bd;
+  border-radius: 6px;
+  padding: 8px 12px;
+  background: white;
+  color: #202d3a;
+}
+button {
+  cursor: pointer;
+  min-height: 36px;
+}
+button:first-child {
+  background: #163e64;
+  color: white;
+  border-color: #163e64;
+}
+button.quiet {
+  background: white;
+  color: #6a3030;
+}
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+input {
+  width: 88px;
+}
+button:focus-visible,
+input:focus-visible,
+summary:focus-visible,
+circle:focus-visible {
+  outline: 3px solid #2569ae;
+  outline-offset: 3px;
+}
+header label {
+  font-size: 14px;
+}
+#recording {
+  margin-left: auto;
+  font-weight: 600;
+  font-size: 14px;
+}
+main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  height: calc(100vh - 136px);
+  min-height: 480px;
+}
+.canvas {
+  position: relative;
+  min-height: 420px;
+  background: #fff;
+  overflow: hidden;
+}
+#tracks {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.canvas-note {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.canvas-note span {
+  font-weight: 400;
+  color: #586776;
+  margin-left: 12px;
+}
+#empty {
+  position: absolute;
+  top: 45%;
+  width: 100%;
+  text-align: center;
+  color: #586776;
+  pointer-events: none;
+}
+small {
+  display: block;
+  font-size: 12px;
+  margin-top: 8px;
+}
+#hover {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  right: 16px;
+  padding: 12px;
+  background: #f4f6f8e8;
+  border-radius: 6px;
+  font-size: 14px;
+  pointer-events: none;
+}
+aside {
+  overflow: auto;
+  border-left: 1px solid #d6dde3;
+  padding: 24px 16px;
+}
+.aside-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+h1 {
+  font-size: 18px;
+  margin: 0 0 16px;
+}
+.device {
+  padding: 16px 0;
+  border-bottom: 1px solid #d6dde3;
+}
+.device-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 650;
+}
+.swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.device input[type="checkbox"] {
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
+}
+.distance {
+  font-size: 24px;
+  font-weight: 650;
+  margin: 8px 0;
+}
+.status {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #586776;
+}
+.healthy {
+  color: #24633f;
+}
+.delayed {
+  color: #805b13;
+}
+.contact_lost {
+  color: #a13030;
+}
+.override {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-top: 12px;
+}
+.override input {
+  width: 76px;
+}
+.override button {
+  font-size: 12px;
+  padding: 6px;
+  background: white;
+  color: #202d3a;
+  border: 1px solid #a6b2bd;
+}
+details {
+  margin-top: 24px;
+  font-size: 14px;
+}
+summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+details p {
+  line-height: 1.5;
+  color: #586776;
+}
+#quality-form label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 12px 0;
+  gap: 8px;
+}
+#quality-form input {
+  width: 90px;
+}
+footer {
+  font-size: 12px;
+  color: #586776;
+  padding: 12px 24px;
+  border-top: 1px solid #d6dde3;
+}
+#error {
+  background: #fff0ee;
+  color: #8d2424;
+  padding: 12px 24px;
+}
+circle {
+  cursor: crosshair;
+}
+polyline {
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+@media (max-width: 900px) {
+  header {
+    gap: 12px;
+    padding: 12px;
+  }
+  .controls {
+    flex-wrap: wrap;
+  }
+  main {
+    grid-template-columns: minmax(0, 1fr) 280px;
+    height: calc(100vh - 190px);
+  }
+}
+@media (max-width: 650px) {
+  main {
+    display: block;
+    height: auto;
+  }
+  .canvas {
+    height: 60vh;
+  }
+  aside {
+    border-left: 0;
+    border-top: 1px solid #d6dde3;
+  }
+  #recording {
+    margin-left: 0;
+  }
+}

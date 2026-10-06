@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Command · Party tracker</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <div class="brand">COMMAND <span>Party tracker</span></div>
+      <div class="controls">
+        <button id="start">Start Recording</button
+        ><button id="stop">Stop Recording</button
+        ><button id="resume">Resume</button
+        ><button id="clear" class="quiet">Clear Recording</button>
+      </div>
+      <label
+        >Display-dot interval
+        <input
+          id="dots"
+          type="number"
+          min="10"
+          max="86400"
+          step="10"
+          value="30"
+        />
+        s</label
+      ><span id="recording" role="status">Connecting…</span>
+    </header>
+    <div id="error" role="alert" hidden></div>
+    <main>
+      <section class="canvas" aria-label="Recorded tracks">
+        <div class="canvas-note">
+          N ↑ <span>Local metric view · north up</span>
+        </div>
+        <svg
+          id="tracks"
+          role="img"
+          aria-label="Accepted geographic tracks"
+        ></svg>
+        <div id="empty">
+          Start a recording to collect tracks.<small
+            >Phones continue Tracking when Command Recording is stopped.</small
+          >
+        </div>
+        <div id="hover" role="status">
+          Hover or focus a point for travelled distance, time and accuracy.
+        </div>
+      </section>
+      <aside>
+        <div class="aside-title">
+          <h1>Devices</h1>
+          <span id="count">0</span>
+        </div>
+        <div id="devices"></div>
+        <details id="quality">
+          <summary>Track quality settings</summary>
+          <p>
+            Changes open a new policy segment. Earlier history keeps its
+            settings.
+          </p>
+          <form id="quality-form"></form>
+        </details>
+      </aside>
+    </main>
+    <footer>
+      Local only · Geographic distance · All accepted points form the line
+    </footer>
+  </body>
+</html>
