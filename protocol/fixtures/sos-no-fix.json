@@ -1,0 +1,32 @@
+{
+  "protocol_version": 1,
+  "type": "sos",
+  "device_id": "11111111-1111-4111-8111-111111111111",
+  "party": {
+    "id": "Alpha",
+    "name": "North team"
+  },
+  "message_id": "00000000-0000-4000-8000-000000000009",
+  "sequence": 9,
+  "captured_at": "2026-10-06T12:00:53.000Z",
+  "config_state": {
+    "authority_id": null,
+    "version": 0,
+    "reporting_interval_override_s": null,
+    "local_reporting_interval_s": 10,
+    "effective_reporting_interval_s": 10
+  },
+  "health": {
+    "battery_percent": 85,
+    "charging": false,
+    "wifi_connected": true,
+    "wifi_rssi_dbm": -55,
+    "gnss_status": "no_fix",
+    "satellites_used": 12
+  },
+  "fix": null,
+  "sos": {
+    "event_id": "00000000-0000-4000-8000-000000000009",
+    "triggered_at": "2026-10-06T12:00:53.000Z"
+  }
+}

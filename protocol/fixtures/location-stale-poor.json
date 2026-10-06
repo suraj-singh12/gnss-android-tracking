@@ -1,0 +1,38 @@
+{
+  "protocol_version": 1,
+  "type": "location",
+  "device_id": "11111111-1111-4111-8111-111111111111",
+  "party": {
+    "id": "Alpha",
+    "name": "North team"
+  },
+  "message_id": "00000000-0000-4000-8000-000000000002",
+  "sequence": 2,
+  "captured_at": "2026-10-06T12:00:10.000Z",
+  "config_state": {
+    "authority_id": null,
+    "version": 0,
+    "reporting_interval_override_s": null,
+    "local_reporting_interval_s": 10,
+    "effective_reporting_interval_s": 10
+  },
+  "health": {
+    "battery_percent": 85,
+    "charging": false,
+    "wifi_connected": true,
+    "wifi_rssi_dbm": -55,
+    "gnss_status": "fix",
+    "satellites_used": 12
+  },
+  "fix": {
+    "observed_at": "2026-10-06T11:59:00.000Z",
+    "fix_age_ms": 70000,
+    "latitude": 28.6139,
+    "longitude": 77.209,
+    "horizontal_accuracy_m": 80,
+    "altitude_m": null,
+    "altitude_accuracy_m": null,
+    "speed_mps": null,
+    "bearing_deg": null
+  }
+}

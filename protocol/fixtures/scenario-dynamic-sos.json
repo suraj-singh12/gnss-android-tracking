@@ -1,0 +1,30 @@
+{
+  "name": "Dynamic join, party rename, SOS with and without fix",
+  "steps": [
+    {
+      "after_ms": 0,
+      "request": "location-normal.json",
+      "ack": "ack-stored.json"
+    },
+    {
+      "after_ms": 10,
+      "request": "location-second-device.json",
+      "ack": "ack-second-device.json"
+    },
+    {
+      "after_ms": 10,
+      "request": "location-renamed-party.json",
+      "ack": "ack-renamed-party.json"
+    },
+    {
+      "after_ms": 10,
+      "request": "sos-fix.json",
+      "ack": "ack-sos-fix.json"
+    },
+    {
+      "after_ms": 10,
+      "request": "sos-no-fix.json",
+      "ack": "ack-sos-no-fix.json"
+    }
+  ]
+}
