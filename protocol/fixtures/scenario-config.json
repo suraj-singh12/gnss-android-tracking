@@ -1,0 +1,30 @@
+{
+  "name": "Override, local edit under override, clear, echo fallback",
+  "steps": [
+    {
+      "after_ms": 0,
+      "request": "location-normal.json",
+      "ack": "ack-stored.json"
+    },
+    {
+      "after_ms": 10,
+      "request": "location-normal.json",
+      "ack": "ack-override.json"
+    },
+    {
+      "after_ms": 10,
+      "request": "location-config-applied.json",
+      "ack": "ack-config-applied.json"
+    },
+    {
+      "after_ms": 10,
+      "request": "location-normal.json",
+      "ack": "ack-clear.json"
+    },
+    {
+      "after_ms": 10,
+      "request": "location-config-cleared.json",
+      "ack": "ack-config-cleared.json"
+    }
+  ]
+}

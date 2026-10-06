@@ -1,0 +1,25 @@
+{
+  "name": "Current first, delayed backlog, duplicate",
+  "steps": [
+    {
+      "after_ms": 0,
+      "request": "location-current.json",
+      "ack": "ack-current.json"
+    },
+    {
+      "after_ms": 10,
+      "request": "location-backlog.json",
+      "ack": "ack-backlog.json"
+    },
+    {
+      "after_ms": 10,
+      "request": "location-normal.json",
+      "ack": "ack-stored.json"
+    },
+    {
+      "after_ms": 10,
+      "request": "location-normal.json",
+      "ack": "ack-duplicate.json"
+    }
+  ]
+}
