@@ -85,6 +85,32 @@ class MemoryStore : MessageStore {
 }
 
 class SenderTest {
+    @Test
+    fun fixAgeUsesElapsedTimeAcrossWallClockEdits() {
+        var wall = 100000L
+        var elapsed = 1000L
+        val clock =
+            object : Clock {
+                override fun wallMillis() = wall
+
+                override fun elapsedMillis() = elapsed
+            }
+        val latest = LatestLocation(clock)
+        latest.enabled = true
+        val measured = Fix(utc(wall), 0, 28.0, 77.0, 3.0, null, null, null, null)
+        latest.update(Observation(measured, elapsed))
+        wall += 3600000
+        elapsed += 1000
+        assertEquals(1000L, latest.currentFix()!!.fix_age_ms)
+        assertEquals(measured.observed_at, latest.currentFix()!!.observed_at)
+        assertNotNull(latest.clockWarning())
+        wall -= 7200000
+        assertEquals(1000L, latest.age())
+        elapsed += 30001
+        assertNull(latest.currentFix())
+        assertEquals("unknown", latest.status())
+    }
+
     private fun ack(json: String, result: String = "stored"): Response {
         val message = Protocol.decodeMessage(json)
         return Response(

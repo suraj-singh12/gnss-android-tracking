@@ -174,7 +174,9 @@ against in-process HTTP listeners. Also run `go test ./...` and `go vet ./...` f
 Limitations: whole-recording rebuild and a JSON state snapshot favor simplicity over
 large-history performance; long-duration field capacity is not yet established.
 The equirectangular view targets small local areas, not polar/global operation.
-Cross-build success does not prove physical execution on macOS/Windows. Real
-Android/LAN integration, SOS alerts/operator acknowledgement, offline maps, polished
+Cross-build success does not prove physical execution on macOS/Windows. The
+[automated Android integration](../test-tools/integration/README.md) proves
+application boundaries; [physical LAN acceptance](../android/DEVICE-ACCEPTANCE.md)
+remains required. SOS alerts/operator acknowledgement, offline maps, polished
 Issue #6 UI, installers/signing and release workflows remain their later issues.
 Protocol v1 and Android responsibilities are unchanged.

@@ -98,7 +98,11 @@ suspend or kill applications; no app can promise recovery after force-stop or an
 OEM kill. Field validation must check the actual hardware, including Doze and
 battery optimization. No real-device result is claimed by JVM tests.
 
+Run the [real Command integration suite](../test-tools/integration/README.md) in
+addition to the build/unit/lint commands above. It uses production Room/Sender and
+Command HTTP/SQLite, substituting only the physical Wi-Fi adapter.
+
 See [device acceptance](DEVICE-ACCEPTANCE.md), the
 [mock receiver](../test-tools/mock-receiver/README.md), and
-[Protocol v1](../protocol/protocol-v1.md). Command recording/tracks and SOS triggers
-are deliberately outside this issue.
+[Protocol v1](../protocol/protocol-v1.md). Command recording/tracks remain
+Command-owned; SOS triggers remain future work.
