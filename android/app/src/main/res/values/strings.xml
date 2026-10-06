@@ -1,0 +1,4 @@
+<resources>
+    <string name="interval_value">%1$d</string>
+    <string name="cannot_start">Cannot start tracking: %1$s</string>
+</resources>
