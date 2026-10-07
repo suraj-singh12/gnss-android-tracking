@@ -4,13 +4,16 @@ import android.Manifest
 import android.app.*
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.view.View
 import android.view.WindowInsets
 import android.widget.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.update
 
 class MainActivity : Activity() {
     private val app
@@ -24,6 +27,7 @@ class MainActivity : Activity() {
     private lateinit var status: TextView
     private var initialized = false
     private var startAfterPermission = false
+    private var visible = false
     private val trackingIntent by lazy { Intent(this, TrackingService::class.java) }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
@@ -119,6 +123,23 @@ class MainActivity : Activity() {
                 .setPositiveButton("Re-enroll") { _, _ -> save(reenroll = true) }
                 .show()
         }
+        button("Battery/background settings") {
+            try {
+                startActivity(
+                    Intent(
+                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:$packageName"),
+                    )
+                )
+            } catch (e: android.content.ActivityNotFoundException) {
+                AlertDialog.Builder(this)
+                    .setMessage(
+                        "Open Android Settings → Apps → GNSS Tracking → Battery and allow unrestricted background activity."
+                    )
+                    .setPositiveButton("OK", null)
+                    .show()
+            }
+        }
         text("Tracking", 20f)
         button("Start Tracking") { save(start = true) }
         button("Stop Tracking") {
@@ -188,6 +209,7 @@ class MainActivity : Activity() {
                                 appendLine(
                                     "Sending paused — correct receiver, then Retry saved messages"
                                 )
+                            op.warning?.let { appendLine("Field setup: $it") }
                             state.configError?.let { appendLine("Configuration error: $it") }
                             (op.error ?: state.operationalError)?.let {
                                 appendLine("Attention: $it")
@@ -227,6 +249,15 @@ class MainActivity : Activity() {
     }
 
     private fun requestStart() {
+        // Settings/permission work can finish after Home/lock hides this Activity.
+        // A location FGS must be created from a visible user action; do not retry
+        // automatically on resume or create a background FGS with denied location.
+        if (!visible || isFinishing || isDestroyed) {
+            app.operational.update {
+                it.copy(error = "Settings saved. Tap Start Tracking while the app is visible.")
+            }
+            return
+        }
         if (
             checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) !=
                 PackageManager.PERMISSION_GRANTED
@@ -277,6 +308,16 @@ class MainActivity : Activity() {
                     .setPositiveButton("OK", null)
                     .show()
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        visible = true
+    }
+
+    override fun onStop() {
+        visible = false
+        super.onStop()
     }
 
     override fun onDestroy() {

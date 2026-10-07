@@ -13,7 +13,8 @@ Copy/fill this table for each run. Keep screenshots/timestamps with the record.
 | --- | --- |
 | Operator / date / evidence directory | |
 | Phone model / Android version | |
-| Battery optimisation setting | |
+| Battery optimisation / unrestricted / OEM background/autostart settings | |
+| Battery Saver / Low Power Standby / thermal or low-battery warnings | |
 | App commit / local reporting interval | |
 | Command OS / commit | |
 | Command LAN address / SQLite file | |
@@ -47,9 +48,9 @@ On Android configure Party ID/name, Command base URL
 `http://<laptop-LAN-IP>:8080` (**not** localhost, dashboard port or API path), local
 reporting interval **10 seconds**, then Start Tracking from the visible app.
 Grant precise location and notification permission; confirm the ongoing notification.
-Record the battery optimisation setting; use unrestricted battery operation for the
-acceptance run if the OEM requires it. Start while the Activity is visible (modern
-Android restricts background location-FGS starts). Do not force-stop or swipe away
+Before the run, use the dedicated-phone setup below and record the settings.
+Start while the Activity is visible (modern Android restricts background
+location-FGS starts). Do not force-stop or swipe away
 the service notification during the sustained test.
 If precise location is denied, confirm a clear explanation and no tracking start.
 
@@ -70,6 +71,38 @@ it. Read `SELECT json FROM outbox ORDER BY sequence DESC LIMIT 1;` and compare t
 saved `fix` coordinate/time with Command. Retain this evidence; then reopen the app
 and explicitly Start Tracking before the sustained test. This optional developer
 evidence tool is not a field product/runtime dependency.
+
+## Required dedicated-phone setup
+
+- Android Settings → Apps → GNSS Tracking → Battery: **Unrestricted** (or allow
+  background activity / do not optimize, depending on firmware). The app's
+  **Battery/background settings** button opens its standard Android app settings;
+  exemptions are never requested/applied automatically. Record actual settings,
+  not just whether an app warning disappeared.
+- **Battery Saver and Ultra/Extreme Power Saving: Off** throughout acceptance.
+  Disable Low Power Standby if available and it restricts this app. Charge before
+  the run; keep the phone cool, with adequate storage. Do not bypass thermal safety.
+- Allow precise location **while using the app**, enable system Location/GPS, and
+  allow notifications. Start Tracking from the visible Activity and verify its
+  ongoing notification before closing it. Background-location permission is not
+  required for this user-started location FGS and is not requested.
+- Vendor controls: Xiaomi/Redmi/POCO—allow background autostart and no battery
+  restriction; Oppo/Realme/OnePlus—allow background activity/auto launch and disable
+  app freeze; Vivo/iQOO—allow background power use/autostart; Samsung—remove from
+  sleeping/deep sleeping apps and use Never sleeping where offered; Motorola/other
+  vendors—disable app background restriction/freezer where offered. Labels and
+  availability vary; record the phone's actual controls. Autostart permission does
+  **not** mean this app implements reboot startup.
+- Do not force-stop, reboot, use vendor task cleaners or dismiss tracking through
+  a system active-app Stop control during the screen-off stage. Swipe-away behavior
+  can differ by OEM: test separately and label it, rather than conflating with Back.
+  Force-stop/reboot require reopening and explicitly Start Tracking. Sticky process
+  reclaim may recover, but is not guaranteed by this app on every OS/OEM.
+
+The app warns about measured Battery Saver, enabled Low Power Standby, severe
+thermal status or battery optimization. No warning is a hardware guarantee, and
+an Android optimization allowlist does not describe every OEM power policy.
+See [GNSS-INVESTIGATION.md](GNSS-INVESTIGATION.md) for the platform/code assessment.
 
 ## Execute and record
 
@@ -108,13 +141,43 @@ is falsely fresh, config never converges, identity changes, or distance duplicat
 connects stopped periods. Record the failure and precise timestamps; retain database
 copies only after stopping Command and note the app queue state. For a GNSS
 continuity failure record whether Command contact stayed healthy and whether
-unlocking versus opening Activity restored fixes. Capture local developer evidence
-without restarting the app: `adb shell dumpsys location`,
-`adb shell dumpsys activity services org.gnss.tracking`, and
-`adb shell dumpsys power` (look for `gnss:tracking`). Redact unrelated device/app
-data; never record Wi-Fi passwords. These distinguish missing GPS registration,
-foreground-service loss and power-policy suspension. A wake lock is CPU protection,
-not a guarantee against OEM GNSS restrictions or Android deep Doze. Stop Tracking on
+unlocking versus opening Activity restored fixes. Before unlocking/opening the app, save Command contact/location-age snapshots
+and failure time; then extract the local diagnostic history and platform state:
+
+```sh
+adb exec-out run-as org.gnss.tracking cat files/gnss-diagnostics.json > gnss-diagnostics.json
+adb logcat -d -s GnssTracking:I > gnss-logcat.txt
+adb shell dumpsys location > location-state.txt
+adb shell dumpsys activity services org.gnss.tracking > service-state.txt
+adb shell dumpsys power > power-state.txt
+adb shell cmd appops get org.gnss.tracking FINE_LOCATION > location-appops.txt
+```
+
+The private file is available on the debug build and is atomic; unlike copying a
+live SQLite database it does not require force-stop. USB/ADB may wake the phone:
+the preceding minute samples (up to 64, ≤128 KiB total) are more valuable than
+post-attachment state. Missing file/samples can mean startup or storage failure.
+Final cleanup may not flush a sample before process exit. Redact unrelated apps'
+`dumpsys` data; no passwords/secrets. Logcat buffers are managed by Android; the
+app emits one concise sample/minute, with bounded exceptional-start evidence.
+
+| Question | Evidence / interpretation |
+| --- | --- |
+| Service alive / recreated? | Ongoing notification, `dumpsys activity services`, `serviceGeneration`, `startReason` user_start/sticky_restart, sample UTC/elapsed times. A history sample proves state at that time, not present liveness. |
+| Source requested? | `source.registered`, `source.statusRegistered`, `source.registrations`; compare `dumpsys location` GPS requests. App registration flags are not proof the system is delivering callbacks. |
+| CPU protection / power gate? | `wakeLockHeld`, `wakeRenewals`, `power.deviceIdle`, `interactive`, optimization status, Saver, location-power mode, Low Power Standby, thermal status and process importance. Held locks can be ignored by Doze/standby. Modes: 0 unchanged; 1 GPS disabled screen-off; 2 all disabled screen-off; 3 foreground-only; 4 throttle screen-off. Unsupported API values are null. |
+| Callback stream alive? | Separate `locationCallbackAgeMs` and `gnssCallbackAgeMs` plus counters; `source.engineRunning`; `callbacksQuiet` flags ≥5 min with neither stream. This flag does **not** diagnose a stall or restart anything: no sky view can also cause silence. |
+| Measurements usable/fresh? | `fixMeasurementAgeMs`, `fixAvailable`, `source.rejectedObservations`/`lastRejection`. Recent callback with old/bad measurement time is not a fresh fix. Satellite/acquisition callbacks never refresh coordinates. GPS enabled is not a fix. |
+| Permission/policy? | `power.precisePermission`, raw `fineLocationAppOp` plus platform appops/location dump. MODE_FOREGROUND (4) is conditional, not a grant of effective access. Logcat may report a background-started FGS without location access. |
+| Reporter/sender/store alive? | `reportingIterationAgeMs`, `senderIterationAgeMs`, `savedSnapshotAgeMs`, `loopError` / `source.error` (last errors, not necessarily ongoing) versus healthy Command receipts. A maintenance sample gap can be scheduling/process/power/disk trouble, not automatically GNSS failure. |
+
+Record behavior in order: outdoors screen-off → unlock only → Activity open →
+minimize/reopen. Do not restart the app/listener until evidence is collected.
+Continuous poor fixes or absent callbacks indoors do not justify automatic source
+restart. If callbacks vanish outdoors while service/provider/lock remain present,
+compare power/AppOp/engine history before attributing the cause to an OEM.
+A wake lock is CPU protection, not a GNSS hardware or Doze exemption guarantee.
+Stop Tracking on
 Android explicitly when finished; saved pending messages remain for next start.
 
 Issue #4 is field-accepted only after the above hardware run passes. JVM tests

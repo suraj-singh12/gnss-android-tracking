@@ -11,9 +11,11 @@ data class Operational(
     val health: Health = Health(),
     val link: String = "Awaiting Command",
     val error: String? = null,
+    val warning: String? = null,
 )
 
 class TrackingApp : Application() {
     val repository by lazy { Repository(TrackingDatabase.open(this)) }
     val operational = MutableStateFlow(Operational())
+    val diagnostics = MutableStateFlow<GnssDiagnostic?>(null)
 }

@@ -20,13 +20,16 @@ class LatestLocation(private val clock: Clock) {
     @Volatile var enabled: Boolean? = null
     @Volatile var satellites: Int? = null
 
-    fun update(value: Observation) {
+    fun update(value: Observation): Boolean {
         if (
             value.elapsedMillis > 0 &&
                 value.elapsedMillis <= clock.elapsedMillis() &&
                 (observation == null || value.elapsedMillis >= observation!!.elapsedMillis)
-        )
+        ) {
             observation = value
+            return true
+        }
+        return false
     }
 
     fun age(): Long? =
@@ -65,14 +68,54 @@ interface LocationSource {
     fun stop()
 }
 
-class PlatformLocationSource(private val context: Context, val latest: LatestLocation) :
-    LocationSource {
+class PlatformLocationSource(
+    private val context: Context,
+    val latest: LatestLocation,
+    private val clock: Clock = SystemClock,
+) : LocationSource {
     private val manager = context.getSystemService(LocationManager::class.java)
     private var started = false
+    @Volatile
+    var diagnostics = SourceState()
+        private set
+
+    fun refreshProvider() {
+        if (!started) return
+        try {
+            latest.enabled = manager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+        } catch (e: Exception) {
+            latest.enabled = null
+            diagnostics =
+                diagnostics.copy(error = "Provider state unavailable: ${e.javaClass.simpleName}")
+            throw e
+        }
+    }
+
+    private fun gnssEvent(running: Boolean? = diagnostics.engineRunning) {
+        diagnostics =
+            diagnostics.copy(
+                lastGnssCallback = clock.elapsedMillis(),
+                gnssCallbacks = diagnostics.gnssCallbacks + 1,
+                engineRunning = running,
+            )
+    }
+
     private val listener =
         object : LocationListener {
             override fun onLocationChanged(location: Location) {
                 if (!started) return
+                diagnostics =
+                    diagnostics.copy(
+                        lastLocationCallback = clock.elapsedMillis(),
+                        locationCallbacks = diagnostics.locationCallbacks + 1,
+                    )
+                fun reject(reason: String) {
+                    diagnostics =
+                        diagnostics.copy(
+                            rejectedObservations = diagnostics.rejectedObservations + 1,
+                            lastRejection = reason,
+                        )
+                }
                 fun available(has: Boolean, value: Double, nonnegative: Boolean = false): Double? =
                     value.takeIf { has && it.isFinite() && (!nonnegative || it >= 0) }
                 if (
@@ -80,37 +123,47 @@ class PlatformLocationSource(private val context: Context, val latest: LatestLoc
                         location.latitude !in -90.0..90.0 ||
                         !location.longitude.isFinite() ||
                         location.longitude !in -180.0..180.0
-                )
+                ) {
+                    reject("invalid_coordinate")
                     return
+                }
                 val altitude = available(location.hasAltitude(), location.altitude)
-                latest.update(
-                    Observation(
-                        Fix(
-                            utc(location.time),
-                            0,
-                            location.latitude,
-                            location.longitude,
-                            available(location.hasAccuracy(), location.accuracy.toDouble(), true),
-                            altitude,
-                            available(
-                                altitude != null && location.hasVerticalAccuracy(),
-                                location.verticalAccuracyMeters.toDouble(),
-                                true,
+                val accepted =
+                    latest.update(
+                        Observation(
+                            Fix(
+                                utc(location.time),
+                                0,
+                                location.latitude,
+                                location.longitude,
+                                available(
+                                    location.hasAccuracy(),
+                                    location.accuracy.toDouble(),
+                                    true,
+                                ),
+                                altitude,
+                                available(
+                                    altitude != null && location.hasVerticalAccuracy(),
+                                    location.verticalAccuracyMeters.toDouble(),
+                                    true,
+                                ),
+                                available(location.hasSpeed(), location.speed.toDouble(), true),
+                                available(location.hasBearing(), location.bearing.toDouble(), true)
+                                    ?.takeIf { it < 360 },
                             ),
-                            available(location.hasSpeed(), location.speed.toDouble(), true),
-                            available(location.hasBearing(), location.bearing.toDouble(), true)
-                                ?.takeIf { it < 360 },
-                        ),
-                        location.elapsedRealtimeNanos / 1000000,
+                            location.elapsedRealtimeNanos / 1000000,
+                        )
                     )
-                )
+                if (!accepted) reject("unusable_elapsed_measurement_time")
             }
 
             override fun onProviderEnabled(provider: String) {
+                if (!started) return
                 latest.enabled = true
             }
 
             override fun onProviderDisabled(provider: String) {
+                if (!started) return
                 latest.enabled = false
                 latest.satellites = null
             }
@@ -120,11 +173,23 @@ class PlatformLocationSource(private val context: Context, val latest: LatestLoc
         }
     private val gnss =
         object : GnssStatus.Callback() {
+            override fun onStarted() {
+                if (started) gnssEvent(true)
+            }
+
+            override fun onFirstFix(ttffMillis: Int) {
+                if (started) gnssEvent(true) // Acquisition event, never a geographic observation.
+            }
+
             override fun onSatelliteStatusChanged(status: GnssStatus) {
+                if (!started) return
+                gnssEvent(true)
                 latest.satellites = (0 until status.satelliteCount).count { status.usedInFix(it) }
             }
 
             override fun onStopped() {
+                if (!started) return
+                gnssEvent(false)
                 latest.satellites = null
             }
         }
@@ -140,9 +205,13 @@ class PlatformLocationSource(private val context: Context, val latest: LatestLoc
         latest.enabled = manager.isProviderEnabled(LocationManager.GPS_PROVIDER)
         started = true
         try {
-            check(manager.registerGnssStatusCallback(gnss, Handler(Looper.getMainLooper()))) {
-                "Unable to register GNSS status callback"
-            }
+            val statusRegistered =
+                manager.registerGnssStatusCallback(gnss, Handler(Looper.getMainLooper()))
+            diagnostics =
+                diagnostics.copy(
+                    statusRegistered = statusRegistered,
+                    error = if (statusRegistered) null else "GNSS status registration unavailable",
+                )
             manager.requestLocationUpdates(
                 LocationManager.GPS_PROVIDER,
                 1000L,
@@ -150,7 +219,15 @@ class PlatformLocationSource(private val context: Context, val latest: LatestLoc
                 listener,
                 Looper.getMainLooper(),
             )
+            diagnostics =
+                diagnostics.copy(
+                    registered = true,
+                    registrations = diagnostics.registrations + 1,
+                    registeredAt = clock.elapsedMillis(),
+                )
         } catch (e: Exception) {
+            diagnostics =
+                diagnostics.copy(error = "GNSS registration failed: ${e.javaClass.simpleName}")
             stop() // Roll back a partially registered source.
             throw e
         }
@@ -159,6 +236,9 @@ class PlatformLocationSource(private val context: Context, val latest: LatestLoc
     override fun stop() {
         if (!started) return
         started = false
+        diagnostics =
+            diagnostics.copy(registered = false, statusRegistered = false, engineRunning = null)
+        latest.satellites = null
         try {
             manager.removeUpdates(listener)
         } finally {
@@ -177,6 +257,12 @@ internal class TrackingResources(
 ) {
     private var active = false
     private var renewedAt = 0L
+    @Volatile
+    var renewals = 0
+        private set
+
+    val held: Boolean
+        get() = wakeLock.isHeld
 
     init {
         wakeLock.setReferenceCounted(false)
@@ -201,6 +287,7 @@ internal class TrackingResources(
         if (active && (!wakeLock.isHeld || clock.elapsedMillis() - renewedAt >= TIMEOUT_MS / 2)) {
             wakeLock.acquire(TIMEOUT_MS)
             renewedAt = clock.elapsedMillis()
+            renewals++
         }
     }
 
