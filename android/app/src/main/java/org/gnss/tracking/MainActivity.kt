@@ -87,7 +87,7 @@ class MainActivity : Activity() {
         text("Command and reporting", 20f)
         endpoint = edit("Command base URL (local Wi-Fi)")
         endpoint.hint = "http://192.168.1.10:8080"
-        interval = edit("Local reporting interval (seconds, steps of 10)", true)
+        interval = edit("Local reporting interval (seconds, 5–86400 in steps of 5)", true)
         button("Save settings") { save() }
         button("Retry saved messages") {
             AlertDialog.Builder(this)

@@ -344,8 +344,8 @@ func (s *Store) SetPolicy(p Policy) error {
 	})
 }
 func (s *Store) SetOverride(device string, v *int) error {
-	if v != nil && (*v < 10 || *v > 86400 || *v%10 != 0) {
-		return fmt.Errorf("interval must be 10..86400 in multiples of 10")
+	if v != nil && (*v < 5 || *v > 86400 || *v%5 != 0) {
+		return fmt.Errorf("interval must be 5..86400 in multiples of 5")
 	}
 	return s.change(func(st *State, _ time.Time, _ *sql.Tx) error {
 		d := st.Devices[device]

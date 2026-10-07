@@ -285,7 +285,7 @@ class Repository(val db: TrackingDatabase, private val clock: Clock = SystemCloc
                 "Party labels must contain 1–80 characters"
             }
             require(validInterval(localInterval)) {
-                "Reporting interval must be 10–86400 seconds, in steps of 10"
+                "Reporting interval must be 5–86400 seconds, in steps of 5"
             }
             if (endpoint.isNotEmpty()) Endpoint.validate(endpoint)
             val old = state()

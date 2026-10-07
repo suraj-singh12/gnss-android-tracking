@@ -6,7 +6,7 @@ implementation/automated-test findings, not claims of physical acceptance.
 | Check | Finding/evidence |
 | --- | --- |
 | A: Screen off | User-started location foreground service owns GPS callbacks/reporting; ongoing notification; hardware/OEM acceptance remains required. |
-| B: Scheduling | No WorkManager, alarms, boot auto-start, or permanent wake lock. Reporting and one sender run under the same service. |
+| B: Scheduling | No WorkManager, alarms or boot auto-start. Issue #4 adds a service-owned, timeout-bounded partial wake lock renewed only during active tracking. Reporting and one sender run under the same service. |
 | C: Save first | Room transaction validates/serializes, allocates sequence and inserts outbox. Rollback-on-insert-failure test verifies both writes roll back; transport receives only committed rows. |
 | D: Sequence | Single installation row, transactional allocation, wire bound check, concurrent allocation/reopen tests; reset creates new UUID. Cloud/device transfer excluded to prevent restoring an old sequence. |
 | E: Retry identity | Sender posts stored JSON; drop-response/duplicate test verifies unchanged payload, ID, sequence, timestamp and config. |

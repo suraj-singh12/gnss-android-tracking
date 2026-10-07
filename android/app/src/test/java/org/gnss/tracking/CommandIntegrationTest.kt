@@ -381,6 +381,62 @@ class CommandIntegrationTest {
     }
 
     @Test
+    fun fiveSecondLocalAndOverrideConvergeAndClearToFifteen() = runBlocking {
+        val p = phone()
+        p.repository.settings("Alpha 1", "Field team 1", bridge.phone, 5)
+        at(1)
+        val first = p.snapshot()
+        p.sender.step()
+        assertEquals(
+            5,
+            Protocol.decodeMessage(first.json).config_state.effective_reporting_interval_s,
+        )
+        for (invalid in listOf(1, 6, 86405)) {
+            assertTrue(
+                runCatching {
+                        p.repository.settings("Alpha 1", "Field team 1", bridge.phone, invalid)
+                    }
+                    .isFailure
+            )
+            val response =
+                request(
+                    bridge.local + "/local/override",
+                    """{"device_id":"${p.id}","reporting_interval_override_s":$invalid}""",
+                )
+            assertEquals(400, response.code)
+        }
+        override(p, 5)
+        at(6)
+        p.snapshot()
+        p.sender.step()
+        assertEquals(5, p.repository.state().overrideSeconds)
+        assertEquals(5, p.repository.state().config().effective_reporting_interval_s)
+        p.reopen()
+        assertEquals(5, p.repository.state().overrideSeconds)
+        p.repository.settings("Alpha 1", "Field team 1", bridge.phone, 15)
+        at(11)
+        val echo = p.snapshot()
+        p.sender.step()
+        val config = Protocol.decodeMessage(echo.json).config_state
+        assertEquals(15, config.local_reporting_interval_s)
+        assertEquals(5, config.effective_reporting_interval_s)
+        assertTrue(device(p)["config_converged"].asBoolean)
+        override(p, null)
+        at(16)
+        p.snapshot()
+        p.sender.step()
+        assertEquals(15, p.repository.state().config().effective_reporting_interval_s)
+        at(31)
+        val clear = p.snapshot()
+        p.sender.step()
+        assertEquals(
+            15,
+            Protocol.decodeMessage(clear.json).config_state.effective_reporting_interval_s,
+        )
+        assertTrue(device(p)["config_converged"].asBoolean)
+    }
+
+    @Test
     fun lostResponseRetriesExactlyOnceWithOriginalReceiptAndDistance() = runBlocking {
         recording("start")
         val p = phone()

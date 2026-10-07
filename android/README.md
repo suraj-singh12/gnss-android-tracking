@@ -26,7 +26,7 @@ Generated APKs/build output are ignored. No release workflow is provided.
 ## Operation
 
 Configure Party ID/name, a Command base URL (e.g. `http://192.168.1.10:8080`), and
-local reporting seconds (10–86400, multiples of 10). Save or Start Tracking.
+local reporting seconds (5–86400, multiples of 5). Save or Start Tracking.
 Grant **precise** location. Notification permission on Android 13+ is requested
 for notification visibility; refusal does not prevent the foreground service.
 Start Tracking is a visible user action. Stop Tracking requires confirmation and
@@ -36,6 +36,12 @@ another explicit Start Tracking. Sticky service recreation can recover tracking
 and outbox after process death when Android permits it; it is not a bypass of
 foreground-start restrictions. Background location permission is not needed for
 a user-started location foreground service and is not requested.
+
+The service registers GPS immediately after foreground promotion and owns a
+timeout-bounded partial CPU wake lock while tracking. Its loop renews the lock;
+stop and registration failure release it. This does not bypass OEM restrictions
+or deep Doze, and increases battery use; physical acceptance remains required.
+Activity destruction never stops or refreshes the source.
 
 The service continuously requests native GPS updates at approximately 1 second
 independently of reporting cadence. Freshness uses platform elapsed-realtime

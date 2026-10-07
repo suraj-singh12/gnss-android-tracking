@@ -179,4 +179,5 @@ Cross-build success does not prove physical execution on macOS/Windows. The
 application boundaries; [physical LAN acceptance](../android/DEVICE-ACCEPTANCE.md)
 remains required. SOS alerts/operator acknowledgement, offline maps, polished
 Issue #6 UI, installers/signing and release workflows remain their later issues.
-Protocol v1 and Android responsibilities are unchanged.
+The Issue #4 Protocol v1 amendment permits reporting intervals of 5–86400 s in
+5-second steps (default 10 s); Android/Command responsibilities are unchanged.

@@ -47,6 +47,10 @@ On Android configure Party ID/name, Command base URL
 `http://<laptop-LAN-IP>:8080` (**not** localhost, dashboard port or API path), local
 reporting interval **10 seconds**, then Start Tracking from the visible app.
 Grant precise location and notification permission; confirm the ongoing notification.
+Record the battery optimisation setting; use unrestricted battery operation for the
+acceptance run if the OEM requires it. Start while the Activity is visible (modern
+Android restricts background location-FGS starts). Do not force-stop or swipe away
+the service notification during the sustained test.
 If precise location is denied, confirm a clear explanation and no tracking start.
 
 The current phone screen shows GNSS quality/age rather than coordinates. To capture
@@ -69,6 +73,10 @@ evidence tool is not a field product/runtime dependency.
 
 ## Execute and record
 
+Run the sustained screen-off stage on battery with USB disconnected; charging
+and ADB can change sleep behavior. Preserve Command evidence before attaching
+ADB to diagnose a failure, since attaching can wake the phone.
+
 Enter **PASS/FAIL and brief evidence for every row**. Record phone and Command
 observation times/coordinates, last ACK, queue count, applied intervals, recording
 state and distances as relevant. A screenshot alone cannot prove unchanged retries.
@@ -82,10 +90,10 @@ before/after events as local evidence of device/config/track state.
 | --- | --- | --- |
 | 1 Discovery | Start Command then phone as above. New device appears dynamically with correct Party labels; record device UUID. | |
 | 2 Outdoor fix | Obtain GNSS fix. Compare phone saved GNSS coordinates (extraction above) with Command `location.fix` in local state and timestamps. Accuracy/unavailable fields must be honest. | |
-| 3 Local cadence | Observe ≥5 reports at local 10 s cadence, increasing observation/capture times and successful ACKs. GNSS callbacks must not flood packets. | |
-| 4 Screen off | Lock/switch screen off; continue tracking **at least 30 minutes**. Record start/end and intervening Command reports; verify sustained reporting and battery use, no unexplained gap. | |
-| 5 Remote override | On device card Set 30 s. Android visibly becomes local 10 / effective 30; observe several reports at 30 s and Command eventually shows settings applied. Delivery waits for next request/ACK. | |
-| 6 Local edit + Clear override | Set phone local 20 s while override remains: effective stays 30. Command device-card Clear override: effective returns to 20, reports resume that cadence, Command settings applied. | |
+| 3 Local cadence | Keep default 10 s as a baseline, then save local **5 s**. Observe ≥5 reports at each cadence, increasing observation/capture times and successful ACKs. GNSS callbacks must not flood packets. | |
+| 4 Activity closed + screen off GNSS | Close Activity using Back, then lock/switch screen off; remain outdoors with sky view and move for **at least 30 minutes** at local 5 s. Do not reopen the app during this period. Retain intervening Command state snapshots: `gnss_condition` remains fresh, native `observed_at` advances, capture/ACK/contact remain healthy, no unexplained gaps. Unlock without opening Activity and check again on Command. Reopening must not be needed to restore fixes. Record battery use and start/end times. | |
+| 5 Remote override | Save local 15 s, close Activity and lock screen. On Command device card Set **5 s**. Confirm ACK adoption, effective 5 s and eventual settings-applied state; observe ≥5 fresh GNSS reports at 5 s without opening Activity. Also check existing 30 s override. Delivery waits for the next request/ACK. | |
+| 6 Local edit + Clear override | With the 5 s override active, change phone local to 15 s: effective stays 5. Close Activity/lock again. Command device-card Clear override: effective returns to 15, reports resume that cadence and settings converge. Record both configurations. | |
 | 7 Offline movement | Start Recording before moving. Note current distance/queue. Break or disable phone Wi-Fi for several minutes while moving; confirm GNSS continues and phone pending queue grows. | |
 | 8 Recovery priority | Restore Wi-Fi without internet. Observe current position restored on Command **before** old backlog drains; then queue falls. Capture closely timed local-state snapshots/screenshots and phone queue/ACK. | |
 | 9 Reconciled route | After drain, accepted history follows observation-time movement. Check sensible turns/reversals, no backwards arrival-order edge, inflated/doubled distance or spurious connector across bad GNSS. Provisional distance may be revised during rebuild. | |
@@ -98,7 +106,15 @@ before/after events as local evidence of device/config/track state.
 A stage fails if reports stop unexpectedly, pending data disappears, a current fix
 is falsely fresh, config never converges, identity changes, or distance duplicates/
 connects stopped periods. Record the failure and precise timestamps; retain database
-copies only after stopping Command and note the app queue state. Stop Tracking on
+copies only after stopping Command and note the app queue state. For a GNSS
+continuity failure record whether Command contact stayed healthy and whether
+unlocking versus opening Activity restored fixes. Capture local developer evidence
+without restarting the app: `adb shell dumpsys location`,
+`adb shell dumpsys activity services org.gnss.tracking`, and
+`adb shell dumpsys power` (look for `gnss:tracking`). Redact unrelated device/app
+data; never record Wi-Fi passwords. These distinguish missing GPS registration,
+foreground-service loss and power-policy suspension. A wake lock is CPU protection,
+not a guarantee against OEM GNSS restrictions or Android deep Doze. Stop Tracking on
 Android explicitly when finished; saved pending messages remain for next start.
 
 Issue #4 is field-accepted only after the above hardware run passes. JVM tests

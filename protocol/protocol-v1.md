@@ -169,10 +169,11 @@ waiting for a lower sequence ACK; sequence is identity/order, not cumulative ACK
 
 ## Remote reporting configuration
 
-Reporting intervals are integer seconds in `10..86400`, divisible by 10 (examples
-10, 20, 30, 60, 120); the finite upper bound allows consistent validation. Local
+Reporting intervals are integer seconds in `5..86400`, divisible by 5 (examples
+5, 10, 15, 20, 30, 60, 120); the finite upper bound allows consistent validation. Local
 default is 10 s. Command display-dot interval is independent and never transmitted
-as a reporting override.
+as a reporting override. This range/step is the deliberate Issue #4 physical-acceptance
+amendment of 2026-10-07; the wire version and message structure remain v1.
 
 ACK `config` contains exactly these known required fields:
 

@@ -113,8 +113,8 @@ class ProtocolTest {
 
     @Test
     fun localAndRemoteIntervals() {
-        for (v in listOf(0, 9, 15, 86410, Int.MAX_VALUE)) assertFalse(validInterval(v))
-        for (v in listOf(10, 20, 30, 60, 86400)) assertTrue(validInterval(v))
+        for (v in listOf(0, 1, 6, 9, 86405, Int.MAX_VALUE)) assertFalse(validInterval(v))
+        for (v in listOf(5, 10, 15, 20, 30, 60, 86400)) assertTrue(validInterval(v))
         val authority = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
         val initial = ConfigState(local_reporting_interval_s = 20)
         val enrolled =

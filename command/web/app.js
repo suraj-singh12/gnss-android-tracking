@@ -151,9 +151,9 @@ function render() {
       const form = el("form", undefined, "override"),
         input = el("input");
       input.type = "number";
-      input.min = 10;
+      input.min = 5;
       input.max = 86400;
-      input.step = 10;
+      input.step = 5;
       input.value =
         d.desired_config.reporting_interval_override_s ??
         d.snapshot.config_state.local_reporting_interval_s;

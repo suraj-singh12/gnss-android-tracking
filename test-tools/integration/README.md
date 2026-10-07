@@ -57,6 +57,7 @@ compared exactly, including segment UUIDs and projected coordinates.
 | --- | --- |
 | Normal location/status + first enrollment | Exact ACK identity, one local allocation/raw row, dynamic party metadata, preserved measurement/capture times, status retains location, authority persists and is echoed |
 | Override/local edit/clear | Real local controls → ACK → Room config → new echo → convergence; local 10 → override 30, local edit 20 retains 30, explicit clear falls back to 20; queued JSON stays immutable |
+| Five-second amendment | Local 5 → real Command override 5 → ACK adoption/Room reopen → local edit 15 retains effective 5 → Clear falls back to 15/converges; local/control reject 1, 6, 86405 |
 | Lost response | Exact saved retry, duplicate with original first receipt, one row/track effect/distance effect per observation |
 | Current-first recovery | Sender wire order D A B C, live D never rolls back, history A B C D; failed retry deadline cleared on restore |
 | Stale recovery + reserved SOS | New current saved before old backlog; reserved SOS precedes current and never enters tracks; no trigger/operator workflow |
@@ -71,9 +72,10 @@ compared exactly, including segment UUIDs and projected coordinates.
 
 ## Compatibility audit of merged cores
 
-Audited latest merged main `931cc8cb32ec8a1dc2847aac1837c720bd11bd8b` against
+The original integration audit used latest merged main `931cc8cb32ec8a1dc2847aac1837c720bd11bd8b` against
 [Protocol v1](../../protocol/protocol-v1.md). Issues #1–#3 were closed; #4's frozen
-constraints and #5–#7 future scope were read before implementation.
+constraints and #5–#7 future scope were read before implementation. The tables
+below include the deliberate 2026-10-07 Issue #4 reporting-interval amendment.
 
 | Android send → Command parse | Result |
 | --- | --- |
@@ -82,7 +84,7 @@ constraints and #5–#7 future scope were read before implementation.
 | `party.id`, `party.name` | Both actual Android settings emit nonblank labels of ≤80 Unicode code points; Command accepts these without changing identity |
 | `captured_at` | Both enforce valid UTC with exactly three fractional digits |
 | `config_state.authority_id`, `version`, `reporting_interval_override_s` | Initial null/0/null; enrolled UUID/version/nullable override; version bounded by wire integer |
-| `config_state.local_reporting_interval_s`, `effective_reporting_interval_s` | Integers 10..86400 in steps of 10; override wins, otherwise current local value |
+| `config_state.local_reporting_interval_s`, `effective_reporting_interval_s` | Integers 5..86400 in steps of 5; override wins, otherwise current local value |
 | `health.battery_percent`, `charging`, `wifi_connected`, `wifi_rssi_dbm`, `gnss_status`, `satellites_used` | Required fields, explicit null where unavailable; matching ranges/enums. Android's native satellite count is an Int, safely within Command's wire-bound int64 |
 | `fix.observed_at`, `fix_age_ms`, `latitude`, `longitude` | Exact UTC; integer elapsed capture age; finite WGS84 bounds |
 | `fix.horizontal_accuracy_m`, `altitude_m`, `altitude_accuracy_m`, `speed_mps`, `bearing_deg` | Explicit nulls; finite/nonnegative accuracy/speed; bearing [0,360); altitude accuracy null without altitude |
@@ -106,8 +108,21 @@ address changes preserve authority unless the operator explicitly re-enrolls.
 
 No production interoperability defect or protocol contradiction was found in this
 baseline. Internal model differences alone require no compatibility layer. The
-frozen protocol and track algorithm are unchanged. Tests intentionally use the
+track algorithm is unchanged; Issue #4 physical acceptance explicitly amends
+reporting intervals to 5-second steps, with default 10 s. Tests intentionally use the
 existing correctness-first rebuild; large-volume/endurance testing remains #7.
 
 Physical GNSS, Wi-Fi Network routing, screen-off/OEM behavior and routers cannot be
 proved here. Execute the canonical [field acceptance runbook](../../android/DEVICE-ACCEPTANCE.md).
+
+Android `LocationSourceTest` separately exercises the native LocationManager seam:
+registration survives Activity destruction, simulated platform callbacks refresh observations,
+stopping unregisters, missing callbacks become stale, and registration can restart
+without an Activity. An actual TrackingService/MainActivity lifecycle test checks foreground promotion,
+single registration across repeated starts, Activity destruction and service stop.
+Service resource tests cover bounded CPU-lock renewal and
+release on stop/failure. These are deterministic lifecycle assertions, not proof
+of physical GNSS, screen-off radio operation, deep Doze or OEM policies. The source
+review found no Activity-driven GPS registration; absence of CPU wake protection
+was a concrete lifecycle gap. The precise trigger on the reported phone remains
+unconfirmed until the updated physical retest and diagnostic evidence.

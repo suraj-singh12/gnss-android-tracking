@@ -495,7 +495,7 @@ func TestHTTPAPIAndDurableFailure(t *testing.T) {
 			t.Fatal(path, w.Code)
 		}
 	}
-	if w := request("/local/override", map[string]any{"device_id": device, "reporting_interval_override_s": 15}); w.Code != 400 {
+	if w := request("/local/override", map[string]any{"device_id": device, "reporting_interval_override_s": 6}); w.Code != 400 {
 		t.Fatal("invalid interval")
 	}
 	w := httptest.NewRecorder()
@@ -765,5 +765,19 @@ func TestCaseVariantAdditiveFieldsCannotShadowKnownContent(t *testing.T) {
 	}
 	if a, err := s.Ingest(encode(t, v)); err != nil || a.Result != "duplicate" {
 		t.Fatal("unknown field retry", a, err)
+	}
+}
+
+func TestFiveSecondReportingContract(t *testing.T) {
+	s, _, _ := open(t)
+	ingest(t, s, message(t, 1, 0, 0, 0, 1))
+	for n, valid := range map[int]bool{5: true, 10: true, 15: true, 20: true, 30: true, 60: true, 86400: true, 0: false, 1: false, 6: false, 86405: false} {
+		if got := interval(json.Number(fmt.Sprint(n))); got != valid {
+			t.Fatalf("interval %d: %v", n, got)
+		}
+		err := s.SetOverride(device, &n)
+		if (err == nil) != valid {
+			t.Fatalf("override %d: %v", n, err)
+		}
 	}
 }

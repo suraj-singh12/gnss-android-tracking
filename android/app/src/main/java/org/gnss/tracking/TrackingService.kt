@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.net.*
 import android.os.IBinder
+import android.os.PowerManager
 import kotlinx.coroutines.*
 
 class TrackingService : Service() {
@@ -18,7 +19,7 @@ class TrackingService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val latest = LatestLocation(SystemClock)
-    private lateinit var source: PlatformLocationSource
+    private lateinit var resources: TrackingResources
     private lateinit var health: DeviceHealth
     private lateinit var sender: Sender
     private lateinit var connectivity: ConnectivityManager
@@ -34,7 +35,12 @@ class TrackingService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        source = PlatformLocationSource(this, latest)
+        resources =
+            TrackingResources(
+                PlatformLocationSource(this, latest),
+                getSystemService(PowerManager::class.java)
+                    .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "gnss:tracking"),
+            )
         health = DeviceHealth(this, latest)
         connectivity = getSystemService(ConnectivityManager::class.java)
         sender = Sender(repository, LanTransport(health::wifiNetwork), SystemClock, ::capture)
@@ -56,9 +62,21 @@ class TrackingService : Service() {
         notifications.createNotificationChannel(
             NotificationChannel(CHANNEL, "Tracking", NotificationManager.IMPORTANCE_LOW)
         )
-        if (android.os.Build.VERSION.SDK_INT >= 29)
-            startForeground(1, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
-        else startForeground(1, notification())
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 29)
+                startForeground(1, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+            else startForeground(1, notification())
+            if (!running) {
+                // Register synchronously after location FGS promotion, before any
+                // Room suspension or Activity transition. No Activity owns this source.
+                resources.start()
+            }
+        } catch (e: Exception) {
+            resources.stop()
+            app.operational.value = Operational(error = e.message ?: "Unable to start GNSS")
+            stopSelf()
+            return START_NOT_STICKY
+        }
         if (!running) {
             running = true
             scope.launch {
@@ -68,15 +86,16 @@ class TrackingService : Service() {
                         return@launch
                     }
                     repository.edit { it.copy(tracking = true) }
-                    withContext(Dispatchers.Main) { source.start() }
-                    connectivity.registerNetworkCallback(
-                        NetworkRequest.Builder()
-                            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-                            .build(),
-                        callback,
-                    )
-                    callbackRegistered = true
                     capture() // Restart always saves a new current snapshot before backlog.
+                    withContext(Dispatchers.Main) {
+                        connectivity.registerNetworkCallback(
+                            NetworkRequest.Builder()
+                                .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                                .build(),
+                            callback,
+                        )
+                        callbackRegistered = true
+                    }
                     launch { reportingLoop() }
                     launch { sendingLoop() }
                 } catch (e: CancellationException) {
@@ -108,6 +127,7 @@ class TrackingService : Service() {
         var due = SystemClock.elapsedMillis() + interval * 1000L
         while (currentCoroutineContext().isActive) {
             try {
+                resources.renew()
                 val state = repository.state()
                 val config = state.config()
                 val newInterval = config.effective_reporting_interval_s
@@ -183,7 +203,7 @@ class TrackingService : Service() {
 
     override fun onDestroy() {
         scope.cancel()
-        source.stop()
+        resources.stop()
         if (callbackRegistered) connectivity.unregisterNetworkCallback(callback)
         app.operational.value = app.operational.value.copy(tracking = false)
         stopForeground(STOP_FOREGROUND_REMOVE)

@@ -88,11 +88,11 @@ func num(v any, min, max float64, whole bool) bool {
 	return err == nil && f >= min && f <= max && (!whole || integer.MatchString(string(n)))
 }
 func interval(v any) bool {
-	if !num(v, 10, 86400, true) {
+	if !num(v, 5, 86400, true) {
 		return false
 	}
 	n, _ := strconv.Atoi(string(v.(json.Number)))
-	return n%10 == 0
+	return n%5 == 0
 }
 func stamp(v any) bool {
 	s := str(v)

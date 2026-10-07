@@ -104,11 +104,11 @@ func num(v any, min, max float64, whole bool) bool {
 	return err == nil && f >= min && f <= max && (!whole || integer.MatchString(string(n)))
 }
 func interval(v any) bool {
-	if !num(v, 10, 86400, true) {
+	if !num(v, 5, 86400, true) {
 		return false
 	}
 	n, _ := strconv.Atoi(string(v.(json.Number)))
-	return n%10 == 0
+	return n%5 == 0
 }
 func stamp(v any) bool {
 	s := str(v)
@@ -375,7 +375,7 @@ func TestRejectContractDrift(t *testing.T) {
 		"wrong precedence": func(m map[string]any) {
 			object(m["config_state"])["effective_reporting_interval_s"] = json.Number("20")
 		},
-		"non multiple interval": func(m map[string]any) { object(m["config_state"])["local_reporting_interval_s"] = json.Number("15") },
+		"non multiple interval": func(m map[string]any) { object(m["config_state"])["local_reporting_interval_s"] = json.Number("6") },
 		"timezone offset":       func(m map[string]any) { m["captured_at"] = "2026-10-06T12:00:00.000+00:00" },
 		"unexpected SOS":        func(m map[string]any) { m["sos"] = map[string]any{} },
 	}

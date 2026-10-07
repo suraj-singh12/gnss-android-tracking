@@ -7,6 +7,7 @@ import android.location.*
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 
 // Pure observation seam: elapsed measurement time establishes age across wall clock edits.
 data class Observation(val fix: Fix, val elapsedMillis: Long)
@@ -67,9 +68,11 @@ interface LocationSource {
 class PlatformLocationSource(private val context: Context, val latest: LatestLocation) :
     LocationSource {
     private val manager = context.getSystemService(LocationManager::class.java)
+    private var started = false
     private val listener =
         object : LocationListener {
             override fun onLocationChanged(location: Location) {
+                if (!started) return
                 fun available(has: Boolean, value: Double, nonnegative: Boolean = false): Double? =
                     value.takeIf { has && it.isFinite() && (!nonnegative || it >= 0) }
                 if (
@@ -127,6 +130,7 @@ class PlatformLocationSource(private val context: Context, val latest: LatestLoc
         }
 
     override fun start() {
+        if (started) return
         check(
             context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
                 PackageManager.PERMISSION_GRANTED
@@ -134,18 +138,83 @@ class PlatformLocationSource(private val context: Context, val latest: LatestLoc
             "Precise location permission required"
         }
         latest.enabled = manager.isProviderEnabled(LocationManager.GPS_PROVIDER)
-        manager.registerGnssStatusCallback(gnss, Handler(Looper.getMainLooper()))
-        manager.requestLocationUpdates(
-            LocationManager.GPS_PROVIDER,
-            1000L,
-            0f,
-            listener,
-            Looper.getMainLooper(),
-        )
+        started = true
+        try {
+            check(manager.registerGnssStatusCallback(gnss, Handler(Looper.getMainLooper()))) {
+                "Unable to register GNSS status callback"
+            }
+            manager.requestLocationUpdates(
+                LocationManager.GPS_PROVIDER,
+                1000L,
+                0f,
+                listener,
+                Looper.getMainLooper(),
+            )
+        } catch (e: Exception) {
+            stop() // Roll back a partially registered source.
+            throw e
+        }
     }
 
     override fun stop() {
-        manager.removeUpdates(listener)
-        manager.unregisterGnssStatusCallback(gnss)
+        if (!started) return
+        started = false
+        try {
+            manager.removeUpdates(listener)
+        } finally {
+            manager.unregisterGnssStatusCallback(gnss)
+        }
+    }
+}
+
+// Owned only by TrackingService. A location FGS grants location access, but does
+// not itself keep the CPU running. Timeout bounds a lock if the service loop fails;
+// normal tracking renews it and every stop/start failure releases it immediately.
+internal class TrackingResources(
+    private val source: LocationSource,
+    private val wakeLock: PowerManager.WakeLock,
+    private val clock: Clock = SystemClock,
+) {
+    private var active = false
+    private var renewedAt = 0L
+
+    init {
+        wakeLock.setReferenceCounted(false)
+    }
+
+    @Synchronized
+    fun start() {
+        if (active) return
+        try {
+            wakeLock.acquire(TIMEOUT_MS)
+            renewedAt = clock.elapsedMillis()
+            source.start()
+            active = true
+        } catch (e: Exception) {
+            stop()
+            throw e
+        }
+    }
+
+    @Synchronized
+    fun renew() {
+        if (active && (!wakeLock.isHeld || clock.elapsedMillis() - renewedAt >= TIMEOUT_MS / 2)) {
+            wakeLock.acquire(TIMEOUT_MS)
+            renewedAt = clock.elapsedMillis()
+        }
+    }
+
+    @Synchronized
+    fun stop() {
+        active = false
+        try {
+            source.stop()
+        } finally {
+            if (wakeLock.isHeld) wakeLock.release()
+        }
+    }
+
+    companion object {
+        const val TIMEOUT_MS = 10 * 60 * 1000L
     }
 }

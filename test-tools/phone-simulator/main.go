@@ -236,7 +236,7 @@ func run(o options) error {
 		}
 		if override != nil {
 			n, ok := override.(float64)
-			if !ok || n < 10 || n > 86400 || n != float64(int(n)) || int(n)%10 != 0 {
+			if !ok || n < 5 || n > 86400 || n != float64(int(n)) || int(n)%5 != 0 {
 				return errors.New("ACK invalid override")
 			}
 		}

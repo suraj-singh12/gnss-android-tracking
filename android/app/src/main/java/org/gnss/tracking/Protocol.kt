@@ -10,7 +10,7 @@ import java.util.UUID
 
 const val MAX_WIRE_INTEGER = 9007199254740991L
 
-fun validInterval(seconds: Int) = seconds in 10..86400 && seconds % 10 == 0
+fun validInterval(seconds: Int) = seconds in 5..86400 && seconds % 5 == 0
 
 fun validLabel(value: String) = value.isNotBlank() && value.codePointCount(0, value.length) <= 80
 
@@ -165,7 +165,7 @@ object Protocol {
     }
 
     private fun interval(o: JsonObject, k: String): Int =
-        whole(o, k, 10, 86400).toInt().also { require(validInterval(it)) }
+        whole(o, k, 5, 86400).toInt().also { require(validInterval(it)) }
 
     fun remote(o: JsonObject): RemoteConfig {
         val authority = id(o, "authority_id")

@@ -11,6 +11,7 @@ are requests. Scenario request/ACK paths resolve relative to this directory.
 | No fix | `status-no-fix.json` | Honest null fix/optional health |
 | Retry | `ack-duplicate.json` | Replay exact normal request, same first receipt, one logical row |
 | Remote override/clear | `scenario-config.json` | Version 1 overrides to 30 s; local changes to 20 s; version 2 clears to 20 s fallback |
+| Five-second override | `location-five-second.json`, `ack-five-second.json` | Local 15 s, applied override/effective 5 s; default remains 10 s |
 | Current-first backlog | `scenario-reconnect.json` | Arrival 5,4,1,1; chronology 1,4,5; repeated 1 adds nothing |
 | SOS | `sos-fix.json`, `sos-no-fix.json` | Event timestamp distinct from fix; no fix allowed; transport ACK only |
 | Dynamic identity | `scenario-dynamic-sos.json` | New device may reuse sequence/message UUID; label edit keeps device ownership |
