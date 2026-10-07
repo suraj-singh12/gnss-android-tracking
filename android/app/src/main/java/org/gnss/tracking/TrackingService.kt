@@ -27,7 +27,10 @@ class TrackingService : Service() {
     private val failureHandler = CoroutineExceptionHandler { _, e ->
         loopError = "Unexpected service coroutine failure: ${e.javaClass.simpleName}"
         app.operational.update {
-            it.copy(error = "Tracking failed. Open the app and Start Tracking again.")
+            it.copy(
+                starting = false,
+                error = "Tracking failed. Open the app and Start Tracking again.",
+            )
         }
         Log.e(TAG, loopError!!)
         Handler(Looper.getMainLooper()).post { stopSelf() }
@@ -93,7 +96,10 @@ class TrackingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (!running) startReason = if (intent == null) "sticky_restart" else "user_start"
+        if (!running) {
+            startReason = if (intent == null) "sticky_restart" else "user_start"
+            app.operational.update { it.copy(starting = true, error = null) }
+        }
         if (
             checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) !=
                 PackageManager.PERMISSION_GRANTED
@@ -156,6 +162,9 @@ class TrackingService : Service() {
                             callback,
                         )
                         callbackRegistered = true
+                        app.operational.update {
+                            it.copy(tracking = true, starting = false, error = null)
+                        }
                     }
                     scope.launch { reportingLoop() }
                     scope.launch { sendingLoop() }
@@ -165,8 +174,9 @@ class TrackingService : Service() {
                     loopError = "Tracking initialization failed: ${e.javaClass.simpleName}"
                     app.operational.update {
                         it.copy(
+                            starting = false,
                             error =
-                                "Cannot initialize tracking. Open the app and Start Tracking again: ${e.message}"
+                                "Cannot initialize tracking. Open the app and Start Tracking again: ${e.message}",
                         )
                     }
                     // Cleanup must not wait on the same store that just failed.
@@ -261,8 +271,10 @@ class TrackingService : Service() {
                     loopError = "Precise location permission lost"
                     app.operational.update {
                         it.copy(
+                            tracking = false,
+                            starting = false,
                             error =
-                                "Precise location permission lost. Grant Precise location and Start Tracking again."
+                                "Precise location permission lost. Grant Precise location and Start Tracking again.",
                         )
                     }
                     runCatching { publishDiagnostics(p, true) }
@@ -272,9 +284,8 @@ class TrackingService : Service() {
                 source.refreshProvider()
                 app.operational.update {
                     it.copy(
-                        tracking = true,
                         gnss = latest.status(),
-                        accuracy = latest.currentFix()?.horizontal_accuracy_m,
+                        accuracy = latest.observation?.fix?.horizontal_accuracy_m,
                         ageMillis = latest.age(),
                         warning = latest.clockWarning() ?: p.warning(),
                     )
@@ -290,7 +301,7 @@ class TrackingService : Service() {
                 app.operational.update {
                     it.copy(
                         gnss = latest.status(),
-                        accuracy = latest.currentFix()?.horizontal_accuracy_m,
+                        accuracy = latest.observation?.fix?.horizontal_accuracy_m,
                         ageMillis = latest.age(),
                         error = "Cannot maintain GNSS: ${e.message}",
                     )
@@ -369,7 +380,7 @@ class TrackingService : Service() {
             runCatching { connectivity.unregisterNetworkCallback(callback) }
                 .onFailure { Log.w(TAG, "Network cleanup failed: ${it.javaClass.simpleName}") }
         runCatching { publishDiagnostics(power.snapshot(), false) }
-        app.operational.update { it.copy(tracking = false) }
+        app.operational.update { it.copy(tracking = false, starting = false) }
         try {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } finally {

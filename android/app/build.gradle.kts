@@ -23,6 +23,7 @@ android {
         srcDir("../../protocol/fixtures")
         exclude("**/*.md")
     }
+    testOptions { unitTests.isIncludeAndroidResources = true }
     lint { abortOnError = true }
 }
 

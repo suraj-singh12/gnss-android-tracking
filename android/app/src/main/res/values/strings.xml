@@ -1,4 +1,6 @@
 <resources>
     <string name="interval_value">%1$d</string>
     <string name="cannot_start">Cannot start tracking: %1$s</string>
+    <string name="cannot_load_settings">Cannot load saved settings: %1$s. Reopen the app to retry.</string>
+    <string name="cannot_read_settings">Cannot read saved settings: %1$s. Reopen the app to retry.</string>
 </resources>

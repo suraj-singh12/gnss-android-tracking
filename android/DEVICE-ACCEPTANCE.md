@@ -46,8 +46,23 @@ controls on loopback. Open `http://127.0.0.1:8081` on the laptop.
 
 On Android configure Party ID/name, Command base URL
 `http://<laptop-LAN-IP>:8080` (**not** localhost, dashboard port or API path), local
-reporting interval **10 seconds**, then Start Tracking from the visible app.
-Grant precise location and notification permission; confirm the ongoing notification.
+reporting interval **10 seconds**. On each open/resume, check **Field readiness**:
+precise permission, system GPS, notifications (including the Tracking channel),
+Battery Saver and battery background policy are listed independently. Missing
+runtime permissions are requested while the Activity is visible; use the listed
+Settings actions for GPS, blocked permissions/notifications or power settings.
+Returning from Settings refreshes readiness. Battery optimization exemption is
+only an Android allowlist signal; it does not certify every OEM's Unrestricted UI.
+
+Wait until **Loading settings…** becomes **Start Tracking**, then tap **once**.
+Expect **Starting…**, followed by **Tracking active** after durable service startup.
+If a prerequisite is missing, the screen explains the required action; that explicit
+Start remains pending through permission/Settings returns and completes only while
+the Activity is resumed. Returning without a pending Start never starts tracking.
+Stop Tracking cancels pending startup; closing the Activity before service handoff
+cancels it. A configuration change while settings are still saving shows an explicit
+cancellation instruction rather than starting with possibly unsaved settings.
+Confirm the ongoing notification.
 Before the run, use the dedicated-phone setup below and record the settings.
 Start while the Activity is visible (modern Android restricts background
 location-FGS starts). Do not force-stop or swipe away
@@ -121,8 +136,8 @@ before/after events as local evidence of device/config/track state.
 
 | Stage | Procedure and expected evidence | PASS/FAIL + evidence |
 | --- | --- | --- |
-| 1 Discovery | Start Command then phone as above. New device appears dynamically with correct Party labels; record device UUID. | |
-| 2 Outdoor fix | Obtain GNSS fix. Compare phone saved GNSS coordinates (extraction above) with Command `location.fix` in local state and timestamps. Accuracy/unavailable fields must be honest. | |
+| 1 Discovery / startup | Start Command then phone as above. Verify one deliberate Start tap, visible Starting → Active, and no extra service start from repeated taps. Check each readiness action and return from Settings; no automatic start without an explicit pending Start. New device appears dynamically with correct Party labels; record device UUID. | |
+| 2 Outdoor fix | Obtain GNSS fix. Compare phone saved GNSS coordinates (extraction above) with Command `location.fix` in local state and timestamps. Accuracy/unavailable fields must be honest. Fresh UI shows Accuracy/Fix age; a >30 s old observation shows Last fix age/Last known accuracy, or Unavailable if never measured. With no observation it shows Last fix: None. Stale metadata must not become a current Command fix. | |
 | 3 Local cadence | Keep default 10 s as a baseline, then save local **5 s**. Observe ≥5 reports at each cadence, increasing observation/capture times and successful ACKs. GNSS callbacks must not flood packets. | |
 | 4 Activity closed + screen off GNSS | Close Activity using Back, then lock/switch screen off; remain outdoors with sky view and move for **at least 30 minutes** at local 5 s. Do not reopen the app during this period. Retain intervening Command state snapshots: `gnss_condition` remains fresh, native `observed_at` advances, capture/ACK/contact remain healthy, no unexplained gaps. Unlock without opening Activity and check again on Command. Reopening must not be needed to restore fixes. Record battery use and start/end times. | |
 | 5 Remote override | Save local 15 s, close Activity and lock screen. On Command device card Set **5 s**. Confirm ACK adoption, effective 5 s and eventual settings-applied state; observe ≥5 fresh GNSS reports at 5 s without opening Activity. Also check existing 30 s override. Delivery waits for the next request/ACK. | |
@@ -171,8 +186,29 @@ app emits one concise sample/minute, with bounded exceptional-start evidence.
 | Permission/policy? | `power.precisePermission`, raw `fineLocationAppOp` plus platform appops/location dump. MODE_FOREGROUND (4) is conditional, not a grant of effective access. Logcat may report a background-started FGS without location access. |
 | Reporter/sender/store alive? | `reportingIterationAgeMs`, `senderIterationAgeMs`, `savedSnapshotAgeMs`, `loopError` / `source.error` (last errors, not necessarily ongoing) versus healthy Command receipts. A maintenance sample gap can be scheduling/process/power/disk trouble, not automatically GNSS failure. |
 
-Record behavior in order: outdoors screen-off → unlock only → Activity open →
-minimize/reopen. Do not restart the app/listener until evidence is collected.
+### GPSTest comparison when GNSS becomes stale
+
+Use GPSTest already installed before the offline run; record its version. This
+comparison does not replace the sustained test and does not prove an app/OEM cause.
+
+1. Keep our foreground service running outdoors. When Command shows healthy
+   contact but old/no GNSS, record Command state, failure time and last observed fix.
+   **Do not reopen GNSS Tracking or restart its service.**
+2. Unlock only; record whether Command receives a newly observed fix before any
+   Activity is opened. Then open **GPSTest**, leaving our Activity closed. Record
+   GPSTest acquisition/fix times and Command's live observation times for several
+   minutes. Note whether fresh fixes return to our service while GPSTest is active.
+3. Capture the private `gnss-diagnostics.json` and platform evidence above. Compare
+   samples before/during GPSTest: same `serviceGeneration`, `source.registrations`,
+   location/GNSS callback counters and ages, measurement age, provider, lock,
+   power/AppOp and sender/reporting ages. Counters increasing with a fresh measurement
+   distinguish native callback recovery from healthy HTTP contact alone. Samples
+   are once/minute, so short transitions may require timestamped Logcat/platform
+   evidence; attaching ADB itself can alter sleep behavior.
+4. Close GPSTest and observe Command again without reopening our Activity. Only
+   after that evidence, open GNSS Tracking, then minimize/reopen it, recording any
+   recovery at each step. Do not restart the app/listener until evidence is collected.
+
 Continuous poor fixes or absent callbacks indoors do not justify automatic source
 restart. If callbacks vanish outdoors while service/provider/lock remain present,
 compare power/AppOp/engine history before attributing the cause to an OEM.

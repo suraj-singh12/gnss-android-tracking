@@ -14,7 +14,7 @@ paths reproduced below. No single cause of the on-phone incident is confirmed.
 | Cause investigated | Assessment and evidence |
 | --- | --- |
 | FGS declaration/promotion/notification | **FIXED PREVIOUSLY / RULED OUT as a current declaration defect.** Location type, FGS and location-FGS permissions, fine/coarse permission, ongoing notification, immediate promotion and registration are present. API 26 uses two-argument promotion; API 29+ explicitly promotes location type. No Activity pause/stop/destroy demotion or source cleanup exists. Notification denial does not grant location permission or stop a valid FGS. Android 15's data-sync/media-processing time limits are not location-service limits. |
-| Async visible Start → hidden Activity before service creation | **FIXED IN THIS RUN; incident attribution STILL UNKNOWN.** Saving settings suspends on Room; the Activity scope survives onStop. Previously completion could start the service from the background. Android 30–33 can allow a service without effective location access, while networking continues; API 34+ may throw at creation. Foregrounding can change access. Explicit start now rechecks Activity visibility after storage/permission work. Opening/resuming never automatically starts or restarts GNSS. A transition after the final visibility check is still subject to Android enforcement. |
+| Async visible Start → hidden Activity before service creation | **FIXED IN THIS RUN; incident attribution STILL UNKNOWN.** Saving settings suspends on Room; the Activity scope survives onStop. Previously completion could start the service from the background. Android 30–33 can allow a service without effective location access, while networking continues; API 34+ may throw at creation. Foregrounding can change access. Explicit start now rechecks Activity visibility after storage/permission work. Opening/resuming alone never starts or restarts GNSS; the later final-candidate change below preserves an explicit pending Start through prerequisite resolution. A transition after the final visibility check is still subject to Android enforcement. |
 | Background-location permission | **RULED OUT as a requirement for ordinary tracking.** A user-visible location FGS may continue when Home/lock hides the Activity. No background location collection entrypoint or boot receiver exists. Adding background permission would expand scope and conceal the startup defect. Fine permission alone does not prove while-in-use access is currently effective. |
 | Full service/process death | **Unlikely sole cause of this incident; DEVICE/OEM DEPENDENT.** Continued Command contact contradicts complete death throughout the failure. Reclaim/recreation can still happen between observations. START_STICKY and null-intent persisted-state restoration remain deliberate. System sticky restarts are exempt from the API 31 general FGS background-start restriction; this is not a universal promise of location permission, OEM restart or GNSS delivery. New generation/start-reason diagnostics distinguish recreation. |
 | CPU sleep/lock renewal | **FIXED PREVIOUSLY + FIXED IN THIS RUN.** Partial non-reference-counted lock, 10-minute timeout, renewal after 5 minutes and finally-release are retained. Renewal was coupled to Room/reporting; blocked startup or a dead reporting coroutine could let it expire. Independent service maintenance now renews before any power/provider check and never waits for Room/network. Held does not mean effective during Doze/Low Power Standby. |
@@ -94,7 +94,7 @@ GNSS power draw, or physical restart behavior. The exact incident cause remains
 unknown until a sustained unplugged run captures these diagnostics. A passing
 hardware run, not this audit, is required for Issue #4 physical acceptance.
 
-## Automated verification for this update
+## Automated verification of the GNSS hardening baseline (`1f3ecbed`)
 
 - Focused GNSS/lifecycle tests: 18 passed, including the 3 retained lifecycle tests.
   Final full run also covers overlapping journal writers; 15 new tests in total.
@@ -120,3 +120,46 @@ Confidence: **READY FOR TARGETED PHYSICAL RETEST.** Known code failure paths are
 addressed; no further speculative acquisition/recovery change is justified without
 the new physical trace. This is not a claim that screen-off GNSS is solved, nor
 permission to field-accept Issue #4 before its sustained hardware run passes.
+
+## Final candidate: startup, preflight and stale display
+
+A separate startup regression was reproduced against `1f3ecbed`: a requested
+precise-permission result delivered after Activity stop cleared `startAfterPermission`
+before the visibility guard rejected service creation. Resume had no remaining
+intent, so a second Start was required. Asynchronous settings-save completion while
+hidden could similarly lose the request. This explains a code-level second-tap
+path; without a phone-side startup trace it does not identify which path occurred
+in the reported incident.
+
+The Activity now retains one explicit pending Start until settings are committed,
+permissions/provider/notifications/Saver are ready and it is resumed. Loading
+settings disables Start; Starting disables repeat submissions. Service startup
+reports Active only after its durable initial state/snapshot and network registration
+complete; native GNSS registration still happens immediately after FGS promotion.
+Startup failures are actionable and clear the Starting state. Activity restoration
+retains pending prerequisite resolution; an interrupted settings save is explicitly
+canceled to avoid using uncertain settings. Closing the Activity cancels unsubmitted
+intent. Neither screen visibility nor Settings return alone starts an existing or
+new source.
+
+Field readiness independently reads precise permission, GPS provider, runtime/app/
+Tracking-channel notification permission, Battery Saver and the Android optimization
+allowlist on every resume. Supported Settings actions resolve non-requestable states;
+no exemption is requested automatically and OEM Unrestricted/background/autostart
+requirements still need human verification.
+
+The UI now retains last-observation accuracy and labels stale age/accuracy as last
+known. `LatestLocation.currentFix()`, the 30-second boundary, native callback strategy,
+wire serialization and private bounded diagnostic journal are unchanged. The canonical
+runbook includes the GPSTest comparison before reopening our Activity.
+
+
+Final-candidate verification: 30 focused tests passed (23 added startup/display
+executions plus 7 retained lifecycle tests). Full Android suite: 69 passed, zero
+failures/errors; 16 opt-in integration tests skipped there and all 16 passed
+separately with zero skips/failures/errors in the race-instrumented real bridge.
+`assembleDebug` and `lintDebug` passed, zero lint issues. Command/test-tools
+unit tests, vet and race checks passed; uncached protocol/fixture/document checks
+passed. Robolectric UI tests now include actual Android resources. Scope/diff and
+artifact review passed: this candidate changes ten Android source/test/build/doc
+files, with no Command/Protocol/test-tools changes or committed APK/database.
