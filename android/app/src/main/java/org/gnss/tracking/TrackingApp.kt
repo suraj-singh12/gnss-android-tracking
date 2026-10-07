@@ -19,5 +19,8 @@ data class Operational(
 class TrackingApp : Application() {
     val repository by lazy { Repository(TrackingDatabase.open(this)) }
     val operational = MutableStateFlow(Operational())
+    val recorder by lazy {
+        DiagnosticRecorder(DiagnosticJournal(java.io.File(filesDir, "diagnostics")))
+    }
     val diagnostics = MutableStateFlow<GnssDiagnostic?>(null)
 }

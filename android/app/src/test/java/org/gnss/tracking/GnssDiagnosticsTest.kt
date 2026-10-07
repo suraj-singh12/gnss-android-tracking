@@ -4,11 +4,6 @@ import android.Manifest
 import android.content.Context
 import android.os.PowerManager
 import androidx.test.core.app.ApplicationProvider
-import com.google.gson.JsonParser
-import java.io.File
-import java.util.concurrent.Callable
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -74,63 +69,5 @@ class GnssDiagnosticsTest {
         assertEquals(PowerManager.THERMAL_STATUS_SEVERE, snapshot.thermalStatus)
         assertTrue(snapshot.warning()!!.contains("Battery Saver"))
         assertTrue(manager.isPowerSaveMode) // Diagnostics do not request/bypass exemptions.
-    }
-
-    @Test
-    fun journalIsBoundedDurableAndContainsNoLocationOrReceiverData() {
-        val file = File(temporary.root, "gnss-diagnostics.json")
-        val power = PowerState(true, false, false, 0, false, false, null, null, 125, 4)
-        fun sample(i: Long) =
-            GnssDiagnostic(
-                utc(i),
-                i,
-                "service-generation",
-                "user_start",
-                null,
-                SourceState(registered = true, registeredAt = 0),
-                true,
-                null,
-                null,
-                null,
-                false,
-                true,
-                true,
-                0,
-                power,
-                0,
-                0,
-                null,
-                null,
-            )
-        val journal = DiagnosticJournal(file)
-        for (i in 0L..70L) journal.append(sample(i))
-        DiagnosticJournal(file).append(sample(71))
-        val data = JsonParser.parseString(file.readText()).asJsonArray
-        assertEquals(DiagnosticJournal.MAX_SAMPLES, data.size())
-        assertEquals(8L, data.first().asJsonObject["elapsed"].asLong)
-        assertEquals(71L, data.last().asJsonObject["elapsed"].asLong)
-        assertTrue(file.length() <= DiagnosticJournal.MAX_BYTES)
-        for (secret in
-            listOf("latitude", "longitude", "endpoint", "device_id", "party")) assertFalse(
-            file.readText().contains(secret)
-        )
-        val workers = Executors.newFixedThreadPool(2)
-        val concurrent = File(temporary.root, "overlapping-generations.json")
-        try {
-            val tasks =
-                (0L..39L).map { i -> Callable { DiagnosticJournal(concurrent).append(sample(i)) } }
-            for (task in workers.invokeAll(tasks)) task.get(10, TimeUnit.SECONDS)
-            val preserved = JsonParser.parseString(concurrent.readText()).asJsonArray
-            assertEquals(40, preserved.size())
-            assertEquals(
-                (0L..39L).toSet(),
-                preserved.map { it.asJsonObject["elapsed"].asLong }.toSet(),
-            )
-        } finally {
-            workers.shutdownNow()
-        }
-        file.writeText("corrupted")
-        journal.append(sample(72))
-        assertEquals(1, JsonParser.parseString(file.readText()).asJsonArray.size())
     }
 }

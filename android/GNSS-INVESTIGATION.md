@@ -2,8 +2,8 @@
 
 PR #11; Android API 26–35, target SDK 35. **The physical failure is not proven
 resolved.** Authoritative evidence is healthy Command contact while GNSS ages,
-often recovering after opening the Activity. No diagnostic trace from that incident
-exists. This report records the code/platform audit, not a hardware result.
+often recovering after opening the Activity. The new A/B test is decisive evidence that GPSTest activation can restore fresh
+coordinates to our still-running listener; it does not yet identify the platform cause. This report records the code/platform audit, not a hardware result.
 The field procedure remains [DEVICE-ACCEPTANCE.md](DEVICE-ACCEPTANCE.md).
 
 ## Assessment
@@ -46,15 +46,9 @@ paths reproduced below. No single cause of the on-phone incident is confirmed.
   post-stop callback guards and separate elapsed callback/rejection/engine diagnostics.
   Native-boundary tests inject partial registration failure, false satellite registration,
   provider off/on, acquisition/stopped events and unusable measurement timestamps.
-- `GnssDiagnostics` / `TrackingApp`: public-API power snapshots, live diagnostic state,
-  and a private atomic file, at most 64 samples and 128 KiB. One sample/minute plus
-  exceptional start/permission failure evidence; one conflated pending sample prevents
-  disk stalls from building a queue. No coordinates, identities, labels, endpoint or
-  protocol fields. Tests cover minimum API unavailable values, API 35 power flags,
-  callback-silence semantics, bounded retention/reopen, concurrent replacement
-  service writers without lost samples, and malformed-file reset. Writers are
-  serialized across service generations because cancellation cannot interrupt
-  synchronous file IO and AtomicFile is not multi-writer safe.
+- `GnssDiagnostics` / `TrackingApp`: the original 64-sample atomic journal is
+  superseded by the incident recorder below. Public power and live diagnostic seams
+  remain; acquisition ownership and callback scheduling are unchanged.
 - Activity adds one actionable field-setup warning and a standard app-settings button.
   It does not request allowlisting, launch itself, or display a developer console.
 
@@ -150,7 +144,8 @@ requirements still need human verification.
 
 The UI now retains last-observation accuracy and labels stale age/accuracy as last
 known. `LatestLocation.currentFix()`, the 30-second boundary, native callback strategy,
-wire serialization and private bounded diagnostic journal are unchanged. The canonical
+wire serialization were unchanged in that update. The later recorder update below
+evolves only private diagnostic persistence/export. The canonical
 runbook includes the GPSTest comparison before reopening our Activity.
 
 
@@ -163,3 +158,104 @@ unit tests, vet and race checks passed; uncached protocol/fixture/document check
 passed. Robolectric UI tests now include actual Android resources. Scope/diff and
 artifact review passed: this candidate changes ten Android source/test/build/doc
 files, with no Command/Protocol/test-tools changes or committed APK/database.
+
+
+## Self-preserving incident recorder
+
+The latest physical A/B result is **CONFIRMED**: service/5-second ACKs stayed alive,
+precise permission/provider/notifications were present, Saver was off and Android
+optimization exemption was present, while GNSS became stale. Opening GPSTest
+obtained a coordinate and our existing listener immediately received fresh fixes.
+The actual stack/OEM cause remains **UNKNOWN**. This update records evidence and
+adds **no acquisition/recovery change**: same GPS_PROVIDER request, main Looper,
+foreground ownership, wake policy, 30-second freshness and Protocol v1.
+
+`TrackingApp` owns one independent supervised recorder worker. Native callbacks
+only update existing in-memory source state and nonblocking-enqueue typed events;
+no file/Room/network access occurs there. The bounded FIFO holds 512 messages;
+overflow is counted, not silently conflated. Writer failures are contained and
+counted; tracking loops, native registration and wake renewal remain independent.
+Export is queued behind prior records, creates one temporary ZIP on that worker,
+then copies to Android's selected document on separate Activity IO. Slow external
+storage does not block callbacks; a slow/private disk can drop queue entries and
+those counts are explicit. A process kill can lose unprocessed entries; a
+crash-safe file is not a promise that every queued event already reached disk.
+
+Private layout: `files/diagnostics/timeline-*.jsonl` and
+`incident-*/{summary.json,pre.jsonl,events-*.jsonl}`. Append-only UTF-8 JSONL uses
+complete lines and fsync; small summaries/pre-context use AtomicFile. Startup
+repairs malformed/torn records while preserving valid evidence. Open incidents
+from a prior process are marked interrupted, not retrospectively recovered.
+Normal samples persist every 30 seconds; five-second samples and immediate events
+populate a five-minute memory pre-buffer. State/power changes are saved when
+observed by the one-second maintenance loop, even between coarse samples.
+
+An incident freezes the pre-buffer on stale measurement (>30 s), independent
+≥5-minute Location/GNSS-status silence (status only if registered), provider off,
+precise permission lost, registration/foreground failure, sticky restart, or loop
+failure. Silence/indoors is evidence, not proof of stack failure, and invokes no
+restart. An ordinary user stop/start is not an unexpected recreation trigger.
+Native events cover registration attempt/result/unregister, provider changes,
+Location acceptance/rejection/measurement age, GNSS engine start/stop/first-fix/
+satellites, wake acquire/renew/release, Activity visible/resumed/background,
+service create/start(reason)/foreground/destroy and loop failure. Samples carry
+separate counters/ages, current versus last-known accuracy, permission/AppOp,
+process importance, screen/idle/Saver/location-power/standby/thermal/optimization,
+lock, report/sender/snapshot progress, effective interval, cached Wi-Fi and delivery
+state. ACK age is time since observing a changed persisted ACK, not corrected
+Command time; it stays unavailable at restart until a new change. Pending count
+remains nullable rather than adding Room work to GNSS maintenance.
+
+Incidents sample every 2 seconds plus native/lifecycle transitions until a real
+accepted Location callback with ≤30-second measurement age arrives with provider
+and precise permission present. `FIRST_LOCATION_AFTER_STALE` and `GNSS_RECOVERED`
+include exact callback UTC/elapsed timestamps and counters; engine/satellite
+callbacks never invent recovery. Summary `before`/`after` contains the requested
+source/power/loop evidence. Stale duration runs from the measured 30-second boundary,
+not the later detection/export time; completed stale episodes are summed if the
+same incident relapses. Post-recovery capture lasts five minutes;
+relapse is retained within the same incident and restarts that window. If only
+Location resumes while satellite telemetry remains silent, the evidence shows it.
+
+Limits: six recent incidents, seven days; 256 KiB rotating chunks; 4 MiB coarse
+timeline and 4 MiB recent event history per incident; pre-context ≤1 MiB/1200
+records; total ≤32 MiB. Start/pre-context/summary survive event rotation; truncated
+middle history is flagged. Count/byte/age rotation may remove old incidents;
+export promptly after a run and retain its ZIP. Active incidents are not aged out.
+A stopped service finalizes evidence without claiming recovery. No automatic
+clock correction or diagnosis such as “OEM killed GNSS” is stored.
+
+**Export diagnostics** uses Android ACTION_CREATE_DOCUMENT, works offline and
+includes only manifest/build/source revision and retained typed recorder files.
+It does not alter tracking or clear evidence. Sanitization removes arbitrary error
+text and unknown/injected keys. No coordinates/altitude, Party/device UUID,
+Command URL/IP, SSID/password, raw protocol or database data enter the bundle.
+Service-generation UUIDs are process-local diagnostic IDs, never device identity.
+See [DEVICE-ACCEPTANCE.md](DEVICE-ACCEPTANCE.md) for the field export and GPSTest
+sequence. ADB is optional developer corroboration, not the primary collection path.
+
+Automated verification for this recorder update is recorded with the PR. JVM tests
+cover retention/transitions/privacy/failures and actual service/source/export seams;
+real GNSS, GPSTest activation, screen-off/Doze/OEM scheduling, battery/storage costs
+and the phone's document picker still require the unplugged physical retest.
+
+
+Recorder verification: full `testDebugUnitTest` **101 passed, zero failures/errors**;
+16 opt-in bridge cases skipped there and **all 16 passed separately** using the
+race-instrumented real Command process. The final full run includes **50**
+recorder/export/source/service checks: 23 incident cases, six document-export cases
+(APIs 26/28/35), and retained/expanded native lifecycle and power tests. The old
+64-sample journal contract is replaced by bounded incident/reopen/rotation/privacy
+coverage; previous startup, display, sender, Room and Protocol assertions remain.
+`assembleDebug` passed; final `lintDebug` reports **zero issues**. Uncached shared
+contract/fixture/document checks: **44 tests/subtests passed**. `git diff --check`
+and scope/artifact review passed. No Command, Protocol, test-tools or GNSS
+acquisition/recovery changes; no APK/database/generated files are committed.
+
+Expanded API testing exposed Robolectric 4.14's native fonts ZIP/SQLite runtime
+contamination across SDK/shadow sandboxes. Each test class now has a fresh Gradle
+fork; document-export APIs have separate test classes, and app-owned recorder IO
+is drained on teardown. The satellite builder boundary runs on API 30, where that
+public API first exists. This keeps all assertions; it is test isolation, not a
+phone workaround. Early failing test-runner attempts are not counted as passes.
+No hardware/GPSTest/screen-off acceptance was executed by this verification.

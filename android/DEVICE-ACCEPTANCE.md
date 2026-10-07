@@ -156,11 +156,41 @@ is falsely fresh, config never converges, identity changes, or distance duplicat
 connects stopped periods. Record the failure and precise timestamps; retain database
 copies only after stopping Command and note the app queue state. For a GNSS
 continuity failure record whether Command contact stayed healthy and whether
-unlocking versus opening Activity restored fixes. Before unlocking/opening the app, save Command contact/location-age snapshots
-and failure time; then extract the local diagnostic history and platform state:
+unlocking versus opening Activity restored fixes. Before unlocking/opening the app, save Command contact/location-age snapshots and
+failure time. Historical evidence is already frozen automatically; **ADB is not
+required at the moment of failure**. Follow the GPSTest comparison below before
+opening our Activity. Afterward, open GNSS Tracking → **Export diagnostics** →
+choose a local folder in Android Files → Save. Share the resulting
+`gnss-diagnostics-<UTC timestamp>.zip` with the run record for analysis. This works
+offline and does not stop tracking, restart GNSS or clear saved incidents. Keep the
+original ZIP; share via USB later or any operator-selected sharing mechanism.
+If export fails, retry after freeing storage/enabling Android Files; incidents
+remain private. Canceling the picker does not change tracking.
+
+The bundle contains `manifest.json` (format, app version/source revision, Android
+API, retention limits and writer/drop counters), rotating `timeline-*.jsonl`, and
+`incident-*/summary.json`, `pre.jsonl`, `events-*.jsonl`. Normal health is sampled
+once/30 s; policy/state changes are recorded on observation (maintenance checks
+every second) and lifecycle/native transitions immediately. Incidents retain
+~5 minutes of pre-context, callbacks/events and 2-second health samples throughout
+the failure, then ~5 minutes after a fresh accepted location. Six recent incidents,
+seven-day retention, 4 MiB rolling timeline, 4 MiB incident event history and
+32 MiB total bound storage. Pre-context is additionally bounded to 1 MiB/1200
+records. Long/high-volume incidents retain their start/summary/pre-context and
+recent events; `truncated` explicitly flags discarded middle history. Reboot/kill
+can lose the in-memory pre-buffer or unflushed queue; `interrupted`, record drops,
+IO failures and gaps must be treated as missing evidence, never proof of health.
+
+No coordinates, altitude, Party/device identity, Command address, SSID/password,
+raw packets or database contents are exported. Accuracy/satellite counts, app
+version, service-generation IDs and timing/policy evidence are included. Command
+screenshots/database evidence are separate and may contain operational identities
+or coordinates; send only intentionally selected evidence.
+
+Optional developer extraction later (USB/ADB may wake the phone):
 
 ```sh
-adb exec-out run-as org.gnss.tracking cat files/gnss-diagnostics.json > gnss-diagnostics.json
+adb exec-out run-as org.gnss.tracking tar -C files -cf - diagnostics > gnss-diagnostics-files.tar
 adb logcat -d -s GnssTracking:I > gnss-logcat.txt
 adb shell dumpsys location > location-state.txt
 adb shell dumpsys activity services org.gnss.tracking > service-state.txt
@@ -168,22 +198,21 @@ adb shell dumpsys power > power-state.txt
 adb shell cmd appops get org.gnss.tracking FINE_LOCATION > location-appops.txt
 ```
 
-The private file is available on the debug build and is atomic; unlike copying a
-live SQLite database it does not require force-stop. USB/ADB may wake the phone:
-the preceding minute samples (up to 64, ≤128 KiB total) are more valuable than
-post-attachment state. Missing file/samples can mean startup or storage failure.
-Final cleanup may not flush a sample before process exit. Redact unrelated apps'
-`dumpsys` data; no passwords/secrets. Logcat buffers are managed by Android; the
-app emits one concise sample/minute, with bounded exceptional-start evidence.
+A live developer copy may end with an incomplete JSONL record; ignore that final
+line. The in-app export reads sanitized complete records on the writer. Platform
+dumps are optional corroboration and can include unrelated apps: redact those
+before sharing. The obsolete single `gnss-diagnostics.json` is not the recorder or
+part of the export. Existing installations may retain that old file.
 
 | Question | Evidence / interpretation |
 | --- | --- |
 | Service alive / recreated? | Ongoing notification, `dumpsys activity services`, `serviceGeneration`, `startReason` user_start/sticky_restart, sample UTC/elapsed times. A history sample proves state at that time, not present liveness. |
 | Source requested? | `source.registered`, `source.statusRegistered`, `source.registrations`; compare `dumpsys location` GPS requests. App registration flags are not proof the system is delivering callbacks. |
 | CPU protection / power gate? | `wakeLockHeld`, `wakeRenewals`, `power.deviceIdle`, `interactive`, optimization status, Saver, location-power mode, Low Power Standby, thermal status and process importance. Held locks can be ignored by Doze/standby. Modes: 0 unchanged; 1 GPS disabled screen-off; 2 all disabled screen-off; 3 foreground-only; 4 throttle screen-off. Unsupported API values are null. |
-| Callback stream alive? | Separate `locationCallbackAgeMs` and `gnssCallbackAgeMs` plus counters; `source.engineRunning`; `callbacksQuiet` flags ≥5 min with neither stream. This flag does **not** diagnose a stall or restart anything: no sky view can also cause silence. |
+| Callback stream alive? | Separate `locationCallbackAgeMs` and `gnssCallbackAgeMs` plus counters; `source.engineRunning`, `satellitesTotal`/`satellitesUsed`; `CALLBACK_SILENCE` records ≥5 min without Location or (when registered) GNSS status independently. Legacy `callbacksQuiet` still reports neither stream. This flag does **not** diagnose a stall or restart anything: no sky view can also cause silence. |
 | Measurements usable/fresh? | `fixMeasurementAgeMs`, `fixAvailable`, `source.rejectedObservations`/`lastRejection`. Recent callback with old/bad measurement time is not a fresh fix. Satellite/acquisition callbacks never refresh coordinates. GPS enabled is not a fix. |
 | Permission/policy? | `power.precisePermission`, raw `fineLocationAppOp` plus platform appops/location dump. MODE_FOREGROUND (4) is conditional, not a grant of effective access. Logcat may report a background-started FGS without location access. |
+| Incident duration / native recovery? | `FIX_BECAME_STALE`, `FIRST_LOCATION_AFTER_STALE`, `GNSS_RECOVERED`; summary before/after counters, `recoveredAt` and elapsed duration. Recovery requires a real accepted Location measurement ≤30 s old with GPS/precise permission present; satellites alone do not recover it. A relapse resets the post-context window; events preserve each transition. |
 | Reporter/sender/store alive? | `reportingIterationAgeMs`, `senderIterationAgeMs`, `savedSnapshotAgeMs`, `loopError` / `source.error` (last errors, not necessarily ongoing) versus healthy Command receipts. A maintenance sample gap can be scheduling/process/power/disk trouble, not automatically GNSS failure. |
 
 ### GPSTest comparison when GNSS becomes stale
@@ -198,16 +227,19 @@ comparison does not replace the sustained test and does not prove an app/OEM cau
    Activity is opened. Then open **GPSTest**, leaving our Activity closed. Record
    GPSTest acquisition/fix times and Command's live observation times for several
    minutes. Note whether fresh fixes return to our service while GPSTest is active.
-3. Capture the private `gnss-diagnostics.json` and platform evidence above. Compare
-   samples before/during GPSTest: same `serviceGeneration`, `source.registrations`,
-   location/GNSS callback counters and ages, measurement age, provider, lock,
-   power/AppOp and sender/reporting ages. Counters increasing with a fresh measurement
-   distinguish native callback recovery from healthy HTTP contact alone. Samples
-   are once/minute, so short transitions may require timestamped Logcat/platform
-   evidence; attaching ADB itself can alter sleep behavior.
-4. Close GPSTest and observe Command again without reopening our Activity. Only
-   after that evidence, open GNSS Tracking, then minimize/reopen it, recording any
-   recovery at each step. Do not restart the app/listener until evidence is collected.
+3. Close GPSTest and observe Command again **without reopening our Activity**.
+   Record whether fresh fixes continue. Only after that comparison, open GNSS
+   Tracking, then minimize/reopen it if needed, recording any recovery at each step.
+   Do not stop tracking or restart the listener to collect evidence.
+4. After ~5 minutes of post-recovery context (or much later the same day), use
+   **Export diagnostics**. Compare the frozen incident before/during GPSTest:
+   service generation/registrations, Location versus GNSS callback counters/ages,
+   engine/satellites, measurement age, provider, lock, power/process/AppOp and
+   sender/reporting progress. `FIRST_LOCATION_AFTER_STALE` identifies the native
+   callback that restored a fresh measurement; HTTP contact alone does not.
+   Attach the ZIP to the Issue #4 test report or analysis conversation, with phone/
+   Android/GPSTest versions and the external Command/GPSTest timestamps. No live ADB
+   is needed; opening the Activity later does not overwrite the frozen incident.
 
 Continuous poor fixes or absent callbacks indoors do not justify automatic source
 restart. If callbacks vanish outdoors while service/provider/lock remain present,

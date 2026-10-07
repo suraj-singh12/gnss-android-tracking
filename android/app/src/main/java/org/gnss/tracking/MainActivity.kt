@@ -24,6 +24,8 @@ class MainActivity : Activity() {
     private lateinit var partyName: EditText
     private lateinit var endpoint: EditText
     private lateinit var interval: EditText
+    private lateinit var exportStatus: TextView
+    private var exporting = false
     private lateinit var status: TextView
     private var initialized = false
     private lateinit var startButton: Button
@@ -204,6 +206,28 @@ class MainActivity : Activity() {
                 .setPositiveButton("Re-enroll") { _, _ -> save(reenroll = true) }
                 .show()
         }
+        text("Diagnostics", 20f)
+        button("Export diagnostics") {
+            if (!exporting) {
+                try {
+                    startActivityForResult(
+                        Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = "application/zip"
+                            putExtra(
+                                Intent.EXTRA_TITLE,
+                                "gnss-diagnostics-${java.time.Instant.now().toString().replace(':', '-')}.zip",
+                            )
+                        },
+                        EXPORT_DIAGNOSTICS,
+                    )
+                } catch (e: android.content.ActivityNotFoundException) {
+                    exportStatus.text = getString(R.string.diagnostics_no_picker)
+                }
+            }
+        }
+        exportStatus =
+            text("Incident evidence is saved automatically. Export does not stop tracking.")
         text("Tracking", 20f)
         startButton = button("Loading settings…") { save(start = true) }
         startButton.isEnabled = false
@@ -500,6 +524,10 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         resumed = true
+        app.recorder.event(
+            DiagnosticEvent.ACTIVITY_RESUMED,
+            app.diagnostics.value?.serviceGeneration,
+        )
         refreshPreflight()
         promptMissingPermissions()
         attemptStart()
@@ -522,11 +550,69 @@ class MainActivity : Activity() {
     override fun onStart() {
         super.onStart()
         visible = true
+        app.recorder.event(
+            DiagnosticEvent.ACTIVITY_VISIBLE,
+            app.diagnostics.value?.serviceGeneration,
+        )
     }
 
     override fun onStop() {
         visible = false
+        app.recorder.event(
+            DiagnosticEvent.ACTIVITY_BACKGROUND,
+            app.diagnostics.value?.serviceGeneration,
+        )
         super.onStop()
+    }
+
+    @Deprecated("Platform document result")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != EXPORT_DIAGNOSTICS || resultCode != RESULT_OK || exporting) return
+        val uri = data?.data ?: return
+        exporting = true
+        exportStatus.text = getString(R.string.diagnostics_exporting)
+        // Snapshot ZIP on the recorder worker, then copy to the user-selected document on IO.
+        // A slow document provider cannot stall the recorder or any tracking loop.
+        scope.launch {
+            var temporary: java.io.File? = null
+            try {
+                withContext(Dispatchers.IO) {
+                    val file = java.io.File.createTempFile("gnss-export-", ".zip", cacheDir)
+                    temporary = file
+                    val info = packageManager.getPackageInfo(packageName, 0)
+                    val versionCode =
+                        if (Build.VERSION.SDK_INT >= 28) info.longVersionCode
+                        else {
+                            @Suppress("DEPRECATION") info.versionCode.toLong()
+                        }
+                    app.recorder.export(
+                        file,
+                        DiagnosticBuild(
+                            info.versionName ?: "unknown",
+                            versionCode,
+                            Build.VERSION.SDK_INT,
+                            BuildConfig.SOURCE_REVISION,
+                        ),
+                    )
+                    contentResolver.openOutputStream(uri, "wt")?.use { out ->
+                        file.inputStream().use { it.copyTo(out) }
+                    } ?: error("Cannot open selected document")
+                }
+                exportStatus.text = getString(R.string.diagnostics_exported)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                exportStatus.text = getString(R.string.diagnostics_export_failed)
+            } finally {
+                withContext(NonCancellable + Dispatchers.IO) { temporary?.delete() }
+                exporting = false
+            }
+        }
+    }
+
+    companion object {
+        internal const val EXPORT_DIAGNOSTICS = 40
     }
 
     override fun onDestroy() {

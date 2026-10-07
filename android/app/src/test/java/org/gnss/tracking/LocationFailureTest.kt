@@ -174,4 +174,117 @@ class LocationFailureTest {
         assertNull(latest.currentFix())
         source.stop()
     }
+
+    @Test
+    fun diagnosticsFailuresCannotBreakRegistrationCallbacksOrCleanup() {
+        source =
+            PlatformLocationSource(context, latest, clock) { _, _ ->
+                error("diagnostic writer failed")
+            }
+        source.start()
+        shadow.simulateLocation(
+            Location(LocationManager.GPS_PROVIDER).apply {
+                latitude = 28.0
+                longitude = 77.0
+                accuracy = 3f
+                time = clock.now
+                elapsedRealtimeNanos = clock.now * 1000000
+            }
+        )
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNotNull(latest.currentFix())
+        assertEquals(1L, source.diagnostics.locationCallbacks)
+        source.stop()
+        assertTrue(shadow.getLocationUpdateListeners().isEmpty())
+    }
+
+    @Test
+    fun eventsDistinguishAcceptedRejectedAndProviderCallbacksWithoutCoordinates() {
+        val events = mutableListOf<Pair<DiagnosticEvent, SourceState>>()
+        source =
+            PlatformLocationSource(context, latest, clock) { event, state ->
+                events += event to state
+            }
+        source.start()
+        source.start()
+        assertEquals(1, events.count { it.first == DiagnosticEvent.REGISTRATION_SUCCESS })
+        val listener = shadow.getLocationUpdateListeners().single()
+        listener.onLocationChanged(
+            Location(LocationManager.GPS_PROVIDER).apply {
+                latitude = 28.0
+                longitude = 77.0
+                accuracy = 3f
+                time = clock.now
+                elapsedRealtimeNanos = clock.now * 1000000
+            }
+        )
+        assertEquals(true, events.last().second.lastObservationAccepted)
+        assertEquals(0L, events.last().second.lastMeasurementAgeMs)
+        listener.onLocationChanged(
+            Location(LocationManager.GPS_PROVIDER).apply { latitude = Double.NaN }
+        )
+        assertEquals(false, events.last().second.lastObservationAccepted)
+        assertEquals("invalid_coordinate", events.last().second.lastRejection)
+        assertEquals(2L, events.last().second.locationCallbacks)
+        listener.onProviderDisabled(LocationManager.GPS_PROVIDER)
+        assertEquals(DiagnosticEvent.PROVIDER_DISABLED, events.last().first)
+        listener.onProviderEnabled(LocationManager.GPS_PROVIDER)
+        assertEquals(DiagnosticEvent.PROVIDER_ENABLED, events.last().first)
+        source.stop()
+        assertEquals(DiagnosticEvent.UNREGISTER, events.last().first)
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun nativeGnssEventsIncludeRealSatelliteCountsAndCannotCreateObservation() {
+        val events = mutableListOf<Pair<DiagnosticEvent, SourceState>>()
+        source =
+            PlatformLocationSource(context, latest, clock) { event, state ->
+                events += event to state
+            }
+        source.start()
+        shadow.capturedStatus.onStarted()
+        shadow.capturedStatus.onFirstFix(2000)
+        val satellites =
+            GnssStatus.Builder()
+                .addSatellite(
+                    GnssStatus.CONSTELLATION_GPS,
+                    1,
+                    30f,
+                    45f,
+                    80f,
+                    true,
+                    true,
+                    true,
+                    false,
+                    0f,
+                    false,
+                    0f,
+                )
+                .addSatellite(
+                    GnssStatus.CONSTELLATION_GPS,
+                    2,
+                    20f,
+                    40f,
+                    60f,
+                    true,
+                    true,
+                    false,
+                    false,
+                    0f,
+                    false,
+                    0f,
+                )
+                .build()
+        shadow.capturedStatus.onSatelliteStatusChanged(satellites)
+        assertEquals(2, source.diagnostics.satellitesTotal)
+        assertEquals(1, source.diagnostics.satellitesUsed)
+        assertEquals(3L, source.diagnostics.gnssCallbacks)
+        assertNull(latest.currentFix())
+        shadow.capturedStatus.onStopped()
+        assertEquals(DiagnosticEvent.GNSS_STOPPED, events.last().first)
+        assertEquals(false, events.last().second.engineRunning)
+        assertNull(events.last().second.satellitesTotal)
+        source.stop()
+    }
 }

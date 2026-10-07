@@ -8,6 +8,7 @@ import android.os.Looper
 import android.os.SystemClock
 import androidx.test.core.app.ApplicationProvider
 import java.time.Duration
+import org.junit.After
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -122,4 +123,15 @@ class FixDisplayTest {
             service.destroy()
         }
     }
+
+    @After
+    fun finishApplicationRecorder() =
+        kotlinx.coroutines.runBlocking {
+            // Application-owned IO must finish before Robolectric replaces its Android sandbox.
+            // Otherwise native fsync/runtime initialization can race the next SDK's font
+            // extraction.
+            val application: android.app.Application = ApplicationProvider.getApplicationContext()
+            (application as? TrackingApp)?.recorder?.finish()
+            Unit
+        }
 }

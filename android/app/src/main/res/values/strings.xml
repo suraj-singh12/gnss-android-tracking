@@ -3,4 +3,8 @@
     <string name="cannot_start">Cannot start tracking: %1$s</string>
     <string name="cannot_load_settings">Cannot load saved settings: %1$s. Reopen the app to retry.</string>
     <string name="cannot_read_settings">Cannot read saved settings: %1$s. Reopen the app to retry.</string>
+    <string name="diagnostics_no_picker">No document picker available. Enable Android Files to export diagnostics.</string>
+    <string name="diagnostics_exporting">Exporting diagnostics… Tracking continues.</string>
+    <string name="diagnostics_exported">Diagnostics exported. Share the ZIP with the test report.</string>
+    <string name="diagnostics_export_failed">Diagnostics export failed. Try again; saved incidents are retained.</string>
 </resources>

@@ -9,6 +9,7 @@ import android.location.LocationManager
 import android.os.Looper
 import android.os.PowerManager
 import androidx.test.core.app.ApplicationProvider
+import org.junit.After
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -134,4 +135,52 @@ class LocationSourceTest {
         assertFalse(lock.isHeld)
         assertEquals(2, stops)
     }
+
+    @Test
+    fun wakeEventsAreBoundedAndDiagnosticsCannotPreventRenewOrRelease() {
+        val clock = FakeClock(1000)
+        val events = mutableListOf<DiagnosticEvent>()
+        val lock =
+            context
+                .getSystemService(PowerManager::class.java)
+                .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "gnss:test")
+        val source =
+            object : LocationSource {
+                override fun start() = Unit
+
+                override fun stop() = Unit
+            }
+        val resources =
+            TrackingResources(source, lock, clock) {
+                events += it
+                error("diagnostic failure")
+            }
+        resources.start()
+        resources.start()
+        resources.renew()
+        clock.now += TrackingResources.TIMEOUT_MS / 2
+        resources.renew()
+        resources.stop()
+        resources.stop()
+        assertEquals(
+            listOf(
+                DiagnosticEvent.WAKE_ACQUIRE,
+                DiagnosticEvent.WAKE_RENEW,
+                DiagnosticEvent.WAKE_RELEASE,
+            ),
+            events,
+        )
+        assertFalse(lock.isHeld)
+    }
+
+    @After
+    fun finishApplicationRecorder() =
+        kotlinx.coroutines.runBlocking {
+            // Application-owned IO must finish before Robolectric replaces its Android sandbox.
+            // Otherwise native fsync/runtime initialization can race the next SDK's font
+            // extraction.
+            val application: android.app.Application = ApplicationProvider.getApplicationContext()
+            (application as? TrackingApp)?.recorder?.finish()
+            Unit
+        }
 }
