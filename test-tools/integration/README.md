@@ -60,7 +60,7 @@ compared exactly, including segment UUIDs and projected coordinates.
 | Five-second amendment | Local 5 → real Command override 5 → ACK adoption/Room reopen → local edit 15 retains effective 5 → Clear falls back to 15/converges; local/control reject 1, 6, 86405 |
 | Lost response | Exact saved retry, duplicate with original first receipt, one row/track effect/distance effect per observation |
 | Current-first recovery | Sender wire order D A B C, live D never rolls back, history A B C D; failed retry deadline cleared on restore |
-| Stale recovery + reserved SOS | New current saved before old backlog; reserved SOS precedes current and never enters tracks; no trigger/operator workflow |
+| Stale recovery + reserved SOS | New current saved before old backlog; SOS precedes current and never enters tracks; complete trigger/operator workflow also covered below |
 | Arrival permutations | A B C D / D A B C / C A D B / D A B B C yield identical point IDs, geometry, segments, cumulative distance; old backlog stays historically valid while live is stale |
 | Bad GNSS | Raw retained with explicit jitter/poor/unknown/stale/jump rejection reasons, recovery opens segment without bridge; turn, sideways and reversal accepted; altitude does not add distance |
 | Recording | Stop preserves live reception without extending recording; Resume adds segment without connector; unconfirmed Clear rejected; confirmed Clear retains raw/device/config; late backlog/restart/new recording cannot resurrect it |
@@ -126,3 +126,35 @@ of physical GNSS, screen-off radio operation, deep Doze or OEM policies. The sou
 review found no Activity-driven GPS registration; absence of CPU wake protection
 was a concrete lifecycle gap. The precise trigger on the reported phone remains
 unconfirmed until the updated physical retest and diagnostic evidence.
+
+## Issue #5 SOS extension
+
+The existing bridge now additionally drives the production central SOS engine into
+real Room/Sender and real Command HTTP/SQLite. Offline creation competes with 100
+tracking envelopes; a stale GNSS snapshot is retained truthfully. The suite checks
+transactional debounce, exact priority payload, phone database reopen, actual lost
+response after durable Command storage, immutable duplicate/original receipt,
+remote interval change, recording Stop/Resume/Clear independence, event-specific
+operator ACK, a second emergency, Command process restart, phone restoration and
+browser-state reload through the real local handler. A wrong matching-identity ACK
+mutation also proves the phone remains pending until a valid duplicate ACK, even
+when a human has already acknowledged the event on Command.
+
+All prior tracking scenarios still run. This bridge proves software boundary and
+storage behavior, not physical Wi-Fi availability, native GNSS, locked-screen key
+routing, OS process recovery or browser-speaker playback. Follow the separate SOS
+section in the canonical device-acceptance runbook after Issue #4 physical acceptance.
+
+An optional real-browser check uses a built Command binary, Node and an external
+Playwright installation (test dependencies only; Command adds no runtime dependency):
+
+```sh
+GNSS_COMMAND_BINARY=/absolute/path/to/party-tracker \
+GNSS_PLAYWRIGHT_MODULE=/absolute/path/to/playwright \
+GNSS_CHROMIUM=/absolute/path/to/chromium \
+node test-tools/integration/sos-dashboard.cjs
+```
+
+It verifies the actual embedded dashboard, blocked audio status, keyboard ACK and
+focus stability, duplicate delivery, multiple SOS, browser reload, real Command
+restart and Recording Clear persistence. It does not establish speaker audibility.

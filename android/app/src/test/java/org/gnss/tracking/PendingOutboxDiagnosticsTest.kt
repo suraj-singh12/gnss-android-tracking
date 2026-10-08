@@ -46,7 +46,7 @@ class PendingOutboxDiagnosticsTest {
 
     @After
     fun close() = runBlocking {
-        app.recorder.finish()
+        app.finishForTests()
         app.repository.db.close()
     }
 

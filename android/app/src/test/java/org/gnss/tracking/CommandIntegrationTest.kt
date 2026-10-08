@@ -141,6 +141,12 @@ class CommandIntegrationTest {
         lateinit var id: String
         val sent = mutableListOf<String>()
         val responses = mutableListOf<Response>()
+        val sosEvidence = mutableListOf<DiagnosticEntry>()
+
+        fun recordSos(kind: DiagnosticEvent, e: SosEvidence) {
+            sosEvidence.add(DiagnosticEntry(kind, utc(clock.now), clock.now, null, sos = e))
+        }
+
         var latest: Fix? = null
         var captures = 0
         var fault: ((Response) -> Response)? = null
@@ -159,7 +165,7 @@ class CommandIntegrationTest {
             db = Room.databaseBuilder(context, TrackingDatabase::class.java, name).build()
             repository = Repository(db, clock)
             sender =
-                Sender(repository, transport, clock) {
+                Sender(repository, transport, clock, ::recordSos) {
                     captures++
                     repository.snapshot(
                         clock.now,
@@ -516,25 +522,9 @@ class CommandIntegrationTest {
         assertEquals(listOf(2L, 1L), p.sent.map { Protocol.decodeMessage(it).sequence })
         assertEquals(1, p.captures)
         p.delivered(old)
-        // Seed only the already-frozen reservation; no SOS trigger/workflow added.
-        val s = p.repository.state()
-        val id = Protocol.newId()
-        val message =
-            Message(
-                type = "sos",
-                device_id = p.id,
-                party = Party(s.partyId, s.partyName),
-                message_id = id,
-                sequence = s.sequence + 1,
-                captured_at = utc(clock.now),
-                config_state = s.config(),
-                health = Health(),
-                fix = null,
-                sos = Sos(id, utc(clock.now)),
-            )
-        val sos = Outbound(message.sequence, id, "sos", clock.now, Protocol.encode(message))
-        p.db.dao().update(s.copy(sequence = sos.sequence))
-        p.db.dao().insert(sos)
+        val latest = LatestLocation(clock)
+        val sos =
+            SosEngine(p.repository, latest, { Health() }, clock).activate(SosTrigger.SCREEN).row
         at(51)
         val current = p.snapshot(51.0)
         p.sender.connectivityRestored()
@@ -543,6 +533,145 @@ class CommandIntegrationTest {
         assertEquals(listOf(sos.json, current.json), p.sent.takeLast(2))
         p.delivered(sos)
         assertFalse(points().any { it["message_id"].asString == sos.messageId })
+    }
+
+    @Test
+    fun sosEngineOfflineBacklogLostAckOperatorAckAndBothRestarts() = runBlocking {
+        recording("start")
+        val p = phone()
+        at(1)
+        val reports = (1..100).map { p.snapshot(it.toDouble(), captured = base - it * 1000L) }
+        val latest = LatestLocation(clock)
+        latest.enabled = true
+        latest.update(Observation(fix(clock.now, 20.0), clock.now))
+        at(50) // measurement is stale, but still an actual last-known observation
+        val engine =
+            SosEngine(p.repository, latest, { Health(wifi_connected = false) }, clock, p::recordSos)
+        val sos = engine.activate(SosTrigger.SCREEN).row
+        assertFalse(engine.activate(SosTrigger.VOLUME_UP).created)
+        val original = Protocol.decodeMessage(sos.json)
+        assertEquals(49000L, original.fix!!.fix_age_ms)
+        assertEquals("unknown", original.health.gnss_status)
+        p.adapterFailure = Response(503, "offline")
+        p.sender.step()
+        assertNull(p.db.dao().row(sos.sequence)!!.deliveredAt)
+        assertEquals(0, raw().size())
+        p.reopen()
+        assertEquals(sos.json, p.db.dao().row(sos.sequence)!!.json)
+        p.adapterFailure = null
+        at(100)
+        p.sender.connectivityRestored()
+        bridge.rpc("drop")
+        p.sender.step() // real Command commits SOS, physical-adapter response is lost
+        assertNull(p.db.dao().row(sos.sequence)!!.deliveredAt)
+        assertEquals(sos.json, p.sent.last())
+        assertEquals(1, raw().size())
+        var alerts = state()["sos_alerts"].asJsonArray
+        assertEquals(1, alerts.size())
+        val firstReceipt = alerts[0].asJsonObject["received_at"].asString
+        assertEquals(original.sos!!.triggered_at, alerts[0].asJsonObject["triggered_at"].asString)
+        assertEquals("last_known", alerts[0].asJsonObject["location_freshness"].asString)
+        assertTrue(points().isEmpty())
+        // Remote interval does not change event identity or pending SOS delivery.
+        override(p, 5)
+        // The offline failure was attempt 1; lost ACK was attempt 2. Persisted
+        // SOS backoff is now 2 seconds, including after Room/Sender recreation.
+        at(102)
+        p.sender.step()
+        p.delivered(sos)
+        assertEquals("duplicate", Protocol.parse(p.responses.last().body)["result"].asString)
+        assertEquals(firstReceipt, p.db.dao().row(sos.sequence)!!.deliveredAt)
+        assertEquals(5, p.repository.state().config().effective_reporting_interval_s)
+        recording("stop")
+        recording("resume")
+        recording("clear", true)
+        assertEquals(1, state()["sos_alerts"].asJsonArray.size())
+        control("sos/acknowledge", """{"device_id":"${p.id}","event_id":"${sos.messageId}"}""")
+        val acknowledged =
+            state()["sos_alerts"].asJsonArray[0].asJsonObject["operator_acknowledged_at"].asString
+        at(110)
+        control("sos/acknowledge", """{"device_id":"${p.id}","event_id":"${sos.messageId}"}""")
+        assertEquals(
+            acknowledged,
+            state()["sos_alerts"].asJsonArray[0].asJsonObject["operator_acknowledged_at"].asString,
+        )
+        val second =
+            SosEngine(p.repository, latest, { Health() }, clock).activate(SosTrigger.VOLUME_UP).row
+        p.sender.step()
+        p.delivered(second)
+        assertEquals(2, state()["sos_alerts"].asJsonArray.size())
+        bridge.restart()
+        p.reopen()
+        alerts = state()["sos_alerts"].asJsonArray
+        assertEquals(2, alerts.size())
+        assertEquals(acknowledged, alerts[0].asJsonObject["operator_acknowledged_at"].asString)
+        assertTrue(alerts[1].asJsonObject["operator_acknowledged_at"].isJsonNull)
+        assertEquals(firstReceipt, alerts[0].asJsonObject["received_at"].asString)
+        assertEquals(sos.json, p.db.dao().row(sos.sequence)!!.json)
+        val field = bridge.rpc("field_report")["report"].asJsonObject
+        val ref = sosReference(sos.messageId)
+        assertTrue(
+            field["events"].asJsonArray.any { it.asJsonObject["sos_event_ref"]?.asString == ref }
+        )
+        for (scenario in
+            listOf("SOS retries deduplicated", "Operator ACK persisted", "SOS survived restart")) {
+            assertTrue(
+                field["assessments"].asJsonArray.any {
+                    val v = it.asJsonObject
+                    v["scenario"].asString == scenario &&
+                        v["result"].asString == "PASS" &&
+                        v["evidence"]?.asJsonObject?.get("event_ref")?.asString == ref
+                }
+            )
+        }
+        @Suppress("UNCHECKED_CAST")
+        val androidVerdicts =
+            sosReport(p.sosEvidence, 0, 0)["assessments"] as List<Map<String, Any>>
+        for (scenario in
+            listOf("SOS saved locally", "SOS preempted backlog", "SOS delivered after reconnect")) {
+            assertTrue(
+                androidVerdicts.any {
+                    it["event_ref"] == ref && it["scenario"] == scenario && it["result"] == "PASS"
+                }
+            )
+        }
+        // Browser reload gets the same authoritative state from the real local handler.
+        val view = Protocol.parse(request(bridge.local + "/local/state").body)
+        assertEquals(alerts, view["sos_alerts"])
+        assertNull(state()["recording"].takeUnless { it.isJsonNull })
+        p.sender.connectivityRestored()
+        p.latest = fix(clock.now, 30.0)
+        p.sender.step() // current report after the two emergencies
+        assertEquals("location", Protocol.decodeMessage(p.sent.last()).type)
+        assertTrue(reports.all { p.db.dao().row(it.sequence)!!.json == it.json })
+    }
+
+    @Test
+    fun sosWrongAckDoesNotClaimReceiptAndDuplicateCannotResetHumanAck() = runBlocking {
+        val p = phone()
+        at(1)
+        val engine = SosEngine(p.repository, LatestLocation(clock), { Health() }, clock)
+        val sos = engine.activate(SosTrigger.SCREEN).row
+        p.fault = { response ->
+            val body = Protocol.parse(response.body)
+            body.addProperty("message_id", Protocol.newId())
+            response.copy(body = body.toString())
+        }
+        p.sender.step()
+        assertNull(p.db.dao().row(sos.sequence)!!.deliveredAt)
+        control("sos/acknowledge", """{"device_id":"${p.id}","event_id":"${sos.messageId}"}""")
+        val acknowledged =
+            state()["sos_alerts"].asJsonArray[0].asJsonObject["operator_acknowledged_at"].asString
+        at(2)
+        p.fault = null
+        p.sender.step()
+        p.delivered(sos)
+        assertEquals(1, raw().size())
+        assertEquals(
+            acknowledged,
+            state()["sos_alerts"].asJsonArray[0].asJsonObject["operator_acknowledged_at"].asString,
+        )
+        assertEquals("duplicate", Protocol.parse(p.responses.last().body)["result"].asString)
     }
 
     @Test

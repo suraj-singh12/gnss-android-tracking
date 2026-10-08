@@ -4,8 +4,10 @@ package core
 // No coordinates, Party metadata, network addresses or raw payloads are copied.
 import (
 	"archive/zip"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io"
 	"math"
 	"runtime/debug"
@@ -39,7 +41,12 @@ func revisionFromSettings(settings []debug.BuildSetting) Revision {
 	return r
 }
 
+func sosRef(event string) string { h := sha256.Sum256([]byte(event)); return fmt.Sprintf("%x", h[:8]) }
+
 type Evidence struct {
+	SOSRef              string             `json:"sos_event_ref,omitempty"`
+	SOSTriggered        string             `json:"sos_triggered_at,omitempty"`
+	SOSAcknowledged     *string            `json:"sos_operator_acknowledged_at,omitempty"`
 	TimingClass         string             `json:"receipt_timing_class,omitempty"`
 	ClockTolerance      float64            `json:"receipt_clock_tolerance_s,omitempty"`
 	UsefulBefore        int                `json:"useful_points_before"`
@@ -164,6 +171,10 @@ func liveObserved(d *Device) string {
 func receiptEvidence(m Message, at, first, result string, d *Device) Evidence {
 	c := m.Config
 	e := Evidence{GNSSStatus: m.Health.GNSS, At: at, Kind: result, Device: m.Device, Message: m.ID, Sequence: m.Sequence, Captured: m.Captured, FirstReceived: first, Type: m.Type, Effective: m.Config.Effective, Reported: &c, FixPresent: m.Fix != nil, LiveBefore: liveObserved(d)}
+	if m.SOS != nil {
+		e.SOSRef = sosRef(m.SOS.EventID)
+		e.SOSTriggered = m.SOS.Triggered
+	}
 	if m.Fix != nil {
 		age := m.Fix.Age
 		e.FixAgeAtCapture = &age
@@ -366,7 +377,25 @@ func (s *Store) fieldReport(tx *sql.Tx) (FieldReport, error) {
 		return a.Message < b.Message
 	})
 
-	analyzeField(&r, st.Policy)
+	analyzeSOS(&r, st)
+	// SOS receipt timing is event evidence, not periodic tracking cadence.
+	tracking := r
+	tracking.Receipts = nil
+	tracking.Events = nil
+	tracking.Verdicts = nil
+	for _, v := range r.Receipts {
+		if v.Type != "sos" {
+			tracking.Receipts = append(tracking.Receipts, v)
+		}
+	}
+	for _, v := range r.Events {
+		if v.SOSRef == "" {
+			tracking.Events = append(tracking.Events, v)
+		}
+	}
+	analyzeField(&tracking, st.Policy)
+	r.Gaps = tracking.Gaps
+	r.Verdicts = append(r.Verdicts, tracking.Verdicts...)
 	return r, nil
 }
 func analyzeField(r *FieldReport, p Policy) {
@@ -606,6 +635,7 @@ func (s *Store) ExportFieldReport(w io.Writer) error {
 	if err != nil {
 		return err
 	}
+	redactSOSReport(&r)
 	z := zip.NewWriter(w)
 	files := []struct {
 		name string

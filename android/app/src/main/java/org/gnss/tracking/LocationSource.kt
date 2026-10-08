@@ -41,6 +41,14 @@ class LatestLocation(private val clock: Clock) {
         return observed.fix.copy(fix_age_ms = age).takeIf { enabled == true && age in 0..30000 }
     }
 
+    // SOS may carry an actual last-known observation; never relabel its time or age.
+    fun sosFix(): Fix? =
+        observation?.let { observed ->
+            (clock.elapsedMillis() - observed.elapsedMillis)
+                .takeIf { it in 0..MAX_WIRE_INTEGER }
+                ?.let { observed.fix.copy(fix_age_ms = it) }
+        }
+
     fun clockWarning(): String? =
         observation?.let { observed ->
             val age = clock.elapsedMillis() - observed.elapsedMillis

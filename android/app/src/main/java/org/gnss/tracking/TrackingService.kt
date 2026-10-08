@@ -50,14 +50,18 @@ class TrackingService : Service() {
     @Volatile private var deliveryError: Boolean? = null
     @Volatile private var loopError: String? = null
     private val pendingDiagnostics = PendingOutboxDiagnostics()
-    private val latest = LatestLocation(SystemClock)
+    private val latest
+        get() = app.latest
+
     private lateinit var resources: TrackingResources
     private lateinit var health: DeviceHealth
     private lateinit var sender: Sender
     private lateinit var connectivity: ConnectivityManager
     private var callbackRegistered = false
     private var running = false
-    @Volatile private var lastCaptureElapsed = 0L
+    private val lastCaptureElapsed
+        get() = app.lastCaptureElapsed
+
     private val callback =
         object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
@@ -94,9 +98,9 @@ class TrackingService : Service() {
                     .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "gnss:tracking"),
                 diagnosticEvent = { app.recorder.event(it, generation) },
             )
-        health = DeviceHealth(this, latest)
+        health = app.health
         connectivity = getSystemService(ConnectivityManager::class.java)
-        sender = Sender(repository, LanTransport(health::wifiNetwork), SystemClock, ::capture)
+        sender = app.sender
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -216,12 +220,7 @@ class TrackingService : Service() {
     }
 
     private suspend fun capture(): Outbound {
-        val fix = latest.currentFix()
-        val snapshot =
-            health.snapshot().let { if (fix != null) it.copy(gnss_status = "fix") else it }
-        val row = repository.snapshot(SystemClock.wallMillis(), fix, snapshot)
-        lastCaptureElapsed = SystemClock.elapsedMillis()
-        return row
+        return app.capture()
     }
 
     private suspend fun reportingLoop() {

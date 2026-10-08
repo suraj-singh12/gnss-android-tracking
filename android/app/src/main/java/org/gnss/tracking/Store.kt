@@ -97,6 +97,15 @@ interface TrackingDao {
     @Query("UPDATE outbox SET nextAttemptMillis=0 WHERE deliveredAt IS NULL AND quarantined=0")
     suspend fun resetTransientRetryTiming()
 
+    @Query("SELECT * FROM outbox WHERE type='sos' ORDER BY sequence DESC LIMIT 1")
+    suspend fun latestSos(): Outbound?
+
+    @Query("SELECT * FROM outbox WHERE type='sos' ORDER BY sequence")
+    suspend fun sosHistory(): List<Outbound>
+
+    @Query("SELECT * FROM outbox WHERE type='sos' ORDER BY sequence DESC")
+    fun observeSos(): Flow<List<Outbound>>
+
     @Query("SELECT * FROM outbox ORDER BY sequence") suspend fun all(): List<Outbound>
 }
 
@@ -174,6 +183,51 @@ class Repository(val db: TrackingDatabase, private val clock: Clock = SystemCloc
             dao.update(state.copy(sequence = sequence))
             dao.insert(row)
             row // Returned only after transaction commits. Transport never sees unsaved data.
+        }
+
+    // One transaction owns debounce, identity allocation and the immutable emergency.
+    // There is no SOS table or second outbox. Delivered emergencies remain retained.
+    suspend fun saveSos(
+        id: String,
+        triggered: Long,
+        now: Long,
+        fix: Fix?,
+        health: Health,
+    ): SosSave =
+        db.withTransaction {
+            val previous = dao.latestSos()
+            if (previous != null) {
+                val at =
+                    java.time.Instant.parse(
+                            Protocol.decodeMessage(previous.json).sos!!.triggered_at
+                        )
+                        .toEpochMilli()
+                // Async adapter handoffs can commit in reverse trigger order.
+                if (triggered - at in (-SosEngine.DEBOUNCE_MS + 1) until SosEngine.DEBOUNCE_MS)
+                    return@withTransaction SosSave(previous, false)
+            }
+            val state = state()
+            check(state.sequence < MAX_WIRE_INTEGER) {
+                "Sequence exhausted; new enrollment required"
+            }
+            val sequence = state.sequence + 1
+            val message =
+                Message(
+                    type = "sos",
+                    device_id = state.deviceId,
+                    party = Party(state.partyId, state.partyName),
+                    message_id = id,
+                    sequence = sequence,
+                    captured_at = utc(now),
+                    config_state = state.config(),
+                    health = health,
+                    fix = fix,
+                    sos = Sos(id, utc(triggered)),
+                )
+            val row = Outbound(sequence, id, "sos", now, Protocol.encode(message))
+            dao.update(state.copy(sequence = sequence))
+            dao.insert(row)
+            SosSave(row, true)
         }
 
     override suspend fun newest() = dao.newest()

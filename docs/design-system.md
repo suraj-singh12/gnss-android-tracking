@@ -22,7 +22,7 @@ No arbitrary fixed loss timeout is frozen here. Unknown/unavailable telemetry is
 
 SOS is more severe than contact loss and persists until the operator acts. “Saved
 on phone”, “Received by Command”, and “Acknowledged by operator” mean different
-things. Transport ACK must never imply a human acknowledged SOS. Later audible
+things. Transport ACK must never imply a human acknowledged SOS. Audible
 alerts accompany visible alerts; status still remains readable without audio.
 
 ## Visual foundations
@@ -53,8 +53,8 @@ Resizing/smaller screens may reorganize controls without hiding critical alerts.
 ## Android
 
 Minimal operational screen: tracking state, GNSS quality/age, Command connection/
-last ACK, battery, queue count, effective reporting interval, configuration and future
-SOS fallback. Show remote override and local interval clearly. Keep diagnostics in
+last ACK, battery, queue count, effective reporting interval, configuration and SOS
+fallback. Show remote override and local interval clearly. Keep diagnostics in
 secondary details; do not expose internal protocol/version machinery as primary UI.
 Foreground notification uses consistent operational wording.
 
@@ -65,3 +65,10 @@ measurement, and “Travelled distance” for accepted horizontal segment distan
 Use metres and seconds consistently; show local display time with timezone while
 stored/wire times remain UTC. [Protocol](../protocol/protocol-v1.md) and
 [architecture](architecture.md) are authoritative for these meanings.
+
+Issue #5 uses a prominent hold-to-activate SOS control and explicitly labelled
+foreground-only volume-key option. Android displays saved versus Command-received
+status and marks human acknowledgement Command-only. Command keeps event-specific
+alert cards, keyboard acknowledgement, original event/receipt times and GNSS quality.
+Audio blocked/unavailable status accompanies visible alerts. Acknowledged events
+remain visible with quieter styling; Recording controls never dismiss emergencies.

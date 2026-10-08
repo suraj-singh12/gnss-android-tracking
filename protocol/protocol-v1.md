@@ -130,7 +130,8 @@ Send immediately with priority, saved first, through the same endpoint/outbox.
 Use the freshest credible available fix; null honestly represents no usable fix.
 Command transport ACK means **received**, never **human acknowledged**. Operator
 acknowledgement is Command-local event state; no separate phone control channel
-is specified. Hardware triggers, audible UI and SOS engine are future Issue #5.
+is specified. Issue #5 implements the shared engine, foreground physical-key
+fallback and audible Command UI without extending this wire contract.
 An SOS fix never becomes a track point merely because it accompanies an alert.
 
 ## Durable ACK and deduplication

@@ -25,8 +25,8 @@ Protocol v1 is their only contract. Both can use shared examples and independent
 mocks to develop in parallel after Issue #1 is reviewed and merged.
 
 Android's foreground service collects actual GNSS observations even with screen
-locked/off subject to platform permissions/OEM limitations. Latest fix is a fresh
-in-memory view for health, minimal UI and future SOS. The reporting interval is
+locked/off subject to platform permissions/OEM limitations. Latest fix is an
+in-memory view for health, minimal UI and SOS. The reporting interval is
 not the sampling interval: location callbacks need not all become packets. At a
 reporting tick Android snapshots the latest fix and health into a durable immutable
 location message, or sends status when no fix exists. The local store owns identity,
@@ -184,3 +184,58 @@ uncertainty, turns/reversals, stale fixes, jumps, last-accepted comparison, geog
 distance, dynamic join, Stop/Resume/Clear, retries, arrival permutations, config
 convergence and restart. #4 adds real LAN integration; #5 implements SOS triggers;
 #6 adds diagnostics/UI/offline map; #7 proves field acceptance and portable releases.
+
+## Issue #5 SOS implementation
+
+The shared SOS engine accepts on-screen and supported physical-key adapters.
+It immediately snapshots the existing `LatestLocation`/device health and commits
+one immutable v1 SOS envelope through the same Repository/Room transaction and
+installation sequence allocator. It never acquires another GNSS fix. The app
+owns one engine and one Sender; TrackingService owns the existing native source,
+foreground lifetime and sending loop. While the Activity is open with tracking
+stopped, the same Sender can drain saved emergencies. Without the tracking FGS,
+background lifetime/delivery is best effort and opening the app resumes delivery.
+Activity destruction does not cancel an activation handed to the app scope.
+
+Selection checks eligible SOS before current-recovery capture and before ordinary
+backoff. Each SOS retains its own durable retry deadline. A failing emergency
+therefore permits ordinary reporting between retries; a new emergency bypasses
+ordinary backlog delay. A request already in flight may take its existing bounded
+10-second timeout. After SOS receipt, reconnect still creates a fresh current
+report before draining old tracking. No extra transport, identity, outbox, control
+channel, GNSS listener or runtime dependency is introduced.
+
+| State | Authoritative evidence / meaning |
+| --- | --- |
+| TRIGGER_DETECTED | Local immediate feedback; not proof of storage or delivery |
+| SAVED_LOCALLY | Room transaction returned after commit; immutable identity and activation time |
+| WAITING_FOR_NETWORK | Saved, no Wi-Fi; cannot transmit without a LAN path |
+| SENT / RETRYING | Attempt evidence and durable retry metadata; still awaiting receipt |
+| COMMAND_RECEIVED | Matching validated v1 stored/duplicate ACK committed to Room |
+| OPERATOR_ACKNOWLEDGED | Command-only persisted acknowledgement of device + event; not transmitted to phone |
+
+One successful activation is one event/message (`event_id=message_id`). Retries
+never allocate new IDs. Within three seconds of the last saved activation,
+adapters coalesce via a Room transaction, including concurrent adapters and
+reopening the database. A deliberate activation after that window creates another
+independent emergency even if the earlier event is unacknowledged. Persistent
+debounce uses activation wall time; abnormal wall-clock edits can alter this
+window, so field clock checks remain required. Short press/release evaluation is
+monotonic and excludes holds, key repeats, canceled keys and mixed keys.
+
+Command adds the alert projection to its existing persisted state in the same
+raw-ingestion transaction. Legacy reserved SOS envelopes are projected during
+additive database opening; no raw data is rewritten. Identical retries return the
+first receipt and cannot reset human acknowledgement. A local-only, same-origin
+JSON control acknowledges exactly `(device_id,event_id)` in a transaction, retaining
+the first acknowledgement time. Recording Start/Stop/Resume/Clear never changes
+alerts. Neither acknowledgement nor any phone control cancels/deletes an event.
+All operational SOS and raw dedupe rows are retained indefinitely under the existing
+store policy, including ACKed Android rows; storage exhaustion must be corrected
+explicitly. Diagnostic history alone follows the existing bounded retention.
+
+The foreground triple Volume Up adapter is opt-in. Locked-screen/other-Activity
+activation is unsupported in this implementation. Future rugged-device/PTT inputs
+can call this engine through an authorized adapter without changing delivery.
+The unresolved Issue #4 GNSS stall remains unresolved; an SOS with unavailable or
+stale location is still saved and delivered truthfully.

@@ -180,7 +180,7 @@ class LocationSourceTest {
             // Otherwise native fsync/runtime initialization can race the next SDK's font
             // extraction.
             val application: android.app.Application = ApplicationProvider.getApplicationContext()
-            (application as? TrackingApp)?.recorder?.finish()
+            (application as? TrackingApp)?.finishForTests()
             Unit
         }
 }

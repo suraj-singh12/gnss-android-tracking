@@ -55,12 +55,14 @@ fun interface Transport {
     suspend fun post(endpoint: String, immutableJson: String): Response
 }
 
+class WifiUnavailable : java.io.IOException("Wi-Fi unavailable")
+
 class LanTransport(private val network: () -> Network?) : Transport {
     private var selectedNetwork: Network? = null
     private var client: OkHttpClient? = null
 
     override suspend fun post(endpoint: String, immutableJson: String): Response {
-        val wifi = network() ?: throw java.io.IOException("Wi-Fi unavailable")
+        val wifi = network() ?: throw WifiUnavailable()
         if (selectedNetwork != wifi) {
             client?.connectionPool?.evictAll()
             client =
@@ -135,9 +137,15 @@ class Sender(
     private val store: MessageStore,
     private val transport: Transport,
     private val clock: Clock,
+    private val evidence: (DiagnosticEvent, SosEvidence) -> Unit = { _, _ -> },
     private val capture: suspend () -> Outbound,
 ) {
     private val mutex = Mutex()
+
+    private fun record(kind: DiagnosticEvent, value: SosEvidence) {
+        runCatching { evidence(kind, value) }
+    }
+
     private var recovering = true
     private var currentAfter = 0L
     private var failures = 0
@@ -154,9 +162,9 @@ class Sender(
             if (!endpointBlocked) waitUntil = 0
         }
 
-    suspend fun step() = mutex.withLock { stepLocked() }
+    suspend fun step(sosOnly: Boolean = false) = mutex.withLock { stepLocked(sosOnly) }
 
-    private suspend fun stepLocked() {
+    private suspend fun stepLocked(sosOnly: Boolean) {
         val state = store.state()
         if (generation != state.endpointGeneration) {
             generation = state.endpointGeneration
@@ -166,14 +174,12 @@ class Sender(
             endpointBlocked = false
             currentAfter = 0
         }
-        if (
-            state.endpoint.isEmpty() ||
-                state.deliveryPaused ||
-                endpointBlocked ||
-                clock.elapsedMillis() < waitUntil
-        )
-            return
-        if (recovering) {
+        if (state.endpoint.isEmpty() || state.deliveryPaused || endpointBlocked) return
+        var selected = store.next(clock.wallMillis(), currentAfter)
+        if (sosOnly && selected?.type != "sos") return
+        // Fresh SOS bypasses ordinary backoff, but its own durable deadline is honored.
+        if (clock.elapsedMillis() < waitUntil && selected?.type != "sos") return
+        if (recovering && selected?.type != "sos") {
             val newest = store.newest()
             if (
                 newest == null ||
@@ -182,19 +188,50 @@ class Sender(
             )
                 capture()
         }
-        val row = store.next(clock.wallMillis(), currentAfter) ?: return
+        if (selected?.type != "sos") selected = store.next(clock.wallMillis(), currentAfter)
+        val row = selected ?: return
+        if (row.type == "sos") {
+            record(
+                DiagnosticEvent.SOS_SEND_ATTEMPT,
+                SosEvidence(sosReference(row.messageId), count = row.attempts + 1),
+            )
+            // Presence of competing pending ordinary work proves actual priority selection.
+            if (runCatching { store.newest() }.getOrNull() != null)
+                record(
+                    DiagnosticEvent.SOS_PREEMPTED_BACKLOG,
+                    SosEvidence(sosReference(row.messageId), competingReports = 1),
+                )
+        }
         try {
             val response = transport.post(state.endpoint, row.json)
             if (store.state().endpointGeneration != state.endpointGeneration) return
             if (response.code == 200) {
-                require(response.json) { "ACK Content-Type must be application/json" }
-                val receipt = Protocol.receipt(response.body, Protocol.decodeMessage(row.json))
+                val receipt =
+                    try {
+                        require(response.json) { "ACK Content-Type must be application/json" }
+                        Protocol.receipt(response.body, Protocol.decodeMessage(row.json))
+                    } catch (e: Exception) {
+                        if (row.type == "sos")
+                            record(
+                                DiagnosticEvent.SOS_TRANSPORT_ACK_REJECTED,
+                                SosEvidence(sosReference(row.messageId)),
+                            )
+                        throw e
+                    }
                 if (store.state().endpointGeneration != state.endpointGeneration) return
                 store.accept(row, receipt, state.endpointGeneration)
+                if (
+                    row.type == "sos" &&
+                        store.state().endpointGeneration == state.endpointGeneration
+                )
+                    record(
+                        DiagnosticEvent.SOS_TRANSPORT_ACK_ACCEPTED,
+                        SosEvidence(sosReference(row.messageId)),
+                    )
                 if (row.type != "sos") currentAfter = maxOf(currentAfter, row.sequence)
                 failures = 0
                 waitUntil = 0
-                recovering = false
+                if (row.type != "sos") recovering = false
                 return
             }
             failure(
@@ -207,6 +244,11 @@ class Sender(
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
+            if (row.type == "sos" && e is WifiUnavailable)
+                record(
+                    DiagnosticEvent.SOS_NETWORK_UNAVAILABLE,
+                    SosEvidence(sosReference(row.messageId)),
+                )
             failure(row, e.message ?: "Command unavailable", null, null, state.endpointGeneration)
         }
     }
@@ -219,14 +261,19 @@ class Sender(
         generation: Long,
     ) {
         if (store.state().endpointGeneration != generation) return
-        failures = (failures + 1).coerceAtMost(32)
-        val retry = classify(code, failures, after)
+        if (row.type != "sos") failures = (failures + 1).coerceAtMost(32)
+        val retry = classify(code, if (row.type == "sos") row.attempts + 1 else failures, after)
         recovering = true
         val delay = retry.delayMillis.coerceAtMost(Long.MAX_VALUE - clock.elapsedMillis())
-        waitUntil = clock.elapsedMillis() + delay
+        if (row.type != "sos") waitUntil = clock.elapsedMillis() + delay
         val next =
             clock.wallMillis() + retry.delayMillis.coerceAtMost(Long.MAX_VALUE - clock.wallMillis())
         store.fail(row, diagnostic, next, retry.quarantine, generation)
+        if (row.type == "sos")
+            record(
+                DiagnosticEvent.SOS_RETRY_BACKOFF,
+                SosEvidence(sosReference(row.messageId), durationMs = retry.delayMillis),
+            )
         // These errors affect the configured receiver, not just one message.
         if (
             code in listOf(404, 405, 415, 426) ||
