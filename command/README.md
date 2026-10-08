@@ -181,3 +181,71 @@ remains required. SOS alerts/operator acknowledgement, offline maps, polished
 Issue #6 UI, installers/signing and release workflows remain their later issues.
 The Issue #4 Protocol v1 amendment permits reporting intervals of 5–86400 s in
 5-second steps (default 10 s); Android/Command responsibilities are unchanged.
+
+## Issue #4 field evidence
+
+Use **Export field-test report** on the local dashboard after testing (also
+`GET /local/field-report`). It downloads one `gnss-field-report-<UTC>.zip` with
+`manifest.json` and `field-report.json`; no external tooling is required. Export
+is read-only, does not stop ingestion/recording, and is absent from the LAN phone
+listener. Save this together with Android's **Export diagnostics** ZIP. No live
+packet counting, stopwatch, SQLite inspection or failure-time ADB is required.
+
+SQLite `raw` remains the unique-envelope truth; `field_evidence` adds transactionally
+ordered metadata for stored/identical retry/conflicting attempts, offered ACK config,
+pre/post live observation time, point count/distance, database-open boundaries,
+configuration requests and recording/policy operations. Operation snapshots retain
+recording IDs, windows/policies, accepted point identities/times/segments, participation
+and distances before/after Clear. Resume remains the same recording with another
+window. Closed windows can reconcile late backlog; operation snapshots describe
+what was known at that operation, while current recording evidence is reconciled.
+Raw rows are not duplicated; evidence persists with the same DB through restart.
+Existing DBs migrate additively; old raw rows count, but historical retry/operation
+metadata is unavailable before recorder installation (explicitly marked legacy).
+Evidence is retained with the operational DB, without automatic deletion/rotation.
+Back up the DB while stopped; save each exported ZIP. Very large-history export
+capacity remains Issue #7.
+
+Counters mean: **Reports received** = unique raw envelopes; **Raw fixes** = distinct
+per-device `observed_at` timestamps, matching the engine's repeated-observation
+identity (not proof of valid GNSS); **Useful points** = current recording's accepted
+points before display-dot filtering. Clear removes current useful points, not reports,
+raw fixes, devices, configuration or persisted operation evidence.
+
+Cadence uses median of up to seven positive unique **current-like receipt** gaps,
+with at least three gaps required. A capture within the configured clock tolerance
+of receipt is current-like; older captures are delayed/backlog, future captures
+beyond tolerance are clock-anomalous. The receipt-time classification/tolerance are
+persisted so later quality-policy changes do not reinterpret prior evidence.
+Config/effective-interval changes and long
+receipt gaps reset the sample window. These classes assume reasonably correct phone
+and laptop clocks; they are timing evidence, not proof of physical Wi-Fi state.
+Duplicate retries and delayed packets never enter live cadence. Receipt chronology follows durable commit ordinals (including equal or backwards
+wall times), with the original HTTP ingress UTC retained separately. Legacy rows
+have no arrival ordinal and cannot certify reconnect ordering. Receipt-gap recovery
+includes first capture/observation time and subsequent older backlog identities;
+ongoing gaps retain the last unique receipt and threshold boundary. Duplicate
+attempt chronology remains available to distinguish contact from unique-report gaps.
+Command never claims an exact Android queue depth.
+
+Assessments are conservative and include evidence/reasons: current-first PASS/FAIL
+compares first post-gap capture age to clock tolerance (future ambiguity is
+INCONCLUSIVE); backlog live-state checks require recorded before/after timestamps;
+config convergence requires the exact authority/version/value echo plus three live
+receipt gaps within ±30% of effective interval (otherwise FAIL with enough samples,
+INCONCLUSIVE without them). ACK offered records generation, **not phone receipt**;
+the later config echo proves adoption. Restart dedupe PASS requires a pre-open-boundary
+stored identity retried identically afterward, original receipt preserved, and unchanged
+point count/distance during that retry. Stop/Resume checks reconciled first-point
+cumulative distance against pre-window geometry; insufficient geometry is INCONCLUSIVE.
+Phone pending=0 is always INCONCLUSIVE in Command alone; correlate Android's cache.
+No automatic verdict certifies GNSS hardware, screen-off continuity or the physical LAN.
+
+Exports omit coordinates/altitude, Party labels, endpoint/IP/SSID, credentials, raw
+payloads and SQLite contents. Device/message/recording UUIDs are included deliberately
+for cross-event correlation; treat bundles as field evidence, not public telemetry.
+Build both assets from the same clean final product SHA: Android records full Git HEAD;
+Command uses Go's `vcs.revision`/`vcs.modified` build metadata. Use `go build` inside the
+Git checkout with VCS stamping enabled; unknown revision is reported honestly if absent.
+A temporary workflow-only APK branch must check out the frozen **product SHA** for the
+build, so its workflow commit does not become the APK's reported source revision.

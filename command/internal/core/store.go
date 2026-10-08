@@ -16,19 +16,20 @@ import (
 )
 
 type Device struct {
-	LocationReason   string   `json:"location_reason"`
-	Color            string   `json:"track_color"`
-	Dash             string   `json:"track_dash"`
-	ID               string   `json:"device_id"`
-	Snapshot         Message  `json:"snapshot"`
-	Location         *Message `json:"location"`
-	Contact          string   `json:"last_contact"`
-	Desired          Config   `json:"desired_config"`
-	Converged        bool     `json:"config_converged"`
-	ContactCondition string   `json:"contact_condition"`
-	GNSSCondition    string   `json:"gnss_condition"`
-	LocationAge      *float64 `json:"location_age_s"`
-	Total            float64  `json:"total_m"`
+	LocationReason   string    `json:"location_reason"`
+	Color            string    `json:"track_color"`
+	Dash             string    `json:"track_dash"`
+	ID               string    `json:"device_id"`
+	Snapshot         Message   `json:"snapshot"`
+	Location         *Message  `json:"location"`
+	Contact          string    `json:"last_contact"`
+	Desired          Config    `json:"desired_config"`
+	Converged        bool      `json:"config_converged"`
+	ContactCondition string    `json:"contact_condition"`
+	GNSSCondition    string    `json:"gnss_condition"`
+	LocationAge      *float64  `json:"location_age_s"`
+	Total            float64   `json:"total_m"`
+	Evidence         *Counters `json:"field_evidence,omitempty"`
 }
 type Window struct {
 	ID     string     `json:"segment_id"`
@@ -73,7 +74,7 @@ func Open(path string) (*Store, error) {
 	db.SetMaxOpenConns(1)
 	s := &Store{db: db, Now: time.Now}
 	fail := func(e error) (*Store, error) { db.Close(); return nil, e }
-	for _, q := range []string{"PRAGMA journal_mode=WAL", "PRAGMA synchronous=FULL", "PRAGMA busy_timeout=5000", `CREATE TABLE IF NOT EXISTS raw (device TEXT NOT NULL, message TEXT NOT NULL, sequence INTEGER NOT NULL, known TEXT NOT NULL, wire BLOB NOT NULL, received TEXT NOT NULL, PRIMARY KEY(device,message), UNIQUE(device,sequence))`, `CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL)`, `CREATE TABLE IF NOT EXISTS retired (recording TEXT PRIMARY KEY, data TEXT NOT NULL)`} {
+	for _, q := range []string{"PRAGMA journal_mode=WAL", "PRAGMA synchronous=FULL", "PRAGMA busy_timeout=5000", `CREATE TABLE IF NOT EXISTS raw (device TEXT NOT NULL, message TEXT NOT NULL, sequence INTEGER NOT NULL, known TEXT NOT NULL, wire BLOB NOT NULL, received TEXT NOT NULL, PRIMARY KEY(device,message), UNIQUE(device,sequence))`, `CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL)`, `CREATE TABLE IF NOT EXISTS retired (recording TEXT PRIMARY KEY, data TEXT NOT NULL)`, `CREATE TABLE IF NOT EXISTS field_evidence (ordinal INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT NOT NULL)`} {
 		if _, err = db.Exec(q); err != nil {
 			return fail(err)
 		}
@@ -81,6 +82,11 @@ func Open(path string) (*Store, error) {
 	state := State{Authority: id(), Policy: DefaultPolicy(), Devices: map[string]*Device{}, Points: []Point{}, Decisions: []Decision{}}
 	b, _ := json.Marshal(state)
 	if _, err = db.Exec("INSERT OR IGNORE INTO state(id,data) VALUES(1,?)", string(b)); err != nil {
+		return fail(err)
+	}
+	revision := BuildRevision()
+	event, _ := json.Marshal(Evidence{At: s.Now().UTC().Format(wireTime), Kind: "command_open", Revision: &revision})
+	if _, err = db.Exec("INSERT INTO field_evidence(data) VALUES(?)", string(event)); err != nil {
 		return fail(err)
 	}
 	return s, nil
@@ -134,6 +140,19 @@ func (s *Store) ingestAt(b []byte, ingress time.Time) (Ack, error) {
 	result := "stored"
 	if err == nil {
 		if old != string(known) {
+			e := receiptEvidence(m, received, first, "conflict", st.Devices[m.Device])
+			e.TimingClass, _ = receiptClass(m, received, st.Policy)
+			e.ClockTolerance = st.Policy.Clock
+			var existing Message
+			_ = json.Unmarshal([]byte(old), &existing)
+			e.ConflictingMessage = existing.ID
+			e.ConflictingSequence = existing.Sequence
+			if err = writeEvidence(tx, e); err != nil {
+				return Ack{}, err
+			}
+			if err = tx.Commit(); err != nil {
+				return Ack{}, err
+			}
 			return Ack{}, ErrConflict
 		}
 		result = "duplicate"
@@ -145,6 +164,10 @@ func (s *Store) ingestAt(b []byte, ingress time.Time) (Ack, error) {
 			return Ack{}, err
 		}
 	}
+	evidence := receiptEvidence(m, received, first, result, st.Devices[m.Device])
+	evidence.TimingClass, _ = receiptClass(m, received, st.Policy)
+	evidence.ClockTolerance = st.Policy.Clock
+	evidence.UsefulBefore, evidence.DistanceBefore = trackEffect(st, m.Device)
 	d := st.Devices[m.Device]
 	if d == nil {
 		authority := st.Authority
@@ -168,6 +191,13 @@ func (s *Store) ingestAt(b []byte, ingress time.Time) (Ack, error) {
 		if err = rebuild(tx, &st); err != nil {
 			return Ack{}, err
 		}
+	}
+	evidence.LiveAfter = liveObserved(d)
+	evidence.UsefulAfter, evidence.DistanceAfter = trackEffect(st, m.Device)
+	offered := d.Desired
+	evidence.Offered = &offered
+	if err = writeEvidence(tx, evidence); err != nil {
+		return Ack{}, err
 	}
 	if err = saveState(tx, st); err != nil {
 		return Ack{}, err
@@ -259,7 +289,7 @@ func rebuild(tx *sql.Tx, st *State) error {
 	}
 	return nil
 }
-func (s *Store) change(fn func(*State, time.Time, *sql.Tx) error) error {
+func (s *Store) change(kind, device string, fn func(*State, time.Time, *sql.Tx) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
@@ -271,10 +301,22 @@ func (s *Store) change(fn func(*State, time.Time, *sql.Tx) error) error {
 	if err != nil {
 		return err
 	}
-	if err = fn(&st, s.Now().UTC(), tx); err != nil {
+	before := recordingEvidence(st)
+	now := s.Now().UTC()
+	if err = fn(&st, now, tx); err != nil {
 		return err
 	}
 	if err = rebuild(tx, &st); err != nil {
+		return err
+	}
+	e := Evidence{At: now.Format(wireTime), Kind: kind, Device: device, Before: before, After: recordingEvidence(st)}
+	if kind == "override_requested" {
+		desired := st.Devices[device].Desired
+		e.Offered = &desired
+		e.Before = nil
+		e.After = nil
+	}
+	if err = writeEvidence(tx, e); err != nil {
 		return err
 	}
 	if err = saveState(tx, st); err != nil {
@@ -283,7 +325,7 @@ func (s *Store) change(fn func(*State, time.Time, *sql.Tx) error) error {
 	return tx.Commit()
 }
 func (s *Store) Action(action string) error {
-	return s.change(func(st *State, now time.Time, tx *sql.Tx) error {
+	return s.change("recording_"+action, "", func(st *State, now time.Time, tx *sql.Tx) error {
 		r := st.Recording
 		open := func(reason string) {
 			r.Active = true
@@ -333,7 +375,7 @@ func (s *Store) SetPolicy(p Policy) error {
 	if err := p.Validate(); err != nil {
 		return err
 	}
-	return s.change(func(st *State, now time.Time, _ *sql.Tx) error {
+	return s.change("policy_changed", "", func(st *State, now time.Time, _ *sql.Tx) error {
 		p.Revision = st.Policy.Revision + 1
 		st.Policy = p
 		if r := st.Recording; r != nil && r.Active {
@@ -347,7 +389,7 @@ func (s *Store) SetOverride(device string, v *int) error {
 	if v != nil && (*v < 5 || *v > 86400 || *v%5 != 0) {
 		return fmt.Errorf("interval must be 5..86400 in multiples of 5")
 	}
-	return s.change(func(st *State, _ time.Time, _ *sql.Tx) error {
+	return s.change("override_requested", device, func(st *State, _ time.Time, _ *sql.Tx) error {
 		d := st.Devices[device]
 		if d == nil {
 			return fmt.Errorf("unknown device")
@@ -398,6 +440,13 @@ func (s *Store) Snapshot(dot int) (State, error) {
 				}
 			}
 		}
+	}
+	report, err := s.fieldReport(tx)
+	if err != nil {
+		return st, err
+	}
+	for id, d := range st.Devices {
+		d.Evidence = report.Devices[id]
 	}
 	st.Points = Present(st.Points, dot)
 	return st, nil

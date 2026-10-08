@@ -7,7 +7,8 @@ passwords or secrets. Repeater roaming and the 4+ hour/OEM campaign remain Issue
 
 ## Run record
 
-Copy/fill this table for each run. Keep screenshots/timestamps with the record.
+Copy/fill setup details for each run. Keep both exported ZIPs with the record;
+receipt/count/config/recording timestamps are captured automatically.
 
 | Item | Value |
 | --- | --- |
@@ -125,27 +126,26 @@ Run the sustained screen-off stage on battery with USB disconnected; charging
 and ADB can change sleep behavior. Preserve Command evidence before attaching
 ADB to diagnose a failure, since attaching can wake the phone.
 
-Enter **PASS/FAIL and brief evidence for every row**. Record phone and Command
-observation times/coordinates, last ACK, queue count, applied intervals, recording
-state and distances as relevant. A screenshot alone cannot prove unchanged retries.
-For retry evidence stop Command and inspect a **copy** of SQLite offline if needed:
-`raw` contains device/message/sequence, original `wire` and first `received`.
-Never add/expose raw inspection endpoints on the phone listener. Do not edit the
-operational database. A browser can save `http://127.0.0.1:8081/local/state` snapshots
-before/after events as local evidence of device/config/track state.
+Perform the actions and retain brief action outcomes/setup notes. The two ZIPs
+capture counts, receipt/capture/observation timestamps, queue changes, retries,
+configuration convergence and recording boundaries automatically. Assess evidence
+afterward as **PASS/FAIL/INCONCLUSIVE**; continuously watching Last seen, ACKs,
+counters or SQLite is unnecessary. Screenshots are optional corroboration, especially
+for real geometry. Never edit the operational DB or expose raw inspection on the
+phone listener. See **Preserve the complete field evidence** below for export.
 
-| Stage | Procedure and expected evidence | PASS/FAIL + evidence |
+| Stage | Procedure and expected evidence | PASS/FAIL/INCONCLUSIVE + evidence |
 | --- | --- | --- |
 | 1 Discovery / startup | Start Command then phone as above. Verify one deliberate Start tap, visible Starting → Active, and no extra service start from repeated taps. Check each readiness action and return from Settings; no automatic start without an explicit pending Start. New device appears dynamically with correct Party labels; record device UUID. | |
 | 2 Outdoor fix | Obtain GNSS fix. Compare phone saved GNSS coordinates (extraction above) with Command `location.fix` in local state and timestamps. Accuracy/unavailable fields must be honest. Fresh UI shows Accuracy/Fix age; a >30 s old observation shows Last fix age/Last known accuracy, or Unavailable if never measured. With no observation it shows Last fix: None. Stale metadata must not become a current Command fix. | |
-| 3 Local cadence | Keep default 10 s as a baseline, then save local **5 s**. Observe ≥5 reports at each cadence, increasing observation/capture times and successful ACKs. GNSS callbacks must not flood packets. | |
-| 4 Activity closed + screen off GNSS | Close Activity using Back, then lock/switch screen off; remain outdoors with sky view and move for **at least 30 minutes** at local 5 s. Do not reopen the app during this period. Retain intervening Command state snapshots: `gnss_condition` remains fresh, native `observed_at` advances, capture/ACK/contact remain healthy, no unexplained gaps. Unlock without opening Activity and check again on Command. Reopening must not be needed to restore fixes. Record battery use and start/end times. | |
-| 5 Remote override | Save local 15 s, close Activity and lock screen. On Command device card Set **5 s**. Confirm ACK adoption, effective 5 s and eventual settings-applied state; observe ≥5 fresh GNSS reports at 5 s without opening Activity. Also check existing 30 s override. Delivery waits for the next request/ACK. | |
-| 6 Local edit + Clear override | With the 5 s override active, change phone local to 15 s: effective stays 5. Close Activity/lock again. Command device-card Clear override: effective returns to 15, reports resume that cadence and settings converge. Record both configurations. | |
-| 7 Offline movement | Start Recording before moving. Note current distance/queue. Break or disable phone Wi-Fi for several minutes while moving; confirm GNSS continues and phone pending queue grows. | |
-| 8 Recovery priority | Restore Wi-Fi without internet. Observe current position restored on Command **before** old backlog drains; then queue falls. Capture closely timed local-state snapshots/screenshots and phone queue/ACK. | |
+| 3 Local cadence | Keep default 10 s as a baseline, then save local **5 s**. Allow several steady reporting cycles at each setting; verify receipt cadence, advancing times and ACK/queue progress afterward from the ZIPs. GNSS callbacks must not flood packets. | |
+| 4 Activity closed + screen off GNSS | Close Activity using Back, then lock/switch screen off; remain outdoors with sky view and move for **at least 30 minutes** at local 5 s. Do not reopen the app during this period. The retained evidence must show: `gnss_condition` remains fresh, native `observed_at` advances, capture/ACK/contact remain healthy, no unexplained gaps. Unlock without opening Activity and check again on Command. Reopening must not be needed to restore fixes. Note battery use; start/end and continuity evidence are retained automatically. | |
+| 5 Remote override | Save local 15 s, close Activity and lock screen. On Command device card Set **5 s**. Confirm ACK adoption, effective 5 s and eventual settings-applied state; leave it running for several cycles without opening Activity; analyze receipt cadence/freshness afterward. Also check existing 30 s override. Delivery waits for the next request/ACK. | |
+| 6 Local edit + Clear override | With the 5 s override active, change phone local to 15 s: effective stays 5. Close Activity/lock again. Command device-card Clear override: effective returns to 15, reports resume that cadence and settings converge. Both configurations and their adoption/cadence are retained in the exports. | |
+| 7 Offline movement | Start Recording before moving. Break or disable phone Wi-Fi for several minutes while moving. Continue the route; Android automatically preserves GNSS state and real pending-count growth. | |
+| 8 Recovery priority | Restore Wi-Fi without internet. Continue moving after restoration. Inspect exports later: first post-gap capture should be current-like, then older backlog follows; Android pending must fall to zero. No live queue watching is required. | |
 | 9 Reconciled route | After drain, accepted history follows observation-time movement. Check sensible turns/reversals, no backwards arrival-order edge, inflated/doubled distance or spurious connector across bad GNSS. Provisional distance may be revised during rebuild. | |
-| 10 Command restart | Stop Command process while phone continues tracking/moving; verify queue growth. Restart same executable/database/address. Verify live recovery/backlog and matching original stored identities/first receipts on retries, no duplicate raw rows/distance. | |
+| 10 Command restart | Stop Command process while phone continues tracking/moving; restart the same executable/database/address. Exports preserve Android queue growth/drain, Command open boundaries, matching retry identities/original receipts, and unchanged unique rows/distance on duplicate ACKs. | |
 | 11 Stop Recording | Stop current Recording; continue moving/reporting. Live coordinate changes while recorded geometry/distance stays stopped once pre-stop backlog is drained. Late pre-stop observations may legitimately reconcile closed history. | |
 | 12 Resume | Resume and move again. Same recording gains a new segment. First resumed point adds no connector/distance from stopped position; subsequent movement adds only within-segment distance. | |
 | 13 Clear Recording | Clear, cancel once to verify confirmation; Clear and confirm. Tracks/distance disappear; live device and remote configuration remain. Subsequent reports/old backlog cannot resurrect cleared recording. | |
@@ -153,12 +153,12 @@ before/after events as local evidence of device/config/track state.
 
 A stage fails if reports stop unexpectedly, pending data disappears, a current fix
 is falsely fresh, config never converges, identity changes, or distance duplicates/
-connects stopped periods. Record the failure and precise timestamps; retain database
-copies only after stopping Command and note the app queue state. For a GNSS
-continuity failure record whether Command contact stayed healthy and whether
-unlocking versus opening Activity restored fixes. Before unlocking/opening the app, save Command contact/location-age snapshots and
-failure time. Historical evidence is already frozen automatically; **ADB is not
-required at the moment of failure**. Follow the GPSTest comparison below before
+connects stopped periods. Missing evidence is **INCONCLUSIVE**, not PASS. Preserve
+both exported ZIPs and brief action order/outcomes; no failure-time timestamp or
+SQLite extraction is needed. For a GNSS continuity failure note whether unlocking
+versus opening Activity restored fixes. Historical evidence is already frozen
+automatically; **ADB is not required at the moment of failure**. Follow the GPSTest
+comparison below before
 opening our Activity. Afterward, open GNSS Tracking → **Export diagnostics** →
 choose a local folder in Android Files → Save. Share the resulting
 `gnss-diagnostics-<UTC timestamp>.zip` with the run record for analysis. This works
@@ -221,15 +221,14 @@ Use GPSTest already installed before the offline run; record its version. This
 comparison does not replace the sustained test and does not prove an app/OEM cause.
 
 1. Keep our foreground service running outdoors. When Command shows healthy
-   contact but old/no GNSS, record Command state, failure time and last observed fix.
+   contact but old/no GNSS, note the symptom; Command receipts and Android incidents already preserve the timing/state.
    **Do not reopen GNSS Tracking or restart its service.**
-2. Unlock only; record whether Command receives a newly observed fix before any
-   Activity is opened. Then open **GPSTest**, leaving our Activity closed. Record
-   GPSTest acquisition/fix times and Command's live observation times for several
-   minutes. Note whether fresh fixes return to our service while GPSTest is active.
+2. Unlock only, then open **GPSTest**, leaving our Activity closed. Note whether
+   GPSTest obtains a real fix. Let both run for several minutes; exported native
+   callback and receipt chronology will show whether/when our service recovered.
 3. Close GPSTest and observe Command again **without reopening our Activity**.
-   Record whether fresh fixes continue. Only after that comparison, open GNSS
-   Tracking, then minimize/reopen it if needed, recording any recovery at each step.
+   Note action order. Only after that comparison, open GNSS Tracking, then
+   minimize/reopen it if needed. Our Activity transitions/recovery are recorded.
    Do not stop tracking or restart the listener to collect evidence.
 4. After ~5 minutes of post-recovery context (or much later the same day), use
    **Export diagnostics**. Compare the frozen incident before/during GPSTest:
@@ -238,7 +237,7 @@ comparison does not replace the sustained test and does not prove an app/OEM cau
    sender/reporting progress. `FIRST_LOCATION_AFTER_STALE` identifies the native
    callback that restored a fresh measurement; HTTP contact alone does not.
    Attach the ZIP to the Issue #4 test report or analysis conversation, with phone/
-   Android/GPSTest versions and the external Command/GPSTest timestamps. No live ADB
+   Android/GPSTest versions, brief action order and the Command field-report ZIP. No live ADB
    is needed; opening the Activity later does not overwrite the frozen incident.
 
 Continuous poor fixes or absent callbacks indoors do not justify automatic source
@@ -260,3 +259,36 @@ and process interruption. Verify explicit save failures, retained pending messag
 nullable telemetry, honest stale/no-fix status and no automatic force-stop/reboot
 startup promise. Run repeater roaming and 4+ hour endurance separately from this
 30-minute integration milestone.
+
+## Preserve the complete field evidence
+
+Build/install Android and Command from the same frozen clean PR #11 product SHA.
+Verify Android `build.sourceRevision` and Command `build.source_revision` match
+in the ZIP manifests; a workflow-only APK build commit must not replace the product checkout. Do not reuse an older APK.
+
+Run the physical actions above without continuously watching counters or using a
+stopwatch. After the run, choose Android **Export diagnostics** and save its ZIP;
+choose Command **Export field-test report** on the loopback dashboard and save the
+ZIP beside it. Export does not stop tracking, restart GNSS, clear queues/incidents
+or change recording. Keep setup details and the two files for analysis, even if the
+GNSS failure was noticed long after it began; ADB is optional.
+
+Android automatically records real pending-count changes: offline growth, drain,
+zero and unavailable/error. It observes Room asynchronously while the Activity is
+closed; null is not zero. Command automatically captures unique receipt chronology,
+retry/conflict attempts, first receipt after each gap, capture/observation chronology,
+older backlog, monotonic live state, config requests/offered ACKs/echoes and actual
+receipt cadence, plus recording operations/windows/accepted segments/distance.
+Use a local **30 s → Command override 5 s → Clear → 30 s** cadence exercise, allowing
+at least four steady reports in each phase. Clear and restart are persisted evidence,
+not operator-written timestamps. Command's automatic assessments are conservative;
+phone queue drain needs the Android ZIP. A gap proves missing Command receipts,
+not that the physical Wi-Fi radio was off.
+
+Send both ZIPs with phone/OS/network setup and brief action outcomes for analysis.
+Android excludes operational identity/location; Command includes device/message/
+recording identifiers for correlation, but excludes coordinates, Party labels,
+network addresses, raw payloads, database files and secrets. Do not publish bundles
+indiscriminately. Recorder retention limits still apply; export promptly after a run.
+Real GNSS/GPSTest activation, screen-off/Doze/OEM effects and physical offline/reconnect
+behaviour remain physical acceptance; no automated verdict substitutes for these.

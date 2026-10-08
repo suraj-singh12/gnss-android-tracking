@@ -17,10 +17,10 @@ android {
         val revision = runCatching {
             providers.exec {
                 workingDir(rootDir.parentFile)
-                commandLine("git", "describe", "--always", "--dirty", "--abbrev=12")
+                commandLine("git", "rev-parse", "HEAD")
                 isIgnoreExitValue = true
             }.standardOutput.asText.get().trim()
-        }.getOrNull()?.takeIf { it.matches(Regex("[0-9a-f]{12}(-dirty)?")) } ?: "unknown"
+        }.getOrNull()?.takeIf { it.matches(Regex("[0-9a-f]{40}")) } ?: "unknown"
         buildConfigField("String", "SOURCE_REVISION", "\"$revision\"")
     }
     compileOptions {

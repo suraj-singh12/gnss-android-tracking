@@ -49,6 +49,7 @@ class TrackingService : Service() {
     @Volatile private var deliveryPaused: Boolean? = null
     @Volatile private var deliveryError: Boolean? = null
     @Volatile private var loopError: String? = null
+    private val pendingDiagnostics = PendingOutboxDiagnostics()
     private val latest = LatestLocation(SystemClock)
     private lateinit var resources: TrackingResources
     private lateinit var health: DeviceHealth
@@ -158,6 +159,17 @@ class TrackingService : Service() {
             // Root supervisor children: maintenance never waits for Room/network;
             // a child reporting failure cannot cancel the sender or native source.
             scope.launch(Dispatchers.Main) { maintenanceLoop() }
+            scope.launch {
+                pendingDiagnostics.observe(
+                    onChange = {
+                        withContext(Dispatchers.Main) {
+                            publishDiagnostics(power.snapshot(), false)
+                        }
+                    }
+                ) {
+                    repository.dao.pendingCount()
+                }
+            }
             scope.launch {
                 try {
                     if (intent == null && !repository.state().tracking) {
@@ -346,6 +358,7 @@ class TrackingService : Service() {
         val now = SystemClock.elapsedMillis()
         fun age(at: Long?) = at?.let { (now - it).coerceAtLeast(0) }
         val d = source.diagnostics
+        val pending = pendingDiagnostics.snapshot
         val snapshot =
             GnssDiagnostic(
                 utc(SystemClock.wallMillis()),
@@ -370,6 +383,8 @@ class TrackingService : Service() {
                 effectiveInterval,
                 wifiAvailable,
                 age(lastAckElapsed),
+                pendingOutbox = pending.value,
+                pendingOutboxError = pending.unavailable,
                 deliveryPaused = deliveryPaused,
                 deliveryError = deliveryError,
                 lastKnownAccuracyM = latest.observation?.fix?.horizontal_accuracy_m,

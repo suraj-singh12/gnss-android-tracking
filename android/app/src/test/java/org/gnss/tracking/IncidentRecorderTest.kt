@@ -74,6 +74,30 @@ class IncidentRecorderTest {
             false,
         )
 
+    @Test
+    fun pendingTransitionsPersistImmediatelyAndExportLongAfterward() {
+        val j = journal()
+        listOf<Int?>(null, 0, 1, 4, 1, 0, null).forEachIndexed { index, count ->
+            j.append(
+                sample(index * 1000L)
+                    .copy(
+                        pendingOutbox = count,
+                        pendingOutboxError = if (index == 6) true else null,
+                    )
+            )
+        }
+        val saved =
+            entries("timeline")
+                .filter { it.event == DiagnosticEvent.STATE_CHANGED }
+                .mapNotNull { it.snapshot }
+                .map { it.pendingOutbox }
+        assertEquals(listOf<Int?>(null, 0, 1, 4, 1, 0, null), saved)
+        j.append(sample(3600000).copy(pendingOutbox = 0))
+        val exported = zip(j).values.joinToString()
+        assertTrue(exported.contains("pendingOutbox"))
+        assertTrue(exported.contains("pendingOutboxError"))
+    }
+
     private fun journal(limits: DiagnosticJournal.Limits = DiagnosticJournal.Limits()) =
         DiagnosticJournal(File(temporary.root, "diagnostics"), limits)
 

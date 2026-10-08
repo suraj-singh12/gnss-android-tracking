@@ -203,8 +203,14 @@ separate counters/ages, current versus last-known accuracy, permission/AppOp,
 process importance, screen/idle/Saver/location-power/standby/thermal/optimization,
 lock, report/sender/snapshot progress, effective interval, cached Wi-Fi and delivery
 state. ACK age is time since observing a changed persisted ACK, not corrected
-Command time; it stays unavailable at restart until a new change. Pending count
-remains nullable rather than adding Room work to GNSS maintenance.
+Command time; it stays unavailable at restart until a new change. Pending count now comes from the existing Room DAO Flow collected by a service-owned
+IO child; diagnostic snapshots only read the volatile cached value. Initial/read
+failure is null (never invented zero), with `pendingOutboxError` set on failure;
+a bounded five-second re-subscription permits recovery. Count/availability changes
+are enqueued immediately to the same recorder. No Activity, native callback,
+wake-lock renewal or one-second maintenance queries Room. Diagnostic write failures
+cannot cancel acquisition/reporting/sending. The Android manifest now identifies
+full Git HEAD for correlation with Command's field report.
 
 Incidents sample every 2 seconds plus native/lifecycle transitions until a real
 accepted Location callback with ≤30-second measurement age arrives with provider
@@ -240,7 +246,7 @@ real GNSS, GPSTest activation, screen-off/Doze/OEM scheduling, battery/storage c
 and the phone's document picker still require the unplugged physical retest.
 
 
-Recorder verification: full `testDebugUnitTest` **101 passed, zero failures/errors**;
+Initial incident-recorder verification (4b2bc3d): full `testDebugUnitTest` **101 passed, zero failures/errors**;
 16 opt-in bridge cases skipped there and **all 16 passed separately** using the
 race-instrumented real Command process. The final full run includes **50**
 recorder/export/source/service checks: 23 incident cases, six document-export cases
@@ -259,3 +265,22 @@ is drained on teardown. The satellite builder boundary runs on API 30, where tha
 public API first exists. This keeps all assertions; it is test isolation, not a
 phone workaround. Early failing test-runner attempts are not counted as passes.
 No hardware/GPSTest/screen-off acceptance was executed by this verification.
+
+Pending-outbox completion: four additional deterministic checks use the real Room
+Flow/ACK path and service without an Activity, suspended observation/cached reads,
+and failure injection (null/error, never guessed zero). One recorder check verifies
+immediate count transitions and later export. Count/error are one immutable volatile
+snapshot; publications use the existing main diagnostic path while Room collection
+stays on IO. Service cancellation ends the observer; writer/publication failure does
+not stop tracking. See Command README and DEVICE-ACCEPTANCE for paired persistent
+field evidence and full-revision ZIPs. GNSS acquisition/recovery is unchanged.
+
+Field-evidence verification: Android **106 passed**, zero failures/errors; the
+16 opt-in bridge cases skipped in that full run **all passed separately** against
+the real race-instrumented Command. The full run includes **55** diagnostics/export/
+source/service checks. `assembleDebug` passed and `lintDebug` found zero issues.
+Command **77 tests/subtests passed**, including 22 new field-evidence checks;
+Command race/vet passed. Test-tools **69 tests/subtests passed**, including all 44
+contract checks; race/vet passed. Command cross-builds for Darwin arm64, Windows
+amd64 and Linux amd64, dashboard JS syntax and diff checks passed. These are
+application-boundary checks, not physical GNSS/Wi-Fi/Doze acceptance.

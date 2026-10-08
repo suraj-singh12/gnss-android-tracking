@@ -1,8 +1,10 @@
 package core
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"net/http"
@@ -80,6 +82,18 @@ func (s *Store) LocalHandler(assets http.Handler) http.Handler {
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; object-src 'none'; frame-ancestors 'none'")
 		if !strings.HasPrefix(r.URL.Path, "/local/") {
 			assets.ServeHTTP(w, r)
+			return
+		}
+		if r.URL.Path == "/local/field-report" && r.Method == "GET" {
+			var b bytes.Buffer
+			if err := s.ExportFieldReport(&b); err != nil {
+				failure(w, 503, "storage_unavailable", err)
+				return
+			}
+			w.Header().Set("Content-Type", "application/zip")
+			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=gnss-field-report-%s.zip", s.Now().UTC().Format("20060102T150405Z")))
+			w.Header().Set("Cache-Control", "no-store")
+			_, _ = w.Write(b.Bytes())
 			return
 		}
 		if r.URL.Path == "/local/state" && r.Method == "GET" {
@@ -168,7 +182,7 @@ func dashboardView(st State) map[string]any {
 		if d.Location != nil {
 			location = map[string]any{"fix": d.Location.Fix}
 		}
-		devices[id] = map[string]any{"device_id": id, "track_color": d.Color, "track_dash": d.Dash, "snapshot": map[string]any{"party": d.Snapshot.Party, "health": d.Snapshot.Health, "config_state": d.Snapshot.Config}, "location": location, "last_contact": d.Contact, "desired_config": d.Desired, "config_converged": d.Converged, "contact_condition": d.ContactCondition, "gnss_condition": d.GNSSCondition, "location_age_s": d.LocationAge, "total_m": d.Total}
+		devices[id] = map[string]any{"device_id": id, "track_color": d.Color, "track_dash": d.Dash, "snapshot": map[string]any{"party": d.Snapshot.Party, "health": d.Snapshot.Health, "config_state": d.Snapshot.Config}, "location": location, "last_contact": d.Contact, "desired_config": d.Desired, "config_converged": d.Converged, "contact_condition": d.ContactCondition, "gnss_condition": d.GNSSCondition, "location_age_s": d.LocationAge, "total_m": d.Total, "field_evidence": d.Evidence}
 	}
 	var recording any
 	if st.Recording != nil {

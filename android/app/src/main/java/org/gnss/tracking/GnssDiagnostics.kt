@@ -135,6 +135,7 @@ data class GnssDiagnostic(
     val deliveryPaused: Boolean? = null,
     val deliveryError: Boolean? = null,
     val lastKnownAccuracyM: Double? = null,
+    val pendingOutboxError: Boolean? = null,
 )
 
 // Closed event vocabulary: callers cannot enqueue protocol bodies, coordinates or error text.
@@ -407,6 +408,8 @@ class DiagnosticJournal(private val directory: File, val limits: Limits = Limits
             s.fixAvailable,
             s.effectiveIntervalS,
             s.wifiAvailable,
+            s.pendingOutbox,
+            s.pendingOutboxError,
             s.deliveryPaused,
             s.deliveryError,
             s.loopError,

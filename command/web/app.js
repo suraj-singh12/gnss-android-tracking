@@ -147,6 +147,11 @@ function render() {
             (d.config_converged ? "settings applied" : "settings pending"),
         ),
       );
+      if (d.field_evidence) {
+        const e = d.field_evidence;
+        status.append(el("div", `Reports received: ${e.reports_received} · Raw fixes: ${e.raw_fixes} · Useful points: ${e.useful_points}`),
+          el("div", `Cadence expected: ${e.expected_interval_s} s · observed: ${e.median_recent_unique_receipt_gap_s == null ? "unavailable" : "~" + e.median_recent_unique_receipt_gap_s.toFixed(1) + " s"}`));
+      }
       card.append(status);
       const form = el("form", undefined, "override"),
         input = el("input");
