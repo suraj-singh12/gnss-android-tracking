@@ -1,0 +1,129 @@
+name: Issue 4 matched physical test assets
+
+on:
+  push:
+    branches:
+      - test-assets-android-issue-4
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-matched-assets:
+    runs-on: ubuntu-latest
+    env:
+      SOURCE_REVISION: 8fbcabbc2443aae75178a50160ee1248830611dd
+    steps:
+      - name: Check out temporary workflow branch
+        uses: actions/checkout@v4
+
+      - name: Verify isolated workflow commit and check out frozen product source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git fetch --no-tags --depth=2 origin "refs/heads/$GITHUB_REF_NAME"
+          test "$(git rev-parse HEAD^)" = "$SOURCE_REVISION"
+          changed_files=$(git diff-tree --no-commit-id --name-only -r HEAD)
+          test "$changed_files" = ".github/workflows/android-test-apk.yml"
+          git checkout --detach "$SOURCE_REVISION"
+          test "$(git rev-parse HEAD)" = "$SOURCE_REVISION"
+          test -z "$(git status --porcelain)"
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+          cache-dependency-path: android/**/*.gradle*
+
+      - name: Set up Android SDK 35
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android SDK platform and build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses </dev/null
+          /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
+      - name: Build Android debug APK
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Verify APK and embedded product revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=android/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          test "$(git rev-parse HEAD)" = "$SOURCE_REVISION"
+          generated=android/app/build/generated/source/buildConfig/debug/org/gnss/tracking/BuildConfig.java
+          grep -F "SOURCE_REVISION = \"$SOURCE_REVISION\"" "$generated"
+          python3 - "$apk" "$SOURCE_REVISION" <<'PY'
+          import sys
+          import zipfile
+
+          apk, revision = sys.argv[1], sys.argv[2].encode()
+          with zipfile.ZipFile(apk) as archive:
+              dex_files = [name for name in archive.namelist() if name.startswith("classes") and name.endswith(".dex")]
+              assert dex_files, "APK contains no DEX files"
+              assert any(revision in archive.read(name) for name in dex_files), "frozen revision missing from APK DEX files"
+          print(f"Verified {revision.decode()} in APK DEX files")
+          PY
+
+      - name: Set up Go 1.24.7
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.7'
+          cache: true
+          cache-dependency-path: command/go.sum
+
+      - name: Build macOS ARM64 Command binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cd command
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o ../dist/gnss-command-darwin-arm64 ./cmd/party-tracker
+
+      - name: Verify Command binary and embedded product revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary=dist/gnss-command-darwin-arm64
+          test -s "$binary"
+          test "$(git rev-parse HEAD)" = "$SOURCE_REVISION"
+          build_info=$(go version -m "$binary")
+          printf '%s\n' "$build_info"
+          grep -F "vcs.revision=$SOURCE_REVISION" <<< "$build_info"
+          grep -F 'vcs.modified=false' <<< "$build_info"
+          grep -F 'GOOS=darwin' <<< "$build_info"
+          grep -F 'GOARCH=arm64' <<< "$build_info"
+          grep -F 'CGO_ENABLED=0' <<< "$build_info"
+
+      - name: Upload Android debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnss-android-issue4-8fbcabb-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload macOS ARM64 Command binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnss-command-issue4-8fbcabb-darwin-arm64
+          path: dist/gnss-command-darwin-arm64
+          if-no-files-found: error
+          retention-days: 7
