@@ -25,25 +25,33 @@ receipt/count/config/recording timestamps are captured automatically.
 
 ## Start
 
-Build using an Android SDK 35/JDK 17+ development machine and install the debug app
-on the test phone (not release packaging):
+Use the matched acceptance artifacts from the reported GitHub Actions run. The APK,
+macOS ARM64 binary and Windows AMD64 binary must share the manifest's **full source
+revision**. Compare SHA-256 checksums with `SHA256SUMS` before installation. Transfer
+`app-debug.apk` to the phone and open it to install; allow installation by that file
+manager/browser only when Android asks. No Android development tools or ADB are
+required. Preserve/drain existing pending history and export diagnostics before any
+reinstall needed because debug signing differs; never uninstall with pending data.
+
+On macOS, extract the matching binary and run from Terminal:
 
 ```sh
-cd android
-./gradlew assembleDebug
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+chmod +x gnss-command-darwin-arm64
+./gnss-command-darwin-arm64 -ingest-listen :8080 -dashboard-listen 127.0.0.1:8081 -db ./field-command.sqlite
 ```
 
-With Go 1.24.7+, from `command/` on the laptop:
+On Windows, extract the matching binary and run from PowerShell:
 
-```sh
-go build -o party-tracker ./cmd/party-tracker
-./party-tracker -ingest-listen :8080 -dashboard-listen 127.0.0.1:8081 -db ./field-command.sqlite
+```powershell
+.\gnss-command-windows-amd64.exe -ingest-listen :8080 -dashboard-listen 127.0.0.1:8081 -db .\field-command.sqlite
 ```
 
-Windows: use `party-tracker.exe`. Record the absolute SQLite path; use the **same
-file** after restart. Allow laptop TCP 8080 on the trusted LAN. Keep dashboard
-controls on loopback. Open `http://127.0.0.1:8081` on the laptop.
+Keep the same SQLite file across Command restarts. Allow phone ingestion through
+local OS firewall rules for the private field LAN; dashboard controls remain
+loopback-only. Developers may instead build both apps from the same clean commit
+with the build commands in the Android and Command READMEs.
+
+Open `http://127.0.0.1:8081` on the laptop.
 
 On Android configure Party ID/name, Command base URL
 `http://<laptop-LAN-IP>:8080` (**not** localhost, dashboard port or API path), local

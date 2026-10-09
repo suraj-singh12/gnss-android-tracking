@@ -1,7 +1,8 @@
-# System architecture — v1 freeze
+# System architecture — v1 and Issue #4 amendments
 
-Issue #1, including its frozen clarifications, is authoritative. This document
-freezes responsibility and recording semantics; the
+Issue #1 established the responsibility boundaries. The dated Issue #4 amendment
+adds native-resolution collection, negotiated history batches and current-policy
+reconstruction; the
 [wire contract](../protocol/protocol-v1.md) freezes interchange. Future changes to
 these semantics require an explicit architecture/protocol decision.
 
@@ -110,8 +111,10 @@ retained. Android/OEM owns physical Wi-Fi reassociation; code recovers when a ne
 is exposed, with application reachability, network-bound transport invalidation and
 bounded retries. Public internet validation is irrelevant.
 
-Command updates live location only for a newer measurement key; device health and
-party label use the newest `captured_at` snapshot key, with sequence/message ID ties.
+Command updates live location only for a newer non-future measurement key; device health
+and party label use the newest non-future `captured_at` snapshot key, with
+sequence/message ID ties. Clock-anomalous future observations remain raw but cannot
+pin the operational marker or snapshot ahead of later genuinely current data.
 A status packet without a fix can change current health without erasing the last
 known location. Every successfully processed request updates last contact, including
 retry; contact freshness and location freshness are different.

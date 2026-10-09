@@ -106,7 +106,7 @@ class TrackingApp : Application() {
     val repository by lazy { Repository(TrackingDatabase.open(this)) }
     val observationPersistence by lazy {
         ObservationPersistence(
-            repository::saveObservation,
+            { value -> repository.saveObservation(value) },
             scope = durableWork,
             onSaved = { value, row ->
                 recorder.event(
@@ -124,11 +124,12 @@ class TrackingApp : Application() {
             },
             onFailure = {
                 recorder.event(DiagnosticEvent.LOOP_FAILURE)
-                operational.value =
-                    operational.value.copy(
+                operational.update {
+                    it.copy(
                         error =
                             "GNSS history storage failed. Keep the app running, free storage and export diagnostics; history is not fully durable."
                     )
+                }
             },
         )
     }

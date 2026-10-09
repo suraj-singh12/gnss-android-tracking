@@ -114,7 +114,7 @@ interface TrackingDao {
     suspend fun measurement(session: String, measurement: String): Outbound?
 
     @Query(
-        "SELECT * FROM outbox WHERE deliveredAt IS NULL AND quarantined=0 AND type='location' AND (observationSequence IS NULL OR sequence=(SELECT sequence FROM outbox WHERE observationSequence IS NOT NULL ORDER BY observedMillis DESC,sequence DESC LIMIT 1)) AND nextAttemptMillis<=:now AND observedMillis>=:since AND observedMillis<=:until ORDER BY capturedMillis DESC,sequence DESC LIMIT 1"
+        "SELECT * FROM outbox WHERE deliveredAt IS NULL AND quarantined=0 AND type='location' AND (observationSequence IS NULL OR sequence=(SELECT sequence FROM outbox WHERE observationSequence IS NOT NULL AND observedMillis>=:since AND observedMillis<=:until ORDER BY observedMillis DESC,sequence DESC LIMIT 1)) AND nextAttemptMillis<=:now AND observedMillis>=:since AND observedMillis<=:until ORDER BY capturedMillis DESC,sequence DESC LIMIT 1"
     )
     suspend fun newestNative(now: Long, since: Long, until: Long): Outbound?
 

@@ -307,4 +307,13 @@ class ObservationPersistenceTest {
             db.close()
         }
     }
+
+    @Test
+    fun creatingCallbackHandoffDoesNotInitializeRoomOnCallingThread() = runBlocking {
+        // No attached Android context: synchronous Room access here would fail.
+        val app = TrackingApp()
+        val writer = app.observationPersistence
+        assertEquals(0L, writer.state.submitted)
+        writer.finish()
+    }
 }

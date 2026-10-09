@@ -366,6 +366,9 @@ func (s *Store) ingestMessage(tx *sql.Tx, st *State, m Message, b []byte, receiv
 	}
 	evidence := receiptEvidence(m, received, first, result, st.Devices[m.Device])
 	evidence.DeliveryRole = role
+	if d := st.Devices[m.Device]; d != nil && d.Location != nil && futureCandidate(*d.Location, received, st.Policy) {
+		evidence.LiveBefore = "" // The anomalous future candidate was never a qualified current position.
+	}
 	quality, fresh := receiptQuality(m, received, st.Policy)
 	evidence.SourceQuality, evidence.FreshAtReceipt = quality, &fresh
 	evidence.TimingClass, _ = receiptClass(m, received, st.Policy)
@@ -398,10 +401,10 @@ func (s *Store) ingestMessage(tx *sql.Tx, st *State, m Message, b []byte, receiv
 	if received > d.Contact {
 		d.Contact = received
 	}
-	if less(d.Snapshot, m, false) {
+	if !futureCapture(m, received, st.Policy) && (futureCapture(d.Snapshot, received, st.Policy) || less(d.Snapshot, m, false)) {
 		d.Snapshot = m
 	}
-	if m.Fix != nil && (d.Location == nil || lessLive(*d.Location, m)) {
+	if m.Fix != nil && !futureCandidate(m, received, st.Policy) && (d.Location == nil || futureCandidate(*d.Location, received, st.Policy) || lessLive(*d.Location, m)) {
 		copy := m
 		d.Location = &copy
 		d.LocationReceived = first
@@ -758,4 +761,13 @@ func writeObservationConflict(tx *sql.Tx, st *State, m Message, received, role, 
 	e.FailureCode = code
 	e.ConflictingMessage = existing
 	return writeEvidence(tx, e)
+}
+
+// Retain clock-anomalous raw data without allowing its timestamp to pin the
+// operational snapshot/marker ahead of later genuinely current observations.
+func futureCapture(m Message, received string, p Policy) bool {
+	return instant(m.Captured).Sub(instant(received)).Seconds() > liveClockTolerance(p)
+}
+func futureCandidate(m Message, received string, p Policy) bool {
+	return futureCapture(m, received, p) || (m.Fix != nil && instant(m.Fix.Observed).Sub(instant(received)).Seconds() > liveClockTolerance(p))
 }

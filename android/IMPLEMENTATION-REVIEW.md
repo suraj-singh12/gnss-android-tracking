@@ -1,6 +1,10 @@
 # Issue #2 reliability self-review
 
-Source review against the frozen Protocol v1 and Issue #2 checklist. These are
+The Issue #2 matrix below records its original baseline. The dated Issue #4
+amendment supersedes snapshot-only history, the ACK eligibility gate and the
+original prohibition on session/batch metadata. Current behavior is documented in
+[architecture](../docs/architecture.md), [Android usage](README.md) and
+[device acceptance](DEVICE-ACCEPTANCE.md). These are
 implementation/automated-test findings, not claims of physical acceptance.
 
 | Check | Finding/evidence |

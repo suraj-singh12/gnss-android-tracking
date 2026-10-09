@@ -264,6 +264,7 @@ func TestHistoricalSwitchesCannotInventLiveFreshness(t *testing.T) {
 	}
 	future := message(t, 1, 0, 0, 0, 1)
 	future.Fix.Observed = base.Add(20 * time.Second).Format(wireTime)
+	future.Captured = future.Fix.Observed
 	future.Observation = &ObservationIdentity{future.ID, id(), base.Format(wireTime), 1, 1000}
 	ingest(t, s, future)
 	if d := snapshot(t, s).Devices[device]; d.CurrentPosition || d.Session != nil {
@@ -272,8 +273,20 @@ func TestHistoricalSwitchesCannotInventLiveFreshness(t *testing.T) {
 	if _, fresh := receiptQuality(future, now.Format(wireTime), p); fresh {
 		t.Fatal("future receipt certified fresh")
 	}
+	*now = base.Add(time.Second)
+	fresh := message(t, 2, 1, 5, 0, 1)
+	fresh.Observation = &ObservationIdentity{fresh.ID, future.Observation.Session, base.Format(wireTime), 2, 2000}
+	ingest(t, s, fresh)
+	if d := snapshot(t, s).Devices[device]; !d.CurrentPosition || d.Location.ID != fresh.ID || d.Snapshot.ID != fresh.ID {
+		t.Fatal("future raw candidate pinned later genuine current data")
+	}
+	var retained int
+	s.db.QueryRow("SELECT COUNT(*) FROM raw").Scan(&retained)
+	if retained != 2 {
+		t.Fatal("future raw observation deleted")
+	}
 	*now = base.Add(30 * time.Second)
-	old := message(t, 2, 30, 0, 0, 1)
+	old := message(t, 3, 30, 0, 0, 1)
 	old.Fix.Age = 60000
 	ingest(t, s, old)
 	if snapshot(t, s).Devices[device].CurrentPosition {

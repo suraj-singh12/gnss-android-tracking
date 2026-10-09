@@ -349,4 +349,21 @@ class HistoryDeliveryTest {
             db.close()
         }
     }
+
+    @Test
+    fun futurePendingObservationCannotPinLaterGenuineLiveCandidate() = runBlocking {
+        val db = Room.inMemoryDatabaseBuilder(context, TrackingDatabase::class.java).build()
+        try {
+            val r = Repository(db, clock)
+            val session = r.beginTracking()
+            val future = r.saveObservation(value(100, session))
+            val fresh = r.saveObservation(value(1, session))
+            clock.now = 101000
+            assertEquals(fresh, r.live(clock.now))
+            assertEquals(2, db.dao().all().size)
+            assertNull(db.dao().row(future.sequence)!!.deliveredAt)
+        } finally {
+            db.close()
+        }
+    }
 }
