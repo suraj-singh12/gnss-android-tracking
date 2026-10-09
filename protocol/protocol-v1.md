@@ -130,7 +130,8 @@ Send immediately with priority, saved first, through the same endpoint/outbox.
 Use the freshest credible available fix; null honestly represents no usable fix.
 Command transport ACK means **received**, never **human acknowledged**. Operator
 acknowledgement is Command-local event state; no separate phone control channel
-is specified. Hardware triggers, audible UI and SOS engine are future Issue #5.
+is specified. Issue #5 implements the shared engine, foreground physical-key
+fallback and audible Command UI without extending this wire contract.
 An SOS fix never becomes a track point merely because it accompanies an alert.
 
 ## Durable ACK and deduplication
@@ -233,18 +234,17 @@ with no receipt ACK/config. Diagnostics are text for logs, not UI decision keys.
 Unexpected HTTP failures are not ACKs; retain and surface diagnostics. Timeout,
 connection failure, 429 and 5xx retry the unchanged message with exponential delay
 1,2,4,8,16,30 s capped at 30 s; jitter may vary scheduling, not content. Use a finite
-request timeout (initial default 10 s); no limit on transient retry count. Do not
+request timeout (current default 6 s overall, 3 s connection); no limit on transient retry count. Do not
 block new current snapshots or SOS behind indefinitely failing backlog. Serialization
 and storage failures must be visible rather than quietly losing observations.
 
-During outage Android may keep measuring and saving report snapshots. Reconnect
-priority: pending SOS first, then newest current location/status snapshot, then
-oldest queued messages by sequence. Continue servicing newly due current reports
-while draining backlog so recovery cannot freeze live state. If the newest existing
-snapshot is old, create and persist a new current snapshot before backlog, using
-status if no fix. Do not rewrite queued packets or invent fixes. A current snapshot
-can carry an old last known fix with honest age; it is not fresh just because sent
-now. Queue retention/capacity management must make any storage exhaustion explicit.
+Android preserves every distinct structurally valid native Location measurement in
+its existing outbox. Reporting cadence controls live delivery/status, not history
+resolution. Live/history reuse the same identity. SOS preempts; live attempts grant
+oldest history an opportunity; there is no unrelated ACK gate. Recovery selects a
+fresh committed observation when available, never creates another copy of it. A stale
+observation remains historical. Satellite-status callbacks are not locations. The
+negotiated batch and session extension below is the authorized Issue #4 amendment.
 
 Command uses newest measurement for live location, newest capture for health/label/
 config echo, and original `observed_at` ordering for historical tracks. Sort/rebuild
@@ -252,3 +252,69 @@ rules and half-open recording windows are frozen in
 [architecture](../docs/architecture.md). `received_at` is never geographic track
 order, observation time, or recording membership. Missing messages are never
 interpolated. Duplicate delivery must not inflate travelled distance.
+
+## Issue #4 collection and historical transfer amendment (2026-10-09)
+
+Native GPS observations are collected independently of the reporting interval.
+That interval controls fresh live opportunities and routine health/config reports,
+not retained resolution. One original observation has one immutable message and
+observation identity; selecting a delivery role never rewrites its envelope.
+
+A new `location` may add `observation`:
+
+```json
+{"observation_id":"00000000-0000-4000-8000-000000000001","tracking_session_id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","session_started_at":"2026-10-06T12:00:00.000Z","observation_sequence":1,"measurement_elapsed_ms":1000}
+```
+
+Observation ID equals message ID. Observation sequences start at 1 per durable
+Android tracking session and commit with the observation. Envelope sequence
+remains device-wide; status/SOS do not consume observation sequences. Session
+starts survive sticky restart; explicit Stop then Start creates another session.
+Distinct coordinates are not required. Repeated callbacks deduplicate only by
+matching provider elapsed measurement and observation time within that session.
+
+Routine status may add `history_progress`: tracking_session_id,
+session_started_at, latest_committed_sequence, oldest_pending_sequence (nullable),
+pending_observations, unresolved_sequences, known_collection_loss and measured_at.
+Counts describe the phone at measured_at, not its present state at later receipt.
+All UTC stamps retain v1 precision; integers retain v1 safe-integer bounds.
+These extensions are optional; old queued v1 envelopes are not rewritten.
+
+### Negotiated historical batch capability, version 1
+
+`GET /api/v1/capabilities` advertises `historical_batch_versions:[1]`,
+`observation_identity_version:1` and `maximum_batch_bytes:65536`.
+Older receivers may return 404; Android then delivers original individual v1
+messages and reports the missing session/completeness capability. Original wire
+extensions retained by an older Command are validated/backfilled when upgraded.
+There is no assumption that an older Command understands a batch.
+
+`POST /api/v1/history`, application/json, takes:
+
+The canonical complete request/ACK/error examples are in
+[`fixtures/history-batch-v1/`](fixtures/history-batch-v1/).
+The request root contains integer `batch_version:1` and `messages`, an array of
+1..128 complete observation envelopes from one device/session/recovery block, within
+64 KiB. Android targets one observation, 500 B, 1/2/4/8/16/20 KB; a complete
+observation may exceed a small target. Never split an observation or wait to fill
+an otherwise ready batch. Transport defaults are a 6-second call and 3-second
+connection timeout. Individual v1 and SOS endpoints remain available.
+
+Success: `{"batch_version":1,"acks":[...]}`, with an ordinary exact-identity v1
+ACK for each entry, in request order. All entries commit atomically before ACK;
+duplicate entries retain their original first received_at. Android validates
+all ACKs before its atomic delivery-state update. Lost responses retry original
+identities; derived quality rejection does not reject raw delivery.
+
+Permanent entry errors return HTTP 422 with batch_version, error, entry_index,
+observation_id and message. No entries of that failed batch commit. Android
+retains the offending original row/error as unresolved and retries the others.
+Unidentified validation failures isolate batches deterministically down to one
+entry. Timeouts, malformed ACKs, 429 and 5xx are temporary, never permanent loss.
+The LAN ingestion listener does not expose dashboard/control/export endpoints.
+
+`X-GNSS-Delivery-Role: live|history` labels an individual transfer without changing
+identity. History batches are historical. A role never overrides actual freshness.
+Historical eligibility does not depend on another current or status ACK. Recovery
+blocks are contiguous outstanding observation sequences separated by delivered
+or unresolved outcomes; blocks are scheduling boundaries, not movement segments.

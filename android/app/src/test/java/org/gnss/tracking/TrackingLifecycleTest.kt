@@ -107,7 +107,16 @@ class TrackingLifecycleTest {
         val second = Robolectric.buildService(TrackingService::class.java).create()
         try {
             assertEquals(android.app.Service.START_STICKY, second.get().onStartCommand(null, 0, 2))
-            shadowOf(Looper.getMainLooper()).idle()
+            withTimeout(10000) {
+                while (
+                    !app.sessionReady.isCompleted ||
+                        shadowOf(manager).getLocationUpdateListeners().isEmpty()
+                ) {
+                    shadowOf(Looper.getMainLooper()).idle()
+                    delay(10)
+                }
+            }
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
             val diagnostic = app.diagnostics.value!!
             assertNotEquals(oldGeneration, diagnostic.serviceGeneration)
             assertEquals("sticky_restart", diagnostic.startReason)
@@ -161,7 +170,10 @@ class TrackingLifecycleTest {
             withTimeout(10000) {
                 while (
                     app.operational.value.error?.contains("Cannot prepare saved delivery") != true
-                ) delay(10)
+                ) {
+                    shadowOf(Looper.getMainLooper()).idle()
+                    delay(10)
+                }
             }
             shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
             assertTrue(app.diagnostics.value!!.loopError!!.contains("Connectivity recovery failed"))
@@ -191,7 +203,7 @@ class TrackingLifecycleTest {
     }
 
     @Test
-    fun initializationFailureRequestsShutdownWithoutAnotherFailedStoreWrite() = runBlocking {
+    fun temporaryInitializationFailureKeepsSourceAndRetriesSessionStorage() = runBlocking {
         app.repository.state()
         app.repository.db.openHelper.writableDatabase.execSQL(
             "CREATE TRIGGER injected_failure BEFORE UPDATE ON installation BEGIN SELECT RAISE(ABORT, 'injected disk failure'); END"
@@ -200,16 +212,31 @@ class TrackingLifecycleTest {
         try {
             service.get().onStartCommand(Intent(app, TrackingService::class.java), 0, 1)
             withTimeout(10000) {
-                while (!shadowOf(service.get()).isStoppedBySelf) {
+                while (
+                    app.operational.value.error?.contains("session storage unavailable") != true
+                ) {
                     shadowOf(Looper.getMainLooper()).idle()
                     delay(10)
                 }
             }
-            assertTrue(app.operational.value.error!!.contains("Cannot initialize tracking"))
-            assertTrue(
-                app.diagnostics.value!!.loopError!!.contains("Tracking initialization failed")
-            )
+            assertFalse(shadowOf(service.get()).isStoppedBySelf)
+            assertTrue(ShadowPowerManager.getLatestWakeLock().isHeld)
+            assertEquals(1, shadowOf(manager).getLocationUpdateListeners().size)
+            assertFalse(app.sessionReady.isCompleted)
+            app.repository.db.openHelper.writableDatabase.execSQL("DROP TRIGGER injected_failure")
+            withTimeout(10000) {
+                while (!app.operational.value.tracking) {
+                    shadowOf(Looper.getMainLooper()).idle()
+                    delay(10)
+                }
+            }
+            assertTrue(app.sessionReady.isCompleted)
+            assertTrue(app.repository.state().tracking)
+            assertEquals(1, shadowOf(manager).getLocationUpdateListeners().size)
         } finally {
+            app.repository.db.openHelper.writableDatabase.execSQL(
+                "DROP TRIGGER IF EXISTS injected_failure"
+            )
             service.destroy()
         }
         assertFalse(ShadowPowerManager.getLatestWakeLock().isHeld)
@@ -223,7 +250,89 @@ class TrackingLifecycleTest {
             // Otherwise native fsync/runtime initialization can race the next SDK's font
             // extraction.
             val application: android.app.Application = ApplicationProvider.getApplicationContext()
-            (application as? TrackingApp)?.recorder?.finish()
+            (application as? TrackingApp)?.finishForTests()
             Unit
         }
+
+    @Test
+    fun stopDuringBlockedSessionCommitPreservesAcceptedCallbacksInOriginalSession() = runBlocking {
+        app.repository.state()
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val transaction =
+            launch(Dispatchers.IO) {
+                app.repository.db.withTransaction {
+                    entered.complete(Unit)
+                    release.await()
+                }
+            }
+        entered.await()
+        val service = Robolectric.buildService(TrackingService::class.java).create()
+        service.get().onStartCommand(Intent(app, TrackingService::class.java), 0, 1)
+        val ready = app.sessionReady
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
+        val observation =
+            Observation(
+                Fix(utc(System.currentTimeMillis()), 0, 28.0, 77.0, 1.0, null, null, null, null),
+                android.os.SystemClock.elapsedRealtime(),
+            )
+        assertTrue(app.observationPersistence.submit(observation, Health(), null, ready))
+        app.operational.value = app.operational.value.copy(stopping = true)
+        service.destroy()
+        val stop = app.finishTracking()
+        assertSame(stop, app.finishTracking())
+        assertFalse(ready.isCompleted)
+        release.complete(Unit)
+        transaction.join()
+        withTimeout(10000) { stop.join() }
+        val oldSession = ready.await()
+        withTimeout(10000) { while (app.observationPersistence.state.saved != 1L) delay(10) }
+        assertFalse(app.repository.state().tracking)
+        assertEquals(oldSession.id, app.repository.dao.all().single().trackingSession)
+        assertEquals(1L, app.repository.dao.all().single().observationSequence)
+        val next = app.repository.beginTracking(resumeExisting = false)
+        assertNotEquals(oldSession.id, next.id)
+        assertTrue(shadowOf(manager).getLocationUpdateListeners().isEmpty())
+        assertFalse(ShadowPowerManager.getLatestWakeLock().isHeld)
+    }
+
+    @Test
+    fun inactiveStickyRestartNeverRegistersGpsOrCreatesNewSession() = runBlocking {
+        app.repository.state()
+        val service = Robolectric.buildService(TrackingService::class.java).create()
+        try {
+            service.get().onStartCommand(null, 0, 1)
+            withTimeout(10000) {
+                while (!shadowOf(service.get()).isStoppedBySelf) {
+                    shadowOf(Looper.getMainLooper()).idle()
+                    delay(10)
+                }
+            }
+            assertTrue(shadowOf(manager).getLocationUpdateListeners().isEmpty())
+            assertNull(app.repository.state().trackingSession)
+            assertFalse(ShadowPowerManager.getLatestWakeLock().isHeld)
+        } finally {
+            service.destroy()
+        }
+    }
+
+    @Test
+    fun knownCollectionLossSurvivesServiceStopAndTemporaryRoomFailure() = runBlocking {
+        val session = app.repository.beginTracking()
+        val ready = CompletableDeferred(session)
+        app.repository.db.openHelper.writableDatabase.execSQL(
+            "CREATE TRIGGER injected_failure BEFORE UPDATE ON tracking_sessions BEGIN SELECT RAISE(ABORT, 'injected disk failure'); END"
+        )
+        app.recordCollectionLoss(ready)
+        app.recordCollectionLoss(ready)
+        delay(100)
+        assertEquals(0L, app.repository.state().knownCollectionLoss)
+        app.repository.db.openHelper.writableDatabase.execSQL("DROP TRIGGER injected_failure")
+        withTimeout(10000) { while (app.repository.state().knownCollectionLoss != 2L) delay(10) }
+        app.repository.endTracking()
+        val next = app.repository.beginTracking(resumeExisting = false)
+        assertNotEquals(session.id, next.id)
+        assertEquals(2L, app.repository.dao.session(session.id)!!.knownCollectionLoss)
+        assertEquals(0L, app.repository.state().knownCollectionLoss)
+    }
 }

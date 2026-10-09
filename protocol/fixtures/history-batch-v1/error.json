@@ -1,0 +1,7 @@
+{
+  "batch_version": 1,
+  "error": "invalid_observation",
+  "entry_index": 0,
+  "observation_id": "00000000-0000-4000-8000-000000000006",
+  "message": "invalid observation identity"
+}

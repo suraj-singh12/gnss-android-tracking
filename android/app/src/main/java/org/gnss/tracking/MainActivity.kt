@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.KeyEvent
 import android.view.View
 import android.view.WindowInsets
 import android.widget.*
@@ -26,6 +27,14 @@ class MainActivity : Activity() {
     private lateinit var interval: EditText
     private lateinit var exportStatus: TextView
     private var exporting = false
+    private lateinit var sosStatus: TextView
+    private lateinit var keyOption: CheckBox
+    private val volumePattern = TripleVolumeUp { count ->
+        app.recorder.sos(
+            DiagnosticEvent.SOS_KEY_EVALUATED,
+            SosEvidence(trigger = SosTrigger.VOLUME_UP, count = count),
+        )
+    }
     private lateinit var status: TextView
     private var initialized = false
     private lateinit var startButton: Button
@@ -113,6 +122,70 @@ class MainActivity : Activity() {
                 content.addView(this)
             }
         text("GNSS Tracking", 24f)
+        sosStatus = text("SOS: no saved event", 18f)
+        sosStatus.accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+        val sosButton =
+            button("SOS — hold to activate") {
+                Toast.makeText(
+                        this,
+                        "Hold SOS briefly to activate. Accessibility: use the long-click action.",
+                        Toast.LENGTH_SHORT,
+                    )
+                    .show()
+            }
+        sosButton.setTextColor(android.graphics.Color.WHITE)
+        sosButton.backgroundTintList =
+            android.content.res.ColorStateList.valueOf(0xffa51621.toInt())
+        sosButton.minHeight = dp(64)
+        sosButton.setOnLongClickListener {
+            app.activateSos(SosTrigger.SCREEN)
+            true
+        }
+        text(
+            "Saved on phone ≠ Received by Command. Operator acknowledgement is visible only on Command."
+        )
+        keyOption =
+            CheckBox(this).apply {
+                text = getString(R.string.sos_volume_option)
+                minHeight = dp(48)
+                isChecked = getPreferences(MODE_PRIVATE).getBoolean("volumeSos", false)
+                setOnCheckedChangeListener { _, checked ->
+                    volumePattern.reset()
+                    getPreferences(MODE_PRIVATE).edit().putBoolean("volumeSos", checked).apply()
+                }
+                content.addView(this)
+            }
+        text(
+            "Physical key support: foreground app only. Three short presses within 1.5 s. Volume still changes. Locked screen / other apps: unsupported; open app and hold SOS."
+        )
+        scope.launch {
+            combine(app.repository.dao.observeSos(), app.sosNotice, app.operational) {
+                    rows,
+                    notice,
+                    op ->
+                    sosStatus.text = buildString {
+                        notice?.let { appendLine(it) }
+                        if (rows.isEmpty()) appendLine("SOS: no saved event")
+                        for (row in rows.take(5)) {
+                            val m = Protocol.decodeMessage(row.json)
+                            appendLine(
+                                "SOS ${sosReference(row.messageId)} • ${m.sos!!.triggered_at}"
+                            )
+                            appendLine(
+                                row.sosDescription(
+                                    op.health.wifi_connected,
+                                    app.activityVisible || op.tracking,
+                                )
+                            )
+                        }
+                        if (rows.size > 5)
+                            appendLine("${rows.size} SOS events retained; latest five shown")
+                        append("Operator acknowledgement: Command-only")
+                    }
+                }
+                .catch { sosStatus.text = getString(R.string.sos_read_failed) }
+                .collect {}
+        }
         status = text("Loading saved settings…")
         text("Field readiness", 20f)
         readiness = text("Checking field setup…")
@@ -243,14 +316,16 @@ class MainActivity : Activity() {
                     pendingStart = false
                     savingStart = false
                     app.operational.update {
-                        it.copy(starting = false, error = if (it.starting) null else it.error)
+                        it.copy(
+                            starting = false,
+                            stopping = true,
+                            error = if (it.starting) null else it.error,
+                        )
                     }
-                    scope.launch {
-                        withContext(Dispatchers.IO) {
-                            app.repository.edit { it.copy(tracking = false) }
-                        }
-                        stopService(trackingIntent)
-                    }
+                    // Stop acquisition immediately; finish accepted session metadata
+                    // before ending it. A later Start cannot race this explicit Stop.
+                    stopService(trackingIntent)
+                    app.finishTracking()
                 }
                 .show()
         }
@@ -265,11 +340,10 @@ class MainActivity : Activity() {
             }
             combine(
                     app.repository.dao.observeState(),
-                    app.repository.dao.pendingCount(),
-                    app.repository.dao.blockedCount(),
+                    app.repository.dao.queueCounts(),
                     app.repository.dao.blockedError(),
                     app.operational,
-                ) { state, pending, blocked, blockedError, op ->
+                ) { state, queues, blockedError, op ->
                     if (state != null) {
                         if (!initialized) {
                             partyId.setText(state.partyId)
@@ -297,11 +371,14 @@ class MainActivity : Activity() {
                             if (state.overrideSeconds != null)
                                 appendLine("Command override active (${state.overrideSeconds} s)")
                             appendLine(
-                                "Battery: ${op.health.battery_percent?.let { "$it%" } ?: "Unavailable"} • pending: $pending"
+                                "Battery: ${op.health.battery_percent?.let { "$it%" } ?: "Unavailable"} • pending: ${queues.pending}"
                             )
-                            if (blocked > 0)
+                            appendLine(
+                                "Pending GNSS: ${queues.gnss} • SOS: ${queues.sos} • routine: ${queues.routine}"
+                            )
+                            if (queues.blocked > 0)
                                 appendLine(
-                                    "$blocked saved message(s) need attention: ${blockedError ?: "Delivery blocked"}"
+                                    "${queues.blocked} saved message(s) need attention: ${blockedError ?: "Delivery blocked"}"
                                 )
                             if (state.deliveryPaused)
                                 appendLine(
@@ -382,10 +459,12 @@ class MainActivity : Activity() {
     private fun updateStartControls() {
         if (!::startButton.isInitialized) return
         val op = app.operational.value
-        startButton.isEnabled = initialized && !pendingStart && !op.starting && !op.tracking
+        startButton.isEnabled =
+            initialized && !pendingStart && !op.starting && !op.stopping && !op.tracking
         startButton.text =
             when {
                 !initialized -> "Loading settings…"
+                op.stopping -> "Stopping…"
                 op.tracking -> "Tracking active"
                 pendingStart || op.starting -> "Starting…"
                 else -> "Start Tracking"
@@ -486,7 +565,7 @@ class MainActivity : Activity() {
             }
             return
         }
-        if (!resumed || permissionInFlight != null) return
+        if (!resumed || permissionInFlight != null || app.operational.value.stopping) return
         if (app.operational.value.tracking || (app.operational.value.starting && !pendingStart))
             return
         pendingStart = false // Hand off once; service owns all subsequent startup state.
@@ -535,6 +614,7 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         resumed = false
+        volumePattern.reset()
         super.onPause()
     }
 
@@ -550,6 +630,7 @@ class MainActivity : Activity() {
     override fun onStart() {
         super.onStart()
         visible = true
+        app.activityVisible = true
         app.recorder.event(
             DiagnosticEvent.ACTIVITY_VISIBLE,
             app.diagnostics.value?.serviceGeneration,
@@ -558,6 +639,7 @@ class MainActivity : Activity() {
 
     override fun onStop() {
         visible = false
+        app.activityVisible = false
         app.recorder.event(
             DiagnosticEvent.ACTIVITY_BACKGROUND,
             app.diagnostics.value?.serviceGeneration,
@@ -613,6 +695,27 @@ class MainActivity : Activity() {
 
     companion object {
         internal const val EXPORT_DIAGNOSTICS = 40
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (
+            resumed &&
+                ::keyOption.isInitialized &&
+                keyOption.isChecked &&
+                event.action in listOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP)
+        ) {
+            if (
+                volumePattern.key(
+                    event.keyCode == KeyEvent.KEYCODE_VOLUME_UP,
+                    event.action == KeyEvent.ACTION_DOWN,
+                    event.repeatCount,
+                    event.eventTime,
+                    event.isCanceled,
+                )
+            )
+                app.activateSos(SosTrigger.VOLUME_UP)
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     override fun onDestroy() {

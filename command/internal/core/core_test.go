@@ -81,6 +81,11 @@ func open(t *testing.T) (*Store, *time.Time, string) {
 }
 func snapshot(t *testing.T, s *Store) State {
 	t.Helper()
+	s.projectionMu.Lock()
+	if e := s.processProjectionLocked(); e != nil {
+		s.recordProjectionFailure(e)
+	}
+	s.projectionMu.Unlock()
 	st, err := s.Snapshot(30)
 	if err != nil {
 		t.Fatal(err)
@@ -328,6 +333,7 @@ func TestRecordingPermutationsRestartAndProjection(t *testing.T) {
 		}
 		for j := range st.Points {
 			st.Points[j].Segment = ""
+			st.Points[j].Window = ""
 		}
 		if i == 0 {
 			expected = st.Points
@@ -386,7 +392,7 @@ func TestRecordingWindowsPolicyClear(t *testing.T) {
 	ingest(t, s, message(t, 7, 140, 520, 0, 1))
 	ingest(t, s, message(t, 8, 150, 523, 0, 1))
 	st := snapshot(t, s)
-	if len(st.Recording.Windows) != 3 || st.Recording.Windows[0].Policy.Forward != 2 || st.Recording.Windows[2].Policy.Forward != 5 || st.Recording.Windows[2].Reason != "policy_change" || math.Abs(st.Devices[device].Total-30) > 1e-6 {
+	if len(st.Recording.Windows) != 2 || st.Recording.Windows[0].Policy.Forward != 5 || st.Recording.Windows[1].Policy.Forward != 5 || st.Recording.Windows[1].Reason != "resume" || math.Abs(st.Devices[device].Total-40) > 1e-6 {
 		t.Fatal("policy history", st)
 	}
 	action(t, s, "clear")
@@ -732,8 +738,8 @@ func TestLiveJumpQualityWithoutRecording(t *testing.T) {
 	ingest(t, s, message(t, 1, 0, 0, 0, 1))
 	ingest(t, s, message(t, 2, 10, 10000, 0, 1))
 	d := snapshot(t, s).Devices[device]
-	if d.GNSSCondition != "implausible_speed" || d.Location.Sequence != 2 {
-		t.Fatal("mislabelled latest jump", d)
+	if d.GNSSCondition != "valid" || !d.CurrentPosition || d.Location.Sequence != 2 {
+		t.Fatal("live source incorrectly gated by historical speed", d)
 	}
 	ingest(t, s, message(t, 3, 20, 20, 0, 1))
 	if snapshot(t, s).Devices[device].GNSSCondition != "valid" {

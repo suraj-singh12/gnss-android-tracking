@@ -16,6 +16,11 @@ import (
 
 func report(t *testing.T, s *Store) FieldReport {
 	t.Helper()
+	s.projectionMu.Lock()
+	if e := s.processProjectionLocked(); e != nil {
+		s.recordProjectionFailure(e)
+	}
+	s.projectionMu.Unlock()
 	r, e := s.FieldReport()
 	if e != nil {
 		t.Fatal(e)
@@ -73,9 +78,17 @@ func TestEvidenceConflictPersistedWithoutRawInsertion(t *testing.T) {
 	if r.Devices[device].Reports != 1 || r.Devices[device].Conflicts != 1 {
 		t.Fatal(r.Devices)
 	}
-	last := r.Events[len(r.Events)-1]
-	if last.ConflictingSequence != 1 || last.ConflictingMessage == "" {
-		t.Fatal(last)
+	found := false
+	for _, event := range r.Events {
+		if event.Kind == "conflict" {
+			if event.ConflictingSequence != 1 || event.ConflictingMessage == "" {
+				t.Fatal(event)
+			}
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("conflict evidence missing")
 	}
 }
 func TestEvidenceCadenceExcludesBacklogAndRetries(t *testing.T) {
@@ -238,7 +251,12 @@ func TestEvidenceRecordingWindowsClearRetainsEvidence(t *testing.T) {
 	if r.Recording.Recording != nil || r.Devices[device].Reports != 5 || r.Devices[device].Useful != 0 {
 		t.Fatal(r)
 	}
-	last := r.Events[len(r.Events)-1]
+	var last Evidence
+	for _, event := range r.Events {
+		if event.Kind == "recording_clear" {
+			last = event
+		}
+	}
 	if last.Kind != "recording_clear" || last.Before.Recording.ID != id || len(last.Before.Points) != 4 || last.After.Recording != nil {
 		t.Fatal(last)
 	}
@@ -393,7 +411,11 @@ func TestEvidenceRecordingAssessmentAfterClear(t *testing.T) {
 		t.Fatal(r.Verdicts)
 	}
 	var last Evidence
-	last = r.Events[len(r.Events)-1]
+	for _, event := range r.Events {
+		if event.Kind == "recording_clear" {
+			last = event
+		}
+	}
 	if len(last.Before.Participation) != 2 || last.Before.Participation[1].StartDistance != 0 {
 		t.Fatal(last)
 	}
@@ -485,5 +507,50 @@ func TestEvidenceTimingClassificationSurvivesPolicyChanges(t *testing.T) {
 	r := report(t, s)
 	if r.Receipts[1].Class != "delayed_backlog" || r.Receipts[1].ClockTolerance != 5 || verdict(r, "reconnect_current_first") != "FAIL" {
 		t.Fatal(r)
+	}
+}
+
+func TestNativeCadenceDoesNotMixStatusOrHistory(t *testing.T) {
+	s, now, _ := open(t)
+	session := id()
+	seq := 1
+	for tick := 0; tick < 6; tick++ {
+		sec := float64(tick * 30)
+		*now = base.Add(time.Duration(sec) * time.Second)
+		live := message(t, seq, sec, sec, 0, 1)
+		live.Config.Local, live.Config.Effective = 30, 30
+		live.Observation = &ObservationIdentity{live.ID, session, base.Format(wireTime), int64(tick + 1), int64(tick+1) * 1000}
+		ingest(t, s, live)
+		seq++
+		*now = now.Add(100 * time.Millisecond)
+		status := message(t, seq, sec+.1, 0, 0, 1)
+		status.Config.Local, status.Config.Effective = 30, 30
+		status.Type, status.Fix, status.Health.GNSS = "status", nil, "no_fix"
+		ingest(t, s, status)
+		seq++
+		history := message(t, seq, sec-1, sec-1, 0, 1)
+		history.Config.Local, history.Config.Effective = 30, 30
+		if _, e := s.ingestRole(encode(t, history), *now, "history"); e != nil {
+			t.Fatal(e)
+		}
+		seq++
+	}
+	c := report(t, s).Devices[device]
+	if c.Observed == nil || *c.Observed != 30 {
+		t.Fatal("status/history distorted native cadence", c)
+	}
+	// Once GNSS is unavailable, recent status receipts remain a truthful cadence lane.
+	for tick := 6; tick < 10; tick++ {
+		sec := float64(tick * 30)
+		*now = base.Add(time.Duration(sec) * time.Second)
+		status := message(t, seq, sec, 0, 0, 1)
+		status.Config.Local, status.Config.Effective = 30, 30
+		status.Type, status.Fix, status.Health.GNSS = "status", nil, "no_fix"
+		ingest(t, s, status)
+		seq++
+	}
+	c = report(t, s).Devices[device]
+	if c.Observed == nil || *c.Observed != 30 {
+		t.Fatal("no-fix status cadence unavailable", c)
 	}
 }

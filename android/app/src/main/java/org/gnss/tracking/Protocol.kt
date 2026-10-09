@@ -57,6 +57,27 @@ data class Fix(
 
 data class Sos(val event_id: String, val triggered_at: String)
 
+data class ObservationIdentity(
+    val observation_id: String,
+    val tracking_session_id: String,
+    val session_started_at: String,
+    val observation_sequence: Long,
+    val measurement_elapsed_ms: Long,
+)
+
+data class HistoryProgress(
+    val tracking_session_id: String,
+    val session_started_at: String,
+    val latest_committed_sequence: Long,
+    val oldest_pending_sequence: Long?,
+    val pending_observations: Long,
+    val unresolved_sequences: List<Long>,
+    val known_collection_loss: Long,
+    val measured_at: String,
+)
+
+data class TrackingSession(val id: String, val startedMillis: Long)
+
 data class Message(
     val protocol_version: Int = 1,
     val type: String,
@@ -69,6 +90,8 @@ data class Message(
     val health: Health,
     val fix: Fix?,
     val sos: Sos? = null,
+    val observation: ObservationIdentity? = null,
+    val history_progress: HistoryProgress? = null,
 )
 
 data class Receipt(
@@ -180,6 +203,8 @@ object Protocol {
     fun encode(m: Message): String {
         val tree = gson.toJsonTree(m).asJsonObject
         if (m.type != "sos") tree.remove("sos")
+        if (m.observation == null) tree.remove("observation")
+        if (m.history_progress == null) tree.remove("history_progress")
         val json = gson.toJson(tree)
         decodeMessage(json) // Validate before committing any snapshot.
         return json
@@ -245,6 +270,32 @@ object Protocol {
                 stamp(s, "triggered_at")
             }
             else -> error("Unknown message type")
+        }
+        if (o.has("observation") && !o.get("observation").isJsonNull) {
+            val identity = obj(o, "observation")
+            require(str(o, "type") == "location")
+            require(id(identity, "observation_id") == str(o, "message_id"))
+            id(identity, "tracking_session_id")
+            stamp(identity, "session_started_at")
+            whole(identity, "observation_sequence", 1)
+            whole(identity, "measurement_elapsed_ms", 1)
+        }
+        if (o.has("history_progress") && !o.get("history_progress").isJsonNull) {
+            val q = obj(o, "history_progress")
+            id(q, "tracking_session_id")
+            stamp(q, "session_started_at")
+            stamp(q, "measured_at")
+            val n = whole(q, "latest_committed_sequence")
+            whole(q, "pending_observations")
+            whole(q, "known_collection_loss")
+            if (!field(q, "oldest_pending_sequence").isJsonNull)
+                whole(q, "oldest_pending_sequence", 1, n)
+            val unresolved = field(q, "unresolved_sequences")
+            require(unresolved.isJsonArray)
+            unresolved.asJsonArray.forEach { value ->
+                val wrapper = JsonObject().apply { add("sequence", value) }
+                whole(wrapper, "sequence", 1, n)
+            }
         }
         return gson.fromJson(o, Message::class.java)
     }

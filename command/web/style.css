@@ -272,3 +272,56 @@ polyline {
     margin-left: 0;
   }
 }
+
+#quality-form input[type="checkbox"] {
+  width: auto;
+  justify-self: start;
+}
+
+#sos-panel {
+  margin: 16px;
+  padding: 16px;
+  border: 3px solid #a51621;
+  background: #fff3f3;
+  color: #67101a;
+}
+#sos-panel h1 {
+  font-size: 24px;
+  margin: 0 0 8px;
+}
+#sos-alerts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.sos-alert {
+  padding: 16px;
+  border: 2px solid #a51621;
+  background: white;
+  overflow-wrap: anywhere;
+}
+.sos-alert h2 {
+  font-size: 20px;
+  margin: 0 0 8px;
+}
+.sos-alert strong {
+  display: block;
+  margin: 12px 0;
+}
+.sos-alert.acknowledged {
+  border-color: #6d6263;
+  color: #393334;
+}
+#sos-panel button {
+  min-height: 44px;
+  background: #a51621;
+  color: white;
+}
+#sos-panel button:disabled {
+  background: #6d6263;
+}
+button:focus-visible {
+  outline: 3px solid #245fa5;
+  outline-offset: 3px;
+}

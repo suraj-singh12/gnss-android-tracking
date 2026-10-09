@@ -41,3 +41,10 @@ go test ./...
 Run [Android validation](android/README.md), [Command validation](command/README.md)
 and `test-tools/integration/run.sh` as well. Real-device acceptance remains required;
 no release/signing workflow is provided.
+
+Issue #5 adds durable SOS through the same tracking outbox and LAN receiver, with
+persistent Command alerts and separate operator acknowledgement. Read the SOS
+sections in the existing Android/Command runbooks. Physical volume keys are limited
+to the foreground Android Activity; locked-screen activation is unsupported.
+Issue #4 remains under physical acceptance on its frozen candidate; do not install
+SOS builds during that testing or merge either branch automatically.

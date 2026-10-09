@@ -36,12 +36,14 @@ class TrackingService : Service() {
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + failureHandler)
     private val generation = UUID.randomUUID().toString()
+    private val generationStartedMillis = SystemClock.wallMillis()
     private var startReason = "not_started"
     private lateinit var source: PlatformLocationSource
     private lateinit var power: PlatformPower
     @Volatile private var reportingIteration: Long? = null
     @Volatile private var senderIteration: Long? = null
     @Volatile private var effectiveInterval: Int? = null
+    @Volatile private var knownCollectionLoss: Long? = null
     @Volatile private var wifiAvailable: Boolean? = null
     @Volatile private var lastAckElapsed: Long? = null
     @Volatile private var observedAck: String? = null
@@ -50,41 +52,105 @@ class TrackingService : Service() {
     @Volatile private var deliveryError: Boolean? = null
     @Volatile private var loopError: String? = null
     private val pendingDiagnostics = PendingOutboxDiagnostics()
-    private val latest = LatestLocation(SystemClock)
+    private val latest
+        get() = app.latest
+
+    @Volatile private var observationHealth = Health()
     private lateinit var resources: TrackingResources
     private lateinit var health: DeviceHealth
     private lateinit var sender: Sender
+    private lateinit var transport: LanTransport
+    private val networkChanges = java.util.concurrent.atomic.AtomicLong()
+    @Volatile private var networkDiagnostics: NetworkState? = null
     private lateinit var connectivity: ConnectivityManager
     private var callbackRegistered = false
     private var running = false
-    @Volatile private var lastCaptureElapsed = 0L
+    private val lastCaptureElapsed
+        get() = app.lastCaptureElapsed
+
     private val callback =
         object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
-                scope.launch {
-                    try {
-                        sender.connectivityRestored()
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        app.recorder.event(DiagnosticEvent.LOOP_FAILURE, generation)
-                        loopError = "Connectivity recovery failed: ${e.javaClass.simpleName}"
-                        app.operational.update {
-                            it.copy(error = "Cannot prepare saved delivery: ${e.message}")
-                        }
+                networkChanged(true)
+            }
+
+            override fun onLost(network: Network) {
+                networkChanged(false)
+            }
+
+            override fun onCapabilitiesChanged(
+                network: Network,
+                capabilities: NetworkCapabilities,
+            ) {
+                networkChanged(false)
+            }
+
+            override fun onLinkPropertiesChanged(network: Network, links: LinkProperties) {
+                networkChanged(true)
+            }
+        }
+
+    private fun networkChanged(restored: Boolean) {
+        transport.invalidate()
+        networkChanges.incrementAndGet()
+        app.recorder.event(DiagnosticEvent.NETWORK_CHANGED, generation)
+        scope.launch {
+            networkDiagnostics =
+                runCatching { health.networkState(networkChanges.get()) }.getOrNull()
+            withContext(Dispatchers.Main) {
+                runCatching { publishDiagnostics(power.snapshot(), false) }
+            }
+            if (restored) {
+                try {
+                    sender.connectivityRestored()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    app.recorder.event(DiagnosticEvent.LOOP_FAILURE, generation)
+                    loopError = "Connectivity recovery failed: ${e.javaClass.simpleName}"
+                    app.operational.update {
+                        it.copy(error = "Cannot prepare saved delivery: ${e.message}")
                     }
                 }
             }
         }
+    }
 
     override fun onCreate() {
         super.onCreate()
+        app.sessionReady = kotlinx.coroutines.CompletableDeferred()
         app.recorder.event(DiagnosticEvent.SERVICE_CREATE, generation)
         source =
             PlatformLocationSource(
                 this,
                 latest,
                 diagnosticEvent = { kind, state -> app.recorder.event(kind, generation, state) },
+                onObservation = { value ->
+                    val session = app.sessionReady
+                    if (
+                        runCatching {
+                                app.observationPersistence.submit(
+                                    value,
+                                    observationHealth,
+                                    generation,
+                                    session,
+                                )
+                            }
+                            .getOrDefault(false) == false
+                    ) {
+                        loopError = "GNSS observation handoff failed; unsaved history"
+                        app.operational.update {
+                            it.copy(
+                                error =
+                                    "GNSS history buffer overflow: an observation was not saved. Free storage and export diagnostics."
+                            )
+                        }
+                        app.recorder.event(DiagnosticEvent.LOOP_FAILURE, generation)
+                        // Overflow is explicit loss, not a permanent stop after temporary writer
+                        // pressure.
+                        app.recordCollectionLoss(session)
+                    }
+                },
             )
         power = PlatformPower(this)
         resources =
@@ -94,9 +160,10 @@ class TrackingService : Service() {
                     .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "gnss:tracking"),
                 diagnosticEvent = { app.recorder.event(it, generation) },
             )
-        health = DeviceHealth(this, latest)
+        health = app.health
         connectivity = getSystemService(ConnectivityManager::class.java)
-        sender = Sender(repository, LanTransport(health::wifiNetwork), SystemClock, ::capture)
+        transport = app.transport
+        sender = app.sender
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -135,8 +202,8 @@ class TrackingService : Service() {
                 startForeground(1, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
             else startForeground(1, notification())
             app.recorder.event(DiagnosticEvent.FOREGROUND_PROMOTED, generation)
-            if (!running) {
-                // Register synchronously after location FGS promotion, before any
+            if (!running && intent != null) {
+                // Explicit starts register synchronously after location FGS promotion, before any
                 // Room suspension or Activity transition. No Activity owns this source.
                 resources.start()
             }
@@ -160,68 +227,105 @@ class TrackingService : Service() {
             // a child reporting failure cannot cancel the sender or native source.
             scope.launch(Dispatchers.Main) { maintenanceLoop() }
             scope.launch {
-                pendingDiagnostics.observe(
+                pendingDiagnostics.observeByType(
                     onChange = {
                         withContext(Dispatchers.Main) {
                             publishDiagnostics(power.snapshot(), false)
                         }
                     }
                 ) {
-                    repository.dao.pendingCount()
+                    repository.dao.queueCounts()
                 }
             }
-            scope.launch {
-                try {
-                    if (intent == null && !repository.state().tracking) {
-                        withContext(Dispatchers.Main) { stopSelf() }
-                        return@launch
-                    }
-                    repository.edit { it.copy(tracking = true) }
-                    capture() // Restart always saves a new current snapshot before backlog.
-                    withContext(Dispatchers.Main) {
-                        connectivity.registerNetworkCallback(
-                            NetworkRequest.Builder()
-                                .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-                                .build(),
-                            callback,
-                        )
-                        callbackRegistered = true
+            val priorSessionStartup = app.sessionStartup
+            val ready = app.sessionReady
+            // Accepted callback handoffs retain this operation's promise. A normal
+            // service stop cannot cancel the metadata commit and reassign them later.
+            app.sessionStartup =
+                scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                    try {
+                        val allowed =
+                            withContext(NonCancellable) {
+                                priorSessionStartup?.join()
+                                var reportedFailure = false
+                                while (true) {
+                                    try {
+                                        if (intent == null && !repository.state().tracking)
+                                            return@withContext false
+                                        ready.complete(
+                                            repository.beginTracking(
+                                                generationStartedMillis,
+                                                resumeExisting = intent == null,
+                                            )
+                                        )
+                                        break
+                                    } catch (e: Exception) {
+                                        if (!reportedFailure) {
+                                            app.recorder.event(
+                                                DiagnosticEvent.LOOP_FAILURE,
+                                                generation,
+                                            )
+                                            reportedFailure = true
+                                        }
+                                        app.operational.update {
+                                            it.copy(
+                                                error =
+                                                    "Tracking session storage unavailable; observations await commit"
+                                            )
+                                        }
+                                        delay(1000)
+                                    }
+                                }
+                                true
+                            }
+                        currentCoroutineContext().ensureActive()
+                        if (!allowed) {
+                            withContext(Dispatchers.Main) { stopSelf() }
+                            return@launch
+                        }
+                        if (intent == null) withContext(Dispatchers.Main) { resources.start() }
+                        capture() // Routine status carries config and timestamped queue state,
+                        // never a fix copy.
+                        withContext(Dispatchers.Main) {
+                            connectivity.registerNetworkCallback(
+                                NetworkRequest.Builder()
+                                    .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                                    .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                                    .build(),
+                                callback,
+                            )
+                            callbackRegistered = true
+                            app.operational.update {
+                                it.copy(tracking = true, starting = false, error = null)
+                            }
+                        }
+                        scope.launch { reportingLoop() }
+                        scope.launch { sendingLoop() }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        app.recorder.event(DiagnosticEvent.LOOP_FAILURE, generation)
+                        loopError = "Tracking initialization failed: ${e.javaClass.simpleName}"
                         app.operational.update {
-                            it.copy(tracking = true, starting = false, error = null)
+                            it.copy(
+                                starting = false,
+                                error =
+                                    "Cannot initialize tracking. Open the app and Start Tracking again: ${e.message}",
+                            )
+                        }
+                        // Cleanup must not wait on the same store that just failed.
+                        withContext(Dispatchers.Main) {
+                            runCatching { publishDiagnostics(power.snapshot(), true) }
+                            stopSelf()
                         }
                     }
-                    scope.launch { reportingLoop() }
-                    scope.launch { sendingLoop() }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    app.recorder.event(DiagnosticEvent.LOOP_FAILURE, generation)
-                    loopError = "Tracking initialization failed: ${e.javaClass.simpleName}"
-                    app.operational.update {
-                        it.copy(
-                            starting = false,
-                            error =
-                                "Cannot initialize tracking. Open the app and Start Tracking again: ${e.message}",
-                        )
-                    }
-                    // Cleanup must not wait on the same store that just failed.
-                    withContext(Dispatchers.Main) {
-                        runCatching { publishDiagnostics(power.snapshot(), true) }
-                        stopSelf()
-                    }
                 }
-            }
         }
         return START_STICKY
     }
 
     private suspend fun capture(): Outbound {
-        val fix = latest.currentFix()
-        val snapshot =
-            health.snapshot().let { if (fix != null) it.copy(gnss_status = "fix") else it }
-        val row = repository.snapshot(SystemClock.wallMillis(), fix, snapshot)
-        lastCaptureElapsed = SystemClock.elapsedMillis()
-        return row
+        return app.capture()
     }
 
     private suspend fun reportingLoop() {
@@ -234,6 +338,7 @@ class TrackingService : Service() {
                 val config = state.config()
                 val newInterval = config.effective_reporting_interval_s
                 effectiveInterval = newInterval
+                knownCollectionLoss = state.knownCollectionLoss
                 deliveryPaused = state.deliveryPaused
                 deliveryError = state.operationalError != null
                 if (ackInitialized && state.lastAck != observedAck) {
@@ -255,14 +360,28 @@ class TrackingService : Service() {
                     due = lastCaptureElapsed + interval * 1000L
                 }
                 val h = health.snapshot()
+                observationHealth = h
+                networkDiagnostics =
+                    runCatching { health.networkState(networkChanges.get()) }.getOrNull()
                 wifiAvailable = h.wifi_connected
                 app.operational.update {
                     it.copy(
                         health = h,
                         link =
-                            if (h.wifi_connected == true) "Wi-Fi connected"
-                            else "Wi-Fi unavailable",
-                        error = state.operationalError,
+                            if (h.wifi_connected != true) "Wi-Fi unavailable"
+                            else
+                                when (sender.commandReachable) {
+                                    true -> "Wi-Fi available • Command reachable"
+                                    false -> "Wi-Fi available • Command unreachable"
+                                    null -> "Wi-Fi available • Command reachability unknown"
+                                },
+                        error =
+                            if (
+                                app.observationPersistence.state.awaitingCommit > 0 &&
+                                    app.observationPersistence.state.writeFailures > 0
+                            )
+                                "GNSS history storage failure; observations awaiting durable commit"
+                            else state.operationalError,
                     )
                 }
             } catch (e: CancellationException) {
@@ -290,7 +409,7 @@ class TrackingService : Service() {
                 app.operational.update { it.copy(error = "Delivery paused: ${e.message}") }
             }
             senderIteration = SystemClock.elapsedMillis()
-            delay(250)
+            if (!sender.attemptedLastStep) delay(250)
         }
     }
 
@@ -325,7 +444,8 @@ class TrackingService : Service() {
                         gnss = latest.status(),
                         accuracy = latest.observation?.fix?.horizontal_accuracy_m,
                         ageMillis = latest.age(),
-                        warning = latest.clockWarning() ?: p.warning(),
+                        warning =
+                            latest.clockWarning() ?: sender.compatibilityWarning ?: p.warning(),
                     )
                 }
                 val now = SystemClock.elapsedMillis()
@@ -388,6 +508,11 @@ class TrackingService : Service() {
                 deliveryPaused = deliveryPaused,
                 deliveryError = deliveryError,
                 lastKnownAccuracyM = latest.observation?.fix?.horizontal_accuracy_m,
+                queueByType = pending.byType,
+                network = networkDiagnostics,
+                sender = sender.diagnostics,
+                collection = app.observationPersistence.state,
+                knownCollectionLoss = knownCollectionLoss,
             )
         app.diagnostics.value = snapshot
         app.recorder.sample(snapshot)

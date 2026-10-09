@@ -284,3 +284,117 @@ Command race/vet passed. Test-tools **69 tests/subtests passed**, including all 
 contract checks; race/vet passed. Command cross-builds for Darwin arm64, Windows
 amd64 and Linux amd64, dashboard JS syntax and diff checks passed. These are
 application-boundary checks, not physical GNSS/Wi-Fi/Doze acceptance.
+
+## Latest field exports: run 3 (2026-10-08)
+
+Both latest `3-` manifests identify `8fbcabbc2443aae75178a50160ee1248830611dd`;
+the earlier exports are cumulative context, not independent trials. In this run:
+
+- **Confirmed:** native callbacks continued through the ~927-second Command receipt
+  gap (12:35:31 → 12:50:58 UTC). After initial acquisition the phone's current-fix
+  flag stayed true until service destruction; one source registration, no rejected
+  observations, Saver/idle/standby off, provider and wake lock present. No GNSS
+  acquisition change is justified by this run.
+- **Confirmed:** during the current recording Command received 757 delayed routine
+  statuses and only one delayed location report. Current positions arrived, but
+  thousands of Android envelopes remained pending (4,227 at stop). Earlier no-fix
+  status history competed with the desired offline route. No pending data was
+  proved lost; the rectangle cannot be reconstructed from these coordinate-free
+  exports or certified complete before history delivery.
+- **Confirmed code defects:** the dashboard drew only recorded track points; live
+  source validity consulted historical track decisions. Quality edits applied to
+  new windows only. A status-only current-first verdict and old cadence estimate
+  could misleadingly suggest tracking success. These are corrected at their owners.
+- **Unknown / device dependent:** radio reassociation delay while locked. Previously
+  exported Wi-Fi availability does not establish radio enablement/association.
+  A healthy GNSS stream does not prove route/HTTP availability. New diagnostics
+  distinguish radio, route, internet validation, IP-family availability and ACKs.
+- **Ruled out for the final long gap:** the service was explicitly destroyed at
+  12:53:39 UTC, with source unregister and wake release. No later service samples
+  precede the 14:20 export; this is not evidence a running sender failed for 87 min.
+
+Recorder additions reuse the isolated writer: asynchronously cached Room pending,
+blocked and delivered counts by type; opaque saved/send/retry/valid-ACK references;
+cached network state and monotonic sender attempt/ACK/retry timestamps. Network
+link changes and actual IO failures invalidate network-bound pooled sockets/DNS.
+Wi-Fi selection still permits an offline router with no internet validation and
+never falls back to mobile data. No association forcing or GNSS recovery is added.
+No addresses, SSIDs, coordinates, Party/device UUID or raw envelopes enter Android
+diagnostics. Recording traffic can shorten bounded timeline retention; truncation,
+drops and IO errors remain explicit. Export both bundles after each trial.
+
+The final amended scheduler is SOS → fresh live observation → oldest pending GNSS
+block → bounded routine status. Every live attempt grants history an opportunity,
+including failed attempts. Only the newest native measurement is eligible for live;
+ACKing it cannot relabel older pending history as current. There is no unrelated
+current/status ACK gate. Native GPS_PROVIDER/1 s/main Looper acquisition remains
+unchanged. Physical Wi-Fi reassociation and GNSS/OEM behavior require the field run.
+
+### Native callback durability / capacity amendment
+
+The application-owned `ObservationPersistence` worker drains a bounded 1,024-entry
+memory handoff into the existing outbox; it never writes on the native callback.
+UUID/capture time/fix age are frozen on submission; retry of uncertain commit is
+idempotent by that UUID. Latest live state ignores older callbacks, but their raw
+observations are still saved. Only invalid coordinates or unrepresentable elapsed
+measurement ages are structurally rejected. Freshness/accuracy filtering is not
+local raw retention. There is no listener restart, new provider or satellite-
+measurement recording. Normal service stop leaves accepted writes draining.
+
+Room v1→v2 adds observation-time scheduling, immutable observation/session identity,
+per-session committed sequence and loss metadata, plus indexes. Existing identity,
+config and envelope JSON migrate unchanged. New envelopes carry authorized optional
+v1 observation/progress fields; negotiated history batches use a separate versioned
+endpoint. Old Command can accept individual envelopes while ignoring extensions,
+but cannot certify native session completeness. Its retained wire metadata is
+validated/backfilled on upgrade. No destructive downgrade fallback exists: an older
+APK cannot open v2. Export field evidence before changing app versions.
+
+`collection.submitted/saved/committedObservations/awaitingCommit/writeFailures/overflow` separates callback
+submission from actual durable commit. Storage failures retry the held callback
+with the same ID; subsequent callbacks use bounded memory. Exhaustion is explicitly
+reported as known loss without permanently stopping collection after temporary pressure. Process
+death can lose uncommitted memory; neither pending RAM nor an overflow is durable.
+No Android app can guarantee writes when storage/process is unavailable.
+
+At the requested native ~1 Hz and 5 s current cadence, expect roughly 3,600 distinct location
+envelopes/hour plus status, versus 720 current-only envelopes/hour previously. JSON, indices,
+WAL, persisted receipts and rebuilt state add storage beyond payload bytes; there
+is no eviction. Assess actual DB size and battery consumption during the physical
+run. More SQLite commits/HTTP backlog work increase power and throughput demand;
+automated bounded-load tests do not establish four-hour capacity or OEM battery
+impact. Command now checkpoints the existing engine and reprocesses affected projections;
+Issue #7 owns sustained capacity testing. Exports distinguish nonadvancing historical packets even when
+they arrive within clock tolerance, excluding them from current cadence.
+
+### Final session/batch evidence (2026-10-09)
+
+Collection now uses immutable observation identity and per-session sequences. Duplicate
+provider measurements do not create new observations; equal coordinates at different
+measurement times do. Live/history reuse the same row. No listener/recovery change.
+Counters additionally distinguish distinct committed observations from callback handoffs.
+Room migration adds session identity/sequence metadata and indexes while preserving all
+old envelopes. A bounded overflow is recorded as loss, never successful persistence.
+
+Historical batches have explicit capability negotiation, atomic ACK identity validation,
+bounded transfer/adaptation, and permanent-entry isolation. Export Command's field report
+alongside Android diagnostics: received/processed prefixes, timestamped phone pending data,
+permanent errors, delivery roles and projection pending/error complement callback/IO state.
+No status-only contact certifies current GNSS. No software test proves OEM reassociation.
+
+
+Historical correctness is tested against the full chronological engine after
+interrupted/permuted delivery. Receipt commits persist projection work independently
+of derivation. The worker uses per-device work generations, an arrival cursor and
+accepted-anchor checkpoints; late observations re-evaluate dependent suffixes. Live
+snapshots do not wait for a busy reconstruction. Projection pending/error, provisional
+sections and timestamped phone progress are explicit in Command/export; neither a
+healthy contact nor quality rejection certifies complete history. Raw callbacks,
+status snapshots and SOS retain distinct counts and identities.
+
+Android's session boundary uses service creation time for an explicit start, before
+early callback registration/Room initialization. Sticky restart reuses the committed
+session. Late writer commits retain their captured session promise even after Stop
+and a subsequent Start. Known buffer loss remains associated with that source session.
+
+Collection-loss metadata is aggregated by captured session and retried in application-owned IO, so a service Stop cannot cancel its persistence. Diagnostic snapshots include the cached durable current-session loss count alongside process-lifetime writer counters. Neither path performs Room work on native callbacks.

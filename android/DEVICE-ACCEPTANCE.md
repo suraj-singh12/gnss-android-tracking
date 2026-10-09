@@ -25,25 +25,33 @@ receipt/count/config/recording timestamps are captured automatically.
 
 ## Start
 
-Build using an Android SDK 35/JDK 17+ development machine and install the debug app
-on the test phone (not release packaging):
+Use the matched acceptance artifacts from the reported GitHub Actions run. The APK,
+macOS ARM64 binary and Windows AMD64 binary must share the manifest's **full source
+revision**. Compare SHA-256 checksums with `SHA256SUMS` before installation. Transfer
+`app-debug.apk` to the phone and open it to install; allow installation by that file
+manager/browser only when Android asks. No Android development tools or ADB are
+required. Preserve/drain existing pending history and export diagnostics before any
+reinstall needed because debug signing differs; never uninstall with pending data.
+
+On macOS, extract the matching binary and run from Terminal:
 
 ```sh
-cd android
-./gradlew assembleDebug
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+chmod +x gnss-command-darwin-arm64
+./gnss-command-darwin-arm64 -ingest-listen :8080 -dashboard-listen 127.0.0.1:8081 -db ./field-command.sqlite
 ```
 
-With Go 1.24.7+, from `command/` on the laptop:
+On Windows, extract the matching binary and run from PowerShell:
 
-```sh
-go build -o party-tracker ./cmd/party-tracker
-./party-tracker -ingest-listen :8080 -dashboard-listen 127.0.0.1:8081 -db ./field-command.sqlite
+```powershell
+.\gnss-command-windows-amd64.exe -ingest-listen :8080 -dashboard-listen 127.0.0.1:8081 -db .\field-command.sqlite
 ```
 
-Windows: use `party-tracker.exe`. Record the absolute SQLite path; use the **same
-file** after restart. Allow laptop TCP 8080 on the trusted LAN. Keep dashboard
-controls on loopback. Open `http://127.0.0.1:8081` on the laptop.
+Keep the same SQLite file across Command restarts. Allow phone ingestion through
+local OS firewall rules for the private field LAN; dashboard controls remain
+loopback-only. Developers may instead build both apps from the same clean commit
+with the build commands in the Android and Command READMEs.
+
+Open `http://127.0.0.1:8081` on the laptop.
 
 On Android configure Party ID/name, Command base URL
 `http://<laptop-LAN-IP>:8080` (**not** localhost, dashboard port or API path), local
@@ -292,3 +300,144 @@ network addresses, raw payloads, database files and secrets. Do not publish bund
 indiscriminately. Recorder retention limits still apply; export promptly after a run.
 Real GNSS/GPSTest activation, screen-off/Doze/OEM effects and physical offline/reconnect
 behaviour remain physical acceptance; no automated verdict substitutes for these.
+
+## Issue #5 SOS acceptance — separate from Issue #4 physical testing
+
+**Do not install/deploy Issue #5 builds while Issue #4 remains under physical
+acceptance.** PR #11 / `8fbcabbc2443aae75178a50160ee1248830611dd` is the frozen Issue #4
+candidate. This SOS branch is independently based on it; GNSS stall remains unresolved.
+Run the following only after scheduling separate SOS acceptance on an authorized
+candidate. Automated results cannot establish physical-key/locked-screen reliability.
+
+Minimum physical SOS tests (retain Android and Command ZIP exports afterwards):
+
+1. Configure Party and the isolated local Wi-Fi receiver; Start Tracking. Tap SOS
+   once: no activation. Hold SOS briefly: immediate detection, then saved status,
+   then Command-received only after a valid ACK. Confirm the Command event/party/time
+   and test audible enablement, blocked audio, speaker volume and keyboard ACK.
+2. Enable the foreground triple Volume Up checkbox. One/two presses, holds, slow
+   triples and mixed Volume Down must not activate. Three short presses within
+   1.5 seconds must activate once. Verify ordinary volume controls still work.
+   Record manufacturer/model, Android version, pattern timing and actual outcome.
+   Lock/off the screen and foreground another app: this adapter is unsupported
+   there; do not depend on it or claim a pass. Open/unlock and use on-screen SOS.
+3. Disconnect Wi-Fi, activate SOS, hide the Activity while Tracking stays active,
+   and restore Wi-Fi after an extended outage with accumulated ordinary reports.
+   Confirm the same event reaches Command before backlog, then current tracking
+   and old backlog continue. Use the automatic evidence instead of observing the
+   exact reconnect moment. No communication path means no transmission.
+4. Disable GPS or wait until the known Issue #4 stall produces stale GNSS; activate
+   SOS. It must save/deliver immediately with unavailable or honestly aged last-known
+   location, preserving accuracy and original time. Do not open GPSTest to manufacture
+   a fresh location result for this test. SOS does not fix that stall.
+5. Stop Command during activation, restart it against the same database, and confirm
+   delivery eventually occurs. Acknowledge that event, reload the browser and restart
+   Command again: the acknowledgement time and first receipt must remain unchanged.
+6. Rapidly trigger again within three seconds: no second logical emergency. Activate
+   deliberately after three seconds: a distinct event. Start/Stop/Resume/Clear Command
+   Recording: both emergency events and individual acknowledgements remain intact.
+7. Recreate the phone process using an approved test procedure while an SOS is pending;
+   reopen/Start Tracking if Android does not restore the service. Verify exact event
+   survival/delivery and record whether OS recovery actually occurred. Repeat with
+   screen off/Doze/OEM battery policy on intended hardware. Force-stop/reboot/OEM kill
+   provide no automatic-transmission guarantee; explicitly restart when needed.
+8. Export both reports soon after the run. Review all six SOS assessments and exact
+   evidence; missing data, no competing backlog, no retry, no restart or truncated
+   history must remain INCONCLUSIVE. Physical-key scope remains a hardware item;
+   exporter file-picker behavior and browser speakers also require a real device.
+
+These tests cover field behavior only within the supported trigger scope. The
+original Issue #5 desired locked-screen physical activation remains an explicit
+acceptance limitation, not a capability inferred from unit/emulator tests.
+## Offline rectangle and historical reconciliation retest
+
+Use the matched APK and Command assets from the same final product SHA. The temporary
+workflow commit must not become either application's source identity. Verify both
+ZIP manifests afterward; keep every run's Android diagnostics and Command report.
+Use GPSTest only for the previously described A/B acquisition investigation.
+
+1. Use an **offline router** (no internet/SIM dependency), outdoor sky view, correct
+   clocks and the dedicated-phone power settings above. Start tracking once, local
+   5 seconds. Start Command Recording. Close Activity and lock the screen.
+2. Walk the first rectangle side, leave/break Wi-Fi coverage, walk the remaining
+   sides outside coverage, then return while the phone remains locked. Do not
+   reopen Activity just to provoke association. If it does not rejoin, record that
+   operational fact, then deliberately unlock/open and identify that intervention.
+3. Command should show a recent **live marker** promptly, independently of incomplete
+   recording/history. Healthy contact without current position is not success.
+   Historical GNSS should reconcile before old routine status history. Fresh
+   markers and changing track geometry while history arrives are provisional.
+4. Continue until recovery/drain has had time to complete; export both bundles.
+   Pending GNSS/SOS/routine and delivered counts are captured automatically. No
+   manual packet-counting/stopwatch is required. Command cannot certify phone
+   pending=0 without the Android export. Truncation/drop/error means missing evidence.
+5. Change quality deliberately; verify the **full current recording** reprojects
+   from retained raw observations. Stop/Resume boundaries remain; there must be no
+   connector/distance over a stopped interval. Clear must not be resurrected by
+   subsequent backlog. Neither quality nor Clear deletes raw evidence.
+6. Repeat once with Command restarted on the same SQLite file during drain. With
+   the combined PR #12 candidate, also raise its supported SOS trigger offline;
+   verify SOS transport/operator evidence independently of track acceptance.
+
+Correlate Android `queueByType` (`pending`, `gnss`, `sos`, `routine`, `blocked`,
+`deliveredGnss`, `deliveredSos`, `deliveredRoutine`) with Command per-type unique/
+delayed counters. `network.radioEnabled` is not association; `routeAvailable` is
+not Command reachability; `internetValidated=false` is expected on an offline LAN.
+IP-family booleans contain no IP addresses. `sender` carries elapsed attempt/ACK/
+retry timestamps and HTTP status; REPORT_ACK_ACCEPTED follows durable acceptance.
+Android report `reference` matches Command `report_reference` (SHA-256 of message
+UUID). Events separate saved snapshot, send attempt, retry, and valid ACK. This proves packet delivery. Also inspect `collection` submission/save/failure/
+overflow counts for native observation commits; uncommitted memory is not durable.
+
+Keep adequate phone/laptop disk space. There is no automatic raw/SOS eviction.
+Storage failures are operational failures shown by the app/export; never clear an
+outbox to improve counters. Diagnostics have bounded retention and are evidence,
+not a complete backup of location data. PASS/FAIL/INCONCLUSIVE assessments concern
+only their stated evidence and never certify physical Wi-Fi/GNSS automatically.
+
+For the collection/cadence amendment, repeat with **30 s current reporting** while
+GNSS callbacks continue near 1 Hz. Walk several distinct turns between reporting
+ticks, including offline movement. Intermediate measurements must survive phone
+persistence reopen, arrive as history, and reappear under changed quality settings.
+Command receipt cadence excludes nonadvancing history rather than claiming 1 s live
+reporting. Verify both source revisions match the combined PR #12 product commit.
+Record actual DB growth and battery use over the run; the 1 Hz durable history adds
+IO compared with the previous interval-only snapshot collection. Preserve exports
+before APK upgrades; v2 Room is an additive upgrade, not an automatic downgrade.
+
+
+## Final matched-candidate acceptance
+
+Use Android and Command assets from the same reconciled PR #12 SHA; verify their export
+revision fields match before testing. Preserve the existing database (v1 migrates to v2);
+do not install an older APK over v2 or clear data containing evidence. Temporary CI
+debug keys can differ between builds: if Android rejects an update for a signing
+mismatch, export existing diagnostics and drain pending data to the previous matched
+Command before any deliberate reinstall. Keep that Command database/evidence. Do not
+uninstall a phone holding unacknowledged history; signing/release packaging remains #7.
+
+1. Outdoors, Start Tracking once. Confirm a new Android source session. Close Activity,
+   lock the screen and move for at least 30 minutes on an offline LAN, without SIM.
+2. Use local 30-second live cadence while native collection is approximately 1 Hz. Walk
+   turns between live updates; retain/export diagnostics, not handwritten counters.
+3. Set override 5 seconds, then clear it. Export verifies requested/delivered/converged
+   settings and receipt cadence separately from high-resolution historical delivery.
+4. Leave Wi-Fi coverage while locked, continue moving, and return without touching the
+   phone. Verify actual automatic reassociation, fresh live display ahead of backlog,
+   oldest-block recovery and eventual contiguous receipt/phone pending-zero evidence.
+5. Repeat outages before the first backlog drains. Compare final qualified route/distance
+   with raw Diagnostic view. Change each quality switch; raw counts must not shrink.
+6. Test Recording From session beginning and From now, delayed history, Stop/move/Resume,
+   no connector, then confirmed Clear. Unrelated Android sessions must remain separate.
+7. Raise SOS offline and during recovery. Confirm immutable delivery and separate operator
+   acknowledgment. Restart Command mid-sync; exports must show duplicate receipt without
+   duplicate observations/distance. Stop/Start Android creates a new source session.
+8. Export both bundles later. Record PASS/FAIL with evidence. Contact alone is not GNSS;
+   stale phone queue information is not present queue state. Unresolved/collection loss is
+   incomplete history even if later sequences arrived. Projection error is not synchronized.
+
+If GNSS stalls, retain the existing GPSTest A/B procedure without reopening our Activity.
+Physical Wi-Fi reassociation/GNSS/OEM power/battery remain acceptance requirements; automated
+integration does not establish them. Extended endurance/repeater campaigns remain Issue #7.
+
+For the combined PR #12 acceptance build, retain this same native-history procedure and the SOS checks above. Trigger SOS while backlog is draining; it must receive the next opportunity after one bounded in-flight request. Export both reports after reconnect/restart and confirm original SOS identity/receipt plus separate operator ACK. No GNSS listener restart or acquisition strategy change is included.
