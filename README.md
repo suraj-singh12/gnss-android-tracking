@@ -26,15 +26,18 @@ and [#3 Command core](https://github.com/suraj-singh12/gnss-android-tracking/iss
 in parallel; then #4 end-to-end reliability, #5 SOS, #6 UI/diagnostics/offline map,
 and #7 hardening/releases.
 
-This baseline contains contracts and scaffolding only. It does not yet run either
-product. Read [architecture](docs/architecture.md), [design semantics](docs/design-system.md)
-and [test-tool contracts](test-tools/README.md) before implementing them.
+Both product cores are implemented. For the first real Android → Command LAN run,
+follow [field acceptance](android/DEVICE-ACCEPTANCE.md). Read
+[architecture](docs/architecture.md), [design semantics](docs/design-system.md) and
+[automated integration](test-tools/integration/README.md) for system boundaries and verification.
 
-Contributor validation (Go toolchain only):
+Protocol/test-tool validation (Go toolchain):
 
 ```sh
 cd test-tools
 go test ./...
 ```
 
-No dependencies, product build system or release workflows are introduced here.
+Run [Android validation](android/README.md), [Command validation](command/README.md)
+and `test-tools/integration/run.sh` as well. Real-device acceptance remains required;
+no release/signing workflow is provided.

@@ -272,3 +272,8 @@ polyline {
     margin-left: 0;
   }
 }
+
+#quality-form input[type="checkbox"] {
+  width: auto;
+  justify-self: start;
+}

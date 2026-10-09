@@ -1,12 +1,16 @@
 # Issue #2 reliability self-review
 
-Source review against the frozen Protocol v1 and Issue #2 checklist. These are
+The Issue #2 matrix below records its original baseline. The dated Issue #4
+amendment supersedes snapshot-only history, the ACK eligibility gate and the
+original prohibition on session/batch metadata. Current behavior is documented in
+[architecture](../docs/architecture.md), [Android usage](README.md) and
+[device acceptance](DEVICE-ACCEPTANCE.md). These are
 implementation/automated-test findings, not claims of physical acceptance.
 
 | Check | Finding/evidence |
 | --- | --- |
 | A: Screen off | User-started location foreground service owns GPS callbacks/reporting; ongoing notification; hardware/OEM acceptance remains required. |
-| B: Scheduling | No WorkManager, alarms, boot auto-start, or permanent wake lock. Reporting and one sender run under the same service. |
+| B: Scheduling | No WorkManager, alarms or boot auto-start. Issue #4 adds a service-owned, timeout-bounded partial wake lock renewed only during active tracking. Reporting and one sender run under the same service. |
 | C: Save first | Room transaction validates/serializes, allocates sequence and inserts outbox. Rollback-on-insert-failure test verifies both writes roll back; transport receives only committed rows. |
 | D: Sequence | Single installation row, transactional allocation, wire bound check, concurrent allocation/reopen tests; reset creates new UUID. Cloud/device transfer excluded to prevent restoring an old sequence. |
 | E: Retry identity | Sender posts stored JSON; drop-response/duplicate test verifies unchanged payload, ID, sequence, timestamp and config. |

@@ -115,8 +115,8 @@ func validateAck(b []byte) error {
 		return fmt.Errorf("ACK missing override")
 	}
 	if override != nil {
-		n, ok := ackInteger(override, 10)
-		if !ok || n > 86400 || n%10 != 0 || version == 0 {
+		n, ok := ackInteger(override, 5)
+		if !ok || n > 86400 || n%5 != 0 || version == 0 {
 			return fmt.Errorf("invalid ACK override")
 		}
 	}

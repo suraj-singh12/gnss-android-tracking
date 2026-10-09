@@ -3,14 +3,17 @@ package org.gnss.tracking
 import android.Manifest
 import android.app.*
 import android.content.Intent
-import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.view.View
 import android.view.WindowInsets
 import android.widget.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.update
 
 class MainActivity : Activity() {
     private val app
@@ -21,15 +24,45 @@ class MainActivity : Activity() {
     private lateinit var partyName: EditText
     private lateinit var endpoint: EditText
     private lateinit var interval: EditText
+    private lateinit var exportStatus: TextView
+    private var exporting = false
     private lateinit var status: TextView
     private var initialized = false
-    private var startAfterPermission = false
+    private lateinit var startButton: Button
+    private lateinit var readiness: TextView
+    private lateinit var locationAction: Button
+    private lateinit var gpsAction: Button
+    private lateinit var notificationAction: Button
+    private lateinit var saverAction: Button
+    private lateinit var backgroundAction: Button
+    private val preflight by lazy { FieldPreflight(this) }
+    private var pendingStart = false
+    private var savingStart = false
+    private var startSave: Job? = null
+    private var permissionInFlight: Int? = null
+    private var askedLocation = false
+    private var askedNotifications = false
+    private var resumed = false
+    private var visible = false
     private val trackingIntent by lazy { Intent(this, TrackingService::class.java) }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        pendingStart = savedInstanceState?.getBoolean("pendingStart") ?: false
+        askedLocation = savedInstanceState?.getBoolean("askedLocation") ?: false
+        askedNotifications = savedInstanceState?.getBoolean("askedNotifications") ?: false
+        permissionInFlight = savedInstanceState?.getInt("permissionInFlight", 0)?.takeIf { it != 0 }
+        if (pendingStart) app.operational.update { it.copy(starting = true) }
+        if (savedInstanceState?.getBoolean("canceledSave") == true)
+            app.operational.update {
+                it.copy(
+                    starting = false,
+                    error =
+                        "Start canceled while saving settings. Check settings and tap Start Tracking.",
+                )
+            }
         val content =
             LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
@@ -81,13 +114,67 @@ class MainActivity : Activity() {
             }
         text("GNSS Tracking", 24f)
         status = text("Loading saved settings…")
+        text("Field readiness", 20f)
+        readiness = text("Checking field setup…")
+        locationAction =
+            button("Allow precise location") {
+                if (
+                    !askedLocation ||
+                        shouldShowRequestPermissionRationale(
+                            Manifest.permission.ACCESS_FINE_LOCATION
+                        )
+                )
+                    askPermission(1)
+                else
+                    openSettings(
+                        Intent(
+                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.parse("package:$packageName"),
+                        )
+                    )
+            }
+        gpsAction =
+            button("Open Location settings") {
+                openSettings(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+            }
+        notificationAction =
+            button("Allow notifications / notification settings") {
+                val snapshot = preflight.snapshot()
+                if (
+                    Build.VERSION.SDK_INT >= 33 &&
+                        !snapshot.notificationPermission &&
+                        (!askedNotifications ||
+                            shouldShowRequestPermissionRationale(
+                                Manifest.permission.POST_NOTIFICATIONS
+                            ))
+                )
+                    askPermission(2)
+                else
+                    openSettings(
+                        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                            .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                    )
+            }
+        saverAction =
+            button("Open Battery Saver settings") {
+                openSettings(Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS))
+            }
+        backgroundAction =
+            button("Battery/background settings") {
+                openSettings(
+                    Intent(
+                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:$packageName"),
+                    )
+                )
+            }
         text("Party", 20f)
         partyId = edit("Party ID")
         partyName = edit("Party name")
         text("Command and reporting", 20f)
         endpoint = edit("Command base URL (local Wi-Fi)")
         endpoint.hint = "http://192.168.1.10:8080"
-        interval = edit("Local reporting interval (seconds, steps of 10)", true)
+        interval = edit("Local reporting interval (seconds, 5–86400 in steps of 5)", true)
         button("Save settings") { save() }
         button("Retry saved messages") {
             AlertDialog.Builder(this)
@@ -119,8 +206,31 @@ class MainActivity : Activity() {
                 .setPositiveButton("Re-enroll") { _, _ -> save(reenroll = true) }
                 .show()
         }
+        text("Diagnostics", 20f)
+        button("Export diagnostics") {
+            if (!exporting) {
+                try {
+                    startActivityForResult(
+                        Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = "application/zip"
+                            putExtra(
+                                Intent.EXTRA_TITLE,
+                                "gnss-diagnostics-${java.time.Instant.now().toString().replace(':', '-')}.zip",
+                            )
+                        },
+                        EXPORT_DIAGNOSTICS,
+                    )
+                } catch (e: android.content.ActivityNotFoundException) {
+                    exportStatus.text = getString(R.string.diagnostics_no_picker)
+                }
+            }
+        }
+        exportStatus =
+            text("Incident evidence is saved automatically. Export does not stop tracking.")
         text("Tracking", 20f)
-        button("Start Tracking") { save(start = true) }
+        startButton = button("Loading settings…") { save(start = true) }
+        startButton.isEnabled = false
         button("Stop Tracking") {
             AlertDialog.Builder(this)
                 .setTitle("Stop tracking on this phone?")
@@ -129,24 +239,38 @@ class MainActivity : Activity() {
                 )
                 .setNegativeButton("Keep tracking", null)
                 .setPositiveButton("Stop Tracking") { _, _ ->
-                    scope.launch {
-                        withContext(Dispatchers.IO) {
-                            app.repository.edit { it.copy(tracking = false) }
-                        }
-                        stopService(trackingIntent)
+                    startSave?.cancel()
+                    pendingStart = false
+                    savingStart = false
+                    app.operational.update {
+                        it.copy(
+                            starting = false,
+                            stopping = true,
+                            error = if (it.starting) null else it.error,
+                        )
                     }
+                    // Stop acquisition immediately; finish accepted session metadata
+                    // before ending it. A later Start cannot race this explicit Stop.
+                    stopService(trackingIntent)
+                    app.finishTracking()
                 }
                 .show()
         }
         scope.launch {
-            withContext(Dispatchers.IO) { app.repository.state() }
+            try {
+                withContext(Dispatchers.IO) { app.repository.state() }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                status.text = getString(R.string.cannot_load_settings, e.message)
+                return@launch
+            }
             combine(
                     app.repository.dao.observeState(),
-                    app.repository.dao.pendingCount(),
-                    app.repository.dao.blockedCount(),
+                    app.repository.dao.queueCounts(),
                     app.repository.dao.blockedError(),
                     app.operational,
-                ) { state, pending, blocked, blockedError, op ->
+                ) { state, queues, blockedError, op ->
                     if (state != null) {
                         if (!initialized) {
                             partyId.setText(state.partyId)
@@ -156,20 +280,16 @@ class MainActivity : Activity() {
                                 getString(R.string.interval_value, state.localInterval)
                             )
                             initialized = true
+                            updateStartControls()
+                            attemptStart()
                         }
-                        val age = op.ageMillis?.let { "${it/1000} s" } ?: "Unavailable"
                         status.text = buildString {
                             appendLine(
-                                if (op.tracking) "Tracking active"
+                                if (op.starting) "Starting…"
+                                else if (op.tracking) "Tracking active"
                                 else "Tracking stopped — start to collect and send"
                             )
-                            val gps =
-                                if (op.gnss == "unknown" && (op.ageMillis ?: 0) > 30000) "Stale fix"
-                                else op.gnss.replace('_', ' ')
-                            appendLine(
-                                "GPS: $gps • accuracy: ${op.accuracy?.let { "%.1f m".format(it) } ?: "Unavailable"}"
-                            )
-                            appendLine("Fix age: $age")
+                            appendLine(op.fixDescription())
                             appendLine("Command: ${state.endpoint.ifEmpty { "Not configured" }}")
                             appendLine("${op.link} • last ACK: ${state.lastAck ?: "None"}")
                             appendLine(
@@ -178,81 +298,214 @@ class MainActivity : Activity() {
                             if (state.overrideSeconds != null)
                                 appendLine("Command override active (${state.overrideSeconds} s)")
                             appendLine(
-                                "Battery: ${op.health.battery_percent?.let { "$it%" } ?: "Unavailable"} • pending: $pending"
+                                "Battery: ${op.health.battery_percent?.let { "$it%" } ?: "Unavailable"} • pending: ${queues.pending}"
                             )
-                            if (blocked > 0)
+                            appendLine(
+                                "Pending GNSS: ${queues.gnss} • SOS: ${queues.sos} • routine: ${queues.routine}"
+                            )
+                            if (queues.blocked > 0)
                                 appendLine(
-                                    "$blocked saved message(s) need attention: ${blockedError ?: "Delivery blocked"}"
+                                    "${queues.blocked} saved message(s) need attention: ${blockedError ?: "Delivery blocked"}"
                                 )
                             if (state.deliveryPaused)
                                 appendLine(
                                     "Sending paused — correct receiver, then Retry saved messages"
                                 )
+                            op.warning?.let { appendLine("Field setup: $it") }
                             state.configError?.let { appendLine("Configuration error: $it") }
                             (op.error ?: state.operationalError)?.let {
                                 appendLine("Attention: $it")
                             }
                         }
+                        updateStartControls()
                     }
+                }
+                .catch { e ->
+                    initialized = false
+                    updateStartControls()
+                    status.text = getString(R.string.cannot_read_settings, e.message)
                 }
                 .collect {}
         }
     }
 
     private fun save(start: Boolean = false, reenroll: Boolean = false) {
-        if (!initialized) return
+        if (!initialized) {
+            app.operational.update {
+                it.copy(error = "Settings are still loading. Start becomes available when ready.")
+            }
+            return
+        }
+        if (start) {
+            if (pendingStart || app.operational.value.starting || app.operational.value.tracking)
+                return
+            pendingStart = true
+            savingStart = true
+            app.operational.update { it.copy(starting = true, error = null) }
+            updateStartControls()
+        }
         val id = partyId.text.toString().trim()
         val name = partyName.text.toString().trim()
         val url = endpoint.text.toString().trim()
         val seconds = interval.text.toString().toIntOrNull()
-        scope.launch {
-            try {
-                require(seconds != null) { "Enter a whole number of seconds" }
-                if (start) require(url.isNotEmpty()) { "Configure a Command URL before tracking" }
-                withContext(Dispatchers.IO) {
-                    app.repository.settings(id, name, url, seconds, reenroll)
+        val saveJob =
+            scope.launch {
+                try {
+                    require(seconds != null) { "Enter a whole number of seconds" }
+                    if (start)
+                        require(url.isNotEmpty()) { "Configure a Command URL before tracking" }
+                    withContext(Dispatchers.IO) {
+                        app.repository.settings(id, name, url, seconds, reenroll)
+                    }
+                    if (start) {
+                        savingStart = false
+                        attemptStart()
+                    } else
+                        Toast.makeText(this@MainActivity, "Settings saved", Toast.LENGTH_SHORT)
+                            .show()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (start) {
+                        pendingStart = false
+                        savingStart = false
+                        app.operational.update { it.copy(starting = false, error = e.message) }
+                        updateStartControls()
+                    }
+                    if (!resumed) return@launch
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Check settings")
+                        .setMessage(e.message)
+                        .setPositiveButton("OK", null)
+                        .show()
                 }
-                if (start) requestStart()
-                else Toast.makeText(this@MainActivity, "Settings saved", Toast.LENGTH_SHORT).show()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("Check settings")
-                    .setMessage(e.message)
-                    .setPositiveButton("OK", null)
-                    .show()
             }
-        }
+        if (start) startSave = saveJob
     }
 
-    private fun requestStart() {
-        if (
-            checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) !=
-                PackageManager.PERMISSION_GRANTED
-        ) {
-            startAfterPermission = true
+    private fun updateStartControls() {
+        if (!::startButton.isInitialized) return
+        val op = app.operational.value
+        startButton.isEnabled =
+            initialized && !pendingStart && !op.starting && !op.stopping && !op.tracking
+        startButton.text =
+            when {
+                !initialized -> "Loading settings…"
+                op.stopping -> "Stopping…"
+                op.tracking -> "Tracking active"
+                pendingStart || op.starting -> "Starting…"
+                else -> "Start Tracking"
+            }
+    }
+
+    private fun refreshPreflight(): FieldReadiness {
+        val state = preflight.snapshot()
+        // A later revocation must be requestable again. A denial remains explained
+        // without repeatedly reopening the same permission dialog on each resume.
+        if (state.precise) askedLocation = false
+        if (state.notificationPermission) askedNotifications = false
+        readiness.text = state.description()
+        locationAction.visibility = if (state.precise) View.GONE else View.VISIBLE
+        gpsAction.visibility = if (state.gps == true) View.GONE else View.VISIBLE
+        notificationAction.visibility = if (state.notifications == true) View.GONE else View.VISIBLE
+        saverAction.visibility = if (state.powerSave == false) View.GONE else View.VISIBLE
+        // Keep app settings available even when Android's allowlist is present:
+        // OEM background/autostart controls still need human verification.
+        return state
+    }
+
+    private fun askPermission(code: Int) {
+        if (!visible || !resumed || permissionInFlight != null) return
+        permissionInFlight = code
+        if (code == 1) {
+            askedLocation = true
             requestPermissions(
                 arrayOf(
                     Manifest.permission.ACCESS_FINE_LOCATION,
                     Manifest.permission.ACCESS_COARSE_LOCATION,
                 ),
-                1,
+                code,
             )
+        } else if (Build.VERSION.SDK_INT >= 33) {
+            askedNotifications = true
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), code)
+        } else permissionInFlight = null
+    }
+
+    private fun promptMissingPermissions() {
+        if (!resumed || !visible || permissionInFlight != null) return
+        val state = refreshPreflight()
+        if (!state.precise && !askedLocation) askPermission(1)
+        else if (
+            Build.VERSION.SDK_INT >= 33 && !state.notificationPermission && !askedNotifications
+        )
+            askPermission(2)
+    }
+
+    private fun attemptStart() {
+        if (!pendingStart || savingStart || !initialized) return
+        if (!visible || !resumed || permissionInFlight != null) {
+            app.operational.update {
+                it.copy(error = "Starting is waiting for the visible app and permission result.")
+            }
             return
         }
+        val state = refreshPreflight()
+        val missing =
+            when {
+                !state.precise -> "Allow precise location to continue starting."
+                state.gps != true -> "Enable System Location/GPS in Settings to continue starting."
+                state.notifications != true -> "Allow tracking notifications to continue starting."
+                state.powerSave == true ->
+                    "Battery Saver is ON — turn it OFF for field tracking, then return to continue starting."
+                else -> null
+            }
+        if (missing != null) {
+            app.operational.update { it.copy(error = missing) }
+            promptMissingPermissions()
+            return
+        }
+        requestStart()
+    }
+
+    private fun openSettings(intent: Intent) {
+        try {
+            startActivity(intent)
+        } catch (e: android.content.ActivityNotFoundException) {
+            try {
+                startActivity(Intent(Settings.ACTION_SETTINGS))
+            } catch (e: android.content.ActivityNotFoundException) {
+                app.operational.update {
+                    it.copy(error = "Open Android Settings manually to resolve field setup.")
+                }
+            }
+        }
+    }
+
+    private fun requestStart() {
+        // Settings/permission work can finish after Home/lock hides this Activity.
+        // Only a preserved explicit Start may continue on resume. Never create a
+        // background location FGS or start tracking just because the app opens.
+        if (!visible || isFinishing || isDestroyed) {
+            app.operational.update {
+                it.copy(error = "Settings saved. Tap Start Tracking while the app is visible.")
+            }
+            return
+        }
+        if (!resumed || permissionInFlight != null || app.operational.value.stopping) return
+        if (app.operational.value.tracking || (app.operational.value.starting && !pendingStart))
+            return
+        pendingStart = false // Hand off once; service owns all subsequent startup state.
+        app.operational.update { it.copy(starting = true, error = null) }
+        updateStartControls()
         try {
             startForegroundService(trackingIntent)
         } catch (e: Exception) {
-            status.text = getString(R.string.cannot_start, e.message)
-            return
+            app.operational.update {
+                it.copy(starting = false, error = "Cannot start tracking: ${e.message}")
+            }
+            updateStartControls()
         }
-        if (
-            Build.VERSION.SDK_INT >= 33 &&
-                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
-                    PackageManager.PERMISSION_GRANTED
-        )
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 2)
     }
 
     override fun onRequestPermissionsResult(
@@ -261,25 +514,116 @@ class MainActivity : Activity() {
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 1 && startAfterPermission) {
-            startAfterPermission = false
-            if (
-                checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
-                    PackageManager.PERMISSION_GRANTED
-            )
-                requestStart()
-            else
-                AlertDialog.Builder(this)
-                    .setTitle("Precise location needed")
-                    .setMessage(
-                        "Tracking requires precise location. Enable it in Android app permissions and try Start Tracking again."
-                    )
-                    .setPositiveButton("OK", null)
-                    .show()
+        if (requestCode == 1 || requestCode == 2) {
+            permissionInFlight = null
+            refreshPreflight()
+            // The result can precede onResume. Preserve the explicit Start; dispatch
+            // only after the Activity is resumed, never while permission UI hides it.
+            scope.launch {
+                yield()
+                promptMissingPermissions()
+                attemptStart()
+            }
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        resumed = true
+        app.recorder.event(
+            DiagnosticEvent.ACTIVITY_RESUMED,
+            app.diagnostics.value?.serviceGeneration,
+        )
+        refreshPreflight()
+        promptMissingPermissions()
+        attemptStart()
+    }
+
+    override fun onPause() {
+        resumed = false
+        super.onPause()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("pendingStart", pendingStart && !savingStart)
+        outState.putBoolean("canceledSave", pendingStart && savingStart)
+        outState.putBoolean("askedLocation", askedLocation)
+        outState.putBoolean("askedNotifications", askedNotifications)
+        outState.putInt("permissionInFlight", permissionInFlight ?: 0)
+        super.onSaveInstanceState(outState)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        visible = true
+        app.recorder.event(
+            DiagnosticEvent.ACTIVITY_VISIBLE,
+            app.diagnostics.value?.serviceGeneration,
+        )
+    }
+
+    override fun onStop() {
+        visible = false
+        app.recorder.event(
+            DiagnosticEvent.ACTIVITY_BACKGROUND,
+            app.diagnostics.value?.serviceGeneration,
+        )
+        super.onStop()
+    }
+
+    @Deprecated("Platform document result")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != EXPORT_DIAGNOSTICS || resultCode != RESULT_OK || exporting) return
+        val uri = data?.data ?: return
+        exporting = true
+        exportStatus.text = getString(R.string.diagnostics_exporting)
+        // Snapshot ZIP on the recorder worker, then copy to the user-selected document on IO.
+        // A slow document provider cannot stall the recorder or any tracking loop.
+        scope.launch {
+            var temporary: java.io.File? = null
+            try {
+                withContext(Dispatchers.IO) {
+                    val file = java.io.File.createTempFile("gnss-export-", ".zip", cacheDir)
+                    temporary = file
+                    val info = packageManager.getPackageInfo(packageName, 0)
+                    val versionCode =
+                        if (Build.VERSION.SDK_INT >= 28) info.longVersionCode
+                        else {
+                            @Suppress("DEPRECATION") info.versionCode.toLong()
+                        }
+                    app.recorder.export(
+                        file,
+                        DiagnosticBuild(
+                            info.versionName ?: "unknown",
+                            versionCode,
+                            Build.VERSION.SDK_INT,
+                            BuildConfig.SOURCE_REVISION,
+                        ),
+                    )
+                    contentResolver.openOutputStream(uri, "wt")?.use { out ->
+                        file.inputStream().use { it.copyTo(out) }
+                    } ?: error("Cannot open selected document")
+                }
+                exportStatus.text = getString(R.string.diagnostics_exported)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                exportStatus.text = getString(R.string.diagnostics_export_failed)
+            } finally {
+                withContext(NonCancellable + Dispatchers.IO) { temporary?.delete() }
+                exporting = false
+            }
+        }
+    }
+
+    companion object {
+        internal const val EXPORT_DIAGNOSTICS = 40
+    }
+
     override fun onDestroy() {
+        if (pendingStart && (!isChangingConfigurations || savingStart))
+            app.operational.update { it.copy(starting = false) }
         scope.cancel()
         super.onDestroy()
     }

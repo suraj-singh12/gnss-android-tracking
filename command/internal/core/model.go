@@ -58,18 +58,39 @@ type SOS struct {
 	EventID   string `json:"event_id"`
 	Triggered string `json:"triggered_at"`
 }
+
+// Observation metadata is an additive v1 extension; history batches negotiate separately.
+type ObservationIdentity struct {
+	ID            string `json:"observation_id"`
+	Session       string `json:"tracking_session_id"`
+	SessionStart  string `json:"session_started_at"`
+	Sequence      int64  `json:"observation_sequence"`
+	ElapsedMillis int64  `json:"measurement_elapsed_ms"`
+}
+type QueueProgress struct {
+	Session       string  `json:"tracking_session_id"`
+	SessionStart  string  `json:"session_started_at"`
+	Latest        int64   `json:"latest_committed_sequence"`
+	OldestPending *int64  `json:"oldest_pending_sequence"`
+	Pending       int64   `json:"pending_observations"`
+	Unresolved    []int64 `json:"unresolved_sequences"`
+	KnownLoss     int64   `json:"known_collection_loss"`
+	Measured      string  `json:"measured_at"`
+}
 type Message struct {
-	Protocol int         `json:"protocol_version"`
-	Type     string      `json:"type"`
-	Device   string      `json:"device_id"`
-	Party    Party       `json:"party"`
-	ID       string      `json:"message_id"`
-	Sequence int64       `json:"sequence"`
-	Captured string      `json:"captured_at"`
-	Config   ConfigState `json:"config_state"`
-	Health   Health      `json:"health"`
-	Fix      *Fix        `json:"fix"`
-	SOS      *SOS        `json:"sos,omitempty"`
+	Observation *ObservationIdentity `json:"observation,omitempty"`
+	Progress    *QueueProgress       `json:"history_progress,omitempty"`
+	Protocol    int                  `json:"protocol_version"`
+	Type        string               `json:"type"`
+	Device      string               `json:"device_id"`
+	Party       Party                `json:"party"`
+	ID          string               `json:"message_id"`
+	Sequence    int64                `json:"sequence"`
+	Captured    string               `json:"captured_at"`
+	Config      ConfigState          `json:"config_state"`
+	Health      Health               `json:"health"`
+	Fix         *Fix                 `json:"fix"`
+	SOS         *SOS                 `json:"sos,omitempty"`
 }
 type Ack struct {
 	Protocol int    `json:"protocol_version"`
@@ -101,6 +122,14 @@ func Parse(b []byte) (Message, error) {
 	}
 	if v["type"] == "sos" {
 		known["sos"] = selectFields(object(v["sos"]), "event_id", "triggered_at")
+	}
+	for _, key := range []string{"observation", "history_progress"} {
+		if v[key] != nil {
+			known[key] = v[key]
+		}
+	}
+	if err = validateObservation(v); err != nil {
+		return m, err
 	}
 	canonical, err := json.Marshal(known)
 	if err != nil {

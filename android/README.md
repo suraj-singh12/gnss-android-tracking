@@ -26,9 +26,12 @@ Generated APKs/build output are ignored. No release workflow is provided.
 ## Operation
 
 Configure Party ID/name, a Command base URL (e.g. `http://192.168.1.10:8080`), and
-local reporting seconds (10–86400, multiples of 10). Save or Start Tracking.
+local reporting seconds (5–86400, multiples of 5). Save or Start Tracking.
 Grant **precise** location. Notification permission on Android 13+ is requested
-for notification visibility; refusal does not prevent the foreground service.
+for notification visibility. The visible Start preflight requires notifications
+and GPS enabled and Battery Saver off; notification refusal needs Settings before
+that preserved Start intent can continue. Android itself allows an FGS without
+notification permission, but that is not healthy field setup.
 Start Tracking is a visible user action. Stop Tracking requires confirmation and
 stops collection/sending; pending messages remain for the next start. Reopening
 the Activity does not restart or stop tracking. Reboot and force-stop require
@@ -36,6 +39,12 @@ another explicit Start Tracking. Sticky service recreation can recover tracking
 and outbox after process death when Android permits it; it is not a bypass of
 foreground-start restrictions. Background location permission is not needed for
 a user-started location foreground service and is not requested.
+
+The service registers GPS immediately after foreground promotion and owns a
+timeout-bounded partial CPU wake lock while tracking. Its loop renews the lock;
+stop and registration failure release it. This does not bypass OEM restrictions
+or deep Doze, and increases battery use; physical acceptance remains required.
+Activity destruction never stops or refreshes the source.
 
 The service continuously requests native GPS updates at approximately 1 second
 independently of reporting cadence. Freshness uses platform elapsed-realtime
@@ -59,16 +68,16 @@ Last ACK is local contact time, separate from the receiver's first receipt times
 automatically evicted. Full storage surfaces an explicit save error. Disk capacity
 must be monitored; retention/export controls are future work.
 
-One sender checks priority after each finite request: reserved SOS, newest unsent
-current report, then oldest eligible backlog. Reporting runs separately, so a
-request or backlog cannot block saving new snapshots. Recovery creates a current
-snapshot if the latest pending snapshot is older than one effective interval.
-Retries reuse the persisted JSON with exponential 1/2/4/8/16/30-second delays;
-429 honors delta Retry-After. Endpoint incompatibility pauses sending until an
-explicit Retry saved messages, endpoint edit, or re-enrollment; message errors remain quarantined and visible. Receiver pauses survive process restarts.
-The sender has no transient retry-count limit. A request has a 10-second total call deadline plus connect, write
-and read timeouts; Wi-Fi loss may interrupt it. Newly due reports can wait for one
-in-flight bounded request, never an entire backlog.
+One sender prioritizes SOS, fresh live observations, oldest historical blocks and
+routine status. The same durable GNSS row supplies both live and history; no new fix
+copy is created on reconnect. Every live attempt grants historical work an opportunity.
+Historical eligibility needs no unrelated ACK. Negotiated atomic batches adapt from
+one observation through approximately 500 B/1/2/4/8/16/20 KB; permanent invalid entries
+remain unresolved while valid history continues. Old queued individual v1 envelopes
+remain deliverable. Missing capability falls back to individual envelopes with a warning.
+Transport uses 6-second calls and 3-second connections, network-bound DNS/sockets,
+invalidation on route changes/IO failure and 1/2/4/8/16/30-second bounded retries.
+Wi-Fi availability and last proven Command communication are independent.
 
 ACK validation rejects duplicate JSON keys, malformed receipt fields, noninteger
 identity fields, mismatched identities and unsupported versions. Valid stored or
@@ -98,7 +107,39 @@ suspend or kill applications; no app can promise recovery after force-stop or an
 OEM kill. Field validation must check the actual hardware, including Doze and
 battery optimization. No real-device result is claimed by JVM tests.
 
+Run the [real Command integration suite](../test-tools/integration/README.md) in
+addition to the build/unit/lint commands above. It uses production Room/Sender and
+Command HTTP/SQLite, substituting only the physical Wi-Fi adapter.
+
 See [device acceptance](DEVICE-ACCEPTANCE.md), the
 [mock receiver](../test-tools/mock-receiver/README.md), and
-[Protocol v1](../protocol/protocol-v1.md). Command recording/tracks and SOS triggers
-are deliberately outside this issue.
+[Protocol v1](../protocol/protocol-v1.md). Command recording/tracks remain
+Command-owned; SOS triggers remain future work.
+
+## Native-resolution history and sessions
+
+Room v2 adds per-session observation numbering, reliable measurement deduplication,
+session lifecycle metadata and ordering indexes to the existing outbox. All sequences
+commit atomically; status/SOS do not consume GNSS sequences. Existing schema-1 identity,
+configuration and envelopes migrate unchanged. Older APKs cannot safely downgrade v2.
+
+A 1,024-entry nonblocking memory handoff isolates callbacks from SQLite. Temporary
+storage failure retries the same held observation. Overflow is known loss and visible;
+it does not permanently stop the provider after temporary pressure. Exported counters
+separate submitted/processed handoffs, distinct committed observations, outstanding RAM,
+storage errors and overflow. Normal service stop leaves accepted handoffs draining;
+process death before commit remains a limitation. Raw/ACKed observations are retained.
+
+At approximately 1 Hz, about 3,600 distinct observations/hour are stored, plus routine
+status envelopes at configured cadence. Live delivery reuses those observations.
+Batch transfer reduces HTTP requests, not source resolution. Battery/storage capacity
+and unattended locked-screen Wi-Fi recovery require the real-device acceptance run.
+
+Session startup and Stop are durably ordered. Native callbacks accepted while Room
+opens retain the original operation's session promise; Stop releases the GPS listener
+immediately and finishes that metadata transaction in application-owned work before
+closing the session. The next Start stays disabled until Stop is saved. Sticky
+recreation checks that tracking was still active before registering GPS, and resumes
+its existing durable session rather than creating a new operation.
+
+The sender reschedules the next live opportunity from its last live attempt when the effective interval changes. A 30→5 override does not wait for the old 30-second deadline; clearing 5→30 prevents another live send at the old five-second cadence. Historical delivery remains independent.
