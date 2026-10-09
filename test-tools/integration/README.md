@@ -194,3 +194,11 @@ and live display while projection is busy. Shared native/batch fixtures are cons
 by both production parsers.
 
 Combined SOS reconciliation additionally holds a real native-history request in flight, saves a no-fix SOS in Room, then proves SOS is the next HTTP request after release. Its immutable retry after both restarts produces one alert and no route/distance. Five-device performance includes SOS requests during recovery; latencies are measured rather than hardware guarantees.
+
+The native two-outage comparison retains 100 one-second measurements per phone
+at 30-second live cadence. Continuous delivery and 41–49 / 52–79 recovery blocks
+produce identical logical point order, segment membership and geometry. Real Sender
+delivers 80 current first, then the two oldest blocks without regressing live state;
+all original Room identities are retained. A poor-accuracy raw point is reconsidered
+by full policy reconstruction, and the final zero-pending report certifies receipt
+and completed projection independently.

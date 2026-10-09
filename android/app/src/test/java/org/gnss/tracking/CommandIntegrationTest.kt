@@ -1083,7 +1083,13 @@ class CommandIntegrationTest {
             }
         assertEquals("clock_anomaly", decisions[anomalous.messageId])
         assertEquals("future_capture", decisions[future.messageId])
-        assertEquals("clock_anomaly", device(p)["gnss_condition"].asString)
+        // The future report remains raw/explainable but cannot replace the real current fix.
+        assertEquals("valid", device(p)["gnss_condition"].asString)
+        assertTrue(device(p)["current_position"].asBoolean)
+        assertEquals(
+            utc(base + 100000),
+            device(p)["location"].asJsonObject["fix"].asJsonObject["observed_at"].asString,
+        )
         assertEquals(4, raw().size())
         assertFalse(
             points().any {
@@ -1420,6 +1426,8 @@ class CommandIntegrationTest {
         assertNull(Protocol.decodeMessage(sos.json).fix)
         bridge.restart()
         p.reopen()
+        // The hermetic process restart chooses a new localhost port. Real field address is stable.
+        p.repository.settings("Alpha", "Field", bridge.phone, 10)
         at(106)
         val duplicate = p.transport.post(p.repository.state().endpoint, sos.json)
         assertEquals("duplicate", Protocol.parse(duplicate.body)["result"].asString)
@@ -1427,5 +1435,146 @@ class CommandIntegrationTest {
         assertEquals(1, state()["sos_alerts"].asJsonArray.size())
         assertEquals(0, points().size)
         assertEquals(0.0, distance(p), 0.001)
+    }
+
+    @Test
+    fun nativeTwoOutageRecoveryEqualsContinuousGeometryBeforeAndAfterQualityEdit() = runBlocking {
+        val continuous = phone()
+        val interrupted = phone()
+        for (p in listOf(continuous, interrupted)) p.repository.settings(
+            "Field",
+            "Comparison",
+            bridge.phone,
+            30,
+        )
+        val sessions =
+            listOf(continuous, interrupted).associateWith { it.repository.beginTracking() }
+        recording("start")
+        val originals = mutableMapOf<Phone, MutableList<Outbound>>()
+        val wire = mutableListOf<Long>()
+        val adapter =
+            object : Transport {
+                override suspend fun post(endpoint: String, immutableJson: String): Response {
+                    wire.add(
+                        Protocol.decodeMessage(immutableJson).observation!!.observation_sequence
+                    )
+                    return interrupted.transport.post(endpoint, immutableJson)
+                }
+
+                override suspend fun capabilities(endpoint: String) =
+                    request(endpoint + "/api/v1/capabilities")
+
+                override suspend fun history(endpoint: String, json: String): Response {
+                    val rows =
+                        Protocol.parse(json).getAsJsonArray("messages").map {
+                            Protocol.decodeMessage(it.toString())
+                        }
+                    val order = rows.map { it.observation!!.observation_sequence }
+                    assertTrue(order.zipWithNext().all { (a, b) -> b == a + 1 })
+                    for (m in rows) assertEquals(
+                        m,
+                        Protocol.decodeMessage(interrupted.db.dao().row(m.sequence)!!.json),
+                    )
+                    wire.addAll(order)
+                    return request(endpoint + "/api/v1/history", json)
+                }
+            }
+        val sender =
+            Sender(
+                interrupted.repository,
+                adapter,
+                clock,
+                capture = { error("No synthetic current ACK gate") },
+            )
+        for (n in 1..100) {
+            at(n.toLong())
+            val (x, y) =
+                when {
+                    n <= 25 -> n * 5.0 to 0.0
+                    n <= 50 -> 125.0 to (n - 25) * 5.0
+                    n <= 75 -> (75 - n) * 5.0 to 125.0
+                    else -> 0.0 to (100 - n) * 5.0
+                }
+            for (p in listOf(continuous, interrupted)) {
+                val row =
+                    p.repository.saveObservation(
+                        CapturedObservation(
+                            Protocol.newId(),
+                            clock.now,
+                            fix(clock.now, x, y, if (n == 60) 50.0 else 1.0),
+                            Health(gnss_status = "fix"),
+                            null,
+                            clock.now * 1000000,
+                            kotlinx.coroutines.CompletableDeferred(sessions.getValue(p)),
+                        )
+                    )
+                originals.getOrPut(p) { mutableListOf() }.add(row)
+                if (p == continuous || n <= 40 || n == 50 || n == 51) p.deliver(row)
+            }
+            if (n == 80) {
+                sender.connectivityRestored()
+                sender.step()
+                assertEquals(listOf(80L), wire)
+            }
+        }
+        var previous =
+            device(interrupted)["location"].asJsonObject["fix"].asJsonObject["observed_at"].asString
+        repeat(100) {
+            sender.step()
+            val current =
+                device(interrupted)["location"]
+                    .asJsonObject["fix"]
+                    .asJsonObject["observed_at"]
+                    .asString
+            assertTrue("Backlog regressed live position", current >= previous)
+            previous = current
+        }
+        assertEquals(listOf(80L) + (41L..49L) + (52L..79L) + (81L..100L), wire)
+        assertEquals(200, raw().size())
+        for ((p, rows) in originals) {
+            assertTrue(p.db.dao().all().all { it.deliveredAt != null })
+            for (point in points().filter { it["device_id"].asString == p.id }) assertEquals(
+                rows[point["sequence"].asInt - 1].messageId,
+                point["message_id"].asString,
+            )
+        }
+        fun geometry(p: Phone): List<JsonObject> {
+            val segments = mutableMapOf<String, Int>()
+            return points()
+                .filter { it["device_id"].asString == p.id }
+                .map { point ->
+                    point.deepCopy().apply {
+                        remove("device_id")
+                        remove("message_id")
+                        addProperty(
+                            "segment_id",
+                            segments.getOrPut(point["segment_id"].asString) { segments.size },
+                        )
+                    }
+                }
+        }
+        assertEquals(geometry(continuous), geometry(interrupted))
+        assertTrue(geometry(continuous).size < 100) // Poor accuracy stayed raw, excluded by policy.
+        val policy = state()["policy"].asJsonObject.deepCopy()
+        policy.addProperty("maximum_accuracy_m", 100)
+        control("quality", policy.toString())
+        assertEquals(geometry(continuous), geometry(interrupted))
+        // Accuracy acceptance and the independent uncertainty movement threshold are separate
+        // rules.
+        val enabled = policy.getAsJsonObject("enabled") ?: JsonObject()
+        enabled.addProperty("uncertainty_multiplier", false)
+        policy.add("enabled", enabled)
+        control("quality", policy.toString())
+        assertEquals(100, geometry(continuous).size)
+        assertEquals(geometry(continuous), geometry(interrupted))
+        assertEquals(distance(continuous), distance(interrupted), 0.000001)
+        assertEquals(495.0, distance(interrupted), 0.001)
+        assertEquals(200, raw().size())
+        val progress = interrupted.repository.snapshot(clock.now, null, Health(gnss_status = "fix"))
+        interrupted.deliver(progress)
+        assertEquals(
+            "synchronized",
+            device(interrupted)["history"].asJsonObject["condition"].asString,
+        )
     }
 }
