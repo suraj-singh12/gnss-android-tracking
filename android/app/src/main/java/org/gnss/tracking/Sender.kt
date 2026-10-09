@@ -53,6 +53,15 @@ data class Response(
 
 fun interface Transport {
     suspend fun post(endpoint: String, immutableJson: String): Response
+
+    suspend fun postRole(endpoint: String, json: String, role: String): Response =
+        post(endpoint, json)
+
+    suspend fun capabilities(endpoint: String): Response? = null
+
+    suspend fun history(endpoint: String, json: String): Response = post(endpoint, json)
+
+    fun wifiAvailable(): Boolean = true
 }
 
 class WifiUnavailable : java.io.IOException("Wi-Fi unavailable")
@@ -60,10 +69,37 @@ class WifiUnavailable : java.io.IOException("Wi-Fi unavailable")
 class LanTransport(private val network: () -> Network?) : Transport {
     private var selectedNetwork: Network? = null
     private var client: OkHttpClient? = null
+    private val generation = java.util.concurrent.atomic.AtomicLong()
+    private var boundGeneration = -1L
 
-    override suspend fun post(endpoint: String, immutableJson: String): Response {
+    // Network/LinkProperties callbacks never wait for an in-flight HTTP call.
+    fun invalidate() {
+        generation.incrementAndGet()
+    }
+
+    override fun wifiAvailable() = network() != null
+
+    override suspend fun post(endpoint: String, immutableJson: String) =
+        request(endpoint, immutableJson, "/api/v1/messages", "live")
+
+    override suspend fun postRole(endpoint: String, json: String, role: String) =
+        request(endpoint, json, "/api/v1/messages", role)
+
+    override suspend fun capabilities(endpoint: String) =
+        request(endpoint, null, "/api/v1/capabilities", "capabilities")
+
+    override suspend fun history(endpoint: String, json: String) =
+        request(endpoint, json, "/api/v1/history", "history")
+
+    private fun request(
+        endpoint: String,
+        immutableJson: String?,
+        path: String,
+        role: String,
+    ): Response {
         val wifi = network() ?: throw WifiUnavailable()
-        if (selectedNetwork != wifi) {
+        val currentGeneration = generation.get()
+        if (selectedNetwork != wifi || boundGeneration != currentGeneration) {
             client?.connectionPool?.evictAll()
             client =
                 OkHttpClient.Builder()
@@ -74,45 +110,56 @@ class LanTransport(private val network: () -> Network?) : Transport {
                                 wifi.getAllByName(hostname).toList()
                         }
                     )
-                    .callTimeout(10, TimeUnit.SECONDS)
-                    .connectTimeout(10, TimeUnit.SECONDS)
-                    .readTimeout(10, TimeUnit.SECONDS)
-                    .writeTimeout(10, TimeUnit.SECONDS)
+                    .callTimeout(6, TimeUnit.SECONDS)
+                    .connectTimeout(3, TimeUnit.SECONDS)
+                    .readTimeout(6, TimeUnit.SECONDS)
+                    .writeTimeout(6, TimeUnit.SECONDS)
                     .followRedirects(false)
                     .followSslRedirects(false)
                     .retryOnConnectionFailure(false)
                     .build()
             selectedNetwork = wifi
+            boundGeneration = currentGeneration
         }
-        val request =
+        val builder =
             Request.Builder()
-                .url(Endpoint.messages(endpoint))
+                .url(Endpoint.validate(endpoint).toString().trimEnd('/') + path)
                 .header("Accept", "application/json")
-                .post(immutableJson.toRequestBody("application/json".toMediaType()))
-                .build()
-        client!!.newCall(request).execute().use { response ->
-            val body =
-                response.body?.byteStream()?.use {
-                    val buffer = java.io.ByteArrayOutputStream()
-                    val chunk = ByteArray(4096)
-                    while (buffer.size() <= 65536) {
-                        val count = it.read(chunk, 0, minOf(chunk.size, 65537 - buffer.size()))
-                        if (count < 0) break
-                        buffer.write(chunk, 0, count)
-                    }
-                    require(buffer.size() <= 65536) { "Response exceeds limit" }
-                    buffer.toString("UTF-8")
-                } ?: ""
-            return Response(
-                response.code,
-                body,
-                response.header("Retry-After"),
-                response
-                    .header("Content-Type")
-                    ?.substringBefore(';')
-                    ?.trim()
-                    ?.equals("application/json", true) == true,
-            )
+                .header("X-GNSS-Delivery-Role", role)
+        val request =
+            if (immutableJson == null) builder.get().build()
+            else builder.post(immutableJson.toRequestBody("application/json".toMediaType())).build()
+
+        try {
+            client!!.newCall(request).execute().use { response ->
+                val body =
+                    response.body?.byteStream()?.use {
+                        val buffer = java.io.ByteArrayOutputStream()
+                        val chunk = ByteArray(4096)
+                        while (buffer.size() <= 65536) {
+                            val count = it.read(chunk, 0, minOf(chunk.size, 65537 - buffer.size()))
+                            if (count < 0) break
+                            buffer.write(chunk, 0, count)
+                        }
+                        require(buffer.size() <= 65536) { "Response exceeds limit" }
+                        buffer.toString("UTF-8")
+                    } ?: ""
+                return Response(
+                    response.code,
+                    body,
+                    response.header("Retry-After"),
+                    response
+                        .header("Content-Type")
+                        ?.substringBefore(';')
+                        ?.trim()
+                        ?.equals("application/json", true) == true,
+                )
+            }
+        } catch (e: java.io.IOException) {
+            // A route can change while retaining the same Network handle. Do not
+            // reuse its old pooled sockets/DNS after an actual IO failure.
+            invalidate()
+            throw e
         }
     }
 }
@@ -138,149 +185,355 @@ class Sender(
     private val transport: Transport,
     private val clock: Clock,
     private val evidence: (DiagnosticEvent, SosEvidence) -> Unit = { _, _ -> },
+    private val deliveryEvidence: (DiagnosticEvent, ReportEvidence) -> Unit = { _, _ -> },
     private val capture: suspend () -> Outbound,
 ) {
-    private val mutex = Mutex()
-
     private fun record(kind: DiagnosticEvent, value: SosEvidence) {
         runCatching { evidence(kind, value) }
     }
 
+    private val mutex = Mutex()
     private var recovering = true
-    private var currentAfter = 0L
     private var failures = 0
     private var waitUntil = 0L
     private var generation: Long? = null
     private var endpointBlocked = false
+    private var historyNext = false
+    private val adaptation = BatchAdaptation()
+    private var batchSupported: Boolean? = null
+    @Volatile
+    var compatibilityWarning: String? = null
+        private set
+
+    private var isolationLimit = 128
+    private var nextLiveElapsed = 0L
+    private var lastLiveAttemptElapsed: Long? = null
+    private var appliedInterval: Int? = null
+    private var lastRoutineElapsed = Long.MIN_VALUE / 2
+    @Volatile
+    var commandReachable: Boolean? = null
+        private set
+
+    @Volatile
+    var attemptedLastStep = false
+        private set
+
+    @Volatile
+    var diagnostics = SenderState()
+        private set
+
+    private fun record(kind: DiagnosticEvent, row: Outbound) {
+        runCatching {
+            val m = Protocol.decodeMessage(row.json)
+            deliveryEvidence(
+                kind,
+                ReportEvidence(
+                    reportReference(m.message_id),
+                    m.type,
+                    m.sequence,
+                    m.captured_at,
+                    m.fix?.observed_at,
+                ),
+            )
+        }
+    }
 
     suspend fun connectivityRestored() =
         mutex.withLock {
             // Clear durable transient deadlines before selecting recovery work. Otherwise
             // an eligible backlog row can jump ahead of a delayed SOS/current row.
             store.resetTransientRetryTiming()
+            adaptation.reset()
+            batchSupported = null
+            nextLiveElapsed = 0
+            lastLiveAttemptElapsed = null
+            lastRoutineElapsed = Long.MIN_VALUE / 2
+            commandReachable = null
             recovering = true
+            historyNext = false
             if (!endpointBlocked) waitUntil = 0
         }
 
-    suspend fun step(sosOnly: Boolean = false) = mutex.withLock { stepLocked(sosOnly) }
+    suspend fun step(sosOnly: Boolean = false) =
+        mutex.withLock {
+            attemptedLastStep = false
+            stepNative(sosOnly)
+        }
 
-    private suspend fun stepLocked(sosOnly: Boolean) {
+    private suspend fun stepNative(sosOnly: Boolean) {
         val state = store.state()
         if (generation != state.endpointGeneration) {
             generation = state.endpointGeneration
+            batchSupported = null
+            adaptation.reset()
             recovering = true
-            failures = 0
+            historyNext = false
+            nextLiveElapsed = 0
+            lastLiveAttemptElapsed = null
+            lastRoutineElapsed = Long.MIN_VALUE / 2
             waitUntil = 0
             endpointBlocked = false
-            currentAfter = 0
+            commandReachable = null
+        }
+        val interval = state.config().effective_reporting_interval_s
+        if (appliedInterval != interval) {
+            appliedInterval = interval
+            nextLiveElapsed = lastLiveAttemptElapsed?.let { it + interval * 1000L } ?: 0
         }
         if (state.endpoint.isEmpty() || state.deliveryPaused || endpointBlocked) return
-        var selected = store.next(clock.wallMillis(), currentAfter)
-        if (sosOnly && selected?.type != "sos") return
-        // Fresh SOS bypasses ordinary backoff, but its own durable deadline is honored.
-        if (clock.elapsedMillis() < waitUntil && selected?.type != "sos") return
-        if (recovering && selected?.type != "sos") {
-            val newest = store.newest()
+        // SOS bypasses ordinary retry backoff, but respects its own durable deadline.
+        val priority = store.sos(clock.wallMillis())
+        if (sosOnly && priority == null) return
+        if (priority == null && (!transport.wifiAvailable() || clock.elapsedMillis() < waitUntil))
+            return
+        val now = clock.wallMillis()
+        if (priority == null && recovering && !store.hasNativeObservations()) {
+            val current = store.newest()
             if (
-                newest == null ||
-                    clock.wallMillis() - newest.capturedMillis !in
+                current == null ||
+                    now - current.capturedMillis !in
                         0 until state.config().effective_reporting_interval_s * 1000L
             )
                 capture()
         }
-        if (selected?.type != "sos") selected = store.next(clock.wallMillis(), currentAfter)
-        val row = selected ?: return
-        if (row.type == "sos") {
+        val live =
+            if (
+                priority == null &&
+                    !historyNext &&
+                    (recovering || clock.elapsedMillis() >= nextLiveElapsed)
+            )
+                store.live(now)
+            else null
+        val rows: List<Outbound>
+        var role = "history"
+        if (priority != null) {
+            rows = listOf(priority)
+            role = "sos"
+        } else if (live != null) {
+            rows = listOf(live)
+            role = "live"
+            historyNext = true
+            lastLiveAttemptElapsed = clock.elapsedMillis()
+            nextLiveElapsed = clock.elapsedMillis() + interval * 1000L
+        } else {
+            val history = store.historical(now, adaptation.target).take(isolationLimit)
+            // Independently bounded status cadence gets an opportunity after history.
+            val routine = store.routine(now)
+            if (
+                routine != null &&
+                    (history.isEmpty() || (!recovering && !historyNext)) &&
+                    clock.elapsedMillis() - lastRoutineElapsed >=
+                        state.config().effective_reporting_interval_s * 1000L
+            ) {
+                rows = listOf(routine)
+                role = "status"
+            } else {
+                rows =
+                    if (history.isNotEmpty()) history else listOfNotNull(store.routineBacklog(now))
+                if (history.isEmpty()) role = "status_backlog"
+                historyNext = false
+            }
+        }
+        if (rows.isEmpty()) return
+        val batchEligible = role == "history" && rows.all { it.observationSequence != null }
+        if (batchEligible && batchSupported == null) {
+            try {
+                val capability = transport.capabilities(state.endpoint)
+                batchSupported =
+                    capability?.let {
+                        it.code == 200 &&
+                            it.json &&
+                            Protocol.parse(it.body)
+                                .getAsJsonArray("historical_batch_versions")
+                                ?.any { v -> v.asInt == 1 } == true
+                    } ?: false
+                compatibilityWarning =
+                    if (batchSupported == true) null
+                    else
+                        "Command lacks negotiated history support; individual v1 delivery preserves envelopes, but session completeness requires an upgraded Command."
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                commandReachable = false
+                failures = (failures + 1).coerceAtMost(32)
+                adaptation.reset()
+                waitUntil = clock.elapsedMillis() + classify(null, failures).delayMillis
+                return
+            }
+        }
+        // Capability discovery is itself a bounded request; newly raised SOS gets the next one.
+        if (role != "sos" && store.sos(clock.wallMillis()) != null) return
+        val selected = if (batchEligible && batchSupported == true) rows else rows.take(1)
+        if (role == "sos") {
+            val row = selected.single()
             record(
                 DiagnosticEvent.SOS_SEND_ATTEMPT,
                 SosEvidence(sosReference(row.messageId), count = row.attempts + 1),
             )
-            // Presence of competing pending ordinary work proves actual priority selection.
-            if (runCatching { store.newest() }.getOrNull() != null)
+            if (store.newest() != null || store.historical(clock.wallMillis(), 0).isNotEmpty())
                 record(
                     DiagnosticEvent.SOS_PREEMPTED_BACKLOG,
                     SosEvidence(sosReference(row.messageId), competingReports = 1),
                 )
         }
+        selected.forEach { record(DiagnosticEvent.REPORT_SEND_ATTEMPT, it) }
+        attemptedLastStep = true
+        diagnostics = diagnostics.copy(lastAttemptElapsed = clock.elapsedMillis())
+        var receivedResponse = false
         try {
-            val response = transport.post(state.endpoint, row.json)
+            val batch = batchEligible && batchSupported == true
+            val response =
+                if (batch) transport.history(state.endpoint, HistoryProtocol.batch(selected))
+                else transport.postRole(state.endpoint, selected.single().json, role)
+            receivedResponse = true
+            commandReachable = true
+            diagnostics = diagnostics.copy(lastHttpCode = response.code)
             if (store.state().endpointGeneration != state.endpointGeneration) return
             if (response.code == 200) {
-                val receipt =
-                    try {
-                        require(response.json) { "ACK Content-Type must be application/json" }
-                        Protocol.receipt(response.body, Protocol.decodeMessage(row.json))
-                    } catch (e: Exception) {
-                        if (row.type == "sos")
-                            record(
-                                DiagnosticEvent.SOS_TRANSPORT_ACK_REJECTED,
-                                SosEvidence(sosReference(row.messageId)),
+                require(response.json) { "ACK must be JSON" }
+                val receipts =
+                    if (batch) HistoryProtocol.receipts(response.body, selected)
+                    else
+                        listOf(
+                            Protocol.receipt(
+                                response.body,
+                                Protocol.decodeMessage(selected.single().json),
                             )
-                        throw e
-                    }
-                if (store.state().endpointGeneration != state.endpointGeneration) return
-                store.accept(row, receipt, state.endpointGeneration)
-                if (
-                    row.type == "sos" &&
-                        store.state().endpointGeneration == state.endpointGeneration
-                )
+                        )
+                store.acceptBatch(selected, receipts, state.endpointGeneration)
+                selected.forEach { record(DiagnosticEvent.REPORT_ACK_ACCEPTED, it) }
+                if (role == "sos")
                     record(
                         DiagnosticEvent.SOS_TRANSPORT_ACK_ACCEPTED,
-                        SosEvidence(sosReference(row.messageId)),
+                        SosEvidence(sosReference(selected.single().messageId)),
                     )
-                if (row.type != "sos") currentAfter = maxOf(currentAfter, row.sequence)
+                diagnostics =
+                    diagnostics.copy(
+                        lastAckElapsed = clock.elapsedMillis(),
+                        retryUntilElapsed = null,
+                        failures = 0,
+                    )
                 failures = 0
                 waitUntil = 0
-                if (row.type != "sos") recovering = false
+                if (role == "status") lastRoutineElapsed = clock.elapsedMillis()
+                if (role != "sos") recovering = false
+                isolationLimit = 128
+                if (role == "history") adaptation.acknowledged()
                 return
             }
-            failure(
-                row,
-                "Command returned HTTP ${response.code}",
+            if (batch && response.code in listOf(404, 405, 426)) {
+                batchSupported = false
+                adaptation.reset()
+                return
+            }
+            if (batch && response.code == 422 && response.json) {
+                val error = Protocol.parse(response.body)
+                if (error.get("error")?.asString == "unsupported_batch") {
+                    batchSupported = false
+                    adaptation.reset()
+                    compatibilityWarning =
+                        "Historical batch version unavailable; retaining individual v1 delivery."
+                    return
+                }
+                val index = error.get("entry_index")?.asInt ?: -1
+                val id = error.get("observation_id")?.asString
+                if (index in selected.indices && (id == null || id == selected[index].messageId)) {
+                    store.fail(
+                        selected[index],
+                        "${error.get("error")?.asString}: ${error.get("message")?.asString}",
+                        0,
+                        true,
+                        state.endpointGeneration,
+                    )
+                    isolationLimit = 128
+                    return
+                }
+            }
+            if (batch && response.code in listOf(400, 413, 422)) {
+                if (selected.size > 1) {
+                    isolationLimit = maxOf(1, selected.size / 2)
+                    return
+                }
+                store.fail(
+                    selected.single(),
+                    "Permanent batch validation: HTTP ${response.code}: ${response.body}",
+                    0,
+                    true,
+                    state.endpointGeneration,
+                )
+                return
+            }
+            if (role == "history" && response.code != 429) adaptation.reachableFailure()
+            nativeFailure(
+                selected,
                 response.code,
                 response.retryAfter,
-                state.endpointGeneration,
+                "Command HTTP ${response.code}",
+                state,
+                role,
             )
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
-            if (row.type == "sos" && e is WifiUnavailable)
-                record(
-                    DiagnosticEvent.SOS_NETWORK_UNAVAILABLE,
-                    SosEvidence(sosReference(row.messageId)),
-                )
-            failure(row, e.message ?: "Command unavailable", null, null, state.endpointGeneration)
+            if (role == "sos") {
+                val kind =
+                    if (e is WifiUnavailable) DiagnosticEvent.SOS_NETWORK_UNAVAILABLE
+                    else if (receivedResponse) DiagnosticEvent.SOS_TRANSPORT_ACK_REJECTED else null
+                if (kind != null)
+                    record(kind, SosEvidence(sosReference(selected.single().messageId)))
+            }
+            if (receivedResponse && transport.wifiAvailable()) {
+                if (role == "history") adaptation.reachableFailure()
+            } else adaptation.reset()
+            commandReachable = receivedResponse
+            nativeFailure(selected, null, null, e.message ?: "ACK unavailable", state, role)
         }
     }
 
-    private suspend fun failure(
-        row: Outbound,
-        diagnostic: String,
+    private suspend fun nativeFailure(
+        rows: List<Outbound>,
         code: Int?,
         after: String?,
-        generation: Long,
+        error: String,
+        state: Installation,
+        role: String,
     ) {
-        if (store.state().endpointGeneration != generation) return
-        if (row.type != "sos") failures = (failures + 1).coerceAtMost(32)
-        val retry = classify(code, if (row.type == "sos") row.attempts + 1 else failures, after)
-        recovering = true
-        val delay = retry.delayMillis.coerceAtMost(Long.MAX_VALUE - clock.elapsedMillis())
-        if (row.type != "sos") waitUntil = clock.elapsedMillis() + delay
-        val next =
-            clock.wallMillis() + retry.delayMillis.coerceAtMost(Long.MAX_VALUE - clock.wallMillis())
-        store.fail(row, diagnostic, next, retry.quarantine, generation)
-        if (row.type == "sos")
+        val count =
+            if (role == "sos") rows.first().attempts + 1 else (failures + 1).coerceAtMost(32)
+        val retry = classify(code, count, after)
+        rows.forEach {
+            store.fail(
+                it,
+                error,
+                clock.wallMillis() +
+                    retry.delayMillis.coerceAtMost(Long.MAX_VALUE - clock.wallMillis()),
+                retry.quarantine,
+                state.endpointGeneration,
+            )
+            record(DiagnosticEvent.REPORT_RETRY, it)
+        }
+        if (role == "sos")
             record(
                 DiagnosticEvent.SOS_RETRY_BACKOFF,
-                SosEvidence(sosReference(row.messageId), durationMs = retry.delayMillis),
+                SosEvidence(sosReference(rows.single().messageId), durationMs = retry.delayMillis),
             )
-        // These errors affect the configured receiver, not just one message.
-        if (
-            code in listOf(404, 405, 415, 426) ||
-                (retry.quarantine && code !in listOf(400, 409, 413))
-        ) {
+        if (role != "sos") {
+            failures = count
+            waitUntil =
+                clock.elapsedMillis() +
+                    retry.delayMillis.coerceAtMost(Long.MAX_VALUE - clock.elapsedMillis())
+            recovering = true
+        }
+        diagnostics =
+            diagnostics.copy(
+                retryUntilElapsed =
+                    clock.elapsedMillis() +
+                        retry.delayMillis.coerceAtMost(Long.MAX_VALUE - clock.elapsedMillis()),
+                failures = count,
+            )
+        if (code in listOf(404, 405, 415, 426)) {
             endpointBlocked = true
-            store.pauseReceiver(diagnostic, generation)
+            store.pauseReceiver(error, state.endpointGeneration)
         }
     }
 }

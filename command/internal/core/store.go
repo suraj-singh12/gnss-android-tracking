@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,33 +16,50 @@ import (
 	_ "github.com/ncruces/go-sqlite3/embed"
 )
 
+type ReportedSession struct {
+	ID       string `json:"tracking_session_id"`
+	Start    string `json:"session_started_at"`
+	Reported string `json:"reported_at"`
+	Envelope int64  `json:"report_sequence"`
+}
 type Device struct {
-	LocationReason   string    `json:"location_reason"`
-	Color            string    `json:"track_color"`
-	Dash             string    `json:"track_dash"`
-	ID               string    `json:"device_id"`
-	Snapshot         Message   `json:"snapshot"`
-	Location         *Message  `json:"location"`
-	Contact          string    `json:"last_contact"`
-	Desired          Config    `json:"desired_config"`
-	Converged        bool      `json:"config_converged"`
-	ContactCondition string    `json:"contact_condition"`
-	GNSSCondition    string    `json:"gnss_condition"`
-	LocationAge      *float64  `json:"location_age_s"`
-	Total            float64   `json:"total_m"`
-	Evidence         *Counters `json:"field_evidence,omitempty"`
+	Session          *ReportedSession         `json:"reported_tracking_session,omitempty"`
+	CurrentPosition  bool                     `json:"current_position"`
+	LiveX            *float64                 `json:"live_x_m"`
+	LiveY            *float64                 `json:"live_y_m"`
+	LocationReceived string                   `json:"location_received_at"`
+	LocationReason   string                   `json:"location_reason"`
+	Color            string                   `json:"track_color"`
+	Dash             string                   `json:"track_dash"`
+	ID               string                   `json:"device_id"`
+	Snapshot         Message                  `json:"snapshot"`
+	Location         *Message                 `json:"location"`
+	Contact          string                   `json:"last_contact"`
+	Desired          Config                   `json:"desired_config"`
+	Converged        bool                     `json:"config_converged"`
+	ContactCondition string                   `json:"contact_condition"`
+	GNSSCondition    string                   `json:"gnss_condition"`
+	LocationAge      *float64                 `json:"location_age_s"`
+	UsefulPoints     int                      `json:"useful_points"`
+	Total            float64                  `json:"total_m"`
+	PhoneQueue       *QueueProgress           `json:"last_reported_phone_queue"`
+	HistorySessions  map[string]*HistoryState `json:"history_sessions"`
+	History          *HistoryState            `json:"history"`
+	Evidence         *Counters                `json:"field_evidence,omitempty"`
 }
 type Window struct {
-	ID     string     `json:"segment_id"`
-	Start  time.Time  `json:"start"`
-	Stop   *time.Time `json:"stop"`
-	Policy Policy     `json:"policy"`
-	Reason string     `json:"reason"`
+	ID       string            `json:"segment_id"`
+	Start    time.Time         `json:"start"`
+	Stop     *time.Time        `json:"stop"`
+	Policy   Policy            `json:"policy"`
+	Reason   string            `json:"reason"`
+	Sessions map[string]string `json:"sessions,omitempty"`
 }
 type Recording struct {
 	ID      string   `json:"recording_id"`
 	Active  bool     `json:"active"`
 	Windows []Window `json:"windows"`
+	Mode    string   `json:"mode"`
 }
 type SOSAlert struct {
 	Device       string  `json:"device_id"`
@@ -83,19 +101,32 @@ func absClock(m Message) float64 {
 }
 
 type State struct {
-	Alerts []SOSAlert `json:"sos_alerts"`
-
-	Authority string             `json:"authority_id"`
-	Policy    Policy             `json:"policy"`
-	Devices   map[string]*Device `json:"devices"`
-	Recording *Recording         `json:"recording"`
-	Points    []Point            `json:"points"`
-	Decisions []Decision         `json:"decisions"`
+	Alerts            []SOSAlert         `json:"sos_alerts"`
+	Authority         string             `json:"authority_id"`
+	Policy            Policy             `json:"policy"`
+	Devices           map[string]*Device `json:"devices"`
+	Recording         *Recording         `json:"recording"`
+	Points            []Point            `json:"points"`
+	Decisions         []Decision         `json:"decisions"`
+	RawVersion        int64              `json:"raw_version"`
+	ProjectionVersion int64              `json:"projection_version"`
+	ProjectionPending bool               `json:"projection_pending"`
+	ProjectionError   string             `json:"projection_error,omitempty"`
+	RawPoints         []Point            `json:"raw_points,omitempty"`
+	Provisional       []Point            `json:"provisional_points,omitempty"`
 }
 type Store struct {
-	db  *sql.DB
-	mu  sync.Mutex
-	Now func() time.Time
+	db            *sql.DB
+	mu            sync.Mutex
+	Now           func() time.Time
+	wake          chan struct{}
+	stop          chan struct{}
+	done          chan struct{}
+	closeOnce     sync.Once
+	closeError    error
+	projectionMu  sync.Mutex
+	projectionRaw map[string]*rawCursor
+	projections   map[string]*ProjectionCache
 }
 
 var ErrConflict = errors.New("identity conflict")
@@ -113,7 +144,7 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	s := &Store{db: db, Now: time.Now}
+	s := &Store{db: db, Now: time.Now, wake: make(chan struct{}, 1), stop: make(chan struct{}), done: make(chan struct{}), projections: map[string]*ProjectionCache{}, projectionRaw: map[string]*rawCursor{}}
 	fail := func(e error) (*Store, error) { db.Close(); return nil, e }
 	for _, q := range []string{"PRAGMA journal_mode=WAL", "PRAGMA synchronous=FULL", "PRAGMA busy_timeout=5000", `CREATE TABLE IF NOT EXISTS raw (device TEXT NOT NULL, message TEXT NOT NULL, sequence INTEGER NOT NULL, known TEXT NOT NULL, wire BLOB NOT NULL, received TEXT NOT NULL, PRIMARY KEY(device,message), UNIQUE(device,sequence))`, `CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL)`, `CREATE TABLE IF NOT EXISTS retired (recording TEXT PRIMARY KEY, data TEXT NOT NULL)`, `CREATE TABLE IF NOT EXISTS field_evidence (ordinal INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT NOT NULL)`} {
 		if _, err = db.Exec(q); err != nil {
@@ -125,16 +156,37 @@ func Open(path string) (*Store, error) {
 	if _, err = db.Exec("INSERT OR IGNORE INTO state(id,data) VALUES(1,?)", string(b)); err != nil {
 		return fail(err)
 	}
+	// Backfill the first receipt of the existing latest observation in older DBs.
 	tx, err := db.Begin()
 	if err != nil {
 		return fail(err)
 	}
-	st, err := loadState(tx)
+	// Additive migration: derived arrays leave the frequently updated receipt state.
+	// They remain the one authoritative cached projection, not another raw store.
+	if _, err = tx.Exec(`CREATE TABLE IF NOT EXISTS projection_state(id INTEGER PRIMARY KEY CHECK(id=1),data TEXT NOT NULL)`); err != nil {
+		tx.Rollback()
+		return fail(err)
+	}
+	if _, err = tx.Exec(`INSERT OR IGNORE INTO projection_state SELECT 1,json_object('points',json_extract(data,'$.points'),'decisions',json_extract(data,'$.decisions')) FROM state WHERE id=1`); err != nil {
+		tx.Rollback()
+		return fail(err)
+	}
+	existing, err := loadState(tx)
 	if err == nil {
-		err = saveState(tx, st)
+		for _, d := range existing.Devices {
+			if d.Location != nil && d.LocationReceived == "" {
+				err = tx.QueryRow("SELECT received FROM raw WHERE device=? AND message=?", d.ID, d.Location.ID).Scan(&d.LocationReceived)
+				if err != nil {
+					break
+				}
+			}
+		}
 	}
 	if err == nil {
-		for _, a := range st.Alerts {
+		err = saveState(tx, existing)
+	}
+	if err == nil {
+		for _, a := range existing.Alerts {
 			err = writeEvidence(tx, Evidence{At: s.Now().UTC().Format(wireTime), Kind: "sos_restored", Device: a.Device,
 				SOSRef: sosRef(a.Event), SOSAcknowledged: a.Acknowledged, FirstReceived: a.Received})
 			if err != nil {
@@ -142,29 +194,73 @@ func Open(path string) (*Store, error) {
 			}
 		}
 	}
-	if err != nil {
+	if err == nil {
+		err = tx.Commit()
+	} else {
 		tx.Rollback()
+	}
+	if err != nil {
 		return fail(err)
 	}
-	if err = tx.Commit(); err != nil {
-		return fail(err)
-	}
-
 	revision := BuildRevision()
 	event, _ := json.Marshal(Evidence{At: s.Now().UTC().Format(wireTime), Kind: "command_open", Revision: &revision})
 	if _, err = db.Exec("INSERT INTO field_evidence(data) VALUES(?)", string(event)); err != nil {
 		return fail(err)
 	}
+	for _, q := range []string{
+		`CREATE TABLE IF NOT EXISTS observation_identity(device TEXT NOT NULL, session TEXT NOT NULL, sequence INTEGER NOT NULL, observation TEXT NOT NULL, message TEXT NOT NULL, PRIMARY KEY(device,session,sequence), UNIQUE(device,observation))`,
+		`CREATE TABLE IF NOT EXISTS receipt_roles(device TEXT NOT NULL,message TEXT NOT NULL,role TEXT NOT NULL,PRIMARY KEY(device,message))`,
+		`CREATE TABLE IF NOT EXISTS projection_work(device TEXT PRIMARY KEY, earliest TEXT NOT NULL, generation INTEGER NOT NULL DEFAULT 0)`,
+	} {
+		if _, err = db.Exec(q); err != nil {
+			return fail(err)
+		}
+	}
+	rows, err := db.Query("PRAGMA table_info(projection_work)")
+	if err != nil {
+		return fail(err)
+	}
+	found := false
+	for rows.Next() {
+		var cid, notnull, pk int
+		var name, kind string
+		var def any
+		if err = rows.Scan(&cid, &name, &kind, &notnull, &def, &pk); err != nil {
+			rows.Close()
+			return fail(err)
+		}
+		found = found || name == "generation"
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return fail(err)
+	}
+	if !found {
+		if _, err = db.Exec("ALTER TABLE projection_work ADD COLUMN generation INTEGER NOT NULL DEFAULT 0"); err != nil {
+			return fail(err)
+		}
+	}
+	if err = s.backfillObservationIdentity(); err != nil {
+		return fail(err)
+	}
+	go s.projectionLoop()
+	s.notifyProjection()
 	return s, nil
 }
-func (s *Store) Close() error { return s.db.Close() }
-func loadState(tx *sql.Tx) (State, error) {
+func (s *Store) Close() error {
+	s.closeOnce.Do(func() { close(s.stop); <-s.done; s.closeError = s.db.Close() })
+	return s.closeError
+}
+
+func loadReceiptState(tx *sql.Tx) (State, error) {
 	var st State
 	var b string
 	if err := tx.QueryRow("SELECT data FROM state WHERE id=1").Scan(&b); err != nil {
 		return st, err
 	}
 	err := json.Unmarshal([]byte(b), &st)
+
 	// Additive upgrade for reserved SOS envelopes stored before Issue #5.
 	if err == nil && st.Alerts == nil {
 		st.Alerts = []SOSAlert{}
@@ -195,13 +291,56 @@ func loadState(tx *sql.Tx) (State, error) {
 	}
 	return st, err
 }
-func saveState(tx *sql.Tx, st State) error {
+func loadState(tx *sql.Tx) (State, error) {
+	st, err := loadReceiptState(tx)
+	if err != nil {
+		return st, err
+	}
+	var b string
+	if err = tx.QueryRow("SELECT data FROM projection_state WHERE id=1").Scan(&b); err != nil {
+		return st, err
+	}
+	var projection struct {
+		Points    []Point    `json:"points"`
+		Decisions []Decision `json:"decisions"`
+	}
+	if err = json.Unmarshal([]byte(b), &projection); err == nil {
+		st.Points, st.Decisions = projection.Points, projection.Decisions
+	}
+	return st, err
+}
+func saveReceiptState(tx *sql.Tx, st State) error {
+	st.Points = nil
+	st.Decisions = nil
+	st.RawPoints = nil
+	st.Provisional = nil
 	b, err := json.Marshal(st)
 	if err != nil {
 		return err
 	}
 	_, err = tx.Exec("UPDATE state SET data=? WHERE id=1", string(b))
 	return err
+}
+func saveState(tx *sql.Tx, st State) error {
+	for _, d := range st.Devices {
+		d.UsefulPoints = 0
+	}
+	for _, p := range st.Points {
+		if d := st.Devices[p.Device]; d != nil {
+			d.UsefulPoints++
+		}
+	}
+	b, err := json.Marshal(struct {
+		Points    []Point    `json:"points"`
+		Decisions []Decision `json:"decisions"`
+	}{st.Points, st.Decisions})
+	if err != nil {
+		return err
+	}
+	if _, err = tx.Exec("UPDATE projection_state SET data=? WHERE id=1", string(b)); err != nil {
+		return err
+	}
+	return saveReceiptState(tx, st)
 }
 func configEqual(a, b Config) bool {
 	if a.Authority == nil || b.Authority == nil || *a.Authority != *b.Authority || a.Version != b.Version {
@@ -212,6 +351,9 @@ func configEqual(a, b Config) bool {
 func (s *Store) Ingest(b []byte) (Ack, error) { return s.ingestAt(b, s.Now().UTC()) }
 
 func (s *Store) ingestAt(b []byte, ingress time.Time) (Ack, error) {
+	return s.ingestRole(b, ingress, "live")
+}
+func (s *Store) ingestRole(b []byte, ingress time.Time, role string) (Ack, error) {
 	m, err := Parse(b)
 	if err != nil {
 		return Ack{}, err
@@ -224,13 +366,30 @@ func (s *Store) ingestAt(b []byte, ingress time.Time) (Ack, error) {
 		return Ack{}, err
 	}
 	defer tx.Rollback()
-	st, err := loadState(tx)
+	st, err := loadReceiptState(tx)
 	if err != nil {
 		return Ack{}, err
 	}
+	if _, err = tx.Exec("INSERT OR IGNORE INTO receipt_roles VALUES(?,?,?)", m.Device, m.ID, role); err != nil {
+		return Ack{}, err
+	}
+	ack, err := s.ingestMessage(tx, &st, m, b, received, role)
+	if err != nil && !errors.Is(err, ErrConflict) {
+		return Ack{}, err
+	}
+	if e := saveReceiptState(tx, st); e != nil {
+		return Ack{}, e
+	}
+	if e := tx.Commit(); e != nil {
+		return Ack{}, e
+	}
+	s.notifyProjection()
+	return ack, err
+}
+func (s *Store) ingestMessage(tx *sql.Tx, st *State, m Message, b []byte, received string, role string) (Ack, error) {
 	known, _ := json.Marshal(m)
 	var old, first string
-	err = tx.QueryRow("SELECT known,received FROM raw WHERE device=? AND (message=? OR sequence=?)", m.Device, m.ID, m.Sequence).Scan(&old, &first)
+	err := tx.QueryRow("SELECT known,received FROM raw WHERE device=? AND (message=? OR sequence=?)", m.Device, m.ID, m.Sequence).Scan(&old, &first)
 	result := "stored"
 	if err == nil {
 		if old != string(known) {
@@ -244,9 +403,6 @@ func (s *Store) ingestAt(b []byte, ingress time.Time) (Ack, error) {
 			if err = writeEvidence(tx, e); err != nil {
 				return Ack{}, err
 			}
-			if err = tx.Commit(); err != nil {
-				return Ack{}, err
-			}
 			return Ack{}, ErrConflict
 		}
 		result = "duplicate"
@@ -254,14 +410,48 @@ func (s *Store) ingestAt(b []byte, ingress time.Time) (Ack, error) {
 		return Ack{}, err
 	} else {
 		first = received
+		if m.Observation != nil {
+			o := m.Observation
+			var start string
+			startError := tx.QueryRow(`SELECT json_extract(r.known,'$.observation.session_started_at') FROM observation_identity i JOIN raw r ON r.device=i.device AND r.message=i.message WHERE i.device=? AND i.session=? LIMIT 1`, m.Device, o.Session).Scan(&start)
+			if startError == nil && start != o.SessionStart {
+				if err = writeObservationConflict(tx, st, m, received, role, "session_start_conflict", ""); err != nil {
+					return Ack{}, err
+				}
+				return Ack{}, ErrConflict
+			}
+			if startError != nil && !errors.Is(startError, sql.ErrNoRows) {
+				return Ack{}, startError
+			}
+			var existing string
+			e := tx.QueryRow("SELECT message FROM observation_identity WHERE device=? AND ((session=? AND sequence=?) OR observation=?)", m.Device, o.Session, o.Sequence, o.ID).Scan(&existing)
+			if e == nil {
+				if err = writeObservationConflict(tx, st, m, received, role, "observation_sequence_conflict", existing); err != nil {
+					return Ack{}, err
+				}
+				return Ack{}, ErrConflict
+			}
+			if !errors.Is(e, sql.ErrNoRows) {
+				return Ack{}, e
+			}
+			if _, err = tx.Exec("INSERT INTO observation_identity VALUES(?,?,?,?,?)", m.Device, o.Session, o.Sequence, o.ID, m.ID); err != nil {
+				return Ack{}, err
+			}
+		}
 		if _, err = tx.Exec("INSERT INTO raw VALUES(?,?,?,?,?,?)", m.Device, m.ID, m.Sequence, string(known), b, first); err != nil {
 			return Ack{}, err
 		}
 	}
 	evidence := receiptEvidence(m, received, first, result, st.Devices[m.Device])
+	evidence.DeliveryRole = role
+	if d := st.Devices[m.Device]; d != nil && d.Location != nil && futureCandidate(*d.Location, received, st.Policy) {
+		evidence.LiveBefore = "" // The anomalous future candidate was never a qualified current position.
+	}
+	quality, fresh := receiptQuality(m, received, st.Policy)
+	evidence.SourceQuality, evidence.FreshAtReceipt = quality, &fresh
 	evidence.TimingClass, _ = receiptClass(m, received, st.Policy)
 	evidence.ClockTolerance = st.Policy.Clock
-	evidence.UsefulBefore, evidence.DistanceBefore = trackEffect(st, m.Device)
+	evidence.UsefulBefore, evidence.DistanceBefore = trackEffect(*st, m.Device)
 	d := st.Devices[m.Device]
 	if d == nil {
 		authority := st.Authority
@@ -271,122 +461,79 @@ func (s *Store) ingestAt(b []byte, ingress time.Time) (Ack, error) {
 		d = &Device{ID: m.Device, Snapshot: m, Desired: Config{Authority: &authority}, Color: palette[index%len(palette)], Dash: styles[(index/len(palette))%len(styles)]}
 		st.Devices[m.Device] = d
 	}
+	var reported *ReportedSession
+	captureAge := instant(received).Sub(instant(m.Captured)).Seconds()
+	if o := m.Observation; o != nil && role == "live" && captureAge >= -liveClockTolerance(st.Policy) && captureAge <= 30 && instant(received).Sub(instant(m.Fix.Observed)).Seconds() >= -liveClockTolerance(st.Policy) && instant(received).Sub(instant(m.Fix.Observed)).Seconds() <= 30 {
+		reported = &ReportedSession{o.Session, o.SessionStart, m.Captured, m.Sequence}
+	}
+	if q := m.Progress; q != nil && captureAge >= -liveClockTolerance(st.Policy) && captureAge <= float64(2*m.Config.Effective+5) {
+		reported = &ReportedSession{q.Session, q.SessionStart, q.Measured, m.Sequence}
+	}
+	if reported != nil && (d.Session == nil || reported.Reported > d.Session.Reported || (reported.Reported == d.Session.Reported && reported.Envelope > d.Session.Envelope)) {
+		d.Session = reported
+	}
+	if m.Progress != nil && (d.PhoneQueue == nil || m.Progress.Measured > d.PhoneQueue.Measured) {
+		q := *m.Progress
+		d.PhoneQueue = &q
+	}
 	if received > d.Contact {
 		d.Contact = received
 	}
-	if less(d.Snapshot, m, false) {
+	if !futureCapture(m, received, st.Policy) && (futureCapture(d.Snapshot, received, st.Policy) || less(d.Snapshot, m, false)) {
 		d.Snapshot = m
 	}
-	if m.Fix != nil && (d.Location == nil || less(*d.Location, m, true)) {
+	if m.Fix != nil && !futureCandidate(m, received, st.Policy) && (d.Location == nil || futureCandidate(*d.Location, received, st.Policy) || lessLive(*d.Location, m)) {
 		copy := m
 		d.Location = &copy
+		d.LocationReceived = first
 	}
+	if r := st.Recording; r != nil && r.Active && r.Mode == "session_beginning" {
+		w := &r.Windows[len(r.Windows)-1]
+		if w.Sessions == nil {
+			w.Sessions = map[string]string{}
+		}
+		session, start := "", ""
+		if d.Session != nil {
+			session, start = d.Session.ID, d.Session.Start
+		}
+		if session != "" && w.Sessions[m.Device] == "" {
+			w.Sessions[m.Device] = session
+			if w.Reason == "start" && instant(start).Before(w.Start) {
+				w.Start = instant(start)
+			}
+		}
+	}
+	refreshLive(st)
 	if result == "stored" && m.Type == "sos" {
 		st.Alerts = append(st.Alerts, alertFrom(m, first))
 	}
-	if result == "stored" {
-		if err = rebuild(tx, &st); err != nil {
+	if result == "stored" && m.Type == "location" {
+		if _, err = tx.Exec(`INSERT INTO projection_work(device,earliest) VALUES(?,?) ON CONFLICT(device) DO UPDATE SET earliest=MIN(earliest,excluded.earliest),generation=generation+1`, m.Device, m.Fix.Observed); err != nil {
 			return Ack{}, err
 		}
+		st.RawVersion++
+		st.ProjectionPending = true
 	}
+	evidence.ProjectionPending = st.ProjectionPending
+	evidence.ProjectionRawVersion = st.RawVersion
 	evidence.LiveAfter = liveObserved(d)
-	evidence.UsefulAfter, evidence.DistanceAfter = trackEffect(st, m.Device)
+	evidence.UsefulAfter, evidence.DistanceAfter = trackEffect(*st, m.Device)
 	offered := d.Desired
 	evidence.Offered = &offered
 	if err = writeEvidence(tx, evidence); err != nil {
 		return Ack{}, err
 	}
-	if err = saveState(tx, st); err != nil {
-		return Ack{}, err
-	}
-	if err = tx.Commit(); err != nil {
-		return Ack{}, err
-	}
 	return Ack{1, m.Device, m.ID, m.Sequence, result, first, d.Desired}, nil
 }
 
-// Replacing the complete current derivation inside the ingestion transaction is
-// intentionally simple. Closed windows remain eligible; retired windows never do.
-func rebuild(tx *sql.Tx, st *State) error {
-	st.Points = []Point{}
-	st.Decisions = []Decision{}
-	for _, d := range st.Devices {
-		d.Total = 0
-	}
-	rows, err := tx.Query("SELECT known,received FROM raw")
-	if err != nil {
-		return err
-	}
-	raw := []Candidate{}
-	for rows.Next() {
-		var b, r string
-		if err = rows.Scan(&b, &r); err != nil {
-			rows.Close()
-			return err
-		}
-		var m Message
-		if err = json.Unmarshal([]byte(b), &m); err != nil {
-			rows.Close()
-			return err
-		}
-		if m.Type == "location" {
-			raw = append(raw, Candidate{m, r})
-		}
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return err
-	}
-	// Live validity is separate from recording membership. A latest measured jump
-	// remains visible as telemetry but must not be labelled usable GNSS.
-	for device, d := range st.Devices {
-		if d.Location == nil {
-			continue
-		}
-		d.LocationReason = Quality(*d.Location, st.Policy)
-		c := []Candidate{}
-		for _, r := range raw {
-			if r.Device == device {
-				c = append(c, r)
-			}
-		}
-		_, decisions := Derive(c, st.Policy, "live", 0)
-		for _, decision := range decisions {
-			if decision.Message == d.Location.ID && decision.Reason != "accepted" && decision.Reason != "below_movement_threshold" && decision.Reason != "same_observation_time" {
-				d.LocationReason = decision.Reason
-			}
-		}
-	}
-	if st.Recording == nil {
-		return nil
-	}
-	ids := []string{}
-	for k := range st.Devices {
-		ids = append(ids, k)
-	}
-	sort.Strings(ids)
-	for _, w := range st.Recording.Windows {
-		for _, device := range ids {
-			c := []Candidate{}
-			for _, r := range raw {
-				t := instant(r.Fix.Observed)
-				if r.Device == device && !t.Before(w.Start) && (w.Stop == nil || t.Before(*w.Stop)) {
-					c = append(c, r)
-				}
-			}
-			points, decisions := Derive(c, w.Policy, w.ID, st.Devices[device].Total)
-			if len(points) > 0 {
-				points[0].Reason = w.Reason + ":" + points[0].Reason
-				st.Devices[device].Total = points[len(points)-1].Distance
-			}
-			st.Points = append(st.Points, points...)
-			st.Decisions = append(st.Decisions, decisions...)
-		}
-	}
-	return nil
-}
 func (s *Store) change(kind, device string, fn func(*State, time.Time, *sql.Tx) error) error {
+	if kind == "policy_changed" || strings.HasPrefix(kind, "recording_") {
+		s.projectionMu.Lock()
+		if e := s.processProjectionLocked(); e != nil {
+			s.recordProjectionFailure(e)
+		}
+		s.projectionMu.Unlock()
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
@@ -403,8 +550,14 @@ func (s *Store) change(kind, device string, fn func(*State, time.Time, *sql.Tx) 
 	if err = fn(&st, now, tx); err != nil {
 		return err
 	}
-	if err = rebuild(tx, &st); err != nil {
-		return err
+	if kind == "policy_changed" || strings.HasPrefix(kind, "recording_") {
+		st.ProjectionVersion++
+		st.ProjectionPending = true
+		for id := range st.Devices {
+			if _, err = tx.Exec(`INSERT INTO projection_work(device,earliest) VALUES(?, '') ON CONFLICT(device) DO UPDATE SET earliest='',generation=generation+1`, id); err != nil {
+				return err
+			}
+		}
 	}
 	e := Evidence{At: now.Format(wireTime), Kind: kind, Device: device, Before: before, After: recordingEvidence(st)}
 	if kind == "override_requested" {
@@ -419,7 +572,10 @@ func (s *Store) change(kind, device string, fn func(*State, time.Time, *sql.Tx) 
 	if err = saveState(tx, st); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err = tx.Commit(); err == nil {
+		s.notifyProjection()
+	}
+	return err
 }
 func (s *Store) AcknowledgeSOS(device, event string) error {
 	if !uuid.MatchString(device) || !uuid.MatchString(event) {
@@ -432,7 +588,7 @@ func (s *Store) AcknowledgeSOS(device, event string) error {
 		return err
 	}
 	defer tx.Rollback()
-	st, err := loadState(tx)
+	st, err := loadReceiptState(tx)
 	if err != nil {
 		return err
 	}
@@ -450,7 +606,7 @@ func (s *Store) AcknowledgeSOS(device, event string) error {
 			SOSRef: sosRef(a.Event), SOSAcknowledged: &at, FirstReceived: a.Received}); err != nil {
 			return err
 		}
-		if err = saveState(tx, st); err != nil {
+		if err = saveReceiptState(tx, st); err != nil {
 			return err
 		}
 		return tx.Commit()
@@ -458,12 +614,22 @@ func (s *Store) AcknowledgeSOS(device, event string) error {
 	return fmt.Errorf("unknown SOS device/event pair")
 }
 
-func (s *Store) Action(action string) error {
+func (s *Store) Action(action string) error { return s.ActionMode(action, "from_now") }
+func (s *Store) ActionMode(action, mode string) error {
 	return s.change("recording_"+action, "", func(st *State, now time.Time, tx *sql.Tx) error {
 		r := st.Recording
 		open := func(reason string) {
 			r.Active = true
-			r.Windows = append(r.Windows, Window{ID: id(), Start: now, Policy: st.Policy, Reason: reason})
+			w := Window{ID: id(), Start: now, Policy: st.Policy, Reason: reason}
+			if r.Mode == "session_beginning" {
+				w.Sessions = map[string]string{}
+				for device, d := range st.Devices {
+					if d.Session != nil {
+						w.Sessions[device] = d.Session.ID
+					}
+				}
+			}
+			r.Windows = append(r.Windows, w)
 		}
 		switch action {
 		case "start":
@@ -473,9 +639,29 @@ func (s *Store) Action(action string) error {
 				}
 				return ErrAction
 			}
-			r = &Recording{ID: id()}
+			if mode != "from_now" && mode != "session_beginning" {
+				return fmt.Errorf("unknown recording mode")
+			}
+			r = &Recording{ID: id(), Mode: mode}
 			st.Recording = r
 			open("start")
+			if mode == "session_beginning" {
+				w := &r.Windows[len(r.Windows)-1]
+				w.Sessions = map[string]string{}
+				for device, d := range st.Devices {
+					if d.Session != nil {
+						w.Sessions[device] = d.Session.ID
+						t := instant(d.Session.Start)
+						if t.Before(w.Start) {
+							w.Start = t
+						}
+					}
+				}
+
+				if len(w.Sessions) == 0 {
+					return fmt.Errorf("no reported Android tracking session; wait for session metadata")
+				}
+			}
 		case "stop":
 			if r == nil {
 				return ErrAction
@@ -499,6 +685,11 @@ func (s *Store) Action(action string) error {
 				}
 			}
 			st.Recording = nil
+			st.Points = []Point{}
+			st.Decisions = []Decision{}
+			for _, d := range st.Devices {
+				d.Total = 0
+			}
 		default:
 			return ErrAction
 		}
@@ -512,9 +703,20 @@ func (s *Store) SetPolicy(p Policy) error {
 	return s.change("policy_changed", "", func(st *State, now time.Time, _ *sql.Tx) error {
 		p.Revision = st.Policy.Revision + 1
 		st.Policy = p
-		if r := st.Recording; r != nil && r.Active {
-			r.Windows[len(r.Windows)-1].Stop = &now
-			r.Windows = append(r.Windows, Window{ID: id(), Start: now, Policy: p, Reason: "policy_change"})
+		// An explicit quality edit reprojects the whole current recording, including
+		// stopped/resumed and legacy policy windows. Lifecycle boundaries remain.
+		if r := st.Recording; r != nil {
+			windows := []Window{}
+			for _, w := range r.Windows {
+				w.Policy = p
+				// Old policy-only boundaries are not recording lifecycle breaks.
+				if w.Reason == "policy_change" && len(windows) > 0 && windows[len(windows)-1].Stop != nil && windows[len(windows)-1].Stop.Equal(w.Start) {
+					windows[len(windows)-1].Stop = w.Stop
+				} else {
+					windows = append(windows, w)
+				}
+			}
+			r.Windows = windows
 		}
 		return nil
 	})
@@ -549,6 +751,7 @@ func (s *Store) Snapshot(dot int) (State, error) {
 		return st, err
 	}
 	now := s.Now()
+	refreshLive(&st)
 	for _, d := range st.Devices {
 		d.Converged = configEqual(d.Desired, d.Snapshot.Config.Config)
 		cadence := float64(d.Snapshot.Config.Effective)
@@ -566,13 +769,63 @@ func (s *Store) Snapshot(dot int) (State, error) {
 			d.LocationAge = &locationAge
 			if d.Snapshot.Health.GNSS == "fix" {
 				d.GNSSCondition = d.LocationReason
-				if locationAge > st.Policy.Age {
+				if locationAge > liveAgeLimit(st.Policy) {
 					d.GNSSCondition = "stale"
 				}
-				if instant(d.Location.Captured).After(now.Add(time.Duration(st.Policy.Clock * float64(time.Second)))) {
+				if instant(d.Location.Captured).After(now.Add(time.Duration(liveClockTolerance(st.Policy)*float64(time.Second)))) || instant(d.Location.Fix.Observed).After(now.Add(time.Duration(liveClockTolerance(st.Policy)*float64(time.Second)))) {
 					d.GNSSCondition = "clock_anomaly"
 				}
 			}
+		}
+		d.CurrentPosition = d.Location != nil && d.GNSSCondition == "valid" && d.LocationAge != nil && *d.LocationAge <= liveAgeLimit(st.Policy)
+	}
+	if err := populateHistory(tx, &st, now); err != nil {
+		return st, err
+	}
+	if err := populateViews(tx, &st); err != nil {
+		return st, err
+	}
+	// Use the same origin for qualified, unfiltered, provisional and live layers.
+	st.Points = Present(st.Points, dot)
+	var origin *Fix
+	var firstPoint *Point
+	all := append(append(append([]Point{}, st.Points...), st.RawPoints...), st.Provisional...)
+	for i := range all {
+		if firstPoint == nil || originLess(all[i], *firstPoint) {
+			firstPoint = &all[i]
+		}
+	}
+	if firstPoint != nil {
+		origin = &firstPoint.Fix
+	}
+	ids := []string{}
+	for id := range st.Devices {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		d := st.Devices[id]
+		if origin == nil && d.CurrentPosition {
+			origin = d.Location.Fix
+		}
+	}
+	for _, d := range st.Devices {
+		if origin != nil && d.CurrentPosition {
+			x, y := Project(*d.Location.Fix, *origin)
+			d.LiveX, d.LiveY = &x, &y
+		}
+	}
+	if origin != nil {
+		for i := range st.Points {
+			st.Points[i].X, st.Points[i].Y = Project(st.Points[i].Fix, *origin)
+		}
+	}
+	if origin != nil {
+		for i := range st.RawPoints {
+			st.RawPoints[i].X, st.RawPoints[i].Y = Project(st.RawPoints[i].Fix, *origin)
+		}
+		for i := range st.Provisional {
+			st.Provisional[i].X, st.Provisional[i].Y = Project(st.Provisional[i].Fix, *origin)
 		}
 	}
 	report, err := s.fieldReport(tx)
@@ -582,7 +835,6 @@ func (s *Store) Snapshot(dot int) (State, error) {
 	for id, d := range st.Devices {
 		d.Evidence = report.Devices[id]
 	}
-	st.Points = Present(st.Points, dot)
 	return st, nil
 }
 func mathMax(a, b float64) float64 {
@@ -590,4 +842,50 @@ func mathMax(a, b float64) float64 {
 		return a
 	}
 	return b
+}
+
+func liveAgeLimit(p Policy) float64 {
+	if p.on("maximum_fix_age_s") && p.Age < 30 {
+		return p.Age
+	}
+	return 30 // Historical policy cannot manufacture current GNSS freshness.
+}
+
+func liveClockTolerance(p Policy) float64 {
+	if p.on("clock_tolerance_s") && p.Clock < 5 {
+		return p.Clock
+	}
+	return 5 // A historical switch cannot make future measurements current.
+}
+
+// Live source integrity is independent of historical movement/segment decisions.
+func refreshLive(st *State) {
+	for _, d := range st.Devices {
+		d.CurrentPosition = false
+		d.LiveX, d.LiveY = nil, nil
+		if d.Location == nil {
+			continue
+		}
+		d.LocationReason = Quality(*d.Location, st.Policy)
+		if st.Policy.on("clock_tolerance_s") && d.LocationReceived != "" && instant(d.Location.Captured).After(instant(d.LocationReceived).Add(time.Duration(st.Policy.Clock*float64(time.Second)))) {
+			d.LocationReason = "future_capture"
+		}
+	}
+}
+
+func writeObservationConflict(tx *sql.Tx, st *State, m Message, received, role, code, existing string) error {
+	e := receiptEvidence(m, received, "", "conflict", st.Devices[m.Device])
+	e.DeliveryRole = role
+	e.FailureCode = code
+	e.ConflictingMessage = existing
+	return writeEvidence(tx, e)
+}
+
+// Retain clock-anomalous raw data without allowing its timestamp to pin the
+// operational snapshot/marker ahead of later genuinely current observations.
+func futureCapture(m Message, received string, p Policy) bool {
+	return instant(m.Captured).Sub(instant(received)).Seconds() > liveClockTolerance(p)
+}
+func futureCandidate(m Message, received string, p Policy) bool {
+	return futureCapture(m, received, p) || (m.Fix != nil && instant(m.Fix.Observed).Sub(instant(received)).Seconds() > liveClockTolerance(p))
 }

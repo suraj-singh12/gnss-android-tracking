@@ -1,16 +1,20 @@
 # Issue #2 reliability self-review
 
-Source review against the frozen Protocol v1 and Issue #2 checklist. These are
+The Issue #2 matrix below records its original baseline. The dated Issue #4
+amendment supersedes snapshot-only history, the ACK eligibility gate and the
+original prohibition on session/batch metadata. Current behavior is documented in
+[architecture](../docs/architecture.md), [Android usage](README.md) and
+[device acceptance](DEVICE-ACCEPTANCE.md). These are
 implementation/automated-test findings, not claims of physical acceptance.
 
 | Check | Finding/evidence |
 | --- | --- |
 | A: Screen off | User-started location foreground service owns GPS callbacks/reporting; ongoing notification; hardware/OEM acceptance remains required. |
-| B: Scheduling | No WorkManager, alarms or boot auto-start. Issue #4 adds a service-owned, timeout-bounded partial wake lock renewed only during active tracking. Reporting and one sender run under the same service. |
+| B: Scheduling | No WorkManager, alarms or boot auto-start. Issue #4 adds a service-owned, timeout-bounded partial wake lock renewed only during active tracking. Reporting runs in the service; the single app-owned sender is shared by service and visible SOS delivery. |
 | C: Save first | Room transaction validates/serializes, allocates sequence and inserts outbox. Rollback-on-insert-failure test verifies both writes roll back; transport receives only committed rows. |
 | D: Sequence | Single installation row, transactional allocation, wire bound check, concurrent allocation/reopen tests; reset creates new UUID. Cloud/device transfer excluded to prevent restoring an old sequence. |
 | E: Retry identity | Sender posts stored JSON; drop-response/duplicate test verifies unchanged payload, ID, sequence, timestamp and config. |
-| F: Current priority | Reserved SOS first, newest current above delivered boundary, oldest eligible backlog; new reports interrupt drain. Recovery saves current if stale. Connectivity restoration clears persisted retry deadlines only for pending, non-quarantined rows under the sender mutex before priority selection; fresh saved current is reused. Normal backoff and permanent pauses remain intact. One HTTP call has a total 10-second deadline. |
+| F: Current priority | Reserved SOS first, fresh newest original observation, oldest eligible historical block, routine status. Live attempts grant history an opportunity; no unrelated ACK eligibility gate. Connectivity restoration clears persisted retry deadlines only for pending, non-quarantined rows under the sender mutex before priority selection; fresh saved current is reused. Normal backoff and permanent pauses remain intact. One HTTP call has a total 6-second deadline and 3-second connection timeout. |
 | G: Local live state | Only native location callbacks update LatestLocation, ordered by monotonic observation time. ACK/backlog never update local GNSS. |
 | H: ACK safety | Strict parser rejects duplicate keys, malformed receipt, wrong identity/version/sequence/result. Repository validates identity again. Only valid HTTP 200 receipt clears pending. |
 | I: Config versions | New applies transactionally; old ignored; equal conflict visible; invalid config preserves prior state. Override/local fallback and restart tests cover this. |
@@ -34,9 +38,10 @@ process/OEM validation. No device/emulator is attached in the cloud environment.
 
 ## Issue #5 SOS self-review
 
-This independent branch starts at the frozen Issue #4 commit
-`8fbcabbc2443aae75178a50160ee1248830611dd`; PR #11 and its temporary build/field
-asset branch remain untouched and unmerged. No Issue #5 APK was installed or deployed.
+The original SOS implementation started at Issue #4 commit
+`8fbcabbc2443aae75178a50160ee1248830611dd`. It is now reconciled on the final
+PR #11 native-resolution implementation, using one shared app-owned Sender and
+Repository. Both PRs remain open and unmerged. No test APK installation is claimed.
 The original GNSS stall remains unresolved. The final Issue #5 SHA and validation
 results are reported with the Issue #5 PR; they are not a physical acceptance claim.
 
@@ -55,7 +60,8 @@ results are reported with the Issue #5 PR; they are not a physical acceptance cl
 | Physical scope | Volume adapter is opt-in and foreground-only; three short release pairs, holds/repeats/mixed/canceled events reset, normal volume still works. Locked/off screen and other foreground apps are unsupported. Hardware keys, GNSS stall, actual Wi-Fi routing/Doze/OEM recovery, document picker, speaker audibility and target-OS binaries need physical acceptance. |
 
 The canonical [device acceptance](DEVICE-ACCEPTANCE.md) has the minimum separate SOS
-field run. Do not perform it by replacing the frozen Issue #4 physical-test APK.
+field run. Use the matched combined Issue #4 + #5 artifacts; export/drain existing data
+before replacing an older acceptance build.
 Protocol v1 fixtures retain their original envelopes and ACK-piggyback configuration.
 The test-only browser/harness additions introduce no field runtime dependencies.
 
@@ -104,4 +110,4 @@ freshness during the unresolved Issue #4 stall, OS service/process recovery, spe
 audibility, document-picker export and target-OS execution remain physical-only.
 Locked/off-screen physical-key activation is unsupported, and force-stop/reboot/OEM
 kill offer no automatic transmission guarantee. Follow the separate eight-step
-[SOS device acceptance](DEVICE-ACCEPTANCE.md#issue-5-sos-acceptance--separate-from-issue-4-physical-testing).
+[SOS device acceptance, Issue #5 section](DEVICE-ACCEPTANCE.md).

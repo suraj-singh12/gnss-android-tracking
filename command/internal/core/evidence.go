@@ -44,39 +44,47 @@ func revisionFromSettings(settings []debug.BuildSetting) Revision {
 func sosRef(event string) string { h := sha256.Sum256([]byte(event)); return fmt.Sprintf("%x", h[:8]) }
 
 type Evidence struct {
-	SOSRef              string             `json:"sos_event_ref,omitempty"`
-	SOSTriggered        string             `json:"sos_triggered_at,omitempty"`
-	SOSAcknowledged     *string            `json:"sos_operator_acknowledged_at,omitempty"`
-	TimingClass         string             `json:"receipt_timing_class,omitempty"`
-	ClockTolerance      float64            `json:"receipt_clock_tolerance_s,omitempty"`
-	UsefulBefore        int                `json:"useful_points_before"`
-	UsefulAfter         int                `json:"useful_points_after"`
-	DistanceBefore      float64            `json:"distance_before_m"`
-	DistanceAfter       float64            `json:"distance_after_m"`
-	ConflictingMessage  string             `json:"existing_conflicting_message_id,omitempty"`
-	ConflictingSequence int64              `json:"existing_conflicting_sequence,omitempty"`
-	Ordinal             int64              `json:"ordinal"`
-	At                  string             `json:"at"`
-	Kind                string             `json:"kind"`
-	Device              string             `json:"device_id,omitempty"`
-	Message             string             `json:"message_id,omitempty"`
-	Sequence            int64              `json:"sequence,omitempty"`
-	Captured            string             `json:"captured_at,omitempty"`
-	Observed            string             `json:"observed_at,omitempty"`
-	FirstReceived       string             `json:"first_received_at,omitempty"`
-	Type                string             `json:"message_type,omitempty"`
-	GNSSStatus          string             `json:"gnss_status,omitempty"`
-	FixAgeAtCapture     *int64             `json:"fix_age_at_capture_ms,omitempty"`
-	FixPresent          bool               `json:"fix_present"`
-	FreshAtCapture      bool               `json:"fresh_at_capture"`
-	Effective           int                `json:"effective_reporting_interval_s,omitempty"`
-	Reported            *ConfigState       `json:"reported_config,omitempty"`
-	Offered             *Config            `json:"ack_config_offered,omitempty"`
-	LiveBefore          string             `json:"live_observed_before,omitempty"`
-	LiveAfter           string             `json:"live_observed_after,omitempty"`
-	Revision            *Revision          `json:"revision,omitempty"`
-	Before              *RecordingEvidence `json:"recording_before,omitempty"`
-	After               *RecordingEvidence `json:"recording_after,omitempty"`
+	SOSRef               string             `json:"sos_event_ref,omitempty"`
+	SOSTriggered         string             `json:"sos_triggered_at,omitempty"`
+	SOSAcknowledged      *string            `json:"sos_operator_acknowledged_at,omitempty"`
+	FailureCode          string             `json:"failure_code,omitempty"`
+	BatchEntryIndex      *int               `json:"batch_entry_index,omitempty"`
+	ProjectionPending    bool               `json:"projection_pending"`
+	ProjectionRawVersion int64              `json:"projection_raw_version,omitempty"`
+	DeliveryRole         string             `json:"delivery_role,omitempty"`
+	ReportReference      string             `json:"report_reference,omitempty"`
+	FreshAtReceipt       *bool              `json:"fresh_gnss_at_receipt,omitempty"`
+	SourceQuality        string             `json:"source_quality,omitempty"`
+	TimingClass          string             `json:"receipt_timing_class,omitempty"`
+	ClockTolerance       float64            `json:"receipt_clock_tolerance_s,omitempty"`
+	UsefulBefore         int                `json:"useful_points_before"`
+	UsefulAfter          int                `json:"useful_points_after"`
+	DistanceBefore       float64            `json:"distance_before_m"`
+	DistanceAfter        float64            `json:"distance_after_m"`
+	ConflictingMessage   string             `json:"existing_conflicting_message_id,omitempty"`
+	ConflictingSequence  int64              `json:"existing_conflicting_sequence,omitempty"`
+	Ordinal              int64              `json:"ordinal"`
+	At                   string             `json:"at"`
+	Kind                 string             `json:"kind"`
+	Device               string             `json:"device_id,omitempty"`
+	Message              string             `json:"message_id,omitempty"`
+	Sequence             int64              `json:"sequence,omitempty"`
+	Captured             string             `json:"captured_at,omitempty"`
+	Observed             string             `json:"observed_at,omitempty"`
+	FirstReceived        string             `json:"first_received_at,omitempty"`
+	Type                 string             `json:"message_type,omitempty"`
+	GNSSStatus           string             `json:"gnss_status,omitempty"`
+	FixAgeAtCapture      *int64             `json:"fix_age_at_capture_ms,omitempty"`
+	FixPresent           bool               `json:"fix_present"`
+	FreshAtCapture       bool               `json:"fresh_at_capture"`
+	Effective            int                `json:"effective_reporting_interval_s,omitempty"`
+	Reported             *ConfigState       `json:"reported_config,omitempty"`
+	Offered              *Config            `json:"ack_config_offered,omitempty"`
+	LiveBefore           string             `json:"live_observed_before,omitempty"`
+	LiveAfter            string             `json:"live_observed_after,omitempty"`
+	Revision             *Revision          `json:"revision,omitempty"`
+	Before               *RecordingEvidence `json:"recording_before,omitempty"`
+	After                *RecordingEvidence `json:"recording_after,omitempty"`
 }
 type PointEvidence struct {
 	Device   string  `json:"device_id"`
@@ -95,10 +103,11 @@ type WindowParticipation struct {
 	EndDistance   float64 `json:"last_cumulative_m"`
 }
 type RecordingEvidence struct {
-	Participation []WindowParticipation `json:"device_window_participation"`
-	Recording     *Recording            `json:"recording"`
-	Points        []PointEvidence       `json:"accepted_points"`
-	Distances     map[string]float64    `json:"distance_m"`
+	ProjectionPending bool                  `json:"projection_pending"`
+	Participation     []WindowParticipation `json:"device_window_participation"`
+	Recording         *Recording            `json:"recording"`
+	Points            []PointEvidence       `json:"accepted_points"`
+	Distances         map[string]float64    `json:"distance_m"`
 }
 
 func recordingEvidence(st State) *RecordingEvidence {
@@ -106,7 +115,7 @@ func recordingEvidence(st State) *RecordingEvidence {
 	b, _ := json.Marshal(st.Recording)
 	var r *Recording
 	_ = json.Unmarshal(b, &r)
-	e := &RecordingEvidence{Recording: r, Points: []PointEvidence{}, Distances: map[string]float64{}}
+	e := &RecordingEvidence{ProjectionPending: st.ProjectionPending, Recording: r, Points: []PointEvidence{}, Distances: map[string]float64{}}
 	for _, p := range st.Points {
 		e.Points = append(e.Points, PointEvidence{p.Device, p.Message, p.Fix.Observed, p.Segment, p.Distance})
 	}
@@ -151,6 +160,9 @@ func writeEvidence(tx *sql.Tx, e Evidence) error {
 }
 func trackEffect(st State, device string) (int, float64) {
 	n := 0
+	if st.Points == nil && st.Devices[device] != nil {
+		n = st.Devices[device].UsefulPoints
+	}
 	for _, p := range st.Points {
 		if p.Device == device {
 			n++
@@ -170,11 +182,12 @@ func liveObserved(d *Device) string {
 }
 func receiptEvidence(m Message, at, first, result string, d *Device) Evidence {
 	c := m.Config
-	e := Evidence{GNSSStatus: m.Health.GNSS, At: at, Kind: result, Device: m.Device, Message: m.ID, Sequence: m.Sequence, Captured: m.Captured, FirstReceived: first, Type: m.Type, Effective: m.Config.Effective, Reported: &c, FixPresent: m.Fix != nil, LiveBefore: liveObserved(d)}
+	e := Evidence{ReportReference: fmt.Sprintf("%x", sha256.Sum256([]byte(m.ID))), GNSSStatus: m.Health.GNSS, At: at, Kind: result, Device: m.Device, Message: m.ID, Sequence: m.Sequence, Captured: m.Captured, FirstReceived: first, Type: m.Type, Effective: m.Config.Effective, Reported: &c, FixPresent: m.Fix != nil, LiveBefore: liveObserved(d)}
 	if m.SOS != nil {
 		e.SOSRef = sosRef(m.SOS.EventID)
 		e.SOSTriggered = m.SOS.Triggered
 	}
+
 	if m.Fix != nil {
 		age := m.Fix.Age
 		e.FixAgeAtCapture = &age
@@ -184,19 +197,40 @@ func receiptEvidence(m Message, at, first, result string, d *Device) Evidence {
 	return e
 }
 
+// Freeze source validity at receipt. Later quality edits must not manufacture
+// evidence that the original recovery supplied a usable current position.
+func receiptQuality(m Message, at string, p Policy) (string, bool) {
+	quality := Quality(m, p)
+	if m.Fix == nil {
+		return quality, false
+	}
+	age := instant(at).Sub(instant(m.Fix.Observed)).Seconds()
+	fresh := m.Health.GNSS == "fix" && quality == "valid" && float64(m.Fix.Age)/1000 <= liveAgeLimit(p) && age >= -liveClockTolerance(p) && age <= liveAgeLimit(p) && instant(m.Captured).Sub(instant(at)).Seconds() <= liveClockTolerance(p)
+	return quality, fresh
+}
+
 type Receipt struct {
+	NonAdvancingHistory bool `json:"nonadvancing_history"`
 	Evidence
 	Class      string  `json:"receipt_class"`
 	CaptureAge float64 `json:"capture_age_at_receipt_s"`
 }
 type Counters struct {
-	Reports    int      `json:"reports_received"`
-	RawFixes   int      `json:"raw_fixes"`
-	Useful     int      `json:"useful_points"`
-	Duplicates int      `json:"identical_duplicate_retries"`
-	Conflicts  int      `json:"identity_conflicts"`
-	Expected   int      `json:"expected_interval_s"`
-	Observed   *float64 `json:"median_recent_unique_receipt_gap_s"`
+	DelayedLocations  int            `json:"delayed_location_reports"`
+	DelayedRoutine    int            `json:"delayed_routine_reports"`
+	LocationReports   int            `json:"location_reports"`
+	RoutineReports    int            `json:"routine_reports"`
+	SOSReports        int            `json:"sos_reports"`
+	DelayedReports    int            `json:"delayed_reports"`
+	LastReceipt       string         `json:"last_unique_receipt_at,omitempty"`
+	ProjectionReasons map[string]int `json:"projection_reasons"`
+	Reports           int            `json:"reports_received"`
+	RawFixes          int            `json:"raw_fixes"`
+	Useful            int            `json:"useful_points"`
+	Duplicates        int            `json:"identical_duplicate_retries"`
+	Conflicts         int            `json:"identity_conflicts"`
+	Expected          int            `json:"expected_interval_s"`
+	Observed          *float64       `json:"median_recent_unique_receipt_gap_s"`
 }
 type Gap struct {
 	GapBeginsAfter string   `json:"gap_begins_after"`
@@ -219,16 +253,22 @@ type Verdict struct {
 	Evidence any    `json:"evidence,omitempty"`
 }
 type FieldReport struct {
-	Schema    int                  `json:"schema_version"`
-	Generated string               `json:"generated_at"`
-	Revision  Revision             `json:"build"`
-	Coverage  string               `json:"coverage"`
-	Devices   map[string]*Counters `json:"devices"`
-	Receipts  []Receipt            `json:"receipt_chronology"`
-	Events    []Evidence           `json:"events"`
-	Gaps      []Gap                `json:"receipt_gaps"`
-	Verdicts  []Verdict            `json:"assessments"`
-	Recording *RecordingEvidence   `json:"current_recording"`
+	HistorySessions     map[string]map[string]*HistoryState `json:"history_sessions"`
+	History             map[string]*HistoryState            `json:"history"`
+	ProjectionPending   bool                                `json:"projection_pending"`
+	ProjectionError     string                              `json:"projection_error,omitempty"`
+	ProjectionDecisions []Decision                          `json:"projection_decisions"`
+	Policy              Policy                              `json:"current_policy"`
+	Schema              int                                 `json:"schema_version"`
+	Generated           string                              `json:"generated_at"`
+	Revision            Revision                            `json:"build"`
+	Coverage            string                              `json:"coverage"`
+	Devices             map[string]*Counters                `json:"devices"`
+	Receipts            []Receipt                           `json:"receipt_chronology"`
+	Events              []Evidence                          `json:"events"`
+	Gaps                []Gap                               `json:"receipt_gaps"`
+	Verdicts            []Verdict                           `json:"assessments"`
+	Recording           *RecordingEvidence                  `json:"current_recording"`
 }
 
 func cadenceConfigEqual(a, b Config) bool {
@@ -258,6 +298,7 @@ func receiptClass(m Message, at string, p Policy) (string, float64) {
 	return "current_like", age
 }
 func (s *Store) FieldReport() (FieldReport, error) {
+	_ = s.processProjection()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
@@ -272,11 +313,25 @@ func (s *Store) fieldReport(tx *sql.Tx) (FieldReport, error) {
 	if err != nil {
 		return FieldReport{}, err
 	}
-	r := FieldReport{Schema: 1, Generated: s.Now().UTC().Format(wireTime), Revision: BuildRevision(), Coverage: "Unique counts include all retained raw messages. Retry, operation and restart evidence begins when this recorder was installed. ACK offered does not prove phone receipt. Command does not know phone queue depth or physical radio state.", Devices: map[string]*Counters{}, Receipts: []Receipt{}, Events: []Evidence{}, Gaps: []Gap{}, Verdicts: []Verdict{}, Recording: recordingEvidence(st)}
-	observations := map[string]map[string]bool{}
+	r := FieldReport{Schema: 2, ProjectionDecisions: st.Decisions, Policy: st.Policy, Generated: s.Now().UTC().Format(wireTime), Revision: BuildRevision(), Coverage: "Unique counts include all retained raw messages. Retry, operation and restart evidence begins when this recorder was installed. ACK offered does not prove phone receipt. Phone queue figures are explicitly timestamped last reports, not inferred current depth; physical radio state is unknown.", Devices: map[string]*Counters{}, Receipts: []Receipt{}, Events: []Evidence{}, Gaps: []Gap{}, Verdicts: []Verdict{}, Recording: recordingEvidence(st)}
+	r.ProjectionPending, r.ProjectionError = st.ProjectionPending, st.ProjectionError
+	if err = populateHistory(tx, &st, s.Now()); err != nil {
+		return r, err
+	}
+	r.History = map[string]*HistoryState{}
+	r.HistorySessions = map[string]map[string]*HistoryState{}
 	for id, d := range st.Devices {
-		r.Devices[id] = &Counters{Expected: d.Snapshot.Config.Effective}
+		r.History[id] = d.History
+		r.HistorySessions[id] = d.HistorySessions
+	}
+	observations := map[string]map[string]bool{}
+	nativeTimes := map[string]map[string]bool{}
+	legacyTimes := map[string]map[string]bool{}
+	for id, d := range st.Devices {
+		r.Devices[id] = &Counters{Expected: d.Snapshot.Config.Effective, ProjectionReasons: map[string]int{}}
 		observations[id] = map[string]bool{}
+		nativeTimes[id] = map[string]bool{}
+		legacyTimes[id] = map[string]bool{}
 	}
 	rows, err := tx.Query("SELECT known,received FROM raw ORDER BY received,device,sequence")
 	if err != nil {
@@ -296,11 +351,36 @@ func (s *Store) fieldReport(tx *sql.Tx) (FieldReport, error) {
 		}
 		c := r.Devices[m.Device]
 		c.Reports++
-		if m.Fix != nil {
-			observations[m.Device][m.Fix.Observed] = true
+		switch m.Type {
+		case "location":
+			c.LocationReports++
+		case "sos":
+			c.SOSReports++
+		default:
+			c.RoutineReports++
 		}
+		c.LastReceipt = at
+		if m.Fix != nil {
+			if m.Observation != nil {
+				observations[m.Device][m.Observation.Session+"/"+m.Observation.ID] = true
+				nativeTimes[m.Device][m.Fix.Observed] = true
+			} else {
+				legacyTimes[m.Device][m.Fix.Observed] = true
+			}
+		}
+
 		cl, age := receiptClass(m, at, st.Policy)
-		legacy[m.Device+"/"+m.ID] = Receipt{Evidence: receiptEvidence(m, at, at, "stored", nil), Class: cl, CaptureAge: age}
+		e := receiptEvidence(m, at, at, "stored", nil)
+		e.SourceQuality = "unavailable_at_receipt"
+		legacy[m.Device+"/"+m.ID] = Receipt{Evidence: e, Class: cl, CaptureAge: age}
+		if cl == "delayed_backlog" {
+			c.DelayedReports++
+			if m.Type == "location" {
+				c.DelayedLocations++
+			} else if m.Type == "status" {
+				c.DelayedRoutine++
+			}
+		}
 	}
 	err = rows.Err()
 	rows.Close()
@@ -308,6 +388,11 @@ func (s *Store) fieldReport(tx *sql.Tx) (FieldReport, error) {
 		return r, err
 	}
 	for id, o := range observations {
+		for t := range legacyTimes[id] {
+			if !nativeTimes[id][t] {
+				o["legacy/"+t] = true
+			}
+		}
 		r.Devices[id].RawFixes = len(o)
 	}
 	for _, p := range st.Points {
@@ -334,6 +419,10 @@ func (s *Store) fieldReport(tx *sql.Tx) (FieldReport, error) {
 		if e.Kind == "stored" {
 			key := e.Device + "/" + e.Message
 			v := legacy[key]
+			e.ReportReference = v.ReportReference
+			if e.SourceQuality == "" {
+				e.SourceQuality = "unavailable_at_receipt"
+			}
 			v.Evidence = e
 			if e.TimingClass != "" {
 				v.Class = e.TimingClass
@@ -345,7 +434,7 @@ func (s *Store) fieldReport(tx *sql.Tx) (FieldReport, error) {
 			if e.Kind == "duplicate" {
 				c.Duplicates++
 			}
-			if e.Kind == "conflict" {
+			if e.Kind == "conflict" || (e.Kind == "batch_rejected" && e.FailureCode == "identity_conflict") {
 				c.Conflicts++
 			}
 		}
@@ -377,12 +466,14 @@ func (s *Store) fieldReport(tx *sql.Tx) (FieldReport, error) {
 		return a.Message < b.Message
 	})
 
+	for _, d := range st.Decisions {
+		if c := r.Devices[d.Device]; c != nil {
+			c.ProjectionReasons[d.Reason]++
+		}
+	}
 	analyzeSOS(&r, st)
-	// SOS receipt timing is event evidence, not periodic tracking cadence.
 	tracking := r
-	tracking.Receipts = nil
-	tracking.Events = nil
-	tracking.Verdicts = nil
+	tracking.Receipts, tracking.Events, tracking.Verdicts = nil, nil, nil
 	for _, v := range r.Receipts {
 		if v.Type != "sos" {
 			tracking.Receipts = append(tracking.Receipts, v)
@@ -396,6 +487,19 @@ func (s *Store) fieldReport(tx *sql.Tx) (FieldReport, error) {
 	analyzeField(&tracking, st.Policy)
 	r.Gaps = tracking.Gaps
 	r.Verdicts = append(r.Verdicts, tracking.Verdicts...)
+	for device, h := range r.History {
+		verdict, reason := "INCONCLUSIVE", "No recent phone queue report proves final synchronization"
+		if h.Condition == "incomplete" {
+			verdict, reason = "FAIL", "Phone explicitly reports known collection loss"
+		}
+		if h.Condition == "unresolved" {
+			verdict, reason = "FAIL", "Permanent delivery rejection remains unresolved"
+		}
+		if h.Condition == "synchronized" && !r.ProjectionPending && r.ProjectionError == "" {
+			verdict, reason = "PASS", "Contiguous durable identities and recent zero-pending phone report; projection work complete"
+		}
+		r.Verdicts = append(r.Verdicts, Verdict{Scenario: "native_history_synchronization", Device: device, Result: verdict, Reason: reason})
+	}
 	return r, nil
 }
 func analyzeField(r *FieldReport, p Policy) {
@@ -403,7 +507,36 @@ func analyzeField(r *FieldReport, p Policy) {
 	lastLive := map[string]Receipt{}
 	gaps := map[string][]float64{}
 	gapIndex := map[string]int{}
+	// Periodic health and live GNSS are independent deliveries at the same
+	// configured cadence. Mixing their gaps halves the apparent interval.
+	cadenceType := map[string]string{}
 	for _, v := range r.Receipts {
+		if v.Kind != "stored" || v.DeliveryRole == "history" || v.Class != "current_like" || (v.Type != "location" && v.Type != "status") {
+			continue
+		}
+		age := instant(r.Generated).Sub(instant(v.At)).Seconds()
+		if age < 0 || age > float64(2*r.Devices[v.Device].Expected+5) {
+			continue
+		}
+		if cadenceType[v.Device] == "" || v.Type == "location" {
+			cadenceType[v.Device] = v.Type
+		}
+	}
+	for index, v := range r.Receipts {
+		if previous, ok := lastLive[v.Device]; ok && !instant(v.Captured).After(instant(previous.Captured)) {
+			v.NonAdvancingHistory = true
+			r.Receipts[index].NonAdvancingHistory = true
+			// Near-current intermediate callbacks still follow a newer live report.
+			if v.Class == "current_like" {
+				c := r.Devices[v.Device]
+				c.DelayedReports++
+				if v.Type == "location" {
+					c.DelayedLocations++
+				} else if v.Type == "status" {
+					c.DelayedRoutine++
+				}
+			}
+		}
 		old, ok := last[v.Device]
 		gap := instant(v.At).Sub(instant(old.At)).Seconds()
 		expected := old.Effective
@@ -415,9 +548,11 @@ func analyzeField(r *FieldReport, p Policy) {
 			gapIndex[v.Device] = len(r.Gaps) - 1
 			verdict := "INCONCLUSIVE"
 			reason := "First receipt has clock ambiguity or lacks exact arrival evidence"
-			if v.Class == "current_like" {
+			if v.Class == "current_like" && v.DeliveryRole != "history" && v.FreshAtReceipt != nil && *v.FreshAtReceipt {
 				verdict = "PASS"
-				reason = "First unique post-gap capture is within the configured clock tolerance of receipt"
+				reason = "First unique post-gap receipt carries a fresh quality-valid GNSS observation"
+			} else if v.Class == "current_like" {
+				reason = "Fresh report capture does not prove current position; no fresh quality-valid GNSS observation"
 			}
 			if v.Class == "delayed_backlog" {
 				verdict = "FAIL"
@@ -431,7 +566,7 @@ func analyzeField(r *FieldReport, p Policy) {
 		if v.LiveBefore != "" && v.LiveAfter != "" && v.LiveAfter < v.LiveBefore {
 			r.Verdicts = append(r.Verdicts, Verdict{"live_state_during_backlog", v.Device, "FAIL", "Persisted live observed timestamp regressed", v.Message})
 		}
-		if v.Class == "current_like" && v.Kind == "stored" {
+		if v.Class == "current_like" && v.DeliveryRole != "history" && !v.NonAdvancingHistory && v.Kind == "stored" && v.Type == cadenceType[v.Device] {
 			prev, ok := lastLive[v.Device]
 			if !ok || prev.Effective != v.Effective || !cadenceConfigEqual(prev.Reported.Config, v.Reported.Config) {
 				gaps[v.Device] = nil
@@ -467,7 +602,16 @@ func analyzeField(r *FieldReport, p Policy) {
 	for _, id := range ids {
 		c := r.Devices[id]
 		c.Observed = median(gaps[id])
-		r.Verdicts = append(r.Verdicts, Verdict{"android_queue_drained", id, "INCONCLUSIVE", "Command cannot prove phone pending=0; correlate Android exported pendingOutbox timeline", nil})
+		if latest, ok := lastLive[id]; !ok || instant(r.Generated).Sub(instant(latest.At)).Seconds() > float64(2*c.Expected+5) {
+			c.Observed = nil
+		}
+		verdict, reason := "INCONCLUSIVE", "No recent explicit zero-pending phone report; correlate Android pendingOutbox timeline"
+		var evidence any
+		if h := r.History[id]; h != nil && h.Condition == "synchronized" {
+			verdict, reason = "PASS", "Phone explicitly reported zero pending at the exported measured_at; all identities through that report are durable"
+			evidence = h.LatestReported
+		}
+		r.Verdicts = append(r.Verdicts, Verdict{"android_queue_drained", id, verdict, reason, evidence})
 	}
 	for _, id := range ids {
 		saw := false
@@ -506,7 +650,7 @@ func analyzeField(r *FieldReport, p Policy) {
 				}
 			}
 		}
-		if rec != nil && rec.Recording != nil && rec.Recording.ID == e.After.Recording.ID {
+		if rec != nil && !rec.ProjectionPending && rec.Recording != nil && rec.Recording.ID == e.After.Recording.ID {
 			window := e.After.Recording.Windows[len(e.After.Recording.Windows)-1]
 			compared := 0
 			missing := false
@@ -560,7 +704,17 @@ func analyzeField(r *FieldReport, p Policy) {
 		offered := false
 		var offeredAt, echoedAt string
 		var previous *Receipt
+		var newestCapture string
 		gs := []float64{}
+		sampleType := "status"
+		for _, v := range r.Events {
+			if v.Ordinal > e.Ordinal && v.Device == e.Device && v.Kind == "override_requested" {
+				break
+			}
+			if v.Ordinal > e.Ordinal && v.Device == e.Device && v.Kind == "stored" && v.Type == "location" && v.DeliveryRole != "history" && v.Reported != nil && configEqual(v.Reported.Config, *e.Offered) && v.TimingClass == "current_like" {
+				sampleType = "location"
+			}
+		}
 		for _, v := range r.Events {
 			if v.Ordinal > e.Ordinal && v.Device == e.Device && v.Kind == "override_requested" {
 				break
@@ -581,9 +735,13 @@ func analyzeField(r *FieldReport, p Policy) {
 			if cl == "" {
 				cl, _ = receiptClass(Message{Captured: v.Captured}, v.At, p)
 			}
-			if cl != "current_like" {
+			if cl == "current_like" && echoedAt == "" {
+				echoedAt = v.At
+			}
+			if v.Type != sampleType || v.DeliveryRole == "history" || cl != "current_like" || (newestCapture != "" && !instant(v.Captured).After(instant(newestCapture))) {
 				continue
 			}
+			newestCapture = v.Captured
 			if echoedAt == "" {
 				echoedAt = v.At
 			}

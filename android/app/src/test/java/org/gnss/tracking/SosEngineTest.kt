@@ -280,7 +280,7 @@ class SosEngineTest {
         repository.edit { it.copy(tracking = false) }
         repository.edit { it.copy(tracking = true) }
         assertEquals(sos.json, db.dao().row(sos.sequence)!!.json)
-        assertEquals(sos.sequence, repository.next(clock.now)!!.sequence)
+        assertEquals(sos.sequence, repository.sos(clock.now)!!.sequence)
         assertEquals("Party", Protocol.decodeMessage(sos.json).party.id)
     }
 

@@ -1,0 +1,18 @@
+{
+  "batch_version": 1,
+  "acks": [
+    {
+      "protocol_version": 1,
+      "device_id": "11111111-1111-4111-8111-111111111111",
+      "message_id": "00000000-0000-4000-8000-000000000006",
+      "sequence": 6,
+      "result": "stored",
+      "received_at": "2026-10-06T12:00:01.000Z",
+      "config": {
+        "authority_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "version": 0,
+        "reporting_interval_override_s": null
+      }
+    }
+  ]
+}

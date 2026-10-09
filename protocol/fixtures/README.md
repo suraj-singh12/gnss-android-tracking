@@ -24,9 +24,14 @@ quality settings. No fixtures assert filtering/distance output before that engin
 Static UTC timestamps are intentional. Actual receiver assigns `received_at`; test
 harness may inject time or shift a whole scenario consistently. ACKs paired with
 requests must echo identity, but config may differ because it is current at ACK time.
-Fixtures do not imply recording/session IDs belong on the wire. Each scenario is
+Native fixtures carry additive Android tracking-session identity; legacy examples remain unchanged. Each scenario is
 an independent test with an empty test store; do not concatenate them as one history.
 
 Run [contract checks](../../test-tools/README.md) to detect field/type/range drift,
 config precedence, duplicate identity and scenario reference errors. Both future
 applications must consume these examples in serializer/parser regression tests.
+
+`location-native-session.json` and `status-history-progress.json` exercise optional
+native identity and timestamped queue progress. `history-batch-v1/` contains the
+negotiated batch request, ordered ACK and indexed permanent error; those files are
+batch wire examples, not individual messages or simulator scripts.

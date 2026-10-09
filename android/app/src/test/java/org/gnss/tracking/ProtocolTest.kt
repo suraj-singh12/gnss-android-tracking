@@ -1,5 +1,6 @@
 package org.gnss.tracking
 
+import java.time.Instant
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -8,6 +9,36 @@ class ProtocolTest {
 
     private val message
         get() = Protocol.decodeMessage(fixture("location-normal.json"))
+
+    @Test
+    fun nativeMetadataAndHistoricalBatchFixturesAgree() {
+        val native = Protocol.decodeMessage(fixture("location-native-session.json"))
+        assertEquals(native.message_id, native.observation!!.observation_id)
+        val row =
+            Outbound(
+                native.sequence,
+                native.message_id,
+                native.type,
+                Instant.parse(native.captured_at).toEpochMilli(),
+                Protocol.encode(native),
+            )
+        assertEquals(
+            Protocol.parse(fixture("history-batch-v1/request.json")),
+            Protocol.parse(HistoryProtocol.batch(listOf(row))),
+        )
+        assertEquals(
+            native.message_id,
+            HistoryProtocol.receipts(fixture("history-batch-v1/ack.json"), listOf(row))
+                .single()
+                .message,
+        )
+        val progress = Protocol.parse(fixture("status-history-progress.json"))
+        progress.getAsJsonObject("history_progress").addProperty("pending_observations", -1)
+        assertTrue(runCatching { Protocol.decodeMessage(progress.toString()) }.isFailure)
+        progress.getAsJsonObject("history_progress").addProperty("pending_observations", 0)
+        progress.getAsJsonObject("history_progress").addProperty("oldest_pending_sequence", 2)
+        assertTrue(runCatching { Protocol.decodeMessage(progress.toString()) }.isFailure)
+    }
 
     @Test
     fun allWireFixturesRoundTrip() {

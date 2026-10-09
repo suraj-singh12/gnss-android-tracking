@@ -201,6 +201,31 @@ func checkIdentity(m map[string]any) error {
 	return nil
 }
 func checkRequest(m map[string]any) error {
+	if o := m["observation"]; o != nil {
+		identity := object(o)
+		if m["type"] != "location" || identity["observation_id"] != m["message_id"] || !uuid.MatchString(str(identity["tracking_session_id"])) || !stamp(identity["session_started_at"]) || !num(identity["observation_sequence"], 1, maxInteger, true) || !num(identity["measurement_elapsed_ms"], 1, maxInteger, true) {
+			return fmt.Errorf("invalid native observation identity")
+		}
+	}
+	if q := m["history_progress"]; q != nil {
+		progress := object(q)
+		if !uuid.MatchString(str(progress["tracking_session_id"])) || !stamp(progress["session_started_at"]) || !stamp(progress["measured_at"]) || !num(progress["latest_committed_sequence"], 0, maxInteger, true) || !num(progress["pending_observations"], 0, maxInteger, true) || !num(progress["known_collection_loss"], 0, maxInteger, true) {
+			return fmt.Errorf("invalid history progress")
+		}
+		n, _ := strconv.ParseFloat(strNumber(progress["latest_committed_sequence"]), 64)
+		if v := progress["oldest_pending_sequence"]; v != nil && !num(v, 1, n, true) {
+			return fmt.Errorf("invalid oldest pending")
+		}
+		values, ok := progress["unresolved_sequences"].([]any)
+		if !ok {
+			return fmt.Errorf("unresolved sequences required")
+		}
+		for _, v := range values {
+			if !num(v, 1, n, true) {
+				return fmt.Errorf("invalid unresolved sequence")
+			}
+		}
+	}
 	if err := checkIdentity(m); err != nil {
 		return err
 	}
@@ -453,5 +478,49 @@ func TestMarkdownLinksAndLayout(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func strNumber(v any) string {
+	if n, ok := v.(json.Number); ok {
+		return string(n)
+	}
+	return ""
+}
+func TestNativeBatchContract(t *testing.T) {
+	request := load(t, "history-batch-v1/request.json")
+	if request["batch_version"] != json.Number("1") {
+		t.Fatal("batch version")
+	}
+	messages, ok := request["messages"].([]any)
+	if !ok || len(messages) == 0 {
+		t.Fatal("batch messages")
+	}
+	ack := load(t, "history-batch-v1/ack.json")
+	acks, ok := ack["acks"].([]any)
+	if !ok || len(acks) != len(messages) {
+		t.Fatal("batch ACK count")
+	}
+	for i, v := range messages {
+		m := object(v)
+		if e := checkRequest(m); e != nil {
+			t.Fatal(e)
+		}
+		a := object(acks[i])
+		if e := checkAck(a); e != nil {
+			t.Fatal(e)
+		}
+		for _, key := range []string{"device_id", "message_id", "sequence"} {
+			if m[key] != a[key] {
+				t.Fatal("batch ACK mismatch", key)
+			}
+		}
+	}
+	for _, value := range []any{json.Number("0"), json.Number("1.0"), json.Number("9007199254740992")} {
+		m := load(t, "location-native-session.json")
+		object(m["observation"])["observation_sequence"] = value
+		if checkRequest(m) == nil {
+			t.Fatal("invalid native sequence accepted", value)
+		}
 	}
 }

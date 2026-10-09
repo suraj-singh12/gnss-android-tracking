@@ -273,6 +273,11 @@ polyline {
   }
 }
 
+#quality-form input[type="checkbox"] {
+  width: auto;
+  justify-self: start;
+}
+
 #sos-panel {
   margin: 16px;
   padding: 16px;

@@ -10,7 +10,11 @@ import android.os.Looper
 import android.os.PowerManager
 
 // Pure observation seam: elapsed measurement time establishes age across wall clock edits.
-data class Observation(val fix: Fix, val elapsedMillis: Long)
+data class Observation(
+    val fix: Fix,
+    val elapsedMillis: Long,
+    val elapsedNanos: Long = elapsedMillis * 1000000,
+)
 
 class LatestLocation(private val clock: Clock) {
     @Volatile
@@ -80,6 +84,7 @@ class PlatformLocationSource(
     private val context: Context,
     val latest: LatestLocation,
     private val clock: Clock = SystemClock,
+    private val onObservation: (Observation) -> Unit = {},
     private val diagnosticEvent: (DiagnosticEvent, SourceState) -> Unit = { _, _ -> },
 ) : LocationSource {
     private val manager = context.getSystemService(LocationManager::class.java)
@@ -164,34 +169,46 @@ class PlatformLocationSource(
                     reject("invalid_coordinate")
                     return
                 }
+                val observedAt =
+                    runCatching { utc(location.time) }.getOrNull()?.takeIf { it.length == 24 }
+                if (observedAt == null) {
+                    reject("invalid_observation_time")
+                    return
+                }
                 val altitude = available(location.hasAltitude(), location.altitude)
-                val accepted =
-                    latest.update(
-                        Observation(
-                            Fix(
-                                utc(location.time),
-                                0,
-                                location.latitude,
-                                location.longitude,
-                                available(
-                                    location.hasAccuracy(),
-                                    location.accuracy.toDouble(),
-                                    true,
-                                ),
-                                altitude,
-                                available(
-                                    altitude != null && location.hasVerticalAccuracy(),
-                                    location.verticalAccuracyMeters.toDouble(),
-                                    true,
-                                ),
-                                available(location.hasSpeed(), location.speed.toDouble(), true),
-                                available(location.hasBearing(), location.bearing.toDouble(), true)
-                                    ?.takeIf { it < 360 },
+                val observation =
+                    Observation(
+                        Fix(
+                            observedAt,
+                            0,
+                            location.latitude,
+                            location.longitude,
+                            available(location.hasAccuracy(), location.accuracy.toDouble(), true),
+                            altitude,
+                            available(
+                                altitude != null && location.hasVerticalAccuracy(),
+                                location.verticalAccuracyMeters.toDouble(),
+                                true,
                             ),
-                            location.elapsedRealtimeNanos / 1000000,
-                        )
+                            available(location.hasSpeed(), location.speed.toDouble(), true),
+                            available(location.hasBearing(), location.bearing.toDouble(), true)
+                                ?.takeIf { it < 360 },
+                        ),
+                        location.elapsedRealtimeNanos / 1000000,
+                        location.elapsedRealtimeNanos,
                     )
-                if (!accepted) reject("unusable_elapsed_measurement_time")
+                // Out-of-order real observations still belong in durable history.
+                // Only unrepresentable elapsed age/coordinates are structurally rejected.
+                if (
+                    observation.elapsedMillis <= 0 ||
+                        observation.elapsedMillis > clock.elapsedMillis()
+                ) {
+                    reject("unusable_elapsed_measurement_time")
+                    return
+                }
+                onObservation(observation)
+                val accepted = latest.update(observation)
+                if (!accepted) reject("older_than_current")
                 else {
                     diagnostics =
                         diagnostics.copy(lastObservationAccepted = true, lastRejection = null)

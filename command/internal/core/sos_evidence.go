@@ -67,6 +67,14 @@ func redactSOSReport(r *FieldReport) {
 		}
 	}
 	for device, opaque := range sosDevices {
+		if h, ok := r.History[device]; ok {
+			delete(r.History, device)
+			r.History[opaque] = h
+		}
+		if h, ok := r.HistorySessions[device]; ok {
+			delete(r.HistorySessions, device)
+			r.HistorySessions[opaque] = h
+		}
 		if counters, ok := r.Devices[device]; ok {
 			delete(r.Devices, device)
 			r.Devices[opaque] = counters
@@ -77,6 +85,15 @@ func redactSOSReport(r *FieldReport) {
 			return
 		}
 		for device, opaque := range sosDevices {
+			if recording.Recording != nil {
+				for i := range recording.Recording.Windows {
+					sessions := recording.Recording.Windows[i].Sessions
+					if session, ok := sessions[device]; ok {
+						delete(sessions, device)
+						sessions[opaque] = session
+					}
+				}
+			}
 			if distance, ok := recording.Distances[device]; ok {
 				delete(recording.Distances, device)
 				recording.Distances[opaque] = distance

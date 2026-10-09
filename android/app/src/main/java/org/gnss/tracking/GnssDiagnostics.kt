@@ -136,6 +136,42 @@ data class GnssDiagnostic(
     val deliveryError: Boolean? = null,
     val lastKnownAccuracyM: Double? = null,
     val pendingOutboxError: Boolean? = null,
+    val queueByType: QueueCounts? = null,
+    val network: NetworkState? = null,
+    val sender: SenderState? = null,
+    val collection: CollectionState? = null,
+    val knownCollectionLoss: Long? = null,
+)
+
+data class NetworkState(
+    val radioEnabled: Boolean?,
+    val routeAvailable: Boolean?,
+    val internetValidated: Boolean?,
+    val ipv4Available: Boolean?,
+    val ipv6Available: Boolean?,
+    val changes: Long,
+)
+
+data class SenderState(
+    val lastAttemptElapsed: Long? = null,
+    val lastAckElapsed: Long? = null,
+    val retryUntilElapsed: Long? = null,
+    val failures: Int = 0,
+    val lastHttpCode: Int? = null,
+)
+
+// Opaque message reference correlates with Command without exposing installation identity.
+fun reportReference(id: String): String =
+    java.security.MessageDigest.getInstance("SHA-256")
+        .digest(id.toByteArray(Charsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }
+
+data class ReportEvidence(
+    val reference: String,
+    val type: String,
+    val sequence: Long,
+    val capturedAt: String,
+    val observedAt: String? = null,
 )
 
 // Closed event vocabulary: callers cannot enqueue protocol bodies, coordinates or error text.
@@ -193,6 +229,11 @@ enum class DiagnosticEvent {
     SOS_TRANSPORT_ACK_ACCEPTED,
     SOS_TRANSPORT_ACK_REJECTED,
     SOS_RESTORED,
+    SNAPSHOT_SAVED,
+    REPORT_SEND_ATTEMPT,
+    REPORT_ACK_ACCEPTED,
+    REPORT_RETRY,
+    NETWORK_CHANGED,
 }
 
 data class DiagnosticEntry(
@@ -205,6 +246,7 @@ data class DiagnosticEntry(
     val count: Long? = null,
     val startReason: ServiceStartReason? = null,
     val sos: SosEvidence? = null,
+    val report: ReportEvidence? = null,
 )
 
 data class IncidentSummary(
@@ -346,13 +388,7 @@ class DiagnosticJournal(private val directory: File, val limits: Limits = Limits
     @Synchronized
     fun event(value: DiagnosticEntry) {
         initialize()
-        val e =
-            value.copy(
-                serviceGeneration = generation(value.serviceGeneration),
-                source = value.source?.let(::safeSource),
-                snapshot = value.snapshot?.let(::safe),
-                sos = value.sos?.let(::safeSos),
-            )
+        val e = sanitize(value)
         // Native event carries exact callback time and updated counters, without reading
         // power/Room.
         if (e.event == DiagnosticEvent.LOCATION_CALLBACK && e.source != null) {
@@ -428,6 +464,10 @@ class DiagnosticJournal(private val directory: File, val limits: Limits = Limits
             s.deliveryPaused,
             s.deliveryError,
             s.loopError,
+            s.queueByType,
+            s.network,
+            s.collection?.writeFailures,
+            s.collection?.overflow,
         )
 
     private fun entry(event: DiagnosticEvent, s: GnssDiagnostic) =
@@ -786,6 +826,18 @@ class DiagnosticJournal(private val directory: File, val limits: Limits = Limits
             snapshot = e.snapshot?.let(::safe),
             source = e.source?.let(::safeSource),
             sos = e.sos?.let(::safeSos),
+            report =
+                e.report
+                    ?.takeIf {
+                        it.reference.matches(Regex("[0-9a-f]{64}")) &&
+                            it.type in setOf("location", "status", "sos")
+                    }
+                    ?.let {
+                        it.copy(
+                            capturedAt = timestamp(it.capturedAt),
+                            observedAt = it.observedAt?.let(::timestamp),
+                        )
+                    },
         )
 
     private fun safeSos(s: SosEvidence) =
@@ -805,7 +857,13 @@ class DiagnosticJournal(private val directory: File, val limits: Limits = Limits
         s.copy(
             lastRejection =
                 s.lastRejection?.takeIf {
-                    it in setOf("invalid_coordinate", "unusable_elapsed_measurement_time")
+                    it in
+                        setOf(
+                            "invalid_coordinate",
+                            "invalid_observation_time",
+                            "unusable_elapsed_measurement_time",
+                            "older_than_current",
+                        )
                 },
             error = if (s.error == null) null else "source_error",
         )
@@ -906,6 +964,7 @@ class DiagnosticRecorder(
         generation: String? = null,
         source: SourceState? = null,
         startReason: ServiceStartReason? = null,
+        report: ReportEvidence? = null,
     ) {
         val e =
             DiagnosticEntry(
@@ -915,6 +974,7 @@ class DiagnosticRecorder(
                 generation,
                 source = source,
                 startReason = startReason,
+                report = report,
             )
         if (!messages.trySend(e).isSuccess) {
             lost.incrementAndGet()

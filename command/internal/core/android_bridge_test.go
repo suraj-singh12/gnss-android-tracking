@@ -90,6 +90,11 @@ func TestAndroidBridge(t *testing.T) {
 		case "field_report":
 			result["report"], err = s.FieldReport()
 		case "inspect":
+			s.projectionMu.Lock()
+			if e := s.processProjectionLocked(); e != nil {
+				s.recordProjectionFailure(e)
+			}
+			s.projectionMu.Unlock()
 			var st State
 			st, err = s.Snapshot(10)
 			result["state"] = st

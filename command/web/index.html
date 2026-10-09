@@ -12,6 +12,15 @@
       <div class="brand">COMMAND <span>Party tracker</span></div>
       <div class="controls">
         <a href="/local/field-report">Export field-test report</a>
+        <label
+          >Recording start
+          <select id="recording-mode">
+            <option value="from_now">From now</option>
+            <option value="session_beginning">
+              From beginning of current Android tracking session
+            </option>
+          </select></label
+        >
         <button id="start">Start Recording</button
         ><button id="stop">Stop Recording</button
         ><button id="resume">Resume</button
@@ -46,6 +55,11 @@
         <div class="canvas-note">
           N ↑ <span>Local metric view · north up</span>
         </div>
+        <label
+          ><input type="checkbox" id="all-observations" /> Use All Observations
+          — Unfiltered / Diagnostic (distance remains qualified)</label
+        >
+        <div id="projection-status" role="status"></div>
         <svg
           id="tracks"
           role="img"
@@ -69,8 +83,8 @@
         <details id="quality">
           <summary>Track quality settings</summary>
           <p>
-            Changes open a new policy segment. Earlier history keeps its
-            settings.
+            Changes rebuild the full current recording using the new settings.
+            Start, Stop and Resume boundaries remain.
           </p>
           <form id="quality-form"></form>
         </details>
