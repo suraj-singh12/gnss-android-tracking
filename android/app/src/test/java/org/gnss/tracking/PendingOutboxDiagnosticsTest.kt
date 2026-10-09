@@ -46,8 +46,11 @@ class PendingOutboxDiagnosticsTest {
 
     @After
     fun close() = runBlocking {
+        app.observationPersistence.finish()
         app.recorder.finish()
         app.repository.db.close()
+        app.deleteDatabase("tracking.db")
+        Unit
     }
 
     @Test
@@ -147,6 +150,55 @@ class PendingOutboxDiagnosticsTest {
             assertEquals(1, shadowOf(manager).getLocationUpdateListeners().size)
         } finally {
             service.destroy()
+        }
+    }
+
+    @Test
+    fun realRoomTypeCountsIncludeBlockedAndDeliveredHistory() = runBlocking {
+        app.repository.state()
+        val cache = PendingOutboxDiagnostics()
+        val job =
+            launch(Dispatchers.IO) { cache.observeByType { app.repository.dao.queueCounts() } }
+        try {
+            waitFor { cache.snapshot.byType?.pending == 0 }
+            val status = app.repository.snapshot(100000, null, Health())
+            val fix = Fix(utc(101000), 0, 28.0, 77.0, 3.0, null, null, null, null)
+            val location = app.repository.snapshot(101000, fix, Health(gnss_status = "fix"))
+            waitFor { cache.snapshot.byType?.pending == 2 }
+            assertEquals(1, cache.snapshot.byType!!.gnss)
+            assertEquals(1, cache.snapshot.byType!!.routine)
+            app.repository.fail(status, "invalid receiver", 0, true, 0)
+            waitFor { cache.snapshot.byType?.blocked == 1 }
+            accept(location)
+            waitFor { cache.snapshot.byType?.deliveredGnss == 1 }
+            assertEquals(0, cache.snapshot.byType!!.gnss)
+            assertEquals(1, cache.value)
+            accept(status)
+            waitFor { cache.value == 0 }
+            assertEquals(1, cache.snapshot.byType!!.deliveredRoutine)
+        } finally {
+            job.cancelAndJoin()
+        }
+    }
+
+    @Test
+    fun typeCountFailureClearsAllCachedCounts() = runBlocking {
+        val cache = PendingOutboxDiagnostics()
+        val job =
+            launch(Dispatchers.IO) {
+                cache.observeByType {
+                    flow {
+                        emit(QueueCounts(3, 2, 0, 1, 0, 0, 0, 0))
+                        throw IllegalStateException("Room failed")
+                    }
+                }
+            }
+        try {
+            waitFor { cache.unavailable == true }
+            assertNull(cache.value)
+            assertNull(cache.snapshot.byType)
+        } finally {
+            job.cancelAndJoin()
         }
     }
 }

@@ -32,7 +32,7 @@ class LocationSourceTest {
         shadowOf(manager).setProviderEnabled(LocationManager.GPS_PROVIDER, true)
         val clock = FakeClock(100000)
         val latest = LatestLocation(clock)
-        val source = PlatformLocationSource(context, latest)
+        val source = PlatformLocationSource(context, latest, clock)
         source.start()
         source.start() // Repeated service starts must not create multiple registrations.
         assertEquals(1, shadowOf(manager).getLocationUpdateListeners().size)
@@ -183,4 +183,54 @@ class LocationSourceTest {
             (application as? TrackingApp)?.recorder?.finish()
             Unit
         }
+
+    @Test
+    fun callbackHistoryIncludesIntermediateAndOlderValidObservationsWithoutChangingLive() {
+        shadowOf(context as android.app.Application)
+            .grantPermissions(Manifest.permission.ACCESS_FINE_LOCATION)
+        val manager = context.getSystemService(LocationManager::class.java)
+        shadowOf(manager).setProviderEnabled(LocationManager.GPS_PROVIDER, true)
+        val clock = FakeClock(100000)
+        val latest = LatestLocation(clock)
+        val received = mutableListOf<Observation>()
+        val source =
+            PlatformLocationSource(context, latest, clock, onObservation = { received.add(it) })
+        source.start()
+        try {
+            val listener = shadowOf(manager).getLocationUpdateListeners().single()
+            for (t in listOf(100000L, 101000L, 100500L, 102000L)) {
+                clock.now = maxOf(clock.now, t)
+                listener.onLocationChanged(
+                    Location(LocationManager.GPS_PROVIDER).apply {
+                        latitude = 28.0
+                        longitude = 77.0
+                        time = t
+                        elapsedRealtimeNanos = t * 1000000
+                        accuracy = 100f
+                    }
+                )
+            }
+            listener.onLocationChanged(
+                Location(LocationManager.GPS_PROVIDER).apply {
+                    latitude = 28.0
+                    longitude = 77.0
+                    time = Long.MAX_VALUE
+                    elapsedRealtimeNanos = clock.now * 1000000
+                }
+            )
+            assertEquals("invalid_observation_time", source.diagnostics.lastRejection)
+            assertEquals(
+                listOf(100000L, 101000L, 100500L, 102000L),
+                received.map { it.elapsedMillis },
+            )
+            assertEquals(utc(102000), latest.currentFix()!!.observed_at)
+            assertEquals(
+                100.0,
+                received.first().fix.horizontal_accuracy_m!!,
+                0.0,
+            ) // Quality is Command projection, not raw deletion.
+        } finally {
+            source.stop()
+        }
+    }
 }

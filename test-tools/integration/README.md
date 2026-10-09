@@ -60,7 +60,7 @@ compared exactly, including segment UUIDs and projected coordinates.
 | Five-second amendment | Local 5 → real Command override 5 → ACK adoption/Room reopen → local edit 15 retains effective 5 → Clear falls back to 15/converges; local/control reject 1, 6, 86405 |
 | Lost response | Exact saved retry, duplicate with original first receipt, one row/track effect/distance effect per observation |
 | Current-first recovery | Sender wire order D A B C, live D never rolls back, history A B C D; failed retry deadline cleared on restore |
-| Stale recovery + reserved SOS | New current saved before old backlog; reserved SOS precedes current and never enters tracks; no trigger/operator workflow |
+| Stale recovery + reserved SOS | Legacy status recovery retry retained; native live observation precedes oldest history when available; reserved SOS precedes ordinary work and never enters tracks |
 | Arrival permutations | A B C D / D A B C / C A D B / D A B B C yield identical point IDs, geometry, segments, cumulative distance; old backlog stays historically valid while live is stale |
 | Bad GNSS | Raw retained with explicit jitter/poor/unknown/stale/jump rejection reasons, recovery opens segment without bridge; turn, sideways and reversal accepted; altitude does not add distance |
 | Recording | Stop preserves live reception without extending recording; Resume adds segment without connector; unconfirmed Clear rejected; confirmed Clear retains raw/device/config; late backlog/restart/new recording cannot resurrect it |
@@ -109,8 +109,8 @@ address changes preserve authority unless the operator explicitly re-enrolls.
 No production interoperability defect or protocol contradiction was found in this
 baseline. Internal model differences alone require no compatibility layer. The
 track algorithm is unchanged; Issue #4 physical acceptance explicitly amends
-reporting intervals to 5-second steps, with default 10 s. Tests intentionally use the
-existing correctness-first rebuild; large-volume/endurance testing remains #7.
+reporting intervals to 5-second steps, with default 10 s. The existing anchor engine remains the oracle; worker checkpoints and affected suffixes
+avoid full derivation on every receipt. Extended endurance remains #7.
 
 Physical GNSS, Wi-Fi Network routing, screen-off/OEM behavior and routers cannot be
 proved here. Execute the canonical [field acceptance runbook](../../android/DEVICE-ACCEPTANCE.md).
@@ -126,3 +126,37 @@ of physical GNSS, screen-off radio operation, deep Doze or OEM policies. The sou
 review found no Activity-driven GPS registration; absence of CPU wake protection
 was a concrete lifecycle gap. The precise trigger on the reported phone remains
 unconfirmed until the updated physical retest and diagnostic evidence.
+
+Issue #4 field regressions additionally exercise 100 old status envelopes before an
+offline rectangle: current location first, lost ACK, phone/Command persistence
+reopen, duplicate ACK, GNSS history before statuses, 80 m chronological geometry
+and unchanged distance after statuses. Continuous new current reports must still
+yield historical progress. Command tests cover full-policy reprojection, legacy
+policy-only boundaries, live markers with no recording, current-first status
+INCONCLUSIVE, expired cadence, per-type evidence and drawing smoke checks.
+These tests replace only the physical Android Wi-Fi adapter; they cannot establish
+locked-screen Wi-Fi reassociation or OEM radio behavior.
+
+The approved native-resolution regression separately persists 21 one-second
+observations around a rectangle while live reporting is 30 seconds. Reopen Room,
+send one current report, synchronize all intermediates, assert 21 distinct raw
+observations/100 m geometry, change policy and retain the same source history.
+Android tests cover additive v1→v2 migration, idempotent callback commit, bounded
+nonblocking handoff/failure evidence, and older/poor-accuracy native callbacks.
+
+
+The native history batch regression negotiates the real capabilities endpoint,
+drives Room's original identities through real atomic Command ingestion, loses a
+response after commit, retries, reconstructs a 21-point/100 m intermediate rectangle
+at 30-second live cadence, and echoes zero pending. No current-fix copy is created.
+Test-only inspection permits responses larger than the production 64-KiB phone ACK
+limit; this does not widen LAN APIs. Bridge restarts preserve their reader executor.
+
+Focused Room tests cover per-session sequence/measurement identity, live exclusion
+of already-ACKed newest observations, recovery blocks, adaptive success/failure/reset,
+indexed permanent failure and preserved invalid rows. Command tests include atomic
+rollback, per-device restart-safe projection work, multiple outages against the
+full oracle, rejected provisional junction/recovery, policy switches, session modes,
+late joins, stale queue/explicit unresolved outcomes, old receiver metadata backfill,
+and live display while projection is busy. Shared native/batch fixtures are consumed
+by both production parsers.

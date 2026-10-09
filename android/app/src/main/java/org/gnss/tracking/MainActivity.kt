@@ -243,14 +243,16 @@ class MainActivity : Activity() {
                     pendingStart = false
                     savingStart = false
                     app.operational.update {
-                        it.copy(starting = false, error = if (it.starting) null else it.error)
+                        it.copy(
+                            starting = false,
+                            stopping = true,
+                            error = if (it.starting) null else it.error,
+                        )
                     }
-                    scope.launch {
-                        withContext(Dispatchers.IO) {
-                            app.repository.edit { it.copy(tracking = false) }
-                        }
-                        stopService(trackingIntent)
-                    }
+                    // Stop acquisition immediately; finish accepted session metadata
+                    // before ending it. A later Start cannot race this explicit Stop.
+                    stopService(trackingIntent)
+                    app.finishTracking()
                 }
                 .show()
         }
@@ -265,11 +267,10 @@ class MainActivity : Activity() {
             }
             combine(
                     app.repository.dao.observeState(),
-                    app.repository.dao.pendingCount(),
-                    app.repository.dao.blockedCount(),
+                    app.repository.dao.queueCounts(),
                     app.repository.dao.blockedError(),
                     app.operational,
-                ) { state, pending, blocked, blockedError, op ->
+                ) { state, queues, blockedError, op ->
                     if (state != null) {
                         if (!initialized) {
                             partyId.setText(state.partyId)
@@ -297,11 +298,14 @@ class MainActivity : Activity() {
                             if (state.overrideSeconds != null)
                                 appendLine("Command override active (${state.overrideSeconds} s)")
                             appendLine(
-                                "Battery: ${op.health.battery_percent?.let { "$it%" } ?: "Unavailable"} • pending: $pending"
+                                "Battery: ${op.health.battery_percent?.let { "$it%" } ?: "Unavailable"} • pending: ${queues.pending}"
                             )
-                            if (blocked > 0)
+                            appendLine(
+                                "Pending GNSS: ${queues.gnss} • SOS: ${queues.sos} • routine: ${queues.routine}"
+                            )
+                            if (queues.blocked > 0)
                                 appendLine(
-                                    "$blocked saved message(s) need attention: ${blockedError ?: "Delivery blocked"}"
+                                    "${queues.blocked} saved message(s) need attention: ${blockedError ?: "Delivery blocked"}"
                                 )
                             if (state.deliveryPaused)
                                 appendLine(
@@ -382,10 +386,12 @@ class MainActivity : Activity() {
     private fun updateStartControls() {
         if (!::startButton.isInitialized) return
         val op = app.operational.value
-        startButton.isEnabled = initialized && !pendingStart && !op.starting && !op.tracking
+        startButton.isEnabled =
+            initialized && !pendingStart && !op.starting && !op.stopping && !op.tracking
         startButton.text =
             when {
                 !initialized -> "Loading settings…"
+                op.stopping -> "Stopping…"
                 op.tracking -> "Tracking active"
                 pendingStart || op.starting -> "Starting…"
                 else -> "Start Tracking"
@@ -486,7 +492,7 @@ class MainActivity : Activity() {
             }
             return
         }
-        if (!resumed || permissionInFlight != null) return
+        if (!resumed || permissionInFlight != null || app.operational.value.stopping) return
         if (app.operational.value.tracking || (app.operational.value.starting && !pendingStart))
             return
         pendingStart = false // Hand off once; service owns all subsequent startup state.

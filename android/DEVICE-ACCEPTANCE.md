@@ -292,3 +292,94 @@ network addresses, raw payloads, database files and secrets. Do not publish bund
 indiscriminately. Recorder retention limits still apply; export promptly after a run.
 Real GNSS/GPSTest activation, screen-off/Doze/OEM effects and physical offline/reconnect
 behaviour remain physical acceptance; no automated verdict substitutes for these.
+
+## Offline rectangle and historical reconciliation retest
+
+Use the matched APK and Command assets from the same final product SHA. The temporary
+workflow commit must not become either application's source identity. Verify both
+ZIP manifests afterward; keep every run's Android diagnostics and Command report.
+Use GPSTest only for the previously described A/B acquisition investigation.
+
+1. Use an **offline router** (no internet/SIM dependency), outdoor sky view, correct
+   clocks and the dedicated-phone power settings above. Start tracking once, local
+   5 seconds. Start Command Recording. Close Activity and lock the screen.
+2. Walk the first rectangle side, leave/break Wi-Fi coverage, walk the remaining
+   sides outside coverage, then return while the phone remains locked. Do not
+   reopen Activity just to provoke association. If it does not rejoin, record that
+   operational fact, then deliberately unlock/open and identify that intervention.
+3. Command should show a recent **live marker** promptly, independently of incomplete
+   recording/history. Healthy contact without current position is not success.
+   Historical GNSS should reconcile before old routine status history. Fresh
+   markers and changing track geometry while history arrives are provisional.
+4. Continue until recovery/drain has had time to complete; export both bundles.
+   Pending GNSS/SOS/routine and delivered counts are captured automatically. No
+   manual packet-counting/stopwatch is required. Command cannot certify phone
+   pending=0 without the Android export. Truncation/drop/error means missing evidence.
+5. Change quality deliberately; verify the **full current recording** reprojects
+   from retained raw observations. Stop/Resume boundaries remain; there must be no
+   connector/distance over a stopped interval. Clear must not be resurrected by
+   subsequent backlog. Neither quality nor Clear deletes raw evidence.
+6. Repeat once with Command restarted on the same SQLite file during drain. With
+   the combined PR #12 candidate, also raise its supported SOS trigger offline;
+   verify SOS transport/operator evidence independently of track acceptance.
+
+Correlate Android `queueByType` (`pending`, `gnss`, `sos`, `routine`, `blocked`,
+`deliveredGnss`, `deliveredSos`, `deliveredRoutine`) with Command per-type unique/
+delayed counters. `network.radioEnabled` is not association; `routeAvailable` is
+not Command reachability; `internetValidated=false` is expected on an offline LAN.
+IP-family booleans contain no IP addresses. `sender` carries elapsed attempt/ACK/
+retry timestamps and HTTP status; REPORT_ACK_ACCEPTED follows durable acceptance.
+Android report `reference` matches Command `report_reference` (SHA-256 of message
+UUID). Events separate saved snapshot, send attempt, retry, and valid ACK. This proves packet delivery. Also inspect `collection` submission/save/failure/
+overflow counts for native observation commits; uncommitted memory is not durable.
+
+Keep adequate phone/laptop disk space. There is no automatic raw/SOS eviction.
+Storage failures are operational failures shown by the app/export; never clear an
+outbox to improve counters. Diagnostics have bounded retention and are evidence,
+not a complete backup of location data. PASS/FAIL/INCONCLUSIVE assessments concern
+only their stated evidence and never certify physical Wi-Fi/GNSS automatically.
+
+For the collection/cadence amendment, repeat with **30 s current reporting** while
+GNSS callbacks continue near 1 Hz. Walk several distinct turns between reporting
+ticks, including offline movement. Intermediate measurements must survive phone
+persistence reopen, arrive as history, and reappear under changed quality settings.
+Command receipt cadence excludes nonadvancing history rather than claiming 1 s live
+reporting. Verify both source revisions match the combined PR #12 product commit.
+Record actual DB growth and battery use over the run; the 1 Hz durable history adds
+IO compared with the previous interval-only snapshot collection. Preserve exports
+before APK upgrades; v2 Room is an additive upgrade, not an automatic downgrade.
+
+
+## Final matched-candidate acceptance
+
+Use Android and Command assets from the same reconciled PR #12 SHA; verify their export
+revision fields match before testing. Preserve the existing database (v1 migrates to v2);
+do not install an older APK over v2 or clear data containing evidence. Temporary CI
+debug keys can differ between builds: if Android rejects an update for a signing
+mismatch, export existing diagnostics and drain pending data to the previous matched
+Command before any deliberate reinstall. Keep that Command database/evidence. Do not
+uninstall a phone holding unacknowledged history; signing/release packaging remains #7.
+
+1. Outdoors, Start Tracking once. Confirm a new Android source session. Close Activity,
+   lock the screen and move for at least 30 minutes on an offline LAN, without SIM.
+2. Use local 30-second live cadence while native collection is approximately 1 Hz. Walk
+   turns between live updates; retain/export diagnostics, not handwritten counters.
+3. Set override 5 seconds, then clear it. Export verifies requested/delivered/converged
+   settings and receipt cadence separately from high-resolution historical delivery.
+4. Leave Wi-Fi coverage while locked, continue moving, and return without touching the
+   phone. Verify actual automatic reassociation, fresh live display ahead of backlog,
+   oldest-block recovery and eventual contiguous receipt/phone pending-zero evidence.
+5. Repeat outages before the first backlog drains. Compare final qualified route/distance
+   with raw Diagnostic view. Change each quality switch; raw counts must not shrink.
+6. Test Recording From session beginning and From now, delayed history, Stop/move/Resume,
+   no connector, then confirmed Clear. Unrelated Android sessions must remain separate.
+7. Raise SOS offline and during recovery. Confirm immutable delivery and separate operator
+   acknowledgment. Restart Command mid-sync; exports must show duplicate receipt without
+   duplicate observations/distance. Stop/Start Android creates a new source session.
+8. Export both bundles later. Record PASS/FAIL with evidence. Contact alone is not GNSS;
+   stale phone queue information is not present queue state. Unresolved/collection loss is
+   incomplete history even if later sequences arrived. Projection error is not synchronized.
+
+If GNSS stalls, retain the existing GPSTest A/B procedure without reopening our Activity.
+Physical Wi-Fi reassociation/GNSS/OEM power/battery remain acceptance requirements; automated
+integration does not establish them. Extended endurance/repeater campaigns remain Issue #7.

@@ -24,16 +24,16 @@ calculation and presentation. Neither application knows the other's internals.
 Protocol v1 is their only contract. Both can use shared examples and independent
 mocks to develop in parallel after Issue #1 is reviewed and merged.
 
-Android's foreground service collects actual GNSS observations even with screen
-locked/off subject to platform permissions/OEM limitations. Latest fix is a fresh
-in-memory view for health, minimal UI and future SOS. The reporting interval is
-not the sampling interval: location callbacks need not all become packets. At a
-reporting tick Android snapshots the latest fix and health into a durable immutable
-location message, or sends status when no fix exists. The local store owns identity,
-sequence allocation, settings and outbox recovery. Packet serialization is explicit;
-the reliable sender removes only ACKed outbox work, with current-first reconnect
-and priority SOS through the same path. Local retention policy is an Android
-implementation detail; unACKed messages must not be silently evicted.
+Android's foreground service requests GPS_PROVIDER observations at about one second,
+independently of Activity visibility, Wi-Fi and reporting cadence. Every structurally
+valid distinct measurement enters one bounded IO handoff and the existing Room outbox.
+The same immutable observation ID and per-session sequence are used for live/history.
+Explicit Start creates a durable Android session; sticky restart preserves it; Stop
+ends it. Status and SOS retain separate envelope numbering. Reporting cadence controls
+fresh-live opportunities and routine status snapshots, not retained GNSS resolution.
+Accepted callbacks become durable only after Room commit; failures/overflow and known
+loss are explicit. No raw-observation deletion is enabled. Process death before commit
+can lose memory. Activity operations do not acquire or restart GNSS.
 
 Command's receiver validates the wire shape and writes each unique envelope,
 original geographic observation and first `received_at` transactionally before
@@ -60,9 +60,11 @@ an untested dependency now. Kotlin + Room/SQLite is the Android direction.
   and physically plausible under explicit Command quality settings.
 - **Track:** significant movement accepted from valid observations within a recording
   segment. Track rejection never deletes raw data. Store reasons and policy revision
-  with derived results so deterministic rebuilds are explainable. Freeze quality
-  settings at each segment start; a setting change during recording opens a new
-  reasoned subsegment at Command time, rather than silently reinterpreting history.
+  with derived results so deterministic rebuilds are explainable. An explicit quality edit
+  reprojects the full current recording from unchanged raw observations with one
+  new policy revision. Preserve recording Start/Stop/Resume boundaries; remove
+  obsolete policy-only boundaries. This is an intentional Issue #4 field-driven
+  amendment of the earlier frozen-window policy, not a wire-format change.
 
 Backlog network delay alone does not invalidate a fix that was fresh when captured.
 For live display, account for both capture age and elapsed time since capture;
@@ -89,14 +91,25 @@ engine may create an explicitly reasoned subsegment before the next credible poi
 
 ## Chronology and reconnect
 
-Per device, sort location candidates by `(observed_at, sequence, message_id)`;
-sequence belongs to stable installation identity and message ID breaks any remaining
-tie. Equal `observed_at` candidates use the lowest sequence (then message ID) as
-the sole track candidate for that instant; preserve others raw with a tie reason.
-Never compute a speed using a zero time delta. Missing sequence values are not
-lost-track placeholders and never cause interpolation.
+Within an Android session, historical order is its original observation sequence;
+source sessions use `(session_started_at, session_id)` between sessions. Queued legacy
+history precedes session-aware collection and uses `(observed_at, envelope_sequence, message_id)`.
+Live measurement ordering always uses observed time, independent of that history order. Identical native
+coordinates do not deduplicate measurements. Repeated native measurement delivery
+uses observation identity; legacy same-timestamp duplicates retain their tie rule.
+Missing observations are never interpolated or claimed received.
 
-Android restores current live state first, then older backlog (SOS has priority).
+One serialized sender serves eligible SOS first, fresh live work next, then the
+oldest historical block. A live attempt grants a historical opportunity even when
+new callbacks continue. Status has an independent cadence. Historical batches are
+negotiated separately from individual v1/SOS, and adapt from one complete observation
+to about 20 KB without waiting for fill. No unrelated current/status ACK gate exists.
+Recovery blocks are contiguous pending sequences separated by delivery outcomes,
+not movement segments. Original envelopes and permanently unresolved errors remain
+retained. Android/OEM owns physical Wi-Fi reassociation; code recovers when a network
+is exposed, with application reachability, network-bound transport invalidation and
+bounded retries. Public internet validation is irrelevant.
+
 Command updates live location only for a newer measurement key; device health and
 party label use the newest `captured_at` snapshot key, with sequence/message ID ties.
 A status packet without a fix can change current health without erasing the last
@@ -105,7 +118,7 @@ retry; contact freshness and location freshness are different.
 
 A late raw observation is assigned by observation time to its original recording
 window, then the affected device segment is deterministically rebuilt from raw
-candidates in the order above using its frozen policy revision. Replace derived
+candidates in the order above using its current recording policy revision. Replace derived
 points and recompute segment distance atomically; do not append an arrival-order
 edge or add a guessed distance correction. Rebuilds may revise provisional geometry
 and distance; duplicate deliveries must not revise them. Track chronology and live
@@ -184,3 +197,36 @@ uncertainty, turns/reversals, stale fixes, jumps, last-accepted comparison, geog
 distance, dynamic join, Stop/Resume/Clear, retries, arrival permutations, config
 convergence and restart. #4 adds real LAN integration; #5 implements SOS triggers;
 #6 adds diagnostics/UI/offline map; #7 proves field acceptance and portable releases.
+
+## Final Issue #4 reliability amendment (2026-10-09)
+
+Raw SQLite commit precedes ACK and schedules restart-safe projection work. Derivation
+failure cannot undo an already committed receipt. A worker checkpoints the existing
+accepted-anchor engine; ordinary append resumes it and late arrivals recalculate from
+the preceding checkpoint through dependent points. Policy/lifecycle changes invalidate
+appropriate projection state. Projection pending/error is explicit. Full chronological
+derivation remains the deterministic oracle for points, segments and distance.
+
+Fresh live markers do not consult old historical movement anchors. Incomplete native
+history creates provisional live sections with zero starting section distance. Late
+history reconciles those sections through canonical derivation, never adding provisional
+distance twice. A quality-rejected junction does not invalidate later candidates.
+
+Every quality rule has an enabled switch and retained numeric threshold. Disabled
+movement floors contribute zero; the uncertainty threshold applies only when enabled.
+Unknown accuracy is rejected when maximum accuracy is enabled; disabling it allows
+structurally valid coordinates with unknown accuracy. Structural validation and live
+freshness remain mandatory. All policy edits reconsider retained raw data while preserving
+recording lifecycle windows. An unfiltered diagnostic view changes neither policy nor
+authoritative distance. No accuracy circles are drawn.
+
+Recording can start from Command now or from the identified current Android session.
+The session mode selects that source session; late delivery does not change original
+membership. Contact, GNSS, live availability and history completeness are separate.
+Phone queue counts carry measurement time; disconnected phone state is unknown.
+Received-through means actual contiguous raw receipt; processed-through may include
+explicit unresolved outcomes and must not be called complete.
+
+The original GPS_PROVIDER/Looper/foreground-service acquisition and 30-second native
+freshness rule are unchanged. No listener restart workaround is introduced. Issue #5
+retains SOS ownership, Issue #6 offline-map scope, and Issue #7 extended endurance.

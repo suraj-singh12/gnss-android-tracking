@@ -586,4 +586,64 @@ class IncidentRecorderTest {
         assertTrue(incidents().size < 5)
         assertTrue(entries("events").isNotEmpty())
     }
+
+    @Test
+    fun exportedDeliveryAndNetworkEvidenceExcludeOperationalSecrets() {
+        val j = journal()
+        j.append(
+            sample(1000)
+                .copy(
+                    queueByType = QueueCounts(3, 2, 0, 1, 0, 1, 0, 4),
+                    network = NetworkState(true, true, false, true, false, 2),
+                    sender = SenderState(900, 950, null, 0, 200),
+                )
+        )
+        val id = "11111111-1111-4111-8111-111111111111"
+        j.event(
+            DiagnosticEntry(
+                DiagnosticEvent.REPORT_ACK_ACCEPTED,
+                utc(1000),
+                1000,
+                generation,
+                report = ReportEvidence(reportReference(id), "location", 7, utc(1000), utc(990)),
+            )
+        )
+        // A caller cannot smuggle free text through the closed evidence fields.
+        j.event(
+            DiagnosticEntry(
+                DiagnosticEvent.REPORT_RETRY,
+                utc(1000),
+                1000,
+                generation,
+                report = ReportEvidence("192.168.1.2", "secret-party", 8, "raw-payload", null),
+            )
+        )
+        val out = ByteArrayOutputStream()
+        j.export(out, build)
+        val text =
+            ZipInputStream(out.toByteArray().inputStream()).use { zip ->
+                buildString {
+                    while (zip.nextEntry != null) {
+                        append(zip.readBytes().toString(Charsets.UTF_8))
+                        zip.closeEntry()
+                    }
+                }
+            }
+        assertTrue(text.contains(reportReference(id)))
+        assertTrue(text.contains("deliveredGnss"))
+        assertTrue(text.contains("internetValidated"))
+        for (secret in
+            listOf(
+                id,
+                "latitude",
+                "longitude",
+                "altitude",
+                "192.168.1.2",
+                "secret-party",
+                "raw-payload",
+                "SSID",
+            )) {
+            assertFalse(secret, text.contains(secret))
+        }
+    }
 }
