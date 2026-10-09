@@ -14,8 +14,11 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SOURCE_REVISION: b23b5f58845c896e7fb2c5800e577202667c1e3f
-      ASSET_DIR: ${{ runner.temp }}/gnss-matched-assets
     steps:
+      - name: Define isolated artifact output directory
+        shell: bash
+        run: echo "ASSET_DIR=$RUNNER_TEMP/gnss-matched-assets" >> "$GITHUB_ENV"
+
       - name: Check out temporary workflow branch
         uses: actions/checkout@v4
         with:
