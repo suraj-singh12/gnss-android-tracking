@@ -87,6 +87,8 @@ func TestAndroidBridge(t *testing.T) {
 			_, err = s.db.Exec(`CREATE TRIGGER integration_fail BEFORE UPDATE ON state BEGIN SELECT RAISE(ABORT,'integration disk failure'); END`)
 		case "restore_storage":
 			_, err = s.db.Exec("DROP TRIGGER integration_fail")
+		case "field_report":
+			result["report"], err = s.FieldReport()
 		case "inspect":
 			s.projectionMu.Lock()
 			if e := s.processProjectionLocked(); e != nil {

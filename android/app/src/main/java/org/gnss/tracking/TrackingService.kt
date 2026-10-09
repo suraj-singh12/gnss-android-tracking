@@ -52,7 +52,9 @@ class TrackingService : Service() {
     @Volatile private var deliveryError: Boolean? = null
     @Volatile private var loopError: String? = null
     private val pendingDiagnostics = PendingOutboxDiagnostics()
-    private val latest = LatestLocation(SystemClock)
+    private val latest
+        get() = app.latest
+
     @Volatile private var observationHealth = Health()
     private lateinit var resources: TrackingResources
     private lateinit var health: DeviceHealth
@@ -63,7 +65,9 @@ class TrackingService : Service() {
     private lateinit var connectivity: ConnectivityManager
     private var callbackRegistered = false
     private var running = false
-    @Volatile private var lastCaptureElapsed = 0L
+    private val lastCaptureElapsed
+        get() = app.lastCaptureElapsed
+
     private val callback =
         object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
@@ -156,19 +160,10 @@ class TrackingService : Service() {
                     .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "gnss:tracking"),
                 diagnosticEvent = { app.recorder.event(it, generation) },
             )
-        health = DeviceHealth(this, latest)
+        health = app.health
         connectivity = getSystemService(ConnectivityManager::class.java)
-        transport = LanTransport(health::wifiNetwork)
-        sender =
-            Sender(
-                repository,
-                transport,
-                SystemClock,
-                deliveryEvidence = { kind, report ->
-                    app.recorder.event(kind, generation, report = report)
-                },
-                capture = ::capture,
-            )
+        transport = app.transport
+        sender = app.sender
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -330,25 +325,7 @@ class TrackingService : Service() {
     }
 
     private suspend fun capture(): Outbound {
-        // Native observations are stored once; routine reports carry health only.
-        val row = repository.snapshot(SystemClock.wallMillis(), null, health.snapshot())
-        runCatching {
-            val message = Protocol.decodeMessage(row.json)
-            app.recorder.event(
-                DiagnosticEvent.SNAPSHOT_SAVED,
-                generation,
-                report =
-                    ReportEvidence(
-                        reportReference(row.messageId),
-                        row.type,
-                        row.sequence,
-                        message.captured_at,
-                        null,
-                    ),
-            )
-        }
-        lastCaptureElapsed = SystemClock.elapsedMillis()
-        return row
+        return app.capture()
     }
 
     private suspend fun reportingLoop() {

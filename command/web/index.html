@@ -40,6 +40,16 @@
       ><span id="recording" role="status">Connecting…</span>
     </header>
     <div id="error" role="alert" hidden></div>
+    <section id="sos-panel" aria-labelledby="sos-heading" hidden>
+      <h1 id="sos-heading">SOS emergencies</h1>
+      <p id="sos-summary" role="status" aria-live="polite"></p>
+      <button id="sos-audio">Enable / test audible SOS alert</button>
+      <span id="sos-audio-status" role="status"
+        >Audible alert blocked until enabled. Visible alerts remain
+        active.</span
+      >
+      <div id="sos-alerts"></div>
+    </section>
     <main>
       <section class="canvas" aria-label="Recorded tracks">
         <div class="canvas-note">

@@ -46,8 +46,7 @@ class PendingOutboxDiagnosticsTest {
 
     @After
     fun close() = runBlocking {
-        app.observationPersistence.finish()
-        app.recorder.finish()
+        app.finishForTests()
         app.repository.db.close()
         app.deleteDatabase("tracking.db")
         Unit

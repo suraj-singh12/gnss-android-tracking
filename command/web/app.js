@@ -50,7 +50,7 @@ for (const action of ["start", "stop", "resume", "clear"])
     if (
       action === "clear" &&
       !confirm(
-        "Clear this Recording and its tracks, distances and windows? Raw observations, devices and reporting settings are retained.",
+        "Clear this Recording and its tracks, distances and windows? Raw observations, devices, reporting settings and all SOS alerts are retained.",
       )
     )
       return;
@@ -68,7 +68,137 @@ $("dots").onchange = () => {
   }
   poll();
 };
+let audio;
+let sounding = false;
+let lastSound = 0;
+async function sosSound(test = false) {
+  if (sounding) return;
+  if (!test && !state?.sos_alerts?.some((a) => !a.operator_acknowledged_at))
+    return;
+  if (!test && Date.now() - lastSound < 10000) return;
+  sounding = true;
+  try {
+    const Audio = window.AudioContext || window.webkitAudioContext;
+    if (!Audio) throw Error("Audio unavailable");
+    if (!audio && !test) throw Error("Audio requires operator activation");
+    audio ||= new Audio();
+    if (test) await audio.resume();
+    if (audio.state !== "running") throw Error("Audio blocked or suspended");
+    const tone = audio.createOscillator(),
+      gain = audio.createGain();
+    tone.frequency.value = 880;
+    gain.gain.value = 0.12;
+    tone.connect(gain);
+    gain.connect(audio.destination);
+    tone.start();
+    tone.stop(audio.currentTime + 0.5);
+    lastSound = Date.now();
+    $("sos-audio-status").textContent =
+      "Audible alert enabled; repeats every 10 s while SOS is unacknowledged. Check speaker volume.";
+  } catch (e) {
+    $("sos-audio-status").textContent =
+      "Audible alert blocked / unavailable. Enable audio and check speaker volume; visible SOS remains active.";
+  } finally {
+    sounding = false;
+  }
+}
+$("sos-audio").onclick = () => sosSound(true);
+function renderSOS() {
+  const alerts = [...(state.sos_alerts || [])].sort(
+    (a, b) =>
+      Number(!!a.operator_acknowledged_at) -
+        Number(!!b.operator_acknowledged_at) ||
+      b.triggered_at.localeCompare(a.triggered_at) ||
+      a.device_id.localeCompare(b.device_id),
+  );
+  const pending = alerts.filter((a) => !a.operator_acknowledged_at).length;
+  $("sos-panel").hidden = alerts.length === 0;
+  const summary = `${pending} unacknowledged · ${alerts.length - pending} acknowledged. Receipt and operator acknowledgement are separate. Recording controls retain SOS.`;
+  if ($("sos-summary").textContent !== summary)
+    $("sos-summary").textContent = summary;
+  // Reuse event-specific nodes so polling never removes keyboard focus or changes
+  // the identity captured by a pending acknowledgement request.
+  const root = $("sos-alerts");
+  const focused = root.contains(document.activeElement)
+    ? document.activeElement
+    : null;
+  let index = 0;
+  for (const a of alerts) {
+    const key = a.device_id + "/" + a.event_id;
+    let card = Array.from(root.children).find((c) => c.dataset.event === key);
+    if (!card) {
+      card = el("article", undefined, "sos-alert");
+      card.dataset.event = key;
+      const details = el("div");
+      details.className = "sos-details";
+      const button = el("button", "Acknowledge this SOS");
+      button.onclick = async () => {
+        button.disabled = true;
+        try {
+          await post("sos/acknowledge", {
+            device_id: a.device_id,
+            event_id: a.event_id,
+          });
+        } catch (e) {
+          button.disabled = false;
+          showError(e);
+        }
+      };
+      card.append(details, button);
+      root.append(card);
+    }
+    card.classList.toggle("acknowledged", !!a.operator_acknowledged_at);
+    const f = a.fix;
+    const details = card.querySelector(".sos-details");
+    if (card.dataset.snapshot !== JSON.stringify(a)) {
+      card.dataset.snapshot = JSON.stringify(a);
+      details.replaceChildren(
+        el("h2", `SOS · ${a.party.id} · ${a.party.name}`),
+        el("div", `Device ${a.device_id} · Event ${a.event_id}`),
+        el(
+          "div",
+          `Activated ${time(a.triggered_at)} · Snapshot ${time(a.captured_at)} · Command received ${time(a.received_at)}`,
+        ),
+        el(
+          "div",
+          f
+            ? `Last credible reported coordinates: ${f.latitude}, ${f.longitude} · accuracy ${f.horizontal_accuracy_m == null ? "unknown" : "±" + f.horizontal_accuracy_m + " m"}`
+            : "Coordinates unavailable at activation",
+        ),
+        el(
+          "div",
+          `GNSS at capture: ${a.gnss_status.replaceAll("_", " ")} · ${a.location_freshness.replaceAll("_", " ")}`,
+        ),
+        el(
+          "div",
+          f
+            ? `Measured ${time(f.observed_at)} · age at capture ${(f.fix_age_ms / 1000).toFixed(1)} s. This is the event observation, not a current position.`
+            : "SOS sent without waiting for GNSS",
+        ),
+        el(
+          "strong",
+          a.operator_acknowledged_at
+            ? `Acknowledged by operator ${time(a.operator_acknowledged_at)}`
+            : "UNACKNOWLEDGED — operator action required",
+        ),
+      );
+    }
+    card.querySelector("button").disabled = !!a.operator_acknowledged_at;
+    card
+      .querySelector("button")
+      .setAttribute(
+        "aria-label",
+        `Acknowledge SOS for ${a.party.id}, activated ${time(a.triggered_at)}, event ${a.event_id}`,
+      );
+    if (root.children[index] !== card)
+      root.insertBefore(card, root.children[index] || null);
+    index++;
+  }
+  if (focused && document.activeElement !== focused) focused.focus();
+  sosSound();
+}
 function render() {
+  renderSOS();
   $("projection-status").textContent = state.projection_error
     ? "Projection failed: " + state.projection_error
     : state.projection_pending

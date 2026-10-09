@@ -216,6 +216,19 @@ enum class DiagnosticEvent {
     INCIDENT_FINALIZED,
     PROCESS_INTERRUPTED,
     RECORDS_DROPPED,
+    SOS_TRIGGER_DETECTED,
+    SOS_KEY_EVALUATED,
+    SOS_DEBOUNCED,
+    SOS_SAVED_LOCALLY,
+    SOS_SAVE_FAILED,
+    SOS_PRIORITY_PLACED,
+    SOS_PREEMPTED_BACKLOG,
+    SOS_SEND_ATTEMPT,
+    SOS_NETWORK_UNAVAILABLE,
+    SOS_RETRY_BACKOFF,
+    SOS_TRANSPORT_ACK_ACCEPTED,
+    SOS_TRANSPORT_ACK_REJECTED,
+    SOS_RESTORED,
     SNAPSHOT_SAVED,
     REPORT_SEND_ATTEMPT,
     REPORT_ACK_ACCEPTED,
@@ -232,6 +245,7 @@ data class DiagnosticEntry(
     val source: SourceState? = null,
     val count: Long? = null,
     val startReason: ServiceStartReason? = null,
+    val sos: SosEvidence? = null,
     val report: ReportEvidence? = null,
 )
 
@@ -742,6 +756,16 @@ class DiagnosticJournal(private val directory: File, val limits: Limits = Limits
                     )
                     .toByteArray(),
             )
+            val sosEntries =
+                diagnosticFiles()
+                    .filter { it.name.startsWith("timeline-") }
+                    .sortedBy { it.path }
+                    .flatMap { it.readLines().mapNotNull(::readEntry) }
+                    .filter { it.sos != null }
+            put(
+                "sos-report.json",
+                gson.toJson(sosReport(sosEntries, ioFailures, dropped)).toByteArray(),
+            )
             for (f in diagnosticFiles().sortedBy { it.path }) {
                 val bytes =
                     if (f.extension == "jsonl") {
@@ -801,6 +825,7 @@ class DiagnosticJournal(private val directory: File, val limits: Limits = Limits
             serviceGeneration = generation(e.serviceGeneration),
             snapshot = e.snapshot?.let(::safe),
             source = e.source?.let(::safeSource),
+            sos = e.sos?.let(::safeSos),
             report =
                 e.report
                     ?.takeIf {
@@ -813,6 +838,14 @@ class DiagnosticJournal(private val directory: File, val limits: Limits = Limits
                             observedAt = it.observedAt?.let(::timestamp),
                         )
                     },
+        )
+
+    private fun safeSos(s: SosEvidence) =
+        s.copy(
+            eventRef = s.eventRef?.takeIf { it.matches(Regex("[0-9a-f]{16}")) },
+            durationMs = s.durationMs?.takeIf { it in 0..MAX_WIRE_INTEGER },
+            count = s.count?.takeIf { it >= 0 },
+            competingReports = s.competingReports?.takeIf { it >= 0 },
         )
 
     private fun timestamp(s: String?) =
@@ -878,6 +911,7 @@ class DiagnosticRecorder(
         val done: kotlinx.coroutines.CompletableDeferred<File>,
     )
 
+    private val processGeneration = java.util.UUID.randomUUID().toString()
     private val worker = scope.launchWorker()
 
     private fun kotlinx.coroutines.CoroutineScope.launchWorker() = launch {
@@ -943,6 +977,21 @@ class DiagnosticRecorder(
                 report = report,
             )
         if (!messages.trySend(e).isSuccess) {
+            lost.incrementAndGet()
+            totalLost.incrementAndGet()
+        }
+    }
+
+    fun sos(event: DiagnosticEvent, value: SosEvidence) {
+        val entry =
+            DiagnosticEntry(
+                event,
+                utc(clock.wallMillis()),
+                clock.elapsedMillis(),
+                processGeneration,
+                sos = value,
+            )
+        if (!messages.trySend(entry).isSuccess) {
             lost.incrementAndGet()
             totalLost.incrementAndGet()
         }

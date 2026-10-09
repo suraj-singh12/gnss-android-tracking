@@ -147,6 +147,8 @@ func (s *Store) LocalHandler(assets http.Handler) http.Handler {
 			return
 		}
 		switch r.URL.Path {
+		case "/local/sos/acknowledge":
+			err = s.AcknowledgeSOS(str(v["device_id"]), str(v["event_id"]))
 		case "/local/recording":
 			if str(v["action"]) == "clear" && v["confirmed"] != true {
 				err = errors.New("clear requires explicit confirmation")
@@ -213,5 +215,5 @@ func dashboardView(st State) map[string]any {
 	if st.Recording != nil {
 		recording = map[string]any{"recording_id": st.Recording.ID, "active": st.Recording.Active}
 	}
-	return map[string]any{"devices": devices, "recording": recording, "policy": st.Policy, "points": st.Points, "raw_points": st.RawPoints, "provisional_points": st.Provisional, "projection_pending": st.ProjectionPending, "projection_error": st.ProjectionError}
+	return map[string]any{"sos_alerts": st.Alerts, "devices": devices, "recording": recording, "policy": st.Policy, "points": st.Points, "raw_points": st.RawPoints, "provisional_points": st.Provisional, "projection_pending": st.ProjectionPending, "projection_error": st.ProjectionError}
 }

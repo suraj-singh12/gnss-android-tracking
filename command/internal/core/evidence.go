@@ -41,7 +41,12 @@ func revisionFromSettings(settings []debug.BuildSetting) Revision {
 	return r
 }
 
+func sosRef(event string) string { h := sha256.Sum256([]byte(event)); return fmt.Sprintf("%x", h[:8]) }
+
 type Evidence struct {
+	SOSRef               string             `json:"sos_event_ref,omitempty"`
+	SOSTriggered         string             `json:"sos_triggered_at,omitempty"`
+	SOSAcknowledged      *string            `json:"sos_operator_acknowledged_at,omitempty"`
 	FailureCode          string             `json:"failure_code,omitempty"`
 	BatchEntryIndex      *int               `json:"batch_entry_index,omitempty"`
 	ProjectionPending    bool               `json:"projection_pending"`
@@ -178,6 +183,11 @@ func liveObserved(d *Device) string {
 func receiptEvidence(m Message, at, first, result string, d *Device) Evidence {
 	c := m.Config
 	e := Evidence{ReportReference: fmt.Sprintf("%x", sha256.Sum256([]byte(m.ID))), GNSSStatus: m.Health.GNSS, At: at, Kind: result, Device: m.Device, Message: m.ID, Sequence: m.Sequence, Captured: m.Captured, FirstReceived: first, Type: m.Type, Effective: m.Config.Effective, Reported: &c, FixPresent: m.Fix != nil, LiveBefore: liveObserved(d)}
+	if m.SOS != nil {
+		e.SOSRef = sosRef(m.SOS.EventID)
+		e.SOSTriggered = m.SOS.Triggered
+	}
+
 	if m.Fix != nil {
 		age := m.Fix.Age
 		e.FixAgeAtCapture = &age
@@ -461,7 +471,22 @@ func (s *Store) fieldReport(tx *sql.Tx) (FieldReport, error) {
 			c.ProjectionReasons[d.Reason]++
 		}
 	}
-	analyzeField(&r, st.Policy)
+	analyzeSOS(&r, st)
+	tracking := r
+	tracking.Receipts, tracking.Events, tracking.Verdicts = nil, nil, nil
+	for _, v := range r.Receipts {
+		if v.Type != "sos" {
+			tracking.Receipts = append(tracking.Receipts, v)
+		}
+	}
+	for _, v := range r.Events {
+		if v.SOSRef == "" {
+			tracking.Events = append(tracking.Events, v)
+		}
+	}
+	analyzeField(&tracking, st.Policy)
+	r.Gaps = tracking.Gaps
+	r.Verdicts = append(r.Verdicts, tracking.Verdicts...)
 	for device, h := range r.History {
 		verdict, reason := "INCONCLUSIVE", "No recent phone queue report proves final synchronization"
 		if h.Condition == "incomplete" {
@@ -768,6 +793,7 @@ func (s *Store) ExportFieldReport(w io.Writer) error {
 	if err != nil {
 		return err
 	}
+	redactSOSReport(&r)
 	z := zip.NewWriter(w)
 	files := []struct {
 		name string
