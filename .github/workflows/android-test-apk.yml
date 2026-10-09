@@ -1,4 +1,4 @@
-name: Issue 4 matched physical test assets
+name: Issue 4 + SOS matched physical acceptance assets
 
 on:
   push:
@@ -13,19 +13,21 @@ jobs:
   build-matched-assets:
     runs-on: ubuntu-latest
     env:
-      SOURCE_REVISION: 8fbcabbc2443aae75178a50160ee1248830611dd
+      SOURCE_REVISION: b23b5f58845c896e7fb2c5800e577202667c1e3f
+      ASSET_DIR: ${{ runner.temp }}/gnss-matched-assets
     steps:
       - name: Check out temporary workflow branch
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Verify isolated workflow commit and check out frozen product source
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          git fetch --no-tags --depth=2 origin "refs/heads/$GITHUB_REF_NAME"
-          test "$(git rev-parse HEAD^)" = "$SOURCE_REVISION"
-          changed_files=$(git diff-tree --no-commit-id --name-only -r HEAD)
+          git merge-base --is-ancestor "$SOURCE_REVISION" HEAD
+          changed_files=$(git diff --name-only "$SOURCE_REVISION" HEAD)
           test "$changed_files" = ".github/workflows/android-test-apk.yml"
           git checkout --detach "$SOURCE_REVISION"
           test "$(git rev-parse HEAD)" = "$SOURCE_REVISION"
@@ -89,41 +91,75 @@ jobs:
           cache: true
           cache-dependency-path: command/go.sum
 
-      - name: Build macOS ARM64 Command binary
+      - name: Build portable Command binaries from frozen source
+        working-directory: command
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p dist
-          cd command
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o ../dist/gnss-command-darwin-arm64 ./cmd/party-tracker
+          mkdir -p "$ASSET_DIR"
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -buildvcs=true -o "$ASSET_DIR/gnss-command-darwin-arm64" ./cmd/party-tracker
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -buildvcs=true -o "$ASSET_DIR/gnss-command-windows-amd64.exe" ./cmd/party-tracker
 
-      - name: Verify Command binary and embedded product revision
+      - name: Verify matched source identities and create checksum manifest
         shell: bash
         run: |
           set -euo pipefail
-          binary=dist/gnss-command-darwin-arm64
-          test -s "$binary"
           test "$(git rev-parse HEAD)" = "$SOURCE_REVISION"
-          build_info=$(go version -m "$binary")
-          printf '%s\n' "$build_info"
-          grep -F "vcs.revision=$SOURCE_REVISION" <<< "$build_info"
-          grep -F 'vcs.modified=false' <<< "$build_info"
-          grep -F 'GOOS=darwin' <<< "$build_info"
-          grep -F 'GOARCH=arm64' <<< "$build_info"
-          grep -F 'CGO_ENABLED=0' <<< "$build_info"
+          test -z "$(git status --porcelain)"
+          for target in darwin-arm64 windows-amd64.exe; do
+            binary="$ASSET_DIR/gnss-command-$target"
+            test -s "$binary"
+            info=$(go version -m "$binary")
+            printf '%s\n' "$info" > "$ASSET_DIR/$target-build-info.txt"
+            printf '%s\n' "$info"
+            grep -F "vcs.revision=$SOURCE_REVISION" <<< "$info"
+            grep -F 'vcs.modified=false' <<< "$info"
+            grep -F 'CGO_ENABLED=0' <<< "$info"
+            if [[ "$target" == darwin-arm64 ]]; then
+              grep -F 'GOOS=darwin' <<< "$info"
+              grep -F 'GOARCH=arm64' <<< "$info"
+            else
+              grep -F 'GOOS=windows' <<< "$info"
+              grep -F 'GOARCH=amd64' <<< "$info"
+            fi
+          done
+          cp android/app/build/outputs/apk/debug/app-debug.apk "$ASSET_DIR/"
+          python3 - <<'PY_MANIFEST'
+          import hashlib, json, os, pathlib
+          root = pathlib.Path(os.environ['ASSET_DIR'])
+          names = ['app-debug.apk', 'gnss-command-darwin-arm64', 'gnss-command-windows-amd64.exe']
+          assets = {name: {'sha256': hashlib.sha256((root/name).read_bytes()).hexdigest(), 'bytes': (root/name).stat().st_size} for name in names}
+          manifest = {'schema_version': 1, 'source_revision': os.environ['SOURCE_REVISION'], 'workflow_revision': os.environ['GITHUB_SHA'], 'android_java': 17, 'android_sdk': 35, 'go': '1.24.7', 'CGO_ENABLED': 0, 'assets': assets}
+          (root/'manifest.json').write_text(json.dumps(manifest, indent=2)+'\n')
+          (root/'SHA256SUMS').write_text(''.join(f"{v['sha256']}  {name}\n" for name,v in assets.items()))
+          print(json.dumps(manifest, indent=2))
+          for folder, file in [('android', names[0]), ('macos', names[1]), ('windows', names[2])]:
+              out = root/folder
+              out.mkdir()
+              for name in [file, 'manifest.json', 'SHA256SUMS']:
+                  (out/name).write_bytes((root/name).read_bytes())
+          PY_MANIFEST
 
-      - name: Upload Android debug APK
+      - name: Upload matched Android debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: gnss-android-issue4-8fbcabb-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: gnss-android-issue4-5-b23b5f5-debug-apk
+          path: ${{ env.ASSET_DIR }}/android/*
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 14
 
-      - name: Upload macOS ARM64 Command binary
+      - name: Upload matched macOS ARM64 Command
         uses: actions/upload-artifact@v4
         with:
-          name: gnss-command-issue4-8fbcabb-darwin-arm64
-          path: dist/gnss-command-darwin-arm64
+          name: gnss-command-issue4-5-b23b5f5-darwin-arm64
+          path: ${{ env.ASSET_DIR }}/macos/*
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 14
+
+      - name: Upload matched Windows AMD64 Command
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnss-command-issue4-5-b23b5f5-windows-amd64
+          path: ${{ env.ASSET_DIR }}/windows/*
+          if-no-files-found: error
+          retention-days: 14
