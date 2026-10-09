@@ -160,3 +160,11 @@ full oracle, rejected provisional junction/recovery, policy switches, session mo
 late joins, stale queue/explicit unresolved outcomes, old receiver metadata backfill,
 and live display while projection is busy. Shared native/batch fixtures are consumed
 by both production parsers.
+
+The native two-outage comparison retains 100 one-second measurements per phone
+at 30-second live cadence. Continuous delivery and 41–49 / 52–79 recovery blocks
+produce identical logical point order, segment membership and geometry. Real Sender
+delivers 80 current first, then the two oldest blocks without regressing live state;
+all original Room identities are retained. A poor-accuracy raw point is reconsidered
+by full policy reconstruction, and the final zero-pending report certifies receipt
+and completed projection independently.
