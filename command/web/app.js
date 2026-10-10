@@ -395,6 +395,7 @@ function render() {
       };
       form.append(input, set, clear);
       card.append(
+        el("small", "Reporting interval override · seconds"),
         form,
         el(
           "small",
@@ -513,6 +514,7 @@ function render() {
       enabled.setAttribute("aria-label", "Enable " + label);
       row.append(enabled);
       input.name = key;
+      input.setAttribute("aria-label", label);
       input.type = "number";
       input.step = "any";
       input.min = key === "uncertainty_multiplier" ? "1" : "0.001";

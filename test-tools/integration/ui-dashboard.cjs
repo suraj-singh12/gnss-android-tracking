@@ -436,15 +436,34 @@ async function wait(check) {
     path: path.join(out, "command-mixed-online-offline-stale-queue.png"),
     fullPage: true,
   });
-  const axe = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
-    .analyze();
+  const violations = [];
+  for (const dialog of [null, "quality", "map-settings"]) {
+    if (dialog) {
+      await page
+        .locator(dialog === "quality" ? "#open-quality" : "#open-map")
+        .click();
+      await page.screenshot({
+        path: path.join(out, `command-${dialog}-dialog.png`),
+        fullPage: true,
+      });
+    }
+    const result = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+      .analyze();
+    violations.push(
+      ...result.violations.map((v) => ({
+        screen: dialog || "workspace",
+        ...v,
+      })),
+    );
+    if (dialog) await page.locator(`[data-close="${dialog}"]`).click();
+  }
   fs.writeFileSync(
     path.join(out, "command-accessibility.json"),
-    JSON.stringify(axe.violations, null, 2),
+    JSON.stringify(violations, null, 2),
   );
   assert.deepEqual(
-    axe.violations.map((v) => ({
+    violations.map((v) => ({
       id: v.id,
       nodes: v.nodes.map((n) => n.target),
     })),
