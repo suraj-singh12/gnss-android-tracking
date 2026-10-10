@@ -676,6 +676,10 @@ async function wait(check) {
     .filter({ hasText: "Locate event observation" })
     .click();
   await page.waitForSelector('[data-layer="located-sos"]');
+  assert.equal(
+    await page.locator('[data-layer="located-sos"] text').innerText(),
+    "SOS event · Charlie",
+  );
   assert.match(
     await page.locator("#hover").innerText(),
     /not necessarily a current position/,

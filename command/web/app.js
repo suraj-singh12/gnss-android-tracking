@@ -1327,11 +1327,12 @@ function draw() {
     };
     const label = svg("text", {
       x: x + 13,
-      y: y - 13,
+      // Separate coincident event/current labels without moving either position.
+      y: y + 22,
       fill: "#a51621",
       "font-size": 12,
     });
-    label.textContent = `SOS · ${locatedSOS.party.id}`;
+    label.textContent = `SOS event · ${locatedSOS.party.id}`;
     layer.append(marker, label);
     root.append(layer);
   }
