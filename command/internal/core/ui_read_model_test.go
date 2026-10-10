@@ -25,3 +25,13 @@ func TestDashboardDurationUsesRecordingWindows(t *testing.T) {
 		t.Fatal("absent recording must remain absent")
 	}
 }
+func TestDashboardSessionAvailabilityUsesExistingMetadata(t *testing.T) {
+	st := State{Devices: map[string]*Device{"one": {}}}
+	if dashboardView(st, time.Now())["recording_session_available"] != false {
+		t.Fatal("invented session")
+	}
+	st.Devices["one"].Session = &ReportedSession{ID: "existing", Start: "2026-10-10T01:00:00.000Z"}
+	if dashboardView(st, time.Now())["recording_session_available"] != true {
+		t.Fatal("reported session hidden")
+	}
+}

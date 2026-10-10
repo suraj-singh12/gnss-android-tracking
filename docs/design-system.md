@@ -80,7 +80,8 @@ The workspace is viewport-bound, with no document scroll. Only party/event lists
 and dialogs scroll. With selected details closed and sidebar open, the geographic
 canvas occupies about 82.5% at 1280 px and 84.4% at 1440 px. Both secondary panels
 collapse; narrow layouts use bounded overlays. Recording controls are geometrically
-centred, state/duration left and Start from right.
+centred, state/duration left. Start opens the mode-selection dialog; no permanent
+Start From selector remains.
 
 Left: compact selectable parties, stable colour, independent contact/GNSS/history
 labels, SOS attention and track visibility. Centre: dominant geographic canvas with
@@ -147,8 +148,24 @@ SOS remains reachable. Verification evidence and remaining limits are recorded i
 Diagnostics includes a named **Diagnostic tools** native vertical group
 (`R.id.diagnostic_tools`) containing delivery retry and diagnostic export. Additional
 tested tools can be appended to that group without adding a destination or changing
-Tracking. The separate experimental Physical Button Test is not included in this
-revision. Its key detection must remain independent of the existing SOS engine.
-Integration requires a reviewed, deliberate merge/rebase after both branches are
-ready, followed by Android and GNSS/SOS regression checks. Neither PR is merged
-without operator approval. Screen-off button support remains unverified.
+Tracking. The integrated Physical Button Test reuses the PR #15 controller/journal;
+foreground routing and SOS suppression/restoration remain independent of appearance.
+Background/locked-screen/screen-off observation is mechanism unavailable. Dependency
+PRs remain unmerged without approval.
+
+## Day/Night and terrain refinement
+
+Day retains existing neutral surfaces. Night uses background `#111B22`, surfaces
+`#1B2831`, ink `#E5EDF1`, secondary `#B2C2CC`, green `#8DDBBD`, warning `#F2C46D`
+and alert `#FF9BA5`. Filled primary and SOS actions retain dark green/red with white
+labels. Native Android resources and Command CSS semantic tokens apply throughout;
+each app stores its independent choice. Command keeps About and Day/Night beside SOS;
+connection and connected/total parties sit beneath identity. No Local workspace label.
+
+Start dialog defaults Current Time, requires confirmation, and explains unavailable
+session metadata. About/appearance never acknowledge events or silence alarms.
+Layers beside Focus selected is a compact nonmodal popover, disabled for missing
+components, with local instant toggles. DEM availability is not inferred from checkbox
+selection. Existing geographic renderer orders hillshade, vectors, contours, tracks,
+live positions, SOS and controls; points/coordinates/distance remain authoritative.
+See Command README for actual local DEM formats, provenance, bounds and provider limits.

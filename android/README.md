@@ -25,6 +25,15 @@ Generated APKs/build output are ignored. No release workflow is provided.
 
 ## Operation
 
+Settings includes **Appearance: Day/Night**. Native configuration/theme resources
+are set while attaching the Activity, before resource access. The independent
+preference persists; Day is default. Tracking, Settings, Diagnostics, Physical Button
+Test, navigation, protected SOS and native dialogs share semantic palettes. Changing
+appearance recreates the Activity, not the tracking service. Any active key diagnostic
+uses its existing pause/interruption behavior, retains evidence and restores normal
+SOS handling. GNSS/Room/sender/SOS state is untouched. Large fonts, TalkBack and
+OS permission/export dialogs still require actual-device acceptance.
+
 Configure Party ID/name, a Command base URL (e.g. `http://192.168.1.10:8080`), and
 local reporting seconds (5–86400, multiples of 5). Save or Start Tracking.
 Grant **precise** location. Notification permission on Android 13+ is requested

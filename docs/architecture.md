@@ -301,6 +301,11 @@ The shared audible scheduler tests the persisted unacknowledged condition; dialo
 and arrival notices cannot acknowledge an event. Event History reads the existing
 `field_evidence` journal (latest 500 on screen; existing full export retained).
 Offline-map preparation uses fixed, bounded Nominatim/Overpass requests and adds
-only an `offline_maps` library table to the existing Command SQLite file. Map
+an `offline_maps` library table to the existing Command SQLite file. The PR #17
+extension adds an associated `offline_terrain` table in that same file: bounded
+binary DEM crops, not GeoJSON raster samples. One source grid supports the selected
+hillshade, contours and elevation inspection; all use the existing map projection.
+Automatic DEM acquisition is not verified; local SRTM HGT import is the supported
+preparation path. Map
 import/display/preparation never feeds reconstruction, raw observations, Recording,
 live/SOS state or qualified distance. There is no parallel database or projection.

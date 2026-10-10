@@ -103,8 +103,42 @@ async function wait(check) {
     fullPage: true,
   });
   assert.equal(await page.locator("#start").isEnabled(), true);
-  await page.locator("#recording-mode").selectOption("from_now");
   await page.locator("#start").click();
+  assert.equal(
+    (await state()).recording,
+    null,
+    "opening Start dialog must not mutate recording",
+  );
+  assert.equal(await page.locator("#current-mode").isChecked(), true);
+  assert.equal(await page.locator("#session-mode").isDisabled(), true);
+  await page
+    .locator('#recording-start [data-close="recording-start"]')
+    .last()
+    .click();
+  assert.equal(
+    (await state()).recording,
+    null,
+    "cancel must not mutate recording",
+  );
+  await page.locator("#start").click();
+  await page.route("**/local/recording", (route) =>
+    route.fulfill({
+      status: 409,
+      contentType: "application/json",
+      body: JSON.stringify({
+        message: "Injected backend rejection; no mutation",
+      }),
+    }),
+  );
+  await page.locator("#confirm-recording").click();
+  await page.waitForFunction(() =>
+    document
+      .querySelector("#recording-start-error")
+      .textContent.includes("Injected backend rejection"),
+  );
+  assert.equal((await state()).recording, null);
+  await page.unroute("**/local/recording");
+  await page.locator("#confirm-recording").click();
   await wait(async () => !!(await state()).recording?.active);
   const fixture = JSON.parse(
     fs.readFileSync(
@@ -175,7 +209,19 @@ async function wait(check) {
     }
   }
   await post("recording", { action: "clear", confirmed: true });
-  await post("recording", { action: "start", mode: "session_beginning" });
+  await page.waitForFunction(() => !document.querySelector("#start").disabled);
+  await page.locator("#start").click();
+  assert.equal(await page.locator("#current-mode").isChecked(), true);
+  assert.equal(await page.locator("#session-mode").isEnabled(), true);
+  await page.locator("#session-mode").check();
+  await page.screenshot({
+    path: path.join(out, "command-start-recording-session.png"),
+    fullPage: true,
+  });
+  await page.locator("#confirm-recording").click();
+  await wait(
+    async () => (await state()).recording?.mode === "session_beginning",
+  );
   await page.reload();
   await page.waitForFunction(
     () => document.querySelectorAll(".party-select").length === 5,
@@ -490,13 +536,158 @@ async function wait(check) {
     await page.locator("#map-attribution").innerText(),
     /OpenStreetMap/,
   );
+  // Synthetic georeferenced HGT: genuine local decoder/storage/rendering, NOT provider evidence.
+  await page.locator("#open-layers").click();
+  for (const k of ["hillshade", "contours", "elevation"])
+    assert.equal(await page.locator("#layer-" + k).isDisabled(), true);
+  await page.screenshot({
+    path: path.join(out, "command-vector-only-layers.png"),
+    fullPage: true,
+  });
+  await page.locator('[data-close="layers"]').click();
+  await page.locator("#open-map").click();
+  await page
+    .getByText("Prepare terrain from a local DEM", { exact: true })
+    .click();
+  const hgt = Buffer.alloc(1201 * 1201 * 2);
+  for (let y = 0; y < 1201; y++)
+    for (let x = 0; x < 1201; x++)
+      hgt.writeInt16BE(
+        Math.round(500 + 250 * Math.sin(x / 7) * Math.cos(y / 9)),
+        (y * 1201 + x) * 2,
+      );
+  await page.locator("#terrain-file").setInputFiles({
+    name: "N28E077.hgt",
+    mimeType: "application/octet-stream",
+    buffer: hgt,
+  });
+  for (const k of ["hillshade", "contours", "elevation"])
+    await page.locator("#prepare-" + k).check();
+  await page.locator("#prepare-terrain").click();
+  await page.waitForFunction(() =>
+    document
+      .querySelector("#terrain-status")
+      .textContent.includes("Prepared and saved"),
+  );
+  await page.locator('[data-close="map-settings"]').click();
+  await page.locator("#open-layers").click();
+  const unchanged = await page.evaluate(() =>
+    JSON.stringify([viewport, selectedParty]),
+  );
+  for (const k of ["hillshade", "contours", "elevation"]) {
+    assert.equal(await page.locator("#layer-" + k).isEnabled(), true);
+    assert.equal(await page.locator("#layer-" + k).isChecked(), false);
+    await page.locator("#layer-" + k).check();
+  }
+  assert.equal(
+    await page.evaluate(() => JSON.stringify([viewport, selectedParty])),
+    unchanged,
+    "layer changes must preserve view and party",
+  );
+  assert.equal(await page.locator('[data-layer="hillshade"]').count(), 1);
+  assert.equal(
+    await page.evaluate(() => {
+      const image = document.querySelector('[data-layer="hillshade"]'),
+        root = document.querySelector("#tracks"),
+        [x, y] = GeoMap.project(terrain.bounds[0], terrain.bounds[3]);
+      const expectedX =
+          (x - viewport.cx) * viewport.scale + root.clientWidth / 2,
+        expectedY = root.clientHeight / 2 - (y - viewport.cy) * viewport.scale;
+      return (
+        Math.abs(
+          Number(image.getAttribute("x")) +
+            Number(image.getAttribute("width")) / terrain.columns / 2 -
+            expectedX,
+        ) < 1e-6 &&
+        Math.abs(
+          Number(image.getAttribute("y")) +
+            Number(image.getAttribute("height")) / terrain.rows / 2 -
+            expectedY,
+        ) < 1e-6
+      );
+    }),
+    true,
+    "hillshade pixel centres align with projected DEM nodes",
+  );
+  assert.equal(await page.locator('[data-layer="contours"]').count(), 1);
+  assert.deepEqual(
+    await page
+      .locator("#tracks > [data-layer]")
+      .evaluateAll((nodes) => nodes.map((n) => n.dataset.layer).slice(0, 4)),
+    ["hillshade", "offline-map", "contours", "tracks"],
+  );
+  await page.screenshot({
+    path: path.join(out, "command-day-terrain-layers-fixture.png"),
+    fullPage: true,
+  });
+  await page.locator('[data-close="layers"]').click();
+  const terrainCursor = await page.evaluate(() => {
+    const lon = (terrain.bounds[0] + terrain.bounds[2]) / 2,
+      lat = (terrain.bounds[1] + terrain.bounds[3]) / 2;
+    const [x, y] = GeoMap.project(lon, lat);
+    const root = document.querySelector("#tracks"),
+      rect = root.getBoundingClientRect();
+    return {
+      x: rect.left + root.clientWidth / 2 + (x - viewport.cx) * viewport.scale,
+      y: rect.top + root.clientHeight / 2 - (y - viewport.cy) * viewport.scale,
+    };
+  });
+  await page.mouse.move(terrainCursor.x, terrainCursor.y);
+  assert.match(
+    await page.locator("#hover").textContent(),
+    /Estimated ground elevation ~\d+ m.*EGM96.*not GNSS altitude/,
+  );
+  await page.locator("#appearance").click();
+  assert.equal(
+    await page.locator("html").getAttribute("data-appearance"),
+    "night",
+  );
+  for (const size of [
+    { width: 1280, height: 720 },
+    { width: 1440, height: 900 },
+  ]) {
+    await page.setViewportSize(size);
+    await page.screenshot({
+      path: path.join(out, `command-night-terrain-${size.width}-fixture.png`),
+      fullPage: true,
+    });
+  }
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.locator("#open-about").click();
+  assert.match(await page.locator("#about").innerText(), /Lt Suraj Singh/);
+  assert.equal(
+    await page.locator("#about a").getAttribute("href"),
+    "mailto:surajsingh5092@gmail.com",
+  );
+  await page.screenshot({
+    path: path.join(out, "command-night-about.png"),
+    fullPage: true,
+  });
+  await page.keyboard.press("Escape");
+  assert.equal(await page.locator("#about").evaluate((e) => e.open), false);
+  assert.equal(await page.locator("#recording-mode").count(), 0);
+  assert.equal(await page.getByText(/Local workspace/i).count(), 0);
+  assert.equal(
+    await page
+      .locator("#connection")
+      .evaluate((e) => e.closest(".brand") !== null),
+    true,
+  );
+  // Providers are denied below; restart must restore the persisted DEM and visibility.
+  let offlineProviderRequests = 0;
+  const denyOfflineProvider = (route) => {
+    offlineProviderRequests++;
+    return route.abort();
+  };
+  await page.route("**/local/map-preview", denyOfflineProvider);
+  await page.route("**/local/map-search", denyOfflineProvider);
   // Command restart + browser reload without any provider access uses the same saved map.
   command.kill("SIGINT");
   await once(command, "exit");
   await page.waitForFunction(() =>
     document
       .querySelector("#connection")
-      .textContent.includes("Command workspace unavailable"),
+      .textContent.includes("Command Disconnected"),
   );
   assert.equal(
     await page
@@ -529,6 +720,35 @@ async function wait(check) {
   });
   await page.reload();
   await page.waitForSelector('[data-layer="offline-map"]');
+  await page.waitForSelector('[data-layer="hillshade"]');
+  await page.waitForSelector('[data-layer="contours"]');
+  assert.equal(
+    await page.locator("html").getAttribute("data-appearance"),
+    "night",
+  );
+  await page.locator("#open-layers").click();
+  for (const k of ["hillshade", "contours", "elevation"]) {
+    assert.equal(await page.locator("#layer-" + k).isChecked(), true);
+    await page.locator("#layer-" + k).uncheck();
+    await page.locator("#layer-" + k).check();
+  }
+  await page.keyboard.press("Escape");
+  assert.equal(await page.locator("#layers").isVisible(), false);
+  assert.equal(
+    await page
+      .locator("#open-layers")
+      .evaluate((e) => e === document.activeElement),
+    true,
+  );
+  assert.equal(
+    offlineProviderRequests,
+    0,
+    "terrain restoration/toggles are offline",
+  );
+  await page.screenshot({
+    path: path.join(out, "command-night-terrain-offline-restored-fixture.png"),
+    fullPage: true,
+  });
   await page.waitForFunction(() =>
     document
       .querySelector("#connection")
@@ -612,8 +832,9 @@ async function wait(check) {
   page.on("dialog", (d) => d.accept());
   await page.locator("#clear").click();
   await wait(async () => !(await state()).recording);
-  await page.locator("#recording-mode").selectOption("from_now");
   await page.locator("#start").click();
+  assert.equal(await page.locator("#current-mode").isChecked(), true);
+  await page.locator("#confirm-recording").click();
   await wait(async () => (await state()).recording?.mode === "from_now");
   const sos = JSON.parse(
     fs.readFileSync(
@@ -797,6 +1018,8 @@ async function wait(check) {
     "map-settings",
     "event-history",
     "sos-panel",
+    "about",
+    "layers",
   ]) {
     if (dialog) {
       await page
@@ -806,6 +1029,8 @@ async function wait(check) {
             "map-settings": "#open-map",
             "event-history": "#open-history",
             "sos-panel": "#open-sos",
+            about: "#open-about",
+            layers: "#open-layers",
           }[dialog],
         )
         .click();

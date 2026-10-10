@@ -83,24 +83,39 @@ class MainActivity : Activity() {
         button.setTextColor(
             android.content.res.ColorStateList(
                 arrayOf(intArrayOf(android.R.attr.state_enabled), intArrayOf()),
-                intArrayOf(0xff24343b.toInt(), 0xff829189.toInt()),
+                intArrayOf(getColor(R.color.ink), getColor(R.color.disabled_ink)),
             )
         )
         val surface =
             android.graphics.drawable.GradientDrawable().apply {
-                setColor(android.graphics.Color.WHITE)
+                setColor(getColor(R.color.surface))
                 cornerRadius = dp(8).toFloat()
-                setStroke(dp(1), 0xffb2c2bc.toInt())
+                setStroke(dp(1), getColor(R.color.control_line))
             }
         button.background =
             android.graphics.drawable.RippleDrawable(
-                android.content.res.ColorStateList.valueOf(0x3317654c),
+                android.content.res.ColorStateList.valueOf(getColor(R.color.ripple)),
                 surface,
                 null,
             )
     }
 
+    override fun attachBaseContext(newBase: android.content.Context) {
+        val night =
+            newBase.getSharedPreferences("appearance", MODE_PRIVATE).getBoolean("night", false)
+        val appearanceConfiguration =
+            android.content.res.Configuration(newBase.resources.configuration)
+        appearanceConfiguration.uiMode =
+            (appearanceConfiguration.uiMode and
+                android.content.res.Configuration.UI_MODE_NIGHT_MASK.inv()) or
+                if (night) android.content.res.Configuration.UI_MODE_NIGHT_YES
+                else android.content.res.Configuration.UI_MODE_NIGHT_NO
+        super.attachBaseContext(newBase.createConfigurationContext(appearanceConfiguration))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        val night = getSharedPreferences("appearance", MODE_PRIVATE).getBoolean("night", false)
+        setTheme(if (night) R.style.AppThemeNight else R.style.AppTheme)
         super.onCreate(savedInstanceState)
         pendingStart = savedInstanceState?.getBoolean("pendingStart") ?: false
         askedLocation = savedInstanceState?.getBoolean("askedLocation") ?: false
@@ -118,13 +133,13 @@ class MainActivity : Activity() {
         val root =
             LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                setBackgroundColor(0xfff3f5f4.toInt())
+                setBackgroundColor(getColor(R.color.background))
             }
         val navigation =
             LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 setPadding(dp(8), dp(4), dp(8), dp(4))
-                setBackgroundColor(android.graphics.Color.WHITE)
+                setBackgroundColor(getColor(R.color.surface))
             }
         val pages =
             listOf("Tracking", "Settings", "Diagnostics").associateWith {
@@ -150,7 +165,9 @@ class MainActivity : Activity() {
             }
             tabButtons.forEach { (key, tab) ->
                 tab.isSelected = key == name
-                tab.setTextColor(if (key == name) 0xff17654c.toInt() else 0xff607077.toInt())
+                tab.setTextColor(
+                    if (key == name) getColor(R.color.accent) else getColor(R.color.muted)
+                )
                 tab.contentDescription = "$key${if (key == name) ", selected" else ""}"
             }
             scroll.scrollTo(0, 0)
@@ -165,7 +182,7 @@ class MainActivity : Activity() {
                     minWidth = 0
                     setPadding(dp(4), dp(8), dp(4), dp(8))
                     backgroundTintList =
-                        android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE)
+                        android.content.res.ColorStateList.valueOf(getColor(R.color.surface))
                     setOnClickListener { navigate(name) }
                 }
             tabButtons[name] = tab
@@ -189,7 +206,7 @@ class MainActivity : Activity() {
             TextView(this).apply {
                 text = label
                 textSize = size
-                setTextColor(0xff24343b.toInt())
+                setTextColor(getColor(R.color.ink))
                 setPadding(0, dp(12), 0, dp(4))
                 content.addView(this)
             }
@@ -224,9 +241,9 @@ class MainActivity : Activity() {
                     setPadding(dp(16), dp(8), dp(16), dp(16))
                     background =
                         android.graphics.drawable.GradientDrawable().apply {
-                            setColor(android.graphics.Color.WHITE)
+                            setColor(getColor(R.color.surface))
                             cornerRadius = dp(12).toFloat()
-                            setStroke(dp(1), 0xffdce3df.toInt())
+                            setStroke(dp(1), getColor(R.color.line))
                         }
                     parent.addView(
                         this,
@@ -270,7 +287,7 @@ class MainActivity : Activity() {
         trackingSummary.accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         trackingError =
             text("").apply {
-                setTextColor(0xffa51621.toInt())
+                setTextColor(getColor(R.color.danger))
                 visibility = View.GONE
             }
         gnssSummary = text("GNSS · No fix")
@@ -281,9 +298,9 @@ class MainActivity : Activity() {
             card.setPadding(dp(16), dp(12), dp(16), dp(12))
             card.background =
                 android.graphics.drawable.GradientDrawable().apply {
-                    setColor(android.graphics.Color.WHITE)
+                    setColor(getColor(R.color.surface))
                     cornerRadius = dp(12).toFloat()
-                    setStroke(dp(1), 0xffdce3df.toInt())
+                    setStroke(dp(1), getColor(R.color.line))
                 }
             (card.layoutParams as LinearLayout.LayoutParams).topMargin = dp(8)
         }
@@ -305,7 +322,8 @@ class MainActivity : Activity() {
         val holdProgress =
             ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
                 contentDescription = "SOS hold progress"
-                progressTintList = android.content.res.ColorStateList.valueOf(0xffa51621.toInt())
+                progressTintList =
+                    android.content.res.ColorStateList.valueOf(getColor(R.color.danger))
             }
         sosHold =
             SosHoldGesture(sosButton, holdProgress, { resumed && destination == "Tracking" }) {
@@ -318,7 +336,7 @@ class MainActivity : Activity() {
             LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(dp(20), dp(8), dp(20), dp(8))
-                setBackgroundColor(android.graphics.Color.WHITE)
+                setBackgroundColor(getColor(R.color.surface))
                 addView(sosStatus, LinearLayout.LayoutParams(-1, -2))
                 addView(sosButton, LinearLayout.LayoutParams(-1, -2))
                 addView(holdProgress, LinearLayout.LayoutParams(-1, dp(4)))
@@ -469,6 +487,29 @@ class MainActivity : Activity() {
         val connectionCard = connectionSettings.parent as View
         settingsPage.removeView(connectionCard)
         settingsPage.addView(connectionCard, 2)
+        content = settingsPage
+        val appearanceButton =
+            button("Appearance: ${if (night) "Night" else "Day"}") {
+                AlertDialog.Builder(this)
+                    .setTitle("Appearance")
+                    .setSingleChoiceItems(arrayOf("Day", "Night"), if (night) 1 else 0) {
+                        dialog,
+                        choice ->
+                        if ((choice == 1) != night) {
+                            getSharedPreferences("appearance", MODE_PRIVATE)
+                                .edit()
+                                .putBoolean("night", choice == 1)
+                                .apply()
+                            recreate()
+                        }
+                        dialog.dismiss()
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+        appearanceButton.id = R.id.appearance
+        settingsPage.removeView(appearanceButton)
+        settingsPage.addView(appearanceButton, 2)
         content = pages.getValue("Diagnostics")
         val diagnosticTools =
             LinearLayout(this).apply {
@@ -494,23 +535,23 @@ class MainActivity : Activity() {
                 visibility = View.GONE
                 background =
                     android.graphics.drawable.GradientDrawable().apply {
-                        setColor(0xffffffff.toInt())
+                        setColor(getColor(R.color.surface))
                         cornerRadius = dp(12).toFloat()
-                        setStroke(dp(1), 0xffdce3df.toInt())
+                        setStroke(dp(1), getColor(R.color.line))
                     }
                 content.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
             }
         TextView(this).apply {
             text = "Physical Button Test"
             textSize = 20f
-            setTextColor(0xff24343b.toInt())
+            setTextColor(getColor(R.color.ink))
             contentDescription = "Physical Button Test details"
             physicalButtonPanel.addView(this)
         }
         physicalButtonStatus =
             TextView(this).apply {
                 textSize = 16f
-                setTextColor(0xff24343b.toInt())
+                setTextColor(getColor(R.color.ink))
                 setPadding(0, dp(8), 0, dp(8))
                 accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
                 physicalButtonPanel.addView(this)
@@ -519,14 +560,14 @@ class MainActivity : Activity() {
             text =
                 "Only supported keys delivered to this visible Activity are recorded. Background / locked-screen / screen-off volume-button detection: Mechanism unavailable. No MediaSession or background listener is used."
             textSize = 14f
-            setTextColor(0xff24343b.toInt())
+            setTextColor(getColor(R.color.ink))
             physicalButtonPanel.addView(this)
         }
         TextView(this).apply {
             text =
                 "While this test is active, the triple-Volume-Up SOS trigger is paused. Android volume handling and previously saved SOS delivery continue. This test never creates an SOS."
             textSize = 14f
-            setTextColor(0xff24343b.toInt())
+            setTextColor(getColor(R.color.ink))
             physicalButtonPanel.addView(this)
         }
         physicalButtonStart =
@@ -548,7 +589,7 @@ class MainActivity : Activity() {
         physicalButtonSummary =
             TextView(this).apply {
                 textSize = 14f
-                setTextColor(0xff24343b.toInt())
+                setTextColor(getColor(R.color.ink))
                 setPadding(0, dp(8), 0, dp(8))
                 physicalButtonPanel.addView(this)
             }
@@ -557,7 +598,7 @@ class MainActivity : Activity() {
             addView(
                 TextView(this@MainActivity).apply {
                     textSize = 14f
-                    setTextColor(0xff24343b.toInt())
+                    setTextColor(getColor(R.color.ink))
                     setTextIsSelectable(true)
                     physicalButtonEvents = this
                 },
@@ -679,7 +720,7 @@ class MainActivity : Activity() {
                             }
                         trackingError.text = op.error ?: state.operationalError ?: ""
                         trackingError.setTextColor(
-                            if (op.tracking) 0xff80590c.toInt() else 0xffa51621.toInt()
+                            if (op.tracking) getColor(R.color.warning) else getColor(R.color.danger)
                         )
                         trackingError.visibility =
                             if (trackingError.text.isEmpty()) View.GONE else View.VISIBLE

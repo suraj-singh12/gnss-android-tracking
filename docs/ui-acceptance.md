@@ -1,5 +1,52 @@
 # Issue #6 integrated UI acceptance
 
+## Terrain/appearance refinement on PR #17
+
+Branch `feature/issue6-terrain-appearance` starts at verified PR #17 SHA
+`9eee532869c3fdcc258bcaa4bc51ccc0f5eecbe7`, targeting
+`correction/issue6-operational-ux`. Existing PRs remain open/unmerged.
+
+Native Android Day/Night uses early Activity configuration and semantic resources,
+with Settings selection and independent persistence. Command themes every surface;
+header contact/count sits under identity, About beside SOS, and Start requires a
+mode modal defaulting Current Time. Existing actions/engines are preserved.
+
+Optional terrain supports real operator-supplied square SRTM HGT and bounded binary
+export/re-import. One DEM subset supplies selected shading/contours/elevation; local
+SQLite migration and map deletion preserve original vector bytes and authoritative
+tracking state. A small nonmodal Layers popover toggles availability/OFF/ON locally.
+Provider-independent fixture processing, real local storage and offline restart are
+distinct from real DEM acquisition. Direct candidate requests here returned proxy
+CONNECT HTTP 403. Automatic Copernicus/OpenTopography acquisition is not implemented;
+do not claim all six improvements fully accepted without that missing provider path.
+
+Run `node test-tools/integration/terrain-test.cjs` alongside existing suites.
+`ui-dashboard.cjs` now exercises default/cancel/error/both recording modes, exact
+About content, header placement, terrain availability/defaults/layer order, unchanged
+view/selection/distance, local DEM upload, Night persistence and Command restart with
+provider requests denied. Native visual tests render both themes at 360/480 dp and
+1.5× font scale, retaining all Physical Button and SOS assertions. Synthetic HGT is
+labelled as fixture evidence in screenshots, not real provider terrain.
+
+Actual screenshots for this refinement are saved under `shared/terrain-before`,
+`shared/terrain-after` and `shared/terrain-android`, with final same-source after
+renders uploaded through the reused workflow. Screenshot-first audit found the
+permanent selector/status placement to change; render inspection tightened layer
+spacing/Night contrast. Detailed passes/skips/failures, final SHA/CI/artifacts and
+signing compatibility are recorded in the new PR only after verification.
+
+Initial focused regression failures were corrected in their owning layers: native
+theme override moved to attachBaseContext before resource access; session availability
+exposed read-only by the existing compact dashboard view; isolated renderer test
+fixture declares optional terrain/theme state. No assertion weakening/test exclusion.
+Native visual GPS fixtures update the Activity's themed service shadow as well as
+the app shadow. Appearance is above the connection form. Raster cell centres align
+with projected DEM nodes; contour complexity is bounded without hiding other products.
+
+Physical device/OEM Wi-Fi/locked GNSS/SOS/speaker/TalkBack/picker and genuine DEM
+geographic alignment remain acceptance requirements. Existing live OSM providers can
+also fail independently of offline regression/builds. GeoTIFF/mosaics unsupported.
+
 ## Source and compatibility
 
 The corrective implementation branch `correction/issue6-operational-ux` starts
@@ -87,6 +134,7 @@ verified trusted asset and follow the OS's explicit security approval flow.
 test-tools/integration/run.sh --console=plain
 node test-tools/integration/map-test.cjs
 node test-tools/integration/sos-alarm-test.cjs
+node test-tools/integration/terrain-test.cjs
 ```
 
 Browser checks require externally installed test-only Playwright and axe-core/playwright;
