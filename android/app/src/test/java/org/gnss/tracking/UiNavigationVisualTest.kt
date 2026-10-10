@@ -177,7 +177,6 @@ class UiNavigationVisualTest {
                     descendants(root).filterIsInstance<Button>().single {
                         it.text == "SOS — hold to activate"
                     }
-                hold.layout(0, 0, w, 64)
                 val touch =
                     android.view.MotionEvent.obtain(
                         0,
