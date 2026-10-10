@@ -8,9 +8,9 @@ permissions:
 jobs:
   integrated:
     runs-on: ubuntu-latest
-    env:
-      GNSS_SCREENSHOT_DIR: ${{ runner.temp }}/gnss-assets/visual-evidence
     steps:
+      - name: Define visual evidence directory
+        run: echo "GNSS_SCREENSHOT_DIR=$RUNNER_TEMP/gnss-assets/visual-evidence" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
