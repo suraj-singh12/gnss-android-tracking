@@ -8,13 +8,13 @@ contains PR #11 native observation/history work. Neither dependency is merged.
 | --- | --- | --- |
 | Start/Stop phone tracking; permission-gated pending Start | MainActivity preflight → TrackingService / finishTracking | Tracking primary action + setup guidance |
 | Party ID/name, Command URL, local interval | repository.settings transaction | Settings |
-| Effective interval and Command override | persisted config / ACK | Tracking summary, Settings / Diagnostics |
+| Effective interval and Command override | persisted config / ACK | Settings / Diagnostics |
 | Precise location, GPS, notifications, battery/background settings | FieldPreflight / Android Settings intents | Tracking setup guidance |
 | Retry saved messages | repository.retryDelivery | Diagnostics, confirmed |
 | Different Command enrollment | repository.settings(reenroll=true) | Settings, confirmed |
 | Native GNSS freshness/accuracy/age; link/ACK; battery/queues/errors | Operational + Room flows | Tracking summary; detailed evidence in Diagnostics |
 | Automatic evidence / ZIP document export | IncidentRecorder / ACTION_CREATE_DOCUMENT | Diagnostics |
-| Hold SOS / accessible long click | app.activateSos(SCREEN) | Tracking emergency card |
+| Hold SOS / accessible long click | app.activateSos(SCREEN) | Persistent Tracking emergency control |
 | Opt-in triple Volume Up in foreground | existing TripleVolumeUp / central SOS engine | Settings; foreground scope explicit |
 | SOS saved/pending/durable receipt; Command-only human ACK | observeSos + sosDescription | Tracking SOS status |
 | Recording Start/Stop/Resume/Clear | POST /local/recording | Persistent Command recording toolbar |
@@ -28,7 +28,7 @@ contains PR #11 native observation/history work. Neither dependency is merged.
 | History completeness, pending counts and age of count | history read model | Overview + selected details |
 | Report/raw/useful counts, cadence/delayed evidence | field_evidence | Selected party Diagnostics disclosure |
 | SOS event/receipt/operator ACK | sos_alerts / POST /local/sos/acknowledge | Persistent emergency region |
-| Audible SOS enable/test, blocked status, recurring alarm | existing AudioContext SOS loop | Emergency region; no competing delivery state |
+| Audible SOS enable/test, blocked status, recurring alarm | existing AudioContext SOS loop | Persistent toolbar control + emergency status; no competing delivery state |
 | Command diagnostic ZIP | GET /local/field-report | Global Diagnostics link |
 | Blank geographic view | existing coordinates; presentation projection | Default canvas mode |
 | Pan/zoom/fit/focus/point coordinate inspection | presentation only | Canvas controls / keyboard / point inspector |

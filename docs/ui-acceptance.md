@@ -13,6 +13,9 @@ Previous frozen comparison build remains Actions run
 [37977149909](https://github.com/suraj-singh12/gnss-android-tracking/actions/runs/37977149909),
 source `b23b5f5`; preserve its downloaded files and evidence before replacing apps.
 Do not uninstall a phone with outstanding data. Existing acceptance source is unchanged.
+The three original Actions artifacts were verified present and unexpired during this
+implementation; their current expiry is 23 October 2026. Archive them before that date
+if they are not already saved. Their runs, branches and binaries were not replaced.
 
 ## Matched builds and checksums
 
@@ -73,6 +76,10 @@ Command frontend/server and real HTTP/read-model state with synthetic protocol f
 Android `UiNavigationVisualTest` renders the actual native Activity with Room flows and
 Robolectric native Skia, with synthetic operational telemetry. This is equivalent
 software rendering evidence, not an emulator or attached physical device.
+The full Android suite has 180 cases: 155 ordinary cases and 25 opt-in cross-language
+cases. The separate integration step executes those 25 against the actual Go core;
+their being skipped in the ordinary suite is intentional. The Actions test-report
+artifact retains both the full-suite reports and the separate integration reports.
 
 ## Physical acceptance remains required
 
