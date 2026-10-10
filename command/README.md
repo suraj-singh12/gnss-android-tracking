@@ -167,7 +167,55 @@ This is tile-bounded acquisition: Command obtains only intersecting 1° tiles pl
 one-sample processing border (maximum four), then reuses the HGT crop/renderer.
 The provider has no documented app-specific quota or availability SLA. HTTP
 403/404/429/5xx, missing tiles and outages remain possible; there is no background
-poller or automatic request loop. The total preparation deadline is 25 seconds.
+poller. Each tile has at most three attempts for transient transport failures and
+HTTP 408/429/500/502/503/504. Backoff is 1 then 2 seconds; longer `Retry-After` up to
+30 seconds is respected. Longer/invalid cooldowns stop automatic retries. Permanent
+403/404/401/400, coverage, invalid gzip/CRC and invalid elevation errors are not
+retried. TCP/TLS budgets are 10 seconds each, response headers 20 seconds, a complete
+tile attempt 120 seconds, and the overall acquisition six minutes. In-memory
+decoding/cropping has a ten-second processing limit, SQLite save five seconds.
+The extended response deadline applies only to terrain downloads; OSM, ingestion,
+GNSS, SOS and recording deadlines are unchanged. Cancel aborts the actual request.
+Compressed input is capped at 26 MiB and decoded input at 25,934,402 bytes; gzip CRC
+is verified after a complete transfer, independently of network error reporting.
+
+### Map & Layers workflow and download evidence
+
+**Current Map** shows selection/layers and offers Blank Canvas. Display-dot interval,
+Use All Observations, opacity, CRS/coverage and attribution remain in **Display &
+geographic details**. **Download Map** follows Location → Area → Terrain → Preview →
+Download: place search or exact centre coordinates, 500 m / 1 km / custom dimensions,
+three optional terrain components, bounded OSM preview, then one save action.
+**Saved Maps** lists selection, coverage and downloaded components. Import/manage
+retains GeoJSON import/export/delete; terrain tools retain online retry, local HGT
+or .gterrain import, preparation and export. Toolbar **Layers** changes visibility
+only and shows not downloaded / downloaded hidden / downloaded visible, offline.
+
+Download progress reports connecting, actual received bytes/time, processing,
+saving and ready (no guessed percentage). Vectors save before terrain. Failures and
+Cancel retain existing vectors/terrain and never create duplicate vectors on retry.
+A complete validated acquisition that fails to save is kept in memory for up to
+15 minutes, so a storage retry does not repeat it. Rendering retries reuse the
+saved grid; quitting Command clears the unsaved bounded cache.
+
+Open **Download diagnostics** to Copy diagnostics or Export download report without
+developer tools. Reports include source revision, provider/dataset, centre/bounds/
+metre dimensions, components, each attempt, observable connection/first-byte timing,
+status/bytes, transfer, gzip decoding, terrain processing, SQLite save, elapsed time,
+failure stage and outcome. `null` means unavailable, not zero. Browser generation
+time/warnings are appended to the on-screen export when measured. The latest 20
+backend reports persist in the existing field-evidence journal, including Cancel;
+reopening a saved map restores its latest report. Existing diagnostics export also
+includes these events. No authorization headers, keys or provider response bodies
+are recorded. Connection time includes connection-pool/proxy/TLS establishment
+where observable, not an asserted physical link measurement.
+
+Mac field verification: enter **27.3739, 88.7618**, select **1 × 1 km** and all three
+terrain options, Preview then Download. If it fails, export that map's download
+report, including the attempt/stage timings. The previously verified defect was
+misclassification of network read deadlines as corrupt gzip; the operator's slow
+network/provider cause remains unverified. Codex Cloud provider CONNECT HTTP 403
+is a separate access-policy blocker, not reproduction of the field timeout.
 
 [Skadi format](https://github.com/tilezen/joerd/blob/master/docs/formats.md):
 WGS84/EPSG:4326, EGM96 integer metre heights, north-first rows, big-endian int16,

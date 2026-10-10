@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -110,8 +111,13 @@ func TestAutomaticDEMProviderFailures(t *testing.T) {
 			defer server.Close()
 			p := newMapProvider()
 			p.dem = server.URL
-			if _, err := p.acquireDEM(context.Background(), [4]float64{77.01, 28.01, 77.014, 28.014}, map[string]bool{"elevation": true}); err == nil {
+			p.demTestBackoff = time.Millisecond
+			_, err := p.acquireDEM(context.Background(), [4]float64{77.01, 28.01, 77.014, 28.014}, map[string]bool{"elevation": true})
+			if err == nil {
 				t.Fatal("invalid provider response accepted")
+			}
+			if test.status == http.StatusOK && !strings.Contains(err.Error(), "invalid compressed DEM") {
+				t.Fatalf("invalid gzip no longer identified: %v", err)
 			}
 		})
 	}
@@ -120,6 +126,48 @@ func TestAutomaticDEMProviderFailures(t *testing.T) {
 	p := newMapProvider()
 	if _, err := p.acquireDEM(ctx, [4]float64{77.01, 28.01, 77.014, 28.014}, map[string]bool{"elevation": true}); err == nil {
 		t.Fatal("cancellation ignored")
+	}
+}
+
+// This is a regression fixture, not evidence of real provider acquisition.
+// Send a valid gzip header, then stall the body: decoding reads the network.
+func TestAutomaticDEMInterruptedBodyIsNotCorruption(t *testing.T) {
+	valid := compressedDEM(t, 27, 88)
+	for _, kind := range []string{"request deadline", "client timeout", "cancellation"} {
+		t.Run(kind, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Write(valid[:20])
+				w.(http.Flusher).Flush()
+				if kind == "cancellation" {
+					time.AfterFunc(100*time.Millisecond, cancel)
+				}
+				<-r.Context().Done()
+			}))
+			defer server.Close()
+			p := newMapProvider()
+			p.dem = server.URL
+			if kind == "request deadline" {
+				var deadlineCancel context.CancelFunc
+				ctx, deadlineCancel = context.WithTimeout(ctx, 150*time.Millisecond)
+				defer deadlineCancel()
+			} else if kind == "client timeout" {
+				p.demClient.Timeout = 150 * time.Millisecond
+				p.demTestBackoff = time.Millisecond
+			}
+			_, err := p.acquireDEM(ctx, [4]float64{88.756, 27.369, 88.768, 27.379}, map[string]bool{"elevation": true})
+			if err == nil || (!strings.Contains(err.Error(), "timed out") && !strings.Contains(err.Error(), "cancelled")) || strings.Contains(err.Error(), "invalid compressed DEM") {
+				t.Fatalf("network interruption misclassified: %v", err)
+			}
+			want := context.DeadlineExceeded
+			if kind == "cancellation" {
+				want = context.Canceled
+			}
+			if !errors.Is(err, want) {
+				t.Fatalf("underlying cause lost: %v", err)
+			}
+		})
 	}
 }
 func TestAutomaticDEMRetryPersistenceAndIsolation(t *testing.T) {

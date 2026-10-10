@@ -2,15 +2,12 @@ package core
 
 // Fixed public Skadi endpoint, bounded acquisition only; no tracking dependency.
 import (
-	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"math"
-	"net/http"
 	"time"
 )
 
@@ -44,6 +41,9 @@ func tileName(lat, lon int) string {
 }
 
 func (p *mapProvider) acquireDEM(ctx context.Context, b [4]float64, components map[string]bool) (terrainGrid, error) {
+	return p.acquireDEMReport(ctx, b, components, nil, nil)
+}
+func (p *mapProvider) acquireDEMReport(ctx context.Context, b [4]float64, components map[string]bool, report *DEMReport, emit demObserver) (terrainGrid, error) {
 	var g terrainGrid
 	for _, v := range b {
 		if math.IsNaN(v) || math.IsInf(v, 0) {
@@ -77,40 +77,34 @@ func (p *mapProvider) acquireDEM(ctx context.Context, b [4]float64, components m
 	if (east-west+1)*(north-south+1) > 4 {
 		return g, errors.New("DEM acquisition exceeds four source tiles")
 	}
-	ctx, cancel := context.WithTimeout(ctx, 25*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, demOverallBudget)
 	defer cancel()
+	key := fmt.Sprintf("%v/%v/%v/%v", b, components["hillshade"], components["contours"], components["elevation"])
+	p.mu.Lock()
+	cached := p.prepared
+	if p.preparedKey != key || time.Since(p.preparedAt) > 15*time.Minute {
+		cached = nil
+	}
+	p.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return g, err
+	}
+	if cached != nil {
+		if report != nil {
+			report.Reused = true
+		}
+		return *cached, nil
+	}
+	processingTime := time.Duration(0)
 	for lat := south; lat <= north; lat++ {
 		for lon := west; lon <= east; lon++ {
 			name := tileName(lat, lon)
 			address := p.dem + "/" + name[:3] + "/" + name + ".gz"
-			req, err := http.NewRequestWithContext(ctx, "GET", address, nil)
+			raw, err := p.downloadDEMTile(ctx, name, address, report, emit)
 			if err != nil {
 				return g, err
 			}
-			req.Header.Set("User-Agent", "GNSS-Command/0.1 (bounded DEM acquisition; https://github.com/suraj-singh12/gnss-android-tracking)")
-			resp, err := p.client.Do(req)
-			if err != nil {
-				return g, fmt.Errorf("DEM acquisition failed: %w", err)
-			}
-			if resp.StatusCode != http.StatusOK {
-				resp.Body.Close()
-				return g, fmt.Errorf("DEM provider returned HTTP %d; retry terrain later", resp.StatusCode)
-			}
-			// A tile is decoded alone, with compressed/decompressed bomb limits and
-			// gzip CRC verification. Full raw tiles are never persisted or cached.
-			zr, err := gzip.NewReader(io.LimitReader(resp.Body, 26*1024*1024+1))
-			var raw []byte
-			if err == nil {
-				raw, err = io.ReadAll(io.LimitReader(zr, 3601*3601*2+1))
-				zr.Close()
-			}
-			resp.Body.Close()
-			if err != nil {
-				return g, fmt.Errorf("invalid compressed DEM: %w", err)
-			}
-			if len(raw) != 3601*3601*2 {
-				return g, errors.New("DEM provider must return a 3601×3601 HGT tile")
-			}
+			started := time.Now()
 			clip := [4]float64{math.Max(g.Bounds[0], float64(lon)), math.Max(g.Bounds[1], float64(lat)), math.Min(g.Bounds[2], float64(lon+1)), math.Min(g.Bounds[3], float64(lat+1))}
 			crop, err := importHGT(name, raw, clip, components)
 			if err != nil {
@@ -131,7 +125,25 @@ func (p *mapProvider) acquireDEM(ctx context.Context, b [4]float64, components m
 					}
 				}
 			}
+			processingTime += time.Since(started)
+			if report != nil {
+				report.ProcessingMS = milliseconds(processingTime)
+			}
+			if ctx.Err() != nil {
+				return g, ctx.Err()
+			}
+			if processingTime > demProcessingBudget {
+				return g, errors.New("terrain processing deadline exceeded")
+			}
 		}
 	}
-	return g, g.validate()
+	if err := g.validate(); err != nil {
+		return g, fmt.Errorf("decoded elevation data invalid: %w", err)
+	}
+	p.mu.Lock()
+	p.prepared = &g
+	p.preparedKey = key
+	p.preparedAt = time.Now()
+	p.mu.Unlock()
+	return g, nil
 }

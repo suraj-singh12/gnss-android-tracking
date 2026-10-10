@@ -1,5 +1,64 @@
 # Issue #6 integrated UI acceptance
 
+## DEM reliability and Map & Layers follow-up on PR #19
+
+`feature/issue6-dem-reliability-map-ui` starts at PR #19's verified
+`2f5e79879fed967bb66ab3def014ae0ae3b76f9d`, retaining the uncommitted diagnostic
+classification correction from the exact-location investigation. One focused PR
+targets `feature/issue6-automatic-dem`; no existing PR is merged or issue closed.
+Android/GNSS/recording/distance/SOS delivery architecture is unchanged.
+
+Verified defect: streaming gzip errors wrapped a response-body timeout as invalid
+DEM. Separating bounded network reading from gzip decoding removes that ambiguity.
+The Mac field-network cause remains unconfirmed; Codex Cloud's provider proxy
+CONNECT 403 is a separate BLOCKED result. Exact timeout/retry/cache/report policy
+and operator instructions are in Command README. Reports persist in the existing
+evidence journal (20 download reports), never a new database or worker service.
+
+Screenshot-first inspection found download actions below unrelated import tools
+and long technical text. Current Map, Download Map and Saved Maps now group tasks;
+advanced details scroll internally. Existing controls are preserved:
+
+| Previous capability | Reachable location |
+| --- | --- |
+| Blank/offline map, saved selection | Current Map / Saved Maps |
+| Opacity, CRS, coverage, attribution | Current Map → Display & geographic details |
+| Use All Observations, display-dot interval | Same disclosure; distance remains qualified |
+| Search/results, geographic-centre coordinates | Download Map → Location |
+| 500 m, 1 km, custom width/height | Download Map → Area (custom fields when selected) |
+| Hillshade, contours, elevation selection | Download Map → Terrain |
+| Preview and separate offline save | Download Map → Preview / Download |
+| GeoJSON import/export/delete | Saved Maps → Import & manage maps |
+| Automatic terrain retry, component choice | Saved Maps → Acquire or import terrain |
+| HGT/.gterrain import, local preparation/export | Same tool → Local DEM import & terrain export |
+| Terrain visibility, hidden/visible/unavailable states | Existing toolbar Layers; never downloads |
+| Progress, Cancel, error details, copy/export | Download feedback / Download diagnostics |
+
+All previous HTML control IDs are retained with no duplicates. Rendered checks
+cover Day/Night at 1280×720, 1280×800 and 1440×900, no document-level scrolling,
+keyboard/accessibility, report export, Cancel/retry and vector preservation.
+`map-download-ui.cjs` uses explicitly synthetic provider/progress fixtures, not
+real download acceptance; Go handler tests exercise actual streaming/storage with
+deterministic providers. Existing dashboard/SOS/projection/map checks remain.
+
+The reused matched-assets workflow adds this branch and browser check. Its real
+DEM UI acceptance is parameterized for **27.3739, 88.7618, 1 km × 1 km**, compares
+every persisted grid node to the real downloaded tile, inspects rendered alignment
+and restarts with outbound provider access blocked. Source-specific Actions results
+must be verified separately; never substitute prior Mussoorie results for this case.
+No real provider result is inferred from fixture tests. The Mac executable is for
+operator field verification and export of complete attempt diagnostics.
+
+```sh
+GNSS_COMMAND_BINARY=/path/to/command GNSS_PLAYWRIGHT_MODULE=/path/to/playwright \
+GNSS_AXE_MODULE=/path/to/axe-core/playwright GNSS_SCREENSHOT_DIR=/path/to/screens \
+node test-tools/integration/map-download-ui.cjs
+```
+
+Before/after captures are preserved with the task evidence; the workflow's
+visual-evidence artifact contains the final rendered checks. These are UI and
+geographic alignment checks, not survey accuracy or physical field acceptance.
+
 ## Automatic DEM follow-up on PR #18
 
 `feature/issue6-automatic-dem` starts at verified PR #18 SHA

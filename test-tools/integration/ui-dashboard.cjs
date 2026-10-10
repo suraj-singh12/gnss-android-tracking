@@ -342,6 +342,7 @@ async function wait(check) {
   await page.locator("#fit").click();
   await page.locator("#focus-party").click();
   await page.locator("#open-map").click();
+  await page.getByText("Display & geographic details", { exact: true }).click();
   await page.locator("#dots").fill("40");
   await page.locator("#dots").blur();
   const qualifiedBeforeRaw = (await state()).devices[partyIds[2]].total_m;
@@ -452,7 +453,7 @@ async function wait(check) {
     if (delayPreview) await new Promise((r) => setTimeout(r, 300));
     return route.fulfill({ json: downloaded });
   });
-  await page.locator("#map-preparation summary").click();
+  await page.locator("#map-preparation > summary").click();
   await page.locator("#map-search").fill("Delhi");
   await page.locator("#search-map").click();
   await page.waitForFunction(
@@ -598,6 +599,9 @@ async function wait(check) {
   });
   for (const k of ["hillshade", "contours", "elevation"])
     await page.locator("#prepare-" + k).check();
+  await page
+    .getByText("Local DEM import & terrain export", { exact: true })
+    .click();
   await page.locator("#prepare-terrain").click();
   await page.waitForFunction(() =>
     document

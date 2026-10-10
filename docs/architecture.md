@@ -309,6 +309,18 @@ hillshade, contours and elevation inspection; all use the existing map projectio
 Automatic acquisition uses fixed public AWS Open Data Skadi HTTPS tiles (maximum
 four), stitching via existing HGT crops into the same binary package/renderer.
 Vectors save first; terrain errors/retries retain vectors and previous terrain.
+DEM gzip decoding streams from the provider response: a deadline/cancellation while
+reading is reported as an interrupted transfer, not proof of corrupt DEM data.
+DEM acquisition now has dedicated TCP/TLS 10-second, response-header 20-second,
+tile-attempt 120-second and overall six-minute budgets; decoding/cropping is bounded
+to ten seconds and SQLite save to five seconds. The existing OSM 25-second deadline
+and ordinary server/ingestion 30-second write deadline remain unchanged. Only the
+terrain-download response extends its write deadline to six minutes plus 30 seconds.
+The existing request streams progress and propagates disconnect/cancellation;
+there is no background job queue. Complete validated terrain is upserted atomically.
+The existing field-evidence journal retains the latest 20 terrain download reports;
+other evidence is not pruned. One completed, not-yet-saved grid may be reused for
+15 minutes (bounded to 257² samples); no full DEM tile is cached or persisted.
 Provider I/O never holds the Store mutex. No background download or new storage
 engine. Local HGT import remains available. Map
 import/display/preparation never feeds reconstruction, raw observations, Recording,

@@ -809,6 +809,51 @@ $("open-history").onclick = () => {
 $("event-filter").onchange = renderEvents;
 let preparedMap;
 let preparationRevision = 0;
+let downloadAbort, lastDownloadReport, retryTerrainRendering, terrainGeneration;
+function showDownloadReport(report) {
+  lastDownloadReport = report;
+  $("download-report-text").textContent = JSON.stringify(report, null, 2);
+}
+async function readDownloadReport(id, since = 0) {
+  const r = await fetch(
+    `/local/maps/${encodeURIComponent(id)}/download-report`,
+  );
+  if (r.ok) {
+    const report = await r.json();
+    if (since && Date.parse(report.started_at) < since) return false;
+    showDownloadReport({
+      ...report,
+      ...(terrainGeneration?.id === id
+        ? { browser_terrain_generation_ms: terrainGeneration.ms }
+        : {}),
+    });
+    return true;
+  }
+  return false;
+}
+$("choose-saved-map").onclick = () => {
+  $("maps-library").open = true;
+  $("saved-maps").focus();
+};
+$("cancel-download").onclick = () => downloadAbort?.abort();
+$("copy-download-report").onclick = async () => {
+  try {
+    await navigator.clipboard.writeText($("download-report-text").textContent);
+  } catch {
+    $("download-diagnostics").open = true;
+    $("download-report-text").focus();
+  }
+};
+$("export-download-report").onclick = () => {
+  const url = URL.createObjectURL(
+    new Blob([$("download-report-text").textContent], { type: "text/plain" }),
+  );
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "terrain-download-report.txt";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
 async function mapPost(path, data) {
   const response = await fetch("/local/" + path, {
     method: "POST",
@@ -824,9 +869,42 @@ async function refreshMaps(selected) {
   if (!response.ok) throw Error("Saved map library unavailable");
   const maps = await response.json();
   $("saved-maps").replaceChildren(new Option("Choose saved map", ""));
-  for (const m of maps)
+  $("saved-map-list").replaceChildren();
+  for (const m of maps) {
+    if (!m.bounds) {
+      try {
+        const data = await fetch(`/local/maps/${encodeURIComponent(m.id)}`);
+        if (data.ok)
+          m.bounds = GeoMap.parse(await data.text(), m.source).bounds;
+      } catch {}
+    }
     $("saved-maps").add(
       new Option(`${m.source} · ${(m.bytes / 1024).toFixed(1)} KB`, m.id),
+    );
+    const row = el("div", undefined, "saved-map-row");
+    const select = el("button", m.source);
+    select.onclick = () => {
+      $("saved-maps").value = m.id;
+      loadSavedMap(m.id).catch(showError);
+    };
+    row.dataset.mapId = m.id;
+    row.append(
+      select,
+      el(
+        "small",
+        `${m.bounds ? m.bounds.map((v) => v.toFixed(4)).join(", ") : "Imported geographic coverage"} · ${
+          Object.entries(m.components || {})
+            .filter(([, v]) => v)
+            .map(([k]) => k)
+            .join(", ") || "Vectors only"
+        }`,
+      ),
+    );
+    $("saved-map-list").append(row);
+  }
+  if (!maps.length)
+    $("saved-map-list").append(
+      el("p", "No saved maps yet. Download or import a map."),
     );
   if (selected) $("saved-maps").value = selected;
 }
@@ -834,6 +912,9 @@ function useMap(text, source, id) {
   const parsed = GeoMap.parse(text, source);
   offlineMap = parsed;
   activeMapID = id;
+  $("current-map-name").textContent = source;
+  for (const row of $("saved-map-list").children)
+    row.classList.toggle("selected", row.dataset.mapId === id);
   terrain = undefined;
   updateLayers();
   $("map-mode").value = "offline";
@@ -856,6 +937,7 @@ async function loadSavedMap(id) {
     $("saved-maps").selectedOptions[0]?.textContent || "Saved offline map";
   useMap(await response.text(), source, id);
   await loadTerrain(id);
+  await readDownloadReport(id);
 }
 const terrainLayers = ["hillshade", "contours", "elevation"];
 function updateLayers() {
@@ -869,11 +951,21 @@ function updateLayers() {
       available &&
       localStorage.getItem(`gnss-layer-${activeMapID}-${kind}`) === "true";
     $("availability-" + kind).textContent = available
-      ? "Prepared locally"
+      ? control.checked
+        ? "Downloaded · visible"
+        : "Downloaded · hidden"
       : kind === "contours" && terrain?.contour_error
         ? "Unavailable: contour complexity limit; choose a smaller area."
         : "Not downloaded / prepared";
   }
+  $("current-map-layers").textContent = terrain
+    ? "Available: " +
+      terrainLayers.filter((k) => terrain.components[k]).join(", ") +
+      " · visibility via Layers"
+    : "Vectors only · no terrain downloaded";
+  for (const id of ["delete-map", "prepare-terrain", "download-terrain"])
+    $(id).disabled = !activeMapID || !!downloadAbort;
+  $("export-map").setAttribute("aria-disabled", String(!activeMapID));
   $("terrain-metadata").textContent = terrain
     ? `${terrain.source} · ${terrain.arc_seconds} arc sec (~${Math.round((terrain.arc_seconds / 3600) * 111320)} m north–south) · ${terrain.vertical_datum} · interpolated, not survey-grade${terrain.contour ? " · contours " + terrain.contour.interval + " m" : ""}${terrain.provenance ? " · " + terrain.provenance.attribution : ""}`
     : "No terrain for this map. Download / retry terrain or import a DEM in Map & layers.";
@@ -894,7 +986,26 @@ async function loadTerrain(id) {
   if (!r.ok) throw Error("Saved terrain unavailable; vector map retained.");
   const grid = await r.json();
   if (activeMapID !== id) return;
-  terrain = Terrain.prepare(grid);
+  const generationStart = performance.now();
+  try {
+    terrain = Terrain.prepare(grid);
+  } catch (e) {
+    if (lastDownloadReport)
+      showDownloadReport({
+        ...lastDownloadReport,
+        terrain_generation_error: e.message,
+      });
+    throw Error("Terrain generation failed: " + e.message);
+  }
+  terrainGeneration = { id, ms: performance.now() - generationStart };
+  if (lastDownloadReport?.map_id === id)
+    showDownloadReport({
+      ...lastDownloadReport,
+      browser_terrain_generation_ms: terrainGeneration.ms,
+      ...(terrain.contour_error
+        ? { terrain_generation_warning: terrain.contour_error }
+        : {}),
+    });
   updateLayers();
   draw();
 }
@@ -920,6 +1031,7 @@ for (const kind of terrainLayers)
       `gnss-layer-${activeMapID}-${kind}`,
       String($("layer-" + kind).checked),
     );
+    updateLayers();
     draw();
   };
 async function attachTerrain(id, file, components) {
@@ -971,12 +1083,123 @@ $("prepare-terrain").onclick = async () => {
   }
 };
 async function downloadTerrain(id, components) {
-  await mapPost(`maps/${encodeURIComponent(id)}/terrain-download`, {
-    components,
-  });
+  if (downloadAbort) throw Error("A terrain download is already active.");
+  if (
+    retryTerrainRendering?.id === id &&
+    retryTerrainRendering.components === JSON.stringify(components)
+  ) {
+    await loadTerrain(id);
+    retryTerrainRendering = undefined;
+    return;
+  }
+  downloadAbort = new AbortController();
+  const operationStarted = Date.now();
+  $("cancel-download").hidden = false;
+  $("download-progress").hidden = false;
+  $("download-progress").textContent = "Connecting to elevation provider…";
+  $("download-terrain").disabled = true;
+  $("download-map").disabled = true;
+  $("prepare-terrain").disabled = true;
+  $("delete-map").disabled = true;
+  for (const control of $("map-settings").querySelectorAll(
+    "#saved-maps, #map-mode, #map-file, #choose-saved-map, .saved-map-row button",
+  ))
+    control.disabled = true;
+  try {
+    const response = await fetch(
+      `/local/maps/${encodeURIComponent(id)}/terrain-download`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/x-ndjson",
+        },
+        body: JSON.stringify({ components }),
+        signal: downloadAbort.signal,
+      },
+    );
+    if (!response.ok) {
+      const error = await response.json();
+      throw Error(error.message || "Terrain acquisition failed");
+    }
+    if (!(response.headers.get("content-type") || "").includes("ndjson")) {
+      const error = await response.json();
+      throw Error(error.message || "Download progress stream unavailable");
+    }
+    const reader = response.body.getReader(),
+      decoder = new TextDecoder();
+    let pending = "",
+      final;
+    function accept(event) {
+      if (event.report) {
+        showDownloadReport(event.report);
+        final = event;
+      }
+      const labels = {
+        connecting: "Connecting to elevation provider…",
+        downloading: `Downloading elevation · ${((event.received_bytes || 0) / 1048576).toFixed(2)} MiB received · ${Math.round((event.elapsed_ms || 0) / 1000)}s`,
+        "retry backoff": `Retrying after transient failure · attempt ${event.attempt}`,
+        "processing terrain": "Processing elevation terrain…",
+        saving: "Saving offline terrain…",
+        ready: "Terrain saved · preparing selected display layers…",
+        failed: event.error,
+        cancelled: "Download cancelled · existing maps retained",
+      };
+      $("download-progress").textContent = labels[event.stage] || event.stage;
+    }
+    while (true) {
+      const { value, done } = await reader.read();
+      pending += decoder.decode(value || new Uint8Array(), { stream: !done });
+      let line;
+      while ((line = pending.indexOf("\n")) >= 0) {
+        const text = pending.slice(0, line);
+        pending = pending.slice(line + 1);
+        if (text.trim()) accept(JSON.parse(text));
+      }
+      if (done) break;
+    }
+    if (!final || final.stage !== "ready")
+      throw Error(
+        final?.error || "Terrain download interrupted before completion",
+      );
+    retryTerrainRendering = { id, components: JSON.stringify(components) };
+  } catch (e) {
+    $("download-progress").textContent =
+      e.name === "AbortError"
+        ? "Download cancelled · vector map and previous terrain retained"
+        : e.message;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const recorded = await readDownloadReport(
+      id,
+      operationStarted - 1000,
+    ).catch(() => false);
+    if (!recorded && e.name === "AbortError")
+      showDownloadReport({
+        map_id: id,
+        started_at: new Date(operationStarted).toISOString(),
+        outcome: "client_cancelled",
+        server_report_pending: true,
+        attempts: null,
+        note: "Client request cancelled. Reopen the saved map to retrieve the persisted server report; provider timings are not yet available.",
+      });
+    throw e.name === "AbortError" ? Error("Download cancelled") : e;
+  } finally {
+    downloadAbort = undefined;
+    $("cancel-download").hidden = true;
+    $("download-terrain").disabled = false;
+    $("prepare-terrain").disabled = false;
+    $("delete-map").disabled = false;
+    for (const control of $("map-settings").querySelectorAll(
+      "#saved-maps, #map-mode, #map-file, #choose-saved-map, .saved-map-row button",
+    ))
+      control.disabled = false;
+  }
   for (const kind of terrainLayers)
     localStorage.setItem(`gnss-layer-${id}-${kind}`, "false");
   await loadTerrain(id);
+  retryTerrainRendering = undefined;
+  $("download-progress").textContent = "Map ready for offline use";
+  await refreshMaps(id);
 }
 $("download-terrain").onclick = async () => {
   if (!activeMapID) {
@@ -1038,6 +1261,7 @@ $("search-map").onclick = async () => {
       text: $("map-search").value,
     });
     $("map-search-results").replaceChildren(new Option("Choose a place", ""));
+    $("map-search-results").hidden = results.length === 0;
     for (const place of results)
       $("map-search-results").add(
         new Option(place.display_name, JSON.stringify([place.lat, place.lon])),
@@ -1075,7 +1299,9 @@ $("map-area").onchange = () => {
   if ($("map-area").value !== "custom")
     $("map-width").value = $("map-height").value = $("map-area").value;
   invalidatePreparation();
+  $("custom-map-dimensions").hidden = $("map-area").value !== "custom";
 };
+$("custom-map-dimensions").hidden = $("map-area").value !== "custom";
 $("preview-map").onclick = async () => {
   invalidatePreparation();
   for (const id of ["map-lat", "map-lon", "map-width", "map-height"])
@@ -1203,6 +1429,10 @@ refreshMaps()
   })
   .catch(showError);
 $("map-mode").onchange = () => {
+  $("current-map-name").textContent =
+    $("map-mode").value === "blank"
+      ? "Blank canvas"
+      : offlineMap?.source || "No offline map selected";
   localStorage.setItem("gnss-map-mode", $("map-mode").value);
   if ($("map-mode").value === "offline" && !offlineMap) {
     $("map-warning").textContent =

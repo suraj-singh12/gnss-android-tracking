@@ -8,6 +8,7 @@ on:
         correction/issue6-operational-ux,
         feature/issue6-terrain-appearance,
         feature/issue6-automatic-dem,
+        feature/issue6-dem-reliability-map-ui,
       ]
   workflow_dispatch:
 concurrency:
@@ -39,6 +40,9 @@ jobs:
           GNSS_COMMAND_BINARY: ${{ runner.temp }}/gnss-dem-command
           GNSS_PLAYWRIGHT_MODULE: ${{ runner.temp }}/gnss-dem-browser/node_modules/playwright
           GNSS_SCREENSHOT_DIR: ${{ runner.temp }}/dem-evidence/visual-evidence
+          GNSS_DEM_LAT: "27.3739"
+          GNSS_DEM_LON: "88.7618"
+          GNSS_DEM_SIZE: "1000"
         run: |
           (cd command && go build -o "$RUNNER_TEMP/gnss-dem-command" ./cmd/party-tracker)
           npm install --prefix "$RUNNER_TEMP/gnss-dem-browser" playwright
@@ -136,6 +140,7 @@ jobs:
           export GNSS_SCREENSHOT_DIR="$RUNNER_TEMP/gnss-assets/visual-evidence"
           node test-tools/integration/sos-dashboard.cjs
           node test-tools/integration/ui-dashboard.cjs
+          node test-tools/integration/map-download-ui.cjs
       - uses: actions/download-artifact@v4
         with:
           name: DEM-provider-acquisition
