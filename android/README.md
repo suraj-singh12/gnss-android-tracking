@@ -10,7 +10,8 @@ Install JDK 17+ and Android SDK platform 35/build tools 35.0.0. Set `ANDROID_HOM
 or an untracked `local.properties` with `sdk.dir`. From this directory:
 
 ```sh
-./gradlew assembleDebug testDebugUnitTest lintDebug
+./gradlew assembleStandardDebug testStandardDebugUnitTest lintStandardDebug
+./gradlew assembleButtonTestDebug lintButtonTestDebug
 ```
 
 The wrapper pins Gradle 8.11.1; AGP 8.9.2, Kotlin 2.1.20 and KSP 2.1.20-1.0.32
@@ -22,6 +23,9 @@ Wi-Fi socket/DNS routing. Robolectric is a
 JVM test dependency for the actual Room database, including reopen/transaction
 rollback tests. No product DI, maps, cloud or background scheduler dependencies.
 Generated APKs/build output are ignored. No release workflow is provided.
+The isolated physical-button experiment has a branch-scoped GitHub Actions
+workflow that uploads a debug-only field APK and checksum manifest; it is not a
+production release.
 
 ## Operation
 
@@ -150,6 +154,36 @@ and old backlog. Existing bounded 6-second in-flight requests can delay selectio
 SOS retries back off and allow ordinary reports between failed attempts.
 Force-stop, reboot and OEM termination can prevent execution/transmission; reopen
 and explicitly Start Tracking when required. No Wi-Fi path means no transmission.
+
+### Physical Button Test (diagnostics experiment)
+
+Open **Diagnostics → Physical Button Test**, then Start Test. It records only
+whitelisted Android key codes delivered to the resumed Activity, including
+key-down, key-up and repeat count. The chronological results use the existing
+bounded Diagnostics timeline and are included in `physical-button-report.json`
+in the diagnostics ZIP. Clear Results hides earlier test results from this
+report; the underlying bounded diagnostics timeline remains governed by the
+existing retention limit. The test is off after process restart.
+
+`LISTENING` means the Activity adapter is ready, not that Android will route a
+key to it. Ordinary apps have no passive global volume-key listener. Background
+and screen-off volume observation are `MECHANISM UNAVAILABLE` in this experiment.
+No MediaSession, audio focus, Accessibility Service or extra foreground service
+is created: a MediaSession can redirect headset media buttons away from their
+current player, and a session would not guarantee screen-off volume delivery.
+Use the exact foreground/background/locked-screen checklist in
+[device acceptance](DEVICE-ACCEPTANCE.md); an absent event in an unsupported
+state is not evidence of `NOT DETECTED`.
+
+The test has no SOS-engine or sender dependency. While it is explicitly active,
+the existing Activity triple-Volume-Up SOS adapter is suspended so the three
+presses in the diagnostic checklist cannot accidentally create an SOS. Volume
+events continue through Android's normal handling and any previously saved SOS
+continues delivery. Stop Test restores the normal SOS adapter; the experiment
+does not change the SOS engine or saved-event sender. Other GNSS, tracking and
+SOS behavior is unchanged outside this explicitly active test mode. The
+`buttonTestDebug` APK uses a separate application ID, so it installs beside an
+existing GNSS app without replacing its data.
 
 ### Physical-key scope and public API investigation
 

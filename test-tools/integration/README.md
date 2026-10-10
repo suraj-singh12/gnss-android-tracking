@@ -10,13 +10,13 @@ test-tools/integration/run.sh
 The script compiles Command's test-only process adapter with the race detector,
 then runs `CommandIntegrationTest` under Android's existing JUnit/Robolectric setup.
 It exits nonzero on any failed scenario. Gradle XML/HTML results are in
-`android/app/build/test-results/testDebugUnitTest` and
-`android/app/build/reports/tests/testDebugUnitTest`. Temporary process binaries and
+`android/app/build/test-results/testStandardDebugUnitTest` and
+`android/app/build/reports/tests/testStandardDebugUnitTest`. Temporary process binaries and
 Command SQLite files are removed on exit; Room databases are deleted after each
 scenario. No harness dependency is added to either product.
 
 Without `GNSS_COMMAND_BRIDGE`, the integration class explicitly skips; ordinary
-`testDebugUnitTest` requires no Go installation. **A skipped integration class is
+`testStandardDebugUnitTest` requires no Go installation. **A skipped integration class is
 not an integration pass.** Run the script in addition to normal Android validation.
 The script forces execution, so prior Gradle results cannot masquerade as a pass.
 

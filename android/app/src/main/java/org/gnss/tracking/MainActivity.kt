@@ -26,6 +26,13 @@ class MainActivity : Activity() {
     private lateinit var endpoint: EditText
     private lateinit var interval: EditText
     private lateinit var exportStatus: TextView
+    private lateinit var physicalButtonPanel: LinearLayout
+    private lateinit var physicalButtonSummary: TextView
+    private lateinit var physicalButtonEvents: TextView
+    private lateinit var physicalButtonStatus: TextView
+    private lateinit var physicalButtonStart: Button
+    private lateinit var physicalButtonStop: Button
+    private var physicalButtonRefresh: Job? = null
     private var exporting = false
     private lateinit var sosStatus: TextView
     private lateinit var keyOption: CheckBox
@@ -120,6 +127,14 @@ class MainActivity : Activity() {
                 isAllCaps = false
                 setOnClickListener { action() }
                 content.addView(this)
+            }
+        fun physicalButtonAction(label: String, action: () -> Unit) =
+            Button(this).apply {
+                text = label
+                minHeight = dp(48)
+                isAllCaps = false
+                setOnClickListener { action() }
+                physicalButtonPanel.addView(this)
             }
         text("GNSS Tracking", 24f)
         sosStatus = text("SOS: no saved event", 18f)
@@ -280,6 +295,80 @@ class MainActivity : Activity() {
                 .show()
         }
         text("Diagnostics", 20f)
+        button("Physical Button Test") {
+            physicalButtonPanel.visibility =
+                if (physicalButtonPanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+            if (physicalButtonPanel.visibility == View.VISIBLE) {
+                refreshPhysicalButtonHistory()
+                scroll.post { scroll.smoothScrollTo(0, physicalButtonPanel.bottom) }
+            }
+        }
+        physicalButtonPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(8), dp(12), dp(12))
+            visibility = if (app.physicalButtonTest.listening) View.VISIBLE else View.GONE
+            content.addView(this)
+        }
+        TextView(this).apply {
+            text = "Physical Button Test"
+            textSize = 20f
+            setTextColor(0xff172b34.toInt())
+            contentDescription = "Physical Button Test"
+            physicalButtonPanel.addView(this)
+        }
+        physicalButtonStatus = TextView(this).apply {
+            textSize = 16f
+            setPadding(0, dp(8), 0, dp(8))
+            accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+            physicalButtonPanel.addView(this)
+        }
+        TextView(this).apply {
+            text =
+                "Only keys delivered to this visible Activity are recorded. Background, locked-screen, and screen-off observation is unavailable. No MediaSession is started because it would route media buttons to this app."
+            textSize = 14f
+            physicalButtonPanel.addView(this)
+        }
+        TextView(this).apply {
+            text =
+                "While this test is active, the existing triple-Volume-Up SOS trigger is paused. Normal volume handling continues; previously saved SOS messages still deliver normally. This test never creates an SOS."
+            textSize = 14f
+            physicalButtonPanel.addView(this)
+        }
+        physicalButtonStart =
+            physicalButtonAction("Start Test") {
+                volumePattern.reset()
+                app.physicalButtonTest.start()
+                refreshPhysicalButtonHistory()
+            }
+        physicalButtonStop =
+            physicalButtonAction("Stop Test") {
+                volumePattern.reset()
+                app.physicalButtonTest.stop()
+                refreshPhysicalButtonHistory()
+            }
+        physicalButtonAction("Clear Results") {
+            app.physicalButtonTest.clearResults()
+            refreshPhysicalButtonHistory()
+        }
+        physicalButtonSummary = TextView(this).apply {
+            textSize = 14f
+            setPadding(0, dp(8), 0, dp(8))
+            physicalButtonPanel.addView(this)
+        }
+        ScrollView(this).apply {
+            isFillViewport = false
+            addView(
+                TextView(this@MainActivity).apply {
+                    textSize = 14f
+                    typeface = android.graphics.Typeface.MONOSPACE
+                    setTextIsSelectable(true)
+                    physicalButtonEvents = this
+                },
+                LinearLayout.LayoutParams(-1, -2),
+            )
+            physicalButtonPanel.addView(this, LinearLayout.LayoutParams(-1, dp(176)))
+        }
+        renderPhysicalButtonStatus()
         button("Export diagnostics") {
             if (!exporting) {
                 try {
@@ -603,6 +692,9 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         resumed = true
+        app.physicalButtonTest.activityResumed()
+        if (::physicalButtonPanel.isInitialized && physicalButtonPanel.visibility == View.VISIBLE)
+            refreshPhysicalButtonHistory()
         app.recorder.event(
             DiagnosticEvent.ACTIVITY_RESUMED,
             app.diagnostics.value?.serviceGeneration,
@@ -613,8 +705,10 @@ class MainActivity : Activity() {
     }
 
     override fun onPause() {
+        app.physicalButtonTest.activityPaused()
         resumed = false
         volumePattern.reset()
+        renderPhysicalButtonStatus()
         super.onPause()
     }
 
@@ -698,7 +792,24 @@ class MainActivity : Activity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (
+        if (resumed && app.physicalButtonTest.listening) {
+            val interactive =
+                runCatching { getSystemService(android.os.PowerManager::class.java).isInteractive }
+                    .getOrNull()
+            val locked =
+                runCatching { getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked }
+                    .getOrNull()
+            app.physicalButtonTest.observeActivityKey(
+                event.keyCode,
+                event.action,
+                event.repeatCount,
+                appForeground = resumed,
+                screenInteractive = interactive,
+                keyguardLocked = locked,
+            )
+            schedulePhysicalButtonRefresh()
+            // The experiment only observes; Android still receives normal key handling.
+        } else if (
             resumed &&
                 ::keyOption.isInitialized &&
                 keyOption.isChecked &&
@@ -716,6 +827,91 @@ class MainActivity : Activity() {
                 app.activateSos(SosTrigger.VOLUME_UP)
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    private fun renderPhysicalButtonStatus(history: PhysicalButtonHistory? = null) {
+        if (!::physicalButtonStatus.isInitialized) return
+        val active = app.physicalButtonTest.listening && resumed
+        physicalButtonStatus.text =
+            if (active) "Test status: LISTENING — Activity-visible keys only"
+            else "Test status: INACTIVE"
+        physicalButtonStart.isEnabled = !app.physicalButtonTest.listening
+        physicalButtonStop.isEnabled = app.physicalButtonTest.listening
+        if (history == null) return
+        val last = history.retainedEvents.lastOrNull()
+        val localTime = { value: String? ->
+            value?.let {
+                runCatching {
+                    java.time.Instant.parse(it)
+                        .atZone(java.time.ZoneId.systemDefault())
+                        .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"))
+                }.getOrDefault("unavailable")
+            } ?: "None"
+        }
+        physicalButtonSummary.text = buildString {
+            appendLine("Test start time: ${localTime(history.startedAt)}")
+            appendLine("Last detected key: ${last?.evidence?.keyName ?: "None"}")
+            appendLine(
+                "Last detected time: ${localTime(last?.at)}${last?.let { " (${it.evidence.action})" } ?: ""}"
+            )
+            appendLine("Total detected presses: ${history.totalPresses}")
+            appendLine("Detection source: Activity")
+            appendLine("Device: ${history.manufacturer ?: "unavailable"} ${history.model ?: "unavailable"}")
+            appendLine("Android: ${history.androidVersion ?: "unavailable"} (API ${history.androidApi ?: "unavailable"})")
+            appendLine("Activity result: ${history.activityResult}")
+            appendLine("Activity test: ${history.activityReason}")
+            appendLine("${PhysicalButtonTestController.BACKGROUND_STATUS}")
+            appendLine(PhysicalButtonTestController.LOCKED_SCREEN_STATUS)
+            append(PhysicalButtonTestController.MEDIA_SESSION_STATUS)
+        }
+        physicalButtonEvents.text =
+            buildString {
+                for (event in history.retainedEvents) {
+                    append(localTime(event.at))
+                    append("  ${event.evidence.keyName} ${event.evidence.action}  Activity")
+                    if (event.evidence.repeatCount > 0)
+                        append(" repeat=${event.evidence.repeatCount}")
+                    append("  screen=")
+                    append(
+                        when {
+                            event.evidence.screenInteractive == false -> "off"
+                            event.evidence.screenInteractive == true -> "on"
+                            else -> "unknown"
+                        }
+                    )
+                    append(" locked=${event.evidence.keyguardLocked ?: "unknown"}")
+                    appendLine()
+                }
+                if (history.olderEventsOmitted)
+                    appendLine("Showing the latest ${PhysicalButtonTestController.MAX_DISPLAY_EVENTS} events.")
+                if (isEmpty()) append("No key events recorded yet.")
+            }
+    }
+
+    private fun refreshPhysicalButtonHistory() {
+        if (!::physicalButtonPanel.isInitialized || physicalButtonPanel.visibility != View.VISIBLE)
+            return
+        renderPhysicalButtonStatus()
+        schedulePhysicalButtonRefresh()
+    }
+
+    private fun schedulePhysicalButtonRefresh() {
+        if (!::physicalButtonPanel.isInitialized || physicalButtonPanel.visibility != View.VISIBLE)
+            return
+        physicalButtonRefresh?.cancel()
+        physicalButtonRefresh =
+            scope.launch {
+                delay(125)
+                try {
+                    val history = withContext(Dispatchers.IO) { app.recorder.physicalButtonHistory() }
+                    renderPhysicalButtonStatus(history)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    physicalButtonSummary.text = getString(R.string.physical_button_read_failed)
+                    physicalButtonEvents.text = "No additional result can be verified."
+                }
+            }
     }
 
     override fun onDestroy() {

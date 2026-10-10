@@ -73,6 +73,19 @@ abstract class DiagnosticsExportChecks {
         val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
         val file = File(app.cacheDir, "selected-diagnostics.zip")
         try {
+            app.physicalButtonTest.stop()
+            app.physicalButtonTest.clearResults()
+            app.physicalButtonTest.start()
+            app.physicalButtonTest.observeActivityKey(
+                android.view.KeyEvent.KEYCODE_VOLUME_UP,
+                android.view.KeyEvent.ACTION_DOWN,
+                0,
+                true,
+                true,
+                false,
+            )
+            app.physicalButtonTest.stop()
+            assertEquals("DETECTED", app.recorder.physicalButtonHistory().activityResult)
             service.get().onStartCommand(Intent(app, TrackingService::class.java), 0, 1)
             shadowOf(Looper.getMainLooper()).idle()
             val generation = app.diagnostics.value!!.serviceGeneration
@@ -99,7 +112,18 @@ abstract class DiagnosticsExportChecks {
                 }
             }
             assertTrue(file.length() > 0)
-            java.util.zip.ZipFile(file).use { assertNotNull(it.getEntry("manifest.json")) }
+            java.util.zip.ZipFile(file).use { zip ->
+                assertNotNull(zip.getEntry("manifest.json"))
+                val report = zip.getInputStream(zip.getEntry("physical-button-report.json")).bufferedReader().readText()
+                assertTrue(report.contains("DETECTED"))
+                assertTrue(report.contains("VOLUME_UP"))
+                assertTrue(report.contains("MECHANISM UNAVAILABLE"))
+                assertTrue(report.contains("\"manufacturer\""))
+                assertTrue(report.contains("\"model\""))
+                assertTrue(report.contains("\"android_version\""))
+                assertTrue(report.contains("\"android_api\""))
+                assertTrue(report.contains("locked_screen"))
+            }
             assertEquals(generation, app.diagnostics.value!!.serviceGeneration)
             assertEquals(listeners, shadowOf(manager).getLocationUpdateListeners().toList())
             assertTrue(ShadowPowerManager.getLatestWakeLock().isHeld)

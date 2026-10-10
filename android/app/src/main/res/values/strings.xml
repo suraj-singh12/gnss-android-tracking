@@ -1,4 +1,5 @@
 <resources>
+    <string name="app_name">GNSS Tracking</string>
     <string name="interval_value">%1$d</string>
     <string name="cannot_start">Cannot start tracking: %1$s</string>
     <string name="cannot_load_settings">Cannot load saved settings: %1$s. Reopen the app to retry.</string>
@@ -9,4 +10,5 @@
     <string name="diagnostics_export_failed">Diagnostics export failed. Try again; saved incidents are retained.</string>
     <string name="sos_volume_option">Enable triple Volume Up SOS while this app is open</string>
     <string name="sos_read_failed">Cannot read saved SOS — check storage</string>
+    <string name="physical_button_read_failed">Cannot read saved button-test results — check diagnostic storage.</string>
 </resources>
