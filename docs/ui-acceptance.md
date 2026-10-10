@@ -108,6 +108,6 @@ pause/resume and process recreation, while listening never survives a restart.
 Background, locked-screen and screen-off volume observation are **MECHANISM
 UNAVAILABLE**. The application does not create a MediaSession, Accessibility Service,
 root/privileged hook, audio playback, extra foreground service or OEM-specific API.
-Follow [Generic Android Physical Button Acceptance](../android/DEVICE-ACCEPTANCE.md#generic-android-physical-button-acceptance)
+Follow [Generic Android Physical Button Acceptance](../android/DEVICE-ACCEPTANCE.md)
 on actual hardware. Keep PRs #11, #12, #14 and #15 unmerged pending review and do
 not infer a physical-device pass from the rendered or JVM evidence.
