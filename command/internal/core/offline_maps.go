@@ -422,18 +422,18 @@ func (s *Store) mapRequest(w http.ResponseWriter, r *http.Request, p *mapProvide
 		return true
 	}
 	var in struct {
-		Lat    float64 `json:"lat"`
-		Lon    float64 `json:"lon"`
-		Width  float64 `json:"width"`
-		Height float64 `json:"height"`
+		Lat    *float64 `json:"lat"`
+		Lon    *float64 `json:"lon"`
+		Width  float64  `json:"width"`
+		Height float64  `json:"height"`
 	}
 	err = json.Unmarshal(b, &in)
-	if err == nil && (math.Abs(in.Lat) > 85 || math.Abs(in.Lon) > 180 || in.Width < 100 || in.Width > 2000 || in.Height < 100 || in.Height > 2000) {
+	if err == nil && (in.Lat == nil || in.Lon == nil || math.Abs(*in.Lat) > 85 || math.Abs(*in.Lon) > 180 || in.Width < 100 || in.Width > 2000 || in.Height < 100 || in.Height > 2000) {
 		err = errors.New("choose 100–2000 m dimensions and a valid WGS84 center (±85°)")
 	}
 	var data []byte
 	if err == nil {
-		data, err = p.area(r.Context(), in.Lat, in.Lon, in.Width, in.Height)
+		data, err = p.area(r.Context(), *in.Lat, *in.Lon, in.Width, in.Height)
 	}
 	if err != nil {
 		failure(w, 502, "map_preparation_unavailable", err)

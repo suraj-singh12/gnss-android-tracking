@@ -758,6 +758,7 @@ $("open-history").onclick = () => {
 };
 $("event-filter").onchange = renderEvents;
 let preparedMap;
+let preparationRevision = 0;
 async function mapPost(path, data) {
   const response = await fetch("/local/" + path, {
     method: "POST",
@@ -831,9 +832,11 @@ $("map-search-results").onchange = () => {
     const [lat, lon] = JSON.parse($("map-search-results").value);
     $("map-lat").value = lat;
     $("map-lon").value = lon;
+    invalidatePreparation();
   }
 };
 function invalidatePreparation() {
+  preparationRevision++;
   preparedMap = undefined;
   $("download-map").disabled = true;
 }
@@ -851,17 +854,23 @@ $("preview-map").onclick = async () => {
   $("preview-map").disabled = true;
   $("map-preparation-status").textContent =
     "Preparing bounded OSM vector area…";
+  const revision = preparationRevision;
+  const area = {
+    lat: Number($("map-lat").value),
+    lon: Number($("map-lon").value),
+    width: Number($("map-width").value),
+    height: Number($("map-height").value),
+  };
   try {
-    const data = await mapPost("map-preview", {
-      lat: Number($("map-lat").value),
-      lon: Number($("map-lon").value),
-      width: Number($("map-width").value),
-      height: Number($("map-height").value),
-    });
+    const data = await mapPost("map-preview", area);
+    if (revision !== preparationRevision)
+      throw Error(
+        "Area changed while preparing. Preview the new area before downloading.",
+      );
     const text = JSON.stringify(data),
       parsed = GeoMap.parse(text, "OpenStreetMap");
     preparedMap = {
-      source: `OSM ${$("map-lat").value}, ${$("map-lon").value} · ${$("map-width").value} × ${$("map-height").value} m`,
+      source: `OSM ${area.lat}, ${area.lon} · ${area.width} × ${area.height} m`,
       data,
     };
     $("map-preparation-status").textContent =

@@ -124,7 +124,9 @@ content scrolls independently while navigation and SOS remain fixed.
 
 Inspection discovered and corrected narrow-header clipping, low-contrast native
 diagnostic text, zero-width narrow map layout, polling that could collapse focused
-history evidence, and tiny saved maps rounding to misleading zero KB. Expanded
+history evidence, tiny saved maps rounding to misleading zero KB, missing map
+coordinates silently becoming zero and changed-area/stale-response preview races.
+Expanded
 native-section captures explicitly scroll to the section under inspection. Browser
 tests assert viewport overflow, geometric recording-control centring and map width;
 axe checks workspace, quality, maps, Event History and emergency drawers.

@@ -400,8 +400,10 @@ async function wait(check) {
     }),
   );
   const areas = [];
-  await page.route("**/local/map-preview", (route) => {
+  let delayPreview = false;
+  await page.route("**/local/map-preview", async (route) => {
     areas.push(route.request().postDataJSON());
+    if (delayPreview) await new Promise((r) => setTimeout(r, 300));
     return route.fulfill({ json: downloaded });
   });
   await page.locator("#map-preparation summary").click();
@@ -434,6 +436,39 @@ async function wait(check) {
       [1000, 1000],
       [1500, 300],
     ],
+  );
+  await page.locator("#map-search-results").selectOption({ index: 1 });
+  assert.equal(
+    await page.locator("#download-map").isDisabled(),
+    true,
+    "changing place invalidates the previous preview",
+  );
+  await page.locator("#map-lat").fill("");
+  await page.locator("#preview-map").click();
+  assert.equal(
+    areas.length,
+    3,
+    "blank coordinates must not silently become zero",
+  );
+  await page.locator("#map-lat").fill("28.617");
+  delayPreview = true;
+  await page.locator("#preview-map").click();
+  await page.locator("#map-lon").fill("77.213");
+  await page.waitForFunction(() =>
+    document
+      .querySelector("#map-preparation-status")
+      .textContent.includes("Area changed"),
+  );
+  assert.equal(
+    await page.locator("#download-map").isDisabled(),
+    true,
+    "a stale response cannot enable the wrong area's download",
+  );
+  delayPreview = false;
+  await page.locator("#map-lon").fill("77.212");
+  await page.locator("#preview-map").click();
+  await page.waitForFunction(
+    () => !document.querySelector("#download-map").disabled,
   );
   const mapDistance = (await state()).devices[partyIds[2]].total_m;
   await page.screenshot({

@@ -79,6 +79,15 @@ func TestOfflineMapGuards(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
+	for _, body := range []string{`{"width":500,"height":500}`, `{"lat":null,"lon":77,"width":500,"height":500}`} {
+		r = httptest.NewRequest("POST", "/local/map-preview", strings.NewReader(body))
+		r.Header.Set("Content-Type", "application/json")
+		w = httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code == 200 || !strings.Contains(w.Body.String(), "valid WGS84 center") {
+			t.Fatal("missing center was silently interpreted as zero", w.Code, w.Body.String())
+		}
+	}
 }
 func TestOfflineMapProviderAndLimits(t *testing.T) {
 	var query string
