@@ -21,76 +21,168 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/** Real Activity/Room flows, rendered using Robolectric's native Skia renderer.
- * Synthetic telemetry does not establish physical GNSS or OEM behavior. */
+/**
+ * Real Activity/Room flows, rendered using Robolectric's native Skia renderer. Synthetic telemetry
+ * does not establish physical GNSS or OEM behavior.
+ */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = TrackingApp::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class UiNavigationVisualTest {
-    private fun descendants(view: View): List<View> = listOf(view) +
-        if (view is ViewGroup) (0 until view.childCount).flatMap { descendants(view.getChildAt(it)) } else emptyList()
+    private fun descendants(view: View): List<View> =
+        listOf(view) +
+            if (view is ViewGroup)
+                (0 until view.childCount).flatMap { descendants(view.getChildAt(it)) }
+            else emptyList()
 
     @Test
     fun navigationAndOperationalStatesRenderAtCompactLargeAndScaledSizes() = runBlocking {
         val app = ApplicationProvider.getApplicationContext<TrackingApp>()
         withContext(Dispatchers.IO) { app.repository.state() }
-        shadowOf(app).grantPermissions(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.POST_NOTIFICATIONS)
-        shadowOf(app.getSystemService(LocationManager::class.java)).setProviderEnabled(LocationManager.GPS_PROVIDER, true)
+        shadowOf(app)
+            .grantPermissions(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.POST_NOTIFICATIONS,
+            )
+        shadowOf(app.getSystemService(LocationManager::class.java))
+            .setProviderEnabled(LocationManager.GPS_PROVIDER, true)
         val output = System.getenv("GNSS_SCREENSHOT_DIR")?.let { File(it).apply { mkdirs() } }
-        for ((width, height, font) in listOf(Triple(360,800,1f), Triple(480,960,1f), Triple(360,800,1.5f))) {
-            val config = android.content.res.Configuration(app.resources.configuration).apply { fontScale = font }
-            @Suppress("DEPRECATION") app.resources.updateConfiguration(config, app.resources.displayMetrics)
+        for ((width, height, font) in
+            listOf(Triple(360, 800, 1f), Triple(480, 960, 1f), Triple(360, 800, 1.5f))) {
+            val config =
+                android.content.res.Configuration(app.resources.configuration).apply {
+                    fontScale = font
+                }
+            @Suppress("DEPRECATION")
+            app.resources.updateConfiguration(config, app.resources.displayMetrics)
             val activity = Robolectric.buildActivity(MainActivity::class.java).setup()
             try {
                 val root = activity.get().findViewById<View>(android.R.id.content)
                 val density = app.resources.displayMetrics.density
-                val w = (width*density).toInt(); val h = (height*density).toInt()
+                val w = (width * density).toInt()
+                val h = (height * density).toInt()
                 suspend fun settle() {
-                    repeat(20) { shadowOf(Looper.getMainLooper()).idle(); delay(10) }
-                    root.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY))
-                    root.layout(0,0,w,h)
+                    repeat(20) {
+                        shadowOf(Looper.getMainLooper()).idle()
+                        delay(10)
+                    }
+                    root.measure(
+                        View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+                        View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY),
+                    )
+                    root.layout(0, 0, w, h)
                 }
                 fun capture(name: String) {
                     if (output == null) return
-                    val image = Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888)
+                    val image = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
                     root.draw(Canvas(image))
-                    File(output,"android-${width}-${font}-$name.png").outputStream().use { image.compress(Bitmap.CompressFormat.PNG,100,it) }
+                    File(output, "android-${width}-${font}-$name.png").outputStream().use {
+                        image.compress(Bitmap.CompressFormat.PNG, 100, it)
+                    }
                     image.recycle()
                 }
                 awaitInitialized(activity.get())
-                for ((name,op) in listOf(
-                    "stopped" to Operational(),
-                    "tracking" to Operational(tracking=true,gnss="fix",accuracy=3.0,ageMillis=1000,health=Health(battery_percent=76,wifi_connected=true),link="Wi-Fi available • Command reachable"),
-                    "offline-stale" to Operational(tracking=true,gnss="stale",accuracy=8.0,ageMillis=90000,health=Health(battery_percent=43,wifi_connected=false),link="Wi-Fi unavailable")
-                )) {
+                for ((name, op) in
+                    listOf(
+                        "stopped" to Operational(),
+                        "tracking" to
+                            Operational(
+                                tracking = true,
+                                gnss = "fix",
+                                accuracy = 3.0,
+                                ageMillis = 1000,
+                                health = Health(battery_percent = 76, wifi_connected = true),
+                                link = "Wi-Fi available • Command reachable",
+                            ),
+                        "offline-stale" to
+                            Operational(
+                                tracking = true,
+                                gnss = "stale",
+                                accuracy = 8.0,
+                                ageMillis = 90000,
+                                health = Health(battery_percent = 43, wifi_connected = false),
+                                link = "Wi-Fi unavailable",
+                            ),
+                    )) {
                     app.operational.value = op
-                    settle(); capture(name)
-                    val visibleText = descendants(root).filterIsInstance<TextView>().filter { it.isShown }.joinToString("\n") { it.text }
-                    assertTrue(visibleText.contains(if(op.tracking) "TRACKING" else "STOPPED"))
-                    if(name == "tracking") { assertTrue(visibleText.contains("GNSS Fresh"));assertTrue(visibleText.contains("Command Connected")) }
-                    if(name == "offline-stale") {assertTrue(visibleText.contains("GNSS Stale"));assertTrue(visibleText.contains("Offline"))}
+                    settle()
+                    capture(name)
+                    val visibleText =
+                        descendants(root)
+                            .filterIsInstance<TextView>()
+                            .filter { it.isShown }
+                            .joinToString("\n") { it.text }
+                    assertTrue(visibleText.contains(if (op.tracking) "TRACKING" else "STOPPED"))
+                    if (name == "tracking") {
+                        assertTrue(visibleText.contains("GNSS Fresh"))
+                        assertTrue(visibleText.contains("Command Connected"))
+                    }
+                    if (name == "offline-stale") {
+                        assertTrue(visibleText.contains("GNSS Stale"))
+                        assertTrue(visibleText.contains("Offline"))
+                    }
                 }
                 withContext(Dispatchers.IO) {
-                    app.repository.snapshot(System.currentTimeMillis(), Fix(utc(System.currentTimeMillis()),0,28.6,77.2,3.0,null,null,null,null), Health(gnss_status="fix"))
-                    app.repository.saveSos(Protocol.newId(), System.currentTimeMillis(), System.currentTimeMillis(), null, Health())
+                    app.repository.snapshot(
+                        System.currentTimeMillis(),
+                        Fix(
+                            utc(System.currentTimeMillis()),
+                            0,
+                            28.6,
+                            77.2,
+                            3.0,
+                            null,
+                            null,
+                            null,
+                            null,
+                        ),
+                        Health(gnss_status = "fix"),
+                    )
+                    app.repository.saveSos(
+                        Protocol.newId(),
+                        System.currentTimeMillis(),
+                        System.currentTimeMillis(),
+                        null,
+                        Health(),
+                    )
                 }
-                settle();capture("backlog-sos-pending")
+                settle()
+                capture("backlog-sos-pending")
                 val all = descendants(root)
-                for (destination in listOf("Settings","Diagnostics","Tracking")) {
+                for (destination in listOf("Settings", "Diagnostics", "Tracking")) {
                     all.filterIsInstance<Button>().single { it.text == destination }.performClick()
-                    settle();capture(destination.lowercase())
-                    assertEquals(destination, activity.get().javaClass.getDeclaredField("destination").apply { isAccessible=true }.get(activity.get()))
+                    settle()
+                    capture(destination.lowercase())
+                    assertEquals(
+                        destination,
+                        activity
+                            .get()
+                            .javaClass
+                            .getDeclaredField("destination")
+                            .apply { isAccessible = true }
+                            .get(activity.get()),
+                    )
                 }
                 val settings = all.filterIsInstance<TextView>().single { it.text == "Party ID" }
                 assertFalse(settings.isShown)
-                assertTrue(all.filterIsInstance<Button>().single { it.text == "Tracking" }.isSelected)
-            } finally { activity.pause().stop().destroy() }
+                assertTrue(
+                    all.filterIsInstance<Button>().single { it.text == "Tracking" }.isSelected
+                )
+            } finally {
+                activity.pause().stop().destroy()
+            }
         }
         app.operational.value = Operational()
         app.recorder.close()
     }
+
     private suspend fun awaitInitialized(activity: MainActivity) {
-        val field = activity.javaClass.getDeclaredField("initialized").apply { isAccessible=true }
-        withTimeout(10000) { while(!field.getBoolean(activity)) { shadowOf(Looper.getMainLooper()).idle();delay(10) } }
+        val field = activity.javaClass.getDeclaredField("initialized").apply { isAccessible = true }
+        withTimeout(10000) {
+            while (!field.getBoolean(activity)) {
+                shadowOf(Looper.getMainLooper()).idle()
+                delay(10)
+            }
+        }
     }
 }

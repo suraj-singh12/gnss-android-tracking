@@ -465,6 +465,15 @@ function render() {
           el("summary", "Diagnostics & significant events"),
           status,
         );
+        for (const event of state.sos_alerts ?? []) {
+          if (event.device_id !== d.device_id) continue;
+          diagnostics.append(
+            el(
+              "p",
+              `SOS raised ${time(event.triggered_at)} · SOS Received ${time(event.received_at)} · ${event.operator_acknowledged_at ? "SOS Acknowledged " + time(event.operator_acknowledged_at) : "Operator acknowledgement required"}`,
+            ),
+          );
+        }
         card.append(diagnostics);
         $("selected-detail").append(card);
       }

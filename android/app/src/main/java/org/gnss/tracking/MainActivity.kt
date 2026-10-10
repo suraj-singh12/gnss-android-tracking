@@ -80,21 +80,24 @@ class MainActivity : Activity() {
                         "Start canceled while saving settings. Check settings and tap Start Tracking.",
                 )
             }
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(0xfff3f5f4.toInt())
-        }
-        val navigation = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(8), dp(4), dp(8), dp(4))
-            setBackgroundColor(android.graphics.Color.WHITE)
-        }
-        val pages = listOf("Tracking", "Settings", "Diagnostics").associateWith {
+        val root =
             LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(dp(20), dp(16), dp(20), dp(24))
+                setBackgroundColor(0xfff3f5f4.toInt())
             }
-        }
+        val navigation =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(dp(8), dp(4), dp(8), dp(4))
+                setBackgroundColor(android.graphics.Color.WHITE)
+            }
+        val pages =
+            listOf("Tracking", "Settings", "Diagnostics").associateWith {
+                LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(20), dp(16), dp(20), dp(24))
+                }
+            }
         val scroll = ScrollView(this).apply { isFillViewport = true }
         val pageContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         pages.values.forEach { pageContainer.addView(it) }
@@ -104,7 +107,9 @@ class MainActivity : Activity() {
         val tabButtons = mutableMapOf<String, Button>()
         fun navigate(name: String) {
             destination = name
-            pages.forEach { (key, page) -> page.visibility = if (key == name) View.VISIBLE else View.GONE }
+            pages.forEach { (key, page) ->
+                page.visibility = if (key == name) View.VISIBLE else View.GONE
+            }
             tabButtons.forEach { (key, tab) ->
                 tab.isSelected = key == name
                 tab.setTextColor(if (key == name) 0xff17654c.toInt() else 0xff607077.toInt())
@@ -113,26 +118,29 @@ class MainActivity : Activity() {
             scroll.scrollTo(0, 0)
         }
         for (name in pages.keys) {
-            val tab = Button(this).apply {
-                text = name
-                isAllCaps = false
-                minHeight = dp(56)
-                textSize = 14f
-                backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE)
-                setOnClickListener { navigate(name) }
-            }
+            val tab =
+                Button(this).apply {
+                    text = name
+                    isAllCaps = false
+                    minHeight = dp(56)
+                    textSize = 14f
+                    backgroundTintList =
+                        android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE)
+                    setOnClickListener { navigate(name) }
+                }
             tabButtons[name] = tab
             navigation.addView(tab, LinearLayout.LayoutParams(0, -2, 1f))
         }
         setContentView(root)
         root.setOnApplyWindowInsetsListener { view, insets ->
-            val (top, bottom) = if (Build.VERSION.SDK_INT >= 30) {
-                val bars = insets.getInsets(WindowInsets.Type.systemBars())
-                bars.top to bars.bottom
-            } else {
-                @Suppress("DEPRECATION")
-                (insets.systemWindowInsetTop to insets.systemWindowInsetBottom)
-            }
+            val (top, bottom) =
+                if (Build.VERSION.SDK_INT >= 30) {
+                    val bars = insets.getInsets(WindowInsets.Type.systemBars())
+                    bars.top to bars.bottom
+                } else {
+                    @Suppress("DEPRECATION")
+                    (insets.systemWindowInsetTop to insets.systemWindowInsetBottom)
+                }
             view.setPadding(0, top, 0, bottom)
             insets
         }
@@ -170,18 +178,23 @@ class MainActivity : Activity() {
         text("GNSS · Party Leader", 24f)
         trackingSummary = text("STOPPED", 32f)
         trackingSummary.accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
-        trackingError = text("").apply { setTextColor(0xffa51621.toInt()); visibility = View.GONE }
+        trackingError =
+            text("").apply {
+                setTextColor(0xffa51621.toInt())
+                visibility = View.GONE
+            }
         gnssSummary = text("GNSS · No fix")
         commandSummary = text("Command · Offline")
         historySummary = text("History · Loading…")
         batterySummary = text("Battery · Unavailable")
         for (card in listOf(gnssSummary, commandSummary, historySummary, batterySummary)) {
             card.setPadding(dp(16), dp(12), dp(16), dp(12))
-            card.background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(android.graphics.Color.WHITE)
-                cornerRadius = dp(12).toFloat()
-                setStroke(dp(1), 0xffdce3df.toInt())
-            }
+            card.background =
+                android.graphics.drawable.GradientDrawable().apply {
+                    setColor(android.graphics.Color.WHITE)
+                    cornerRadius = dp(12).toFloat()
+                    setStroke(dp(1), 0xffdce3df.toInt())
+                }
             (card.layoutParams as LinearLayout.LayoutParams).topMargin = dp(8)
         }
         sosStatus = text("SOS: no saved event", 18f)
@@ -238,10 +251,12 @@ class MainActivity : Activity() {
                                 "SOS ${sosReference(row.messageId)} • ${m.sos!!.triggered_at}"
                             )
                             appendLine(
-                                (if (row.deliveredAt != null) "SOS Received · " else "SOS Pending · ") + row.sosDescription(
-                                    op.health.wifi_connected,
-                                    app.activityVisible || op.tracking,
-                                )
+                                (if (row.deliveredAt != null) "SOS Received · "
+                                else "SOS Pending · ") +
+                                    row.sosDescription(
+                                        op.health.wifi_connected,
+                                        app.activityVisible || op.tracking,
+                                    )
                             )
                         }
                         if (rows.size > 5)
@@ -376,10 +391,12 @@ class MainActivity : Activity() {
         exportStatus =
             text("Incident evidence is saved automatically. Export does not stop tracking.")
         content = pages.getValue("Tracking")
-        startButton = button("Loading settings…") {
-            if (app.operational.value.tracking) stopTracking() else save(start = true)
-        }
-        startButton.backgroundTintList = android.content.res.ColorStateList.valueOf(0xff17654c.toInt())
+        startButton =
+            button("Loading settings…") {
+                if (app.operational.value.tracking) stopTracking() else save(start = true)
+            }
+        startButton.backgroundTintList =
+            android.content.res.ColorStateList.valueOf(0xff17654c.toInt())
         startButton.setTextColor(android.graphics.Color.WHITE)
         startButton.minHeight = dp(56)
         startButton.isEnabled = false
@@ -418,39 +435,64 @@ class MainActivity : Activity() {
                             updateStartControls()
                             attemptStart()
                         }
-                        trackingSummary.text = when {
-                            op.starting -> "STARTING"
-                            op.stopping -> "STOPPING"
-                            op.error != null || state.operationalError != null -> "ERROR"
-                            op.tracking -> "TRACKING"
-                            else -> "STOPPED"
-                        }
+                        trackingSummary.text =
+                            when {
+                                op.starting -> "STARTING"
+                                op.stopping -> "STOPPING"
+                                op.error != null || state.operationalError != null -> "ERROR"
+                                op.tracking -> "TRACKING"
+                                else -> "STOPPED"
+                            }
                         trackingError.text = op.error ?: state.operationalError ?: ""
-                        trackingError.visibility = if (trackingError.text.isEmpty()) View.GONE else View.VISIBLE
-                        gnssSummary.text = (if (op.tracking) "GNSS\n" else "Last known GNSS · Tracking stopped\n") + op.fixDescription().replace("GPS: Fix", "GNSS Fresh").replace("GPS: Stale fix", "GNSS Stale").replace("GPS: ", "")
-                        val connection = when {
-                            !op.tracking -> "Offline · Tracking stopped"
-                            op.link.contains("Command reachable") -> "Command Connected"
-                            op.health.wifi_connected == true -> "Reconnecting · Command unavailable"
-                            else -> "Offline"
-                        }
-                        commandSummary.text = "Command\n$connection\nLast successful communication: ${state.lastAck ?: "None"}"
-                        historySummary.text = "History\n" + when {
-                            queues.blocked > 0 || state.deliveryPaused || state.knownCollectionLoss > 0 || app.observationPersistence.state.awaitingCommit > 0 -> "Delivery problem · ${queues.gnss} GNSS pending"
-                            queues.gnss == 0 -> "Fully synchronized"
-                            connection == "Command Connected" -> "Synchronizing · ${queues.gnss} GNSS pending"
-                            else -> "${queues.gnss} observations pending"
-                        }
-                        batterySummary.text = "Battery · ${op.health.battery_percent?.let { "$it%" } ?: "Unavailable"}${if (op.health.charging == true) " · Charging" else ""}"
+                        trackingError.visibility =
+                            if (trackingError.text.isEmpty()) View.GONE else View.VISIBLE
+                        gnssSummary.text =
+                            (if (op.tracking) "GNSS\n"
+                            else "Last known GNSS · Tracking stopped\n") +
+                                op.fixDescription()
+                                    .replace("GPS: Fix", "GNSS Fresh")
+                                    .replace("GPS: Stale fix", "GNSS Stale")
+                                    .replace("GPS: ", "")
+                        val connection =
+                            when {
+                                !op.tracking -> "Offline · Tracking stopped"
+                                op.link.contains("Command reachable") -> "Command Connected"
+                                op.health.wifi_connected == true ->
+                                    "Reconnecting · Command unavailable"
+                                else -> "Offline"
+                            }
+                        commandSummary.text =
+                            "Command\n$connection\nLast successful communication: ${state.lastAck ?: "None"}"
+                        historySummary.text =
+                            "History\n" +
+                                when {
+                                    queues.blocked > 0 ||
+                                        state.deliveryPaused ||
+                                        state.knownCollectionLoss > 0 ||
+                                        app.observationPersistence.state.awaitingCommit > 0 ->
+                                        "Delivery problem · ${queues.gnss} GNSS pending"
+                                    queues.gnss == 0 -> "Fully synchronized"
+                                    connection == "Command Connected" ->
+                                        "Synchronizing · ${queues.gnss} GNSS pending"
+                                    else -> "${queues.gnss} observations pending"
+                                }
+                        batterySummary.text =
+                            "Battery · ${op.health.battery_percent?.let { "$it%" } ?: "Unavailable"}${if (op.health.charging == true) " · Charging" else ""}"
                         status.text = buildString {
                             appendLine("Device: ${state.deviceId}")
-                            appendLine("GNSS observations: ${state.observationSequence} · known collection loss: ${state.knownCollectionLoss}")
+                            appendLine(
+                                "GNSS observations: ${state.observationSequence} · known collection loss: ${state.knownCollectionLoss}"
+                            )
                             val collection = app.observationPersistence.state
-                            appendLine("Persistence: ${collection.awaitingCommit} awaiting commit · ${collection.writeFailures} failures")
+                            appendLine(
+                                "Persistence: ${collection.awaitingCommit} awaiting commit · ${collection.writeFailures} failures"
+                            )
                             app.diagnostics.value?.let { diagnostic ->
                                 appendLine("Network: ${diagnostic.network}")
                                 appendLine("Transport: ${diagnostic.sender}")
-                                appendLine("Last ACK age: ${diagnostic.lastAckAgeMs?.let { "${it / 1000} s" } ?: "Unavailable"}")
+                                appendLine(
+                                    "Last ACK age: ${diagnostic.lastAckAgeMs?.let { "${it / 1000} s" } ?: "Unavailable"}"
+                                )
                             }
                             appendLine(
                                 if (op.starting) "Starting…"
@@ -501,29 +543,29 @@ class MainActivity : Activity() {
     }
 
     private fun stopTracking() {
-            AlertDialog.Builder(this)
-                .setTitle("Stop tracking on this phone?")
-                .setMessage(
-                    "Location collection and sending will stop. Saved pending messages remain on this phone until tracking starts again."
-                )
-                .setNegativeButton("Keep tracking", null)
-                .setPositiveButton("Stop Tracking") { _, _ ->
-                    startSave?.cancel()
-                    pendingStart = false
-                    savingStart = false
-                    app.operational.update {
-                        it.copy(
-                            starting = false,
-                            stopping = true,
-                            error = if (it.starting) null else it.error,
-                        )
-                    }
-                    // Stop acquisition immediately; finish accepted session metadata
-                    // before ending it. A later Start cannot race this explicit Stop.
-                    stopService(trackingIntent)
-                    app.finishTracking()
+        AlertDialog.Builder(this)
+            .setTitle("Stop tracking on this phone?")
+            .setMessage(
+                "Location collection and sending will stop. Saved pending messages remain on this phone until tracking starts again."
+            )
+            .setNegativeButton("Keep tracking", null)
+            .setPositiveButton("Stop Tracking") { _, _ ->
+                startSave?.cancel()
+                pendingStart = false
+                savingStart = false
+                app.operational.update {
+                    it.copy(
+                        starting = false,
+                        stopping = true,
+                        error = if (it.starting) null else it.error,
+                    )
                 }
-                .show()
+                // Stop acquisition immediately; finish accepted session metadata
+                // before ending it. A later Start cannot race this explicit Stop.
+                stopService(trackingIntent)
+                app.finishTracking()
+            }
+            .show()
     }
 
     private fun save(start: Boolean = false, reenroll: Boolean = false) {
@@ -583,8 +625,7 @@ class MainActivity : Activity() {
     private fun updateStartControls() {
         if (!::startButton.isInitialized) return
         val op = app.operational.value
-        startButton.isEnabled =
-            initialized && !pendingStart && !op.starting && !op.stopping
+        startButton.isEnabled = initialized && !pendingStart && !op.starting && !op.stopping
         cancelStartButton.visibility = if (pendingStart || op.starting) View.VISIBLE else View.GONE
         startButton.text =
             when {
