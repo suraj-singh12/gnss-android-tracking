@@ -594,3 +594,32 @@ footer {
   margin-top: 1px;
   line-height: 1.2;
 }
+#sos-panel.quiet-events {
+  background: #edf2ef;
+  border-color: #c2cdc5;
+  color: var(--ink);
+}
+#sos-panel.quiet-events button {
+  background: white;
+  color: var(--accent);
+}
+.has-events main {
+  height: calc(100vh - 300px);
+  min-height: 480px;
+}
+.has-sos main {
+  height: calc(100vh - 530px);
+  min-height: 360px;
+}
+.has-sos .canvas {
+  min-height: 360px;
+}
+@media (max-width: 850px) {
+  .has-events main,
+  .has-sos main {
+    height: auto;
+  }
+  .has-sos .canvas {
+    height: 55vh;
+  }
+}

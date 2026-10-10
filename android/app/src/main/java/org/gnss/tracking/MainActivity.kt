@@ -28,6 +28,8 @@ class MainActivity : Activity() {
     private lateinit var exportStatus: TextView
     private var exporting = false
     private lateinit var sosStatus: TextView
+    private lateinit var sosDetails: TextView
+    private lateinit var emergencyDock: LinearLayout
     private lateinit var keyOption: CheckBox
     private val volumePattern = TripleVolumeUp { count ->
         app.recorder.sos(
@@ -107,6 +109,8 @@ class MainActivity : Activity() {
         val tabButtons = mutableMapOf<String, Button>()
         fun navigate(name: String) {
             destination = name
+            if (::emergencyDock.isInitialized)
+                emergencyDock.visibility = if (name == "Tracking") View.VISIBLE else View.GONE
             pages.forEach { (key, page) ->
                 page.visibility = if (key == name) View.VISIBLE else View.GONE
             }
@@ -124,6 +128,8 @@ class MainActivity : Activity() {
                     isAllCaps = false
                     minHeight = dp(56)
                     textSize = 14f
+                    minWidth = 0
+                    setPadding(dp(4), dp(8), dp(4), dp(8))
                     backgroundTintList =
                         android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE)
                     setOnClickListener { navigate(name) }
@@ -197,7 +203,7 @@ class MainActivity : Activity() {
                 }
             (card.layoutParams as LinearLayout.LayoutParams).topMargin = dp(8)
         }
-        sosStatus = text("SOS: no saved event", 18f)
+        sosStatus = text("SOS · No saved event", 16f)
         sosStatus.accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         val sosButton =
             button("SOS — hold to activate") {
@@ -216,9 +222,18 @@ class MainActivity : Activity() {
             app.activateSos(SosTrigger.SCREEN)
             true
         }
-        text(
-            "Saved on phone ≠ Received by Command. Operator acknowledgement is visible only on Command."
-        )
+        // Keep the deliberate emergency action reachable even with large fonts or backlog.
+        content.removeView(sosStatus)
+        content.removeView(sosButton)
+        emergencyDock =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(20), dp(8), dp(20), dp(8))
+                setBackgroundColor(android.graphics.Color.WHITE)
+                addView(sosStatus, LinearLayout.LayoutParams(-1, -2))
+                addView(sosButton, LinearLayout.LayoutParams(-1, -2))
+            }
+        root.addView(emergencyDock, root.childCount - 1)
         content = pages.getValue("Settings")
         text("Settings", 24f)
         text("Emergency shortcut", 20f)
@@ -236,13 +251,31 @@ class MainActivity : Activity() {
         text(
             "Physical key support: foreground app only. Three short presses within 1.5 s. Volume still changes. Locked screen / other apps: unsupported; open app and hold SOS."
         )
+        content = pages.getValue("Diagnostics")
+        text("Diagnostics", 24f)
+        text("SOS event details", 20f)
+        sosDetails = text("No saved SOS event")
         content = pages.getValue("Tracking")
         scope.launch {
             combine(app.repository.dao.observeSos(), app.sosNotice, app.operational) {
                     rows,
                     notice,
                     op ->
-                    sosStatus.text = buildString {
+                    val pending = rows.count { it.deliveredAt == null }
+                    val relevant = rows.firstOrNull { it.deliveredAt == null } ?: rows.firstOrNull()
+                    sosStatus.text =
+                        when {
+                            relevant == null -> notice ?: "SOS · No saved event"
+                            pending > 0 -> "SOS Pending · $pending awaiting Command receipt"
+                            else -> "SOS Received · Operator acknowledgement on Command"
+                        }
+                    if (
+                        notice != null &&
+                            (notice.contains("saving", ignoreCase = true) ||
+                                notice.contains("failed", ignoreCase = true))
+                    )
+                        sosStatus.text = "$notice\n${sosStatus.text}"
+                    sosDetails.text = buildString {
                         notice?.let { appendLine(it) }
                         if (rows.isEmpty()) appendLine("SOS: no saved event")
                         for (row in rows.take(5)) {
@@ -268,7 +301,6 @@ class MainActivity : Activity() {
                 .collect {}
         }
         content = pages.getValue("Diagnostics")
-        text("Diagnostics", 24f)
         status = text("Loading saved settings…")
         content = pages.getValue("Tracking")
         button("Check setup / permissions") { navigate("Settings") }

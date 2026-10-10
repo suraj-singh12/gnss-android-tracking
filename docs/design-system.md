@@ -54,7 +54,7 @@ Backend contact grace periods follow each device's effective reporting interval.
 
 Three persistent destinations: **Tracking · Settings · Diagnostics**. Tracking shows
 large lifecycle state, one Start/Stop control, GNSS accuracy/age, application contact
-and last ACK, concise GNSS queue state, battery and protected hold-to-activate SOS.
+and last ACK, concise GNSS queue state, battery and a protected hold-to-activate SOS dock that stays visible above navigation.
 Check setup opens Settings in one interaction. Settings contains field readiness
 and permission/system-setting actions, identity labels, receiver address, reporting
 interval, enrollment and foreground volume shortcut. Diagnostics contains technical
@@ -92,8 +92,8 @@ continues to use the existing backend. No accuracy circles are introduced.
 
 SOS region is outside secondary panels. Event cards distinguish activation, snapshot,
 Command receipt and human acknowledgement. Existing AudioContext alerts repeat while
-unacknowledged after explicit enablement; blocked/unavailable sound is shown visibly.
-Recording actions cannot dismiss SOS. Acknowledged events remain quieter and retained.
+unacknowledged after explicit enablement from the persistent toolbar, including before an SOS arrives; blocked/unavailable sound is shown visibly.
+Recording actions cannot dismiss SOS. Acknowledged events remain quieter and retained in a collapsible event history.
 
 ## Exactly two map modes
 

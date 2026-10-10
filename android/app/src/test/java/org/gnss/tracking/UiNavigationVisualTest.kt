@@ -71,6 +71,25 @@ class UiNavigationVisualTest {
                         View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY),
                     )
                     root.layout(0, 0, w, h)
+                    for (tab in
+                        descendants(root).filterIsInstance<Button>().filter {
+                            it.text in listOf("Tracking", "Settings", "Diagnostics")
+                        }) {
+                        assertEquals(
+                            "Navigation label must fit at font scale $font",
+                            1,
+                            tab.lineCount,
+                        )
+                    }
+                    val sos =
+                        descendants(root).filterIsInstance<Button>().single {
+                            it.text == "SOS — hold to activate"
+                        }
+                    if (sos.isShown) {
+                        val bounds = android.graphics.Rect()
+                        assertTrue(sos.getGlobalVisibleRect(bounds))
+                        assertEquals("SOS must remain fully reachable", sos.height, bounds.height())
+                    }
                 }
                 fun capture(name: String) {
                     if (output == null) return
@@ -152,7 +171,7 @@ class UiNavigationVisualTest {
                 for (destination in listOf("Settings", "Diagnostics", "Tracking")) {
                     all.filterIsInstance<Button>().single { it.text == destination }.performClick()
                     settle()
-                    capture(destination.lowercase())
+                    capture("nav-" + destination.lowercase())
                     assertEquals(
                         destination,
                         activity

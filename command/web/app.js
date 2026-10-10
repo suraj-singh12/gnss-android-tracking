@@ -72,6 +72,7 @@ $("dots").onchange = () => {
 let audio;
 let sounding = false;
 let lastSound = 0;
+let showSOSEventHistory = false;
 async function sosSound(test = false) {
   if (sounding) return;
   if (!test && !state?.sos_alerts?.some((a) => !a.operator_acknowledged_at))
@@ -94,9 +95,11 @@ async function sosSound(test = false) {
     tone.start();
     tone.stop(audio.currentTime + 0.5);
     lastSound = Date.now();
+    $("sos-audio").textContent = "SOS sound enabled · Test";
     $("sos-audio-status").textContent =
       "Audible alert enabled; repeats every 10 s while SOS is unacknowledged. Check speaker volume.";
   } catch (e) {
+    $("sos-audio").textContent = "Enable SOS sound · currently blocked";
     $("sos-audio-status").textContent =
       "Audible alert blocked / unavailable. Enable audio and check speaker volume; visible SOS remains active.";
   } finally {
@@ -104,6 +107,10 @@ async function sosSound(test = false) {
   }
 }
 $("sos-audio").onclick = () => sosSound(true);
+$("sos-history-toggle").onclick = () => {
+  showSOSEventHistory = !showSOSEventHistory;
+  renderSOS();
+};
 function renderSOS() {
   const alerts = [...(state.sos_alerts || [])].sort(
     (a, b) =>
@@ -114,6 +121,17 @@ function renderSOS() {
   );
   const pending = alerts.filter((a) => !a.operator_acknowledged_at).length;
   $("sos-panel").hidden = alerts.length === 0;
+  $("sos-panel").classList.toggle("quiet-events", pending === 0);
+  $("sos-heading").textContent = pending
+    ? "SOS emergencies"
+    : "SOS event history";
+  $("sos-history-toggle").hidden = pending > 0;
+  $("sos-history-toggle").textContent = showSOSEventHistory
+    ? "Hide event history"
+    : "Show event history";
+  $("sos-alerts").hidden = pending === 0 && !showSOSEventHistory;
+  document.body.classList.toggle("has-events", alerts.length > 0);
+  document.body.classList.toggle("has-sos", pending > 0);
   const summary = `${pending} unacknowledged · ${alerts.length - pending} acknowledged. Receipt and operator acknowledgement are separate. Recording controls retain SOS.`;
   if ($("sos-summary").textContent !== summary)
     $("sos-summary").textContent = summary;

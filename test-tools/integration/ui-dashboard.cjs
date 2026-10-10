@@ -223,6 +223,8 @@ async function wait(check) {
   await page.locator("#fit").click();
   await page.locator("#focus-party").click();
   await page.locator("#open-map").click();
+  await page.locator("#dots").fill("40");
+  await page.locator("#dots").blur();
   const qualifiedBeforeRaw = (await state()).devices[partyIds[2]].total_m;
   await page.locator("#all-observations").check();
   assert.equal(await page.locator("#all-observations").isChecked(), true);
@@ -311,6 +313,9 @@ async function wait(check) {
   await wait(async () => !(await state()).recording.active);
   await page.locator("#resume").click();
   await wait(async () => (await state()).recording.active);
+  page.once("dialog", (d) => d.dismiss());
+  await page.locator("#clear").click();
+  assert.ok((await state()).recording, "Canceled Clear must retain recording");
   page.on("dialog", (d) => d.accept());
   await page.locator("#clear").click();
   await wait(async () => !(await state()).recording);
@@ -339,12 +344,11 @@ async function wait(check) {
       return original.call(this);
     };
   });
+  await page.locator("#sos-audio").click();
   await send(sos);
   await page.waitForSelector(".sos-alert");
-  await page.locator("#sos-audio").click();
   assert.ok((await page.evaluate(() => window.__tones)) > 0);
-  await page.evaluate(() => (lastSound = 0));
-  await page.waitForTimeout(2200);
+  await wait(async () => (await page.evaluate(() => window.__tones)) >= 2);
   assert.ok(
     (await page.evaluate(() => window.__tones)) >= 2,
     "delayed SOS must sound again while pending",

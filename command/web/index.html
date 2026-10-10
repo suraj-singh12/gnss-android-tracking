@@ -15,6 +15,7 @@
         <div>GNSS<span>Command Centre</span></div>
       </div>
       <div class="header-tools">
+        <button id="sos-audio">Enable / test SOS sound</button>
         <button id="open-quality">Quality settings</button
         ><button id="open-map">Map & layers</button
         ><a href="/local/field-report">Export diagnostics</a>
@@ -43,7 +44,7 @@
     <section id="sos-panel" aria-labelledby="sos-heading" hidden>
       <div class="emergency-heading">
         <h1 id="sos-heading">SOS emergencies</h1>
-        <button id="sos-audio">Enable / test audible SOS alert</button>
+        <button id="sos-history-toggle">Show event history</button>
       </div>
       <p id="sos-summary" role="status" aria-live="polite"></p>
       <span id="sos-audio-status" role="status"
