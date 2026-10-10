@@ -1,6 +1,36 @@
 # Issue #6 integrated UI acceptance
 
-## Terrain/appearance refinement on PR #17
+## Automatic DEM follow-up on PR #18
+
+`feature/issue6-automatic-dem` starts at verified PR #18 SHA
+`4d676aef51b61fd9d981d2f44bb0a10babafe7b3`, targeting
+`feature/issue6-terrain-appearance`. No Android/GNSS/SOS/recording engine redesign.
+Existing PRs/issues stay open and unmerged. Source ancestry and frozen build SHA
+are recorded in the focused PR and Actions manifest.
+
+Enter/search a geographic centre, retain default 500×500 m or choose bounds,
+optionally select hillshade/contours/elevation, Preview and Download for Offline Use.
+Vectors save first; AWS Open Data Skadi acquisition then uses the existing HGT
+pipeline. Failure warns and retains vectors/previous terrain. Select the saved map
+and **Download / retry selected terrain** without duplicating vectors. Layers start
+OFF and toggle locally; provenance/attribution/datum/spacing survive restart/export.
+Provider coverage/credentials/pricing/quotas/limits are in Command README.
+
+Real acceptance: `dem-acquisition.cjs` downloads/decodes Mussoorie
+(30.4598,78.0644); `dem-offline-acceptance.cjs` uses the actual OSM/DEM downloader UI,
+checks centre bounds and every saved sample against independently downloaded HGT,
+checks rendered shade pixel centres/contour coordinates/pointer readouts, then
+restarts Command with provider networking blocked. Failed offline retry must retain
+the exact terrain export. Actual screenshots and JSON are Actions evidence.
+This verifies georeferencing, not surveyed accuracy or physical field acceptance.
+
+```sh
+GNSS_COMMAND_BINARY=/path/to/command GNSS_PLAYWRIGHT_MODULE=/path/to/playwright \
+GNSS_TERRAIN_PROVIDER_REPORT=/path/to/report.json \
+node test-tools/integration/dem-offline-acceptance.cjs
+```
+
+## Historical PR #18 terrain/appearance refinement on PR #17
 
 Branch `feature/issue6-terrain-appearance` starts at verified PR #17 SHA
 `9eee532869c3fdcc258bcaa4bc51ccc0f5eecbe7`, targeting
@@ -17,8 +47,8 @@ SQLite migration and map deletion preserve original vector bytes and authoritati
 tracking state. A small nonmodal Layers popover toggles availability/OFF/ON locally.
 Provider-independent fixture processing, real local storage and offline restart are
 distinct from real DEM acquisition. Direct candidate requests here returned proxy
-CONNECT HTTP 403. Automatic Copernicus/OpenTopography acquisition is not implemented;
-do not claim all six improvements fully accepted without that missing provider path.
+CONNECT HTTP 403. That baseline did not implement automatic acquisition. The
+follow-up above uses the separately verified AWS Skadi source, not those candidates.
 
 Run `node test-tools/integration/terrain-test.cjs` alongside existing suites.
 `ui-dashboard.cjs` now exercises default/cancel/error/both recording modes, exact

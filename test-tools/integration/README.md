@@ -1,5 +1,15 @@
 # Android → Command integration
 
+Automatic DEM follow-up: `dem-acquisition.cjs` performs an actual public Skadi GET
+and gzip decode. `dem-offline-acceptance.cjs` requires `GNSS_COMMAND_BINARY` and
+Playwright (`GNSS_PLAYWRIGHT_MODULE`; optional `GNSS_CHROMIUM`), drives the real
+OSM/DEM download UI at Mussoorie, independently validates every geographic DEM node,
+rendered shading/contours/elevation, then restarts with Command provider traffic
+blocked and denies external browser requests. Failed offline retry preserves exact
+terrain bytes. `GNSS_TERRAIN_PROVIDER_REPORT` sets the JSON evidence path;
+`GNSS_SCREENSHOT_DIR` retains actual rendered screenshots. These are mandatory
+real-provider checks in matched-assets Actions, distinct from deterministic fixtures.
+
 Corrective UI acceptance also runs `sos-alarm-test.cjs`, `sos-dashboard.cjs`,
 `ui-dashboard.cjs` and `map-test.cjs`. The browser uses the real embedded Command
 HTTP/state and SQLite paths. Only public map-provider search/preview boundaries
@@ -64,23 +74,23 @@ compared exactly, including segment UUIDs and projected coordinates.
 
 ## Automated scenarios
 
-| Scenario | Assertions |
-| --- | --- |
-| Normal location/status + first enrollment | Exact ACK identity, one local allocation/raw row, dynamic party metadata, preserved measurement/capture times, status retains location, authority persists and is echoed |
-| Override/local edit/clear | Real local controls → ACK → Room config → new echo → convergence; local 10 → override 30, local edit 20 retains 30, explicit clear falls back to 20; queued JSON stays immutable |
-| Five-second amendment | Local 5 → real Command override 5 → ACK adoption/Room reopen → local edit 15 retains effective 5 → Clear falls back to 15/converges; local/control reject 1, 6, 86405 |
-| Lost response | Exact saved retry, duplicate with original first receipt, one row/track effect/distance effect per observation |
-| Current-first recovery | Sender wire order D A B C, live D never rolls back, history A B C D; failed retry deadline cleared on restore |
-| Stale recovery + reserved SOS | New current saved before old backlog; SOS precedes current and never enters tracks; complete trigger/operator workflow also covered below |
-| Stale recovery + reserved SOS | Legacy status recovery retry retained; native live observation precedes oldest history when available; reserved SOS precedes ordinary work and never enters tracks |
-| Arrival permutations | A B C D / D A B C / C A D B / D A B B C yield identical point IDs, geometry, segments, cumulative distance; old backlog stays historically valid while live is stale |
-| Bad GNSS | Raw retained with explicit jitter/poor/unknown/stale/jump rejection reasons, recovery opens segment without bridge; turn, sideways and reversal accepted; altitude does not add distance |
-| Recording | Stop preserves live reception without extending recording; Resume adds segment without connector; unconfirmed Clear rejected; confirmed Clear retains raw/device/config; late backlog/restart/new recording cannot resurrect it |
-| Five devices | Independent Room installations, IDs/sequences/configs/track segments/totals and late join during active recording |
-| Command process restart | Original receipt/dedupe, authority/version/override, recording/windows/geometry survive; exact pending retry then normal sending |
-| Android Room restoration | Identity/sequence/pending payload/local setting/authority/override/delivery metadata survive; exact retry and subsequent sequence continue |
-| Failure/security boundaries | Real 503 rollback, invalid ACK stays pending then duplicate succeeds, actual changed-envelope 409, 429 timing; controls/state/assets absent from phone listener |
-| Clocks | Production monotonic fix age; stale latest fix omitted; UTC/elapsed mismatch and future capture stored raw/rejected honestly; receipt never replaces observation time |
+| Scenario                                  | Assertions                                                                                                                                                                                                                      |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Normal location/status + first enrollment | Exact ACK identity, one local allocation/raw row, dynamic party metadata, preserved measurement/capture times, status retains location, authority persists and is echoed                                                        |
+| Override/local edit/clear                 | Real local controls → ACK → Room config → new echo → convergence; local 10 → override 30, local edit 20 retains 30, explicit clear falls back to 20; queued JSON stays immutable                                                |
+| Five-second amendment                     | Local 5 → real Command override 5 → ACK adoption/Room reopen → local edit 15 retains effective 5 → Clear falls back to 15/converges; local/control reject 1, 6, 86405                                                           |
+| Lost response                             | Exact saved retry, duplicate with original first receipt, one row/track effect/distance effect per observation                                                                                                                  |
+| Current-first recovery                    | Sender wire order D A B C, live D never rolls back, history A B C D; failed retry deadline cleared on restore                                                                                                                   |
+| Stale recovery + reserved SOS             | New current saved before old backlog; SOS precedes current and never enters tracks; complete trigger/operator workflow also covered below                                                                                       |
+| Stale recovery + reserved SOS             | Legacy status recovery retry retained; native live observation precedes oldest history when available; reserved SOS precedes ordinary work and never enters tracks                                                              |
+| Arrival permutations                      | A B C D / D A B C / C A D B / D A B B C yield identical point IDs, geometry, segments, cumulative distance; old backlog stays historically valid while live is stale                                                            |
+| Bad GNSS                                  | Raw retained with explicit jitter/poor/unknown/stale/jump rejection reasons, recovery opens segment without bridge; turn, sideways and reversal accepted; altitude does not add distance                                        |
+| Recording                                 | Stop preserves live reception without extending recording; Resume adds segment without connector; unconfirmed Clear rejected; confirmed Clear retains raw/device/config; late backlog/restart/new recording cannot resurrect it |
+| Five devices                              | Independent Room installations, IDs/sequences/configs/track segments/totals and late join during active recording                                                                                                               |
+| Command process restart                   | Original receipt/dedupe, authority/version/override, recording/windows/geometry survive; exact pending retry then normal sending                                                                                                |
+| Android Room restoration                  | Identity/sequence/pending payload/local setting/authority/override/delivery metadata survive; exact retry and subsequent sequence continue                                                                                      |
+| Failure/security boundaries               | Real 503 rollback, invalid ACK stays pending then duplicate succeeds, actual changed-envelope 409, 429 timing; controls/state/assets absent from phone listener                                                                 |
+| Clocks                                    | Production monotonic fix age; stale latest fix omitted; UTC/elapsed mismatch and future capture stored raw/rejected honestly; receipt never replaces observation time                                                           |
 
 ## Compatibility audit of merged cores
 
@@ -89,26 +99,26 @@ The original integration audit used latest merged main `931cc8cb32ec8a1dc2847aac
 constraints and #5–#7 future scope were read before implementation. The tables
 below include the deliberate 2026-10-07 Issue #4 reporting-interval amendment.
 
-| Android send → Command parse | Result |
-| --- | --- |
-| `protocol_version`, `type` | Integer 1; location/status/sos enum matches |
-| `device_id`, `message_id`, `sequence` | Canonical UUIDs; durable positive sequence through 9007199254740991; exact echoed identity |
-| `party.id`, `party.name` | Both actual Android settings emit nonblank labels of ≤80 Unicode code points; Command accepts these without changing identity |
-| `captured_at` | Both enforce valid UTC with exactly three fractional digits |
-| `config_state.authority_id`, `version`, `reporting_interval_override_s` | Initial null/0/null; enrolled UUID/version/nullable override; version bounded by wire integer |
-| `config_state.local_reporting_interval_s`, `effective_reporting_interval_s` | Integers 5..86400 in steps of 5; override wins, otherwise current local value |
+| Android send → Command parse                                                                              | Result                                                                                                                                                        |
+| --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `protocol_version`, `type`                                                                                | Integer 1; location/status/sos enum matches                                                                                                                   |
+| `device_id`, `message_id`, `sequence`                                                                     | Canonical UUIDs; durable positive sequence through 9007199254740991; exact echoed identity                                                                    |
+| `party.id`, `party.name`                                                                                  | Both actual Android settings emit nonblank labels of ≤80 Unicode code points; Command accepts these without changing identity                                 |
+| `captured_at`                                                                                             | Both enforce valid UTC with exactly three fractional digits                                                                                                   |
+| `config_state.authority_id`, `version`, `reporting_interval_override_s`                                   | Initial null/0/null; enrolled UUID/version/nullable override; version bounded by wire integer                                                                 |
+| `config_state.local_reporting_interval_s`, `effective_reporting_interval_s`                               | Integers 5..86400 in steps of 5; override wins, otherwise current local value                                                                                 |
 | `health.battery_percent`, `charging`, `wifi_connected`, `wifi_rssi_dbm`, `gnss_status`, `satellites_used` | Required fields, explicit null where unavailable; matching ranges/enums. Android's native satellite count is an Int, safely within Command's wire-bound int64 |
-| `fix.observed_at`, `fix_age_ms`, `latitude`, `longitude` | Exact UTC; integer elapsed capture age; finite WGS84 bounds |
-| `fix.horizontal_accuracy_m`, `altitude_m`, `altitude_accuracy_m`, `speed_mps`, `bearing_deg` | Explicit nulls; finite/nonnegative accuracy/speed; bearing [0,360); altitude accuracy null without altitude |
-| `sos.event_id`, `triggered_at` | Reserved only for SOS; event ID equals message ID; exact UTC; nullable fix; same endpoint/dedupe and no track effect |
+| `fix.observed_at`, `fix_age_ms`, `latitude`, `longitude`                                                  | Exact UTC; integer elapsed capture age; finite WGS84 bounds                                                                                                   |
+| `fix.horizontal_accuracy_m`, `altitude_m`, `altitude_accuracy_m`, `speed_mps`, `bearing_deg`              | Explicit nulls; finite/nonnegative accuracy/speed; bearing [0,360); altitude accuracy null without altitude                                                   |
+| `sos.event_id`, `triggered_at`                                                                            | Reserved only for SOS; event ID equals message ID; exact UTC; nullable fix; same endpoint/dedupe and no track effect                                          |
 
-| Command ACK → Android parse | Result |
-| --- | --- |
-| `protocol_version`, `device_id`, `message_id`, `sequence` | Valid integer 1 and exact identity required before delivery; Repository rechecks identity |
-| `result`, `received_at` | stored/duplicate both succeed; original first receipt in exact UTC survives retry/restart |
-| `config.authority_id`, `version`, `reporting_interval_override_s` | Nonnull authority UUID; bounded version; explicit null clears; zero version has no override |
-| Authority/version application | First valid snapshot enrolls even at version 0; newer applies atomically; stale/equal match no-op; equal conflict/different authority error retain old config |
-| Invalid config with valid receipt | Delivery retained separately, old config preserved with visible error, per frozen contract |
+| Command ACK → Android parse                                       | Result                                                                                                                                                        |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `protocol_version`, `device_id`, `message_id`, `sequence`         | Valid integer 1 and exact identity required before delivery; Repository rechecks identity                                                                     |
+| `result`, `received_at`                                           | stored/duplicate both succeed; original first receipt in exact UTC survives retry/restart                                                                     |
+| `config.authority_id`, `version`, `reporting_interval_override_s` | Nonnull authority UUID; bounded version; explicit null clears; zero version has no override                                                                   |
+| Authority/version application                                     | First valid snapshot enrolls even at version 0; newer applies atomically; stale/equal match no-op; equal conflict/different authority error retain old config |
+| Invalid config with valid receipt                                 | Delivery retained separately, old config preserved with visible error, per frozen contract                                                                    |
 
 Transport matches: `POST /api/v1/messages`, UTF-8 application/json, 65536-byte
 limit. Duplicate keys/missing nullable fields rejected; additive fields ignored.
@@ -186,7 +196,6 @@ send one current report, synchronize all intermediates, assert 21 distinct raw
 observations/100 m geometry, change policy and retain the same source history.
 Android tests cover additive v1→v2 migration, idempotent callback commit, bounded
 nonblocking handoff/failure evidence, and older/poor-accuracy native callbacks.
-
 
 The native history batch regression negotiates the real capabilities endpoint,
 drives Room's original identities through real atomic Command ingestion, loses a

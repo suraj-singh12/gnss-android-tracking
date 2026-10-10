@@ -68,15 +68,15 @@ Android echo. Delivery/application may wait until the next request/ACK exchange.
 
 ## Concrete quality policy (revision 1 defaults)
 
-| Setting | Default |
-| --- | --- |
-| Minimum forward / backward movement floors | 2 m / 2 m |
-| Maximum horizontal accuracy | 25 m |
-| Maximum fix age at capture | 30 s |
-| UTC versus monotonic capture-age tolerance | 5 s |
-| Maximum uncertainty-adjusted horizontal speed | 12 m/s |
-| Maximum time gap from last accepted point | 120 s |
-| Uncertainty multiplier | 1 |
+| Setting                                       | Default   |
+| --------------------------------------------- | --------- |
+| Minimum forward / backward movement floors    | 2 m / 2 m |
+| Maximum horizontal accuracy                   | 25 m      |
+| Maximum fix age at capture                    | 30 s      |
+| UTC versus monotonic capture-age tolerance    | 5 s       |
+| Maximum uncertainty-adjusted horizontal speed | 12 m/s    |
+| Maximum time gap from last accepted point     | 120 s     |
+| Uncertainty multiplier                        | 1         |
 
 Unknown accuracy is invalid for track derivation. A fix is clock-anomalous if
 `abs((captured_at-observed_at)-fix_age_ms/1000) > clock_tolerance_s`. Captures more
@@ -157,7 +157,55 @@ default **Current Time** on every opening. Confirm uses existing `from_now` or
 session selection is disabled/explained. Server validation/errors remain authoritative.
 Stop/Resume/Clear, recording boundaries and distance calculations are unchanged.
 
-### Terrain preparation and provider boundary
+### Automatic terrain preparation and provider boundary
+
+The current automatic provider is [AWS Open Data Terrain Tiles](https://registry.opendata.aws/terrain-tiles/)
+(Mapzen/Tilezen), not Copernicus/OpenTopography. Public unsigned HTTPS GET requires
+no AWS account, API key or paid subscription. Endpoint:
+`https://elevation-tiles-prod.s3.amazonaws.com/skadi/{N|S}{lat}/{N|S}{lat}{E|W}{lon}.hgt.gz`.
+This is tile-bounded acquisition: Command obtains only intersecting 1° tiles plus a
+one-sample processing border (maximum four), then reuses the HGT crop/renderer.
+The provider has no documented app-specific quota or availability SLA. HTTP
+403/404/429/5xx, missing tiles and outages remain possible; there is no background
+poller or automatic request loop. The total preparation deadline is 25 seconds.
+
+[Skadi format](https://github.com/tilezen/joerd/blob/master/docs/formats.md):
+WGS84/EPSG:4326, EGM96 integer metre heights, north-first rows, big-endian int16,
+−32768 voids, gzip-compressed 3601² grid. Native 1 arc-second spacing is ~31 m N/S
+(E/W narrows with latitude); [composite source resolution/accuracy varies](https://github.com/tilezen/joerd/blob/master/docs/data-sources.md).
+Grid spacing is not surveyed accuracy or uniform bare-earth detail. No voids are
+fabricated; an adjacent valid seam sample at the same geographic node may be used.
+Automatic coverage is conservatively limited to 56°S–60°N; no antimeridian crossing.
+Cross-tile stitching is supported automatically, not by manual multi-file upload.
+A 500 m area still downloads full source tiles: the verified Mussoorie tile is
+18,131,689 compressed bytes / 25,934,402 decoded bytes. Full tiles are not persisted.
+
+The composite is **not** labelled wholly public domain. Its complete multi-source
+[attribution/terms notice](https://github.com/tilezen/joerd/blob/master/docs/attribution.md),
+provider, UTC acquisition timestamp, exact tile URLs and decoded SHA-256 hashes
+are retained in terrain metadata/export and shown in Layers. Retain these notices
+when redistributing. No EGM2008 conversion, mandatory credentials or paid dependency.
+
+Select a location/coordinate **centre**, default 500×500 m, choose optional terrain,
+Preview, then Download for Offline Use. Vectors commit first, independently of DEM
+success. A terrain failure warns and retains vectors and any previous terrain.
+Select that saved map, open **Acquire or import terrain for this saved map**, select
+components and press **Download / retry selected terrain**; no duplicate vector map
+is created. No manual HGT is needed. Unchecked terrain makes no DEM request.
+Local HGT/`.gterrain` import remains available. Loopback-only same-origin JSON
+`POST /local/maps/{id}/terrain-download` takes `components`; bounds come from the
+saved map. Network I/O never holds the Store lock. Storage/schema/GTERR001 remain
+compatible; optional provenance metadata is additive. The previous format limits
+and independent OFF/ON layer behavior below are unchanged.
+
+`dem-offline-acceptance.cjs` uses actual OSM and Skadi acquisition through the UI,
+compares every saved node with independently decoded raw HGT, verifies rendered
+hillshade pixel centres, contour geographic coordinates and pointer elevations,
+then restarts Command with a dead provider proxy and blocks browser external requests.
+A failed offline retry must retain byte-identical terrain. JSON/screenshots are
+separate real-provider evidence, not fixture or survey/physical field acceptance.
+
+#### Historical PR #18 provider investigation (superseded by Skadi above)
 
 [Copernicus GLO-30 public](https://registry.opendata.aws/copernicus-dem/) supplies
 30 m Cloud Optimized GeoTIFF tiles, no AWS account, under its
@@ -166,7 +214,7 @@ It is a surface model (including buildings/vegetation), EGM2008; public coverage
 exclusions. The bucket is not this app's small-area extraction API. OpenTopography
 is a subset-service candidate, but eligibility, authentication/quotas/payment were
 not verified. Actual endpoint requests here failed **proxy CONNECT HTTP 403**.
-**Automatic DEM acquisition is not implemented or accepted**. No credential, paid
+**At that baseline, automatic DEM acquisition was not implemented**. No credential, paid
 service, unsupported COG decoder or terrain data was fabricated. CI separately
 records reachability; a HEAD response is not successful DEM extraction.
 
@@ -194,9 +242,9 @@ third-party material; the importer cannot certify an arbitrary supplied file's l
 Download an offline map still defaults to centre-based **500×500 m** OSM vectors,
 optional 1 km or 100–2000 m custom bounds. Preview displays W/S/E/N requested bounds;
 whole intersecting ways may extend outside. Existing natural/land-use features remain.
-With terrain unchecked, no DEM is read/requested. Optional hillshade/contour/elevation
-choices use one covering local HGT file. Alternatively select a saved map and open
-**Prepare terrain from a local DEM**. Validation/storage failures retain saved vectors
+At the PR #18 baseline, optional terrain used one covering local HGT file. The
+automatic path now described above requires no file. Local import remains under
+**Acquire or import terrain for this saved map**. Validation/storage failures retain saved vectors
 and earlier terrain. After a lost response, reopen the saved map to inspect its
 persisted result; a network error cannot promise that a committed save was rolled back.
 
@@ -236,12 +284,12 @@ alignment**. Existing OSM provider availability remains an external dependency.
 Loopback listener only by default; no CORS. Mutations require JSON and same-origin
 browser requests. These are Command-local controls, never a second phone protocol.
 
-| Endpoint | Purpose |
-| --- | --- |
-| `GET /local/state?dot_interval_s=30` | Current recording, devices and projected geographic points |
-| `POST /local/recording` | `{ "action": "start" / "stop" / "resume" / "clear", "confirmed": true, "mode": "from_now" / "session_beginning" }` (mode selected on Start; confirmation required for Clear) |
-| `POST /local/override` | `{ "device_id": UUID, "reporting_interval_override_s": 30 / null }` |
-| `POST /local/quality` | Complete quality snapshot using the field names in `GET /local/state` |
+| Endpoint                             | Purpose                                                                                                                                                                      |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /local/state?dot_interval_s=30` | Current recording, devices and projected geographic points                                                                                                                   |
+| `POST /local/recording`              | `{ "action": "start" / "stop" / "resume" / "clear", "confirmed": true, "mode": "from_now" / "session_beginning" }` (mode selected on Start; confirmation required for Clear) |
+| `POST /local/override`               | `{ "device_id": UUID, "reporting_interval_override_s": 30 / null }`                                                                                                          |
+| `POST /local/quality`                | Complete quality snapshot using the field names in `GET /local/state`                                                                                                        |
 
 ## Validation and boundaries
 
@@ -428,6 +476,7 @@ open; survival PASS requires stored + restoration evidence. A new event with no
 restart/retry data remains INCONCLUSIVE. Evidence is automatic: no packet counting,
 queue observation or failure-time SQLite inspection is required. Legacy SOS raw
 records are upgraded to alerts; missing legacy evidence is never fabricated.
+
 ### Field reliability evidence (schema 2)
 
 Reports include per-type unique/delayed counts, last unique receipt, current
@@ -478,7 +527,6 @@ The local dashboard reports contiguous received/processed prefixes and separatel
 timestamped phone queue state. A permanent protocol rejection is unresolved, not received;
 a GNSS quality rejection is stored history. Exports include these distinctions and projection
 state without copying coordinates, raw envelopes, databases or secrets.
-
 
 Derived arrays live in the existing SQLite projection cache (`projection_state`),
 separate from the frequently updated device/receipt state. This is an additive

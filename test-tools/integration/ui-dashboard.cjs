@@ -512,6 +512,17 @@ async function wait(check) {
   );
   delayPreview = false;
   await page.locator("#map-lon").fill("77.212");
+  await page.locator("#download-elevation").check();
+  await page.locator("#preview-map").click();
+  await page.waitForFunction(
+    () => !document.querySelector("#download-map").disabled,
+  );
+  assert.equal(
+    await page.locator("#download-dem").count(),
+    0,
+    "automatic DEM preview must not require a manual file",
+  );
+  await page.locator("#download-elevation").uncheck();
   await page.locator("#preview-map").click();
   await page.waitForFunction(
     () => !document.querySelector("#download-map").disabled,
@@ -547,8 +558,32 @@ async function wait(check) {
   await page.locator('[data-close="layers"]').click();
   await page.locator("#open-map").click();
   await page
-    .getByText("Prepare terrain from a local DEM", { exact: true })
+    .getByText("Acquire or import terrain for this saved map", { exact: true })
     .click();
+  await page.route("**/local/maps/*/terrain-download", (route) =>
+    route.fulfill({
+      status: 503,
+      json: { message: "Injected DEM provider outage" },
+    }),
+  );
+  await page.locator("#prepare-elevation").check();
+  await page.locator("#download-terrain").click();
+  await page.waitForFunction(() =>
+    document
+      .querySelector("#terrain-status")
+      .textContent.includes("Injected DEM provider outage"),
+  );
+  assert.match(
+    await page.locator("#terrain-status").textContent(),
+    /Vector map and previous terrain retained.*Retry/,
+  );
+  assert.equal(await page.locator("#download-terrain").isEnabled(), true);
+  assert.equal(
+    (await (await fetch(local + "/local/maps")).json()).length,
+    2,
+    "terrain retry must not duplicate vectors",
+  );
+  await page.unroute("**/local/maps/*/terrain-download");
   const hgt = Buffer.alloc(1201 * 1201 * 2);
   for (let y = 0; y < 1201; y++)
     for (let x = 0; x < 1201; x++)

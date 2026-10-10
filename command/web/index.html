@@ -314,12 +314,13 @@
       >
       <button id="delete-map">Delete selected map</button>
       <details>
-        <summary>Prepare terrain from a local DEM</summary>
+        <summary>Acquire or import terrain for this saved map</summary>
         <p>
-          Online DEM acquisition is not verified. Import an uncompressed SRTM
-          tile (N28E077.hgt, 1201² or 3601² samples) covering the saved map, or
-          re-import its .gterrain export. Only a bounded subset is retained. No
-          terrain is inferred from GNSS altitude.
+          Download selected terrain from AWS Open Data (56°S–60°N), or import an
+          uncompressed SRTM tile (N28E077.hgt, 1201² or 3601² samples) covering
+          the saved map, or its .gterrain export. Only a bounded subset is
+          retained. No terrain is inferred from GNSS altitude. Downloads may
+          transfer up to four full source tiles; grid spacing is not accuracy.
         </p>
         <label
           >DEM file<input
@@ -333,6 +334,7 @@
         ><label
           ><input type="checkbox" id="prepare-elevation" /> Elevation
           inspection</label
+        ><button id="download-terrain">Download / retry selected terrain</button
         ><button id="prepare-terrain">Prepare selected terrain locally</button
         ><a id="export-terrain" class="secondary-action" hidden
           >Save terrain file</a
@@ -403,11 +405,12 @@
           /></label>
         </div>
         <fieldset>
-          <legend>Optional terrain · local DEM preparation</legend>
+          <legend>Optional terrain · automatic offline acquisition</legend>
           <p class="muted">
-            Automatic DEM download is unavailable in this build. Supply a
-            licensed SRTM HGT tile to prepare selected components; no DEM
-            request occurs for a vector-only map.
+            Real elevation data downloads from AWS Open Data Terrain Tiles
+            (Mapzen Skadi, WGS84 / EGM96). Coverage: 56°S–60°N; 1 arc sec grid,
+            varying source accuracy. Vectors save first even if terrain fails.
+            No DEM request occurs for a vector-only map.
           </p>
           <label
             ><input id="download-hillshade" type="checkbox" /> Hillshade</label
@@ -416,9 +419,7 @@
           ><label
             ><input id="download-elevation" type="checkbox" /> Elevation
             data</label
-          ><label
-            >Optional DEM<input id="download-dem" type="file" accept=".hgt"
-          /></label>
+          >
         </fieldset>
         <button id="preview-map">Preview area & features</button
         ><button id="download-map" class="primary" disabled>

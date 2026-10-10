@@ -29,6 +29,7 @@ type terrainGrid struct {
 	Datum      string          `json:"vertical_datum"`
 	Components map[string]bool `json:"components"`
 	Samples    []*float64      `json:"samples,omitempty"` // null is unavailable; persisted as binary int16
+	Provenance *demProvenance  `json:"provenance,omitempty"`
 }
 
 func (g terrainGrid) validate() error {
@@ -219,15 +220,15 @@ func mapAreaBounds(b []byte) ([4]float64, error) {
 	return result, nil
 }
 
-func (s *Store) terrainRequest(w http.ResponseWriter, r *http.Request) bool {
+func (s *Store) terrainRequest(w http.ResponseWriter, r *http.Request, p *mapProvider) bool {
 	path := strings.TrimPrefix(r.URL.Path, "/local/maps/")
 	parts := strings.Split(path, "/")
-	if !strings.HasPrefix(r.URL.Path, "/local/maps/") || len(parts) != 2 || (parts[1] != "terrain" && parts[1] != "terrain-file" && parts[1] != "delete") {
+	if !strings.HasPrefix(r.URL.Path, "/local/maps/") || len(parts) != 2 || (parts[1] != "terrain" && parts[1] != "terrain-file" && parts[1] != "terrain-download" && parts[1] != "delete") {
 		return false
 	}
 	mapID := parts[0]
 	w.Header().Set("Cache-Control", "no-store")
-	if r.Method == "GET" && parts[1] != "delete" {
+	if r.Method == "GET" && (parts[1] == "terrain" || parts[1] == "terrain-file") {
 		s.mu.Lock()
 		var b []byte
 		err := s.db.QueryRow(`SELECT data FROM offline_terrain WHERE map_id=?`, mapID).Scan(&b)
@@ -263,7 +264,10 @@ func (s *Store) terrainRequest(w http.ResponseWriter, r *http.Request) bool {
 		failure(w, 415, "unsupported_media_type", errors.New("use application/json"))
 		return true
 	}
-	terrainPreparation.Lock()
+	if !terrainPreparation.TryLock() {
+		failure(w, 409, "terrain_busy", errors.New("terrain preparation busy; retry when it completes"))
+		return true
+	}
 	defer terrainPreparation.Unlock()
 	if parts[1] == "delete" {
 		s.mu.Lock()
@@ -307,7 +311,9 @@ func (s *Store) terrainRequest(w http.ResponseWriter, r *http.Request) bool {
 	bounds, err := mapAreaBounds(mapBytes)
 	var g terrainGrid
 	if err == nil {
-		if strings.HasSuffix(in.Name, ".gterrain") {
+		if parts[1] == "terrain-download" {
+			g, err = p.acquireDEM(r.Context(), bounds, in.Components)
+		} else if strings.HasSuffix(in.Name, ".gterrain") {
 			g, err = decodeTerrain(in.Data)
 			if err == nil && (g.Bounds[0] > bounds[0] || g.Bounds[1] > bounds[1] || g.Bounds[2] < bounds[2] || g.Bounds[3] < bounds[3]) {
 				err = errors.New("terrain package does not cover selected map")
