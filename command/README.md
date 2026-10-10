@@ -129,7 +129,7 @@ deltas, no altitude component and no edge rounding. The backend retains its orig
 Issue #6 renderer projects original WGS84 coordinates to Web Mercator for both blank
 and offline GeoJSON modes, north up. Pan/zoom persists through polling; Fit/Focus
 are explicit actions. Projection never influences acceptance or travelled distance.
-See [map format and alignment inspection](../docs/design-system.md#exactly-two-map-modes).
+See [map format and alignment inspection](../docs/design-system.md).
 
 The canvas dominates the page. Dynamic device cards show totals, independent contact
 and GNSS conditions, last seen, location age, battery and reporting/config state.
