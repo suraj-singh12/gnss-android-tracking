@@ -89,13 +89,14 @@ async function stop() {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(local);
+  await page.locator("#open-sos").click();
   await page.waitForSelector(".sos-alert");
   assert.match(await page.locator("#sos-audio-status").innerText(), /blocked/i);
   assert.match(
     await page.locator(".sos-alert").innerText(),
     /Coordinates unavailable/,
   );
-  const button = page.locator(".sos-alert button");
+  const button = page.locator(".sos-alert button").first();
   await button.focus();
   await page.waitForTimeout(2200);
   assert.equal(
@@ -103,9 +104,18 @@ async function stop() {
     true,
   );
   await page.keyboard.press("Enter");
-  await page.waitForSelector("#sos-history-toggle");
-  await page.locator("#sos-history-toggle").click();
-  await page.waitForSelector(".sos-alert.acknowledged");
+  await page.waitForFunction(
+    () => document.querySelector("#sos-count").textContent === "0",
+  );
+  await page.locator('[data-close="sos-panel"]').click();
+  await page.locator("#open-history").click();
+  await page.locator("#event-filter").selectOption("sos");
+  await page.waitForSelector(".history-event");
+  assert.match(
+    await page.locator(".history-event").innerText(),
+    /Acknowledged/,
+  );
+  await page.locator('[data-close="event-history"]').click();
   const state = await (await fetch(local + "/local/state")).json();
   const ack = state.sos_alerts[0].operator_acknowledged_at;
   assert.ok(ack);
@@ -118,8 +128,9 @@ async function stop() {
   second.sequence++;
   await send(second);
   await page.reload();
+  await page.locator("#open-sos").click();
   await page.waitForSelector(".sos-alert:not(.acknowledged)");
-  assert.equal(await page.locator(".sos-alert").count(), 2);
+  assert.equal(await page.locator(".sos-alert").count(), 1);
   assert.equal(
     await page.locator(".sos-alert button:not(:disabled)").count(),
     1,
@@ -131,6 +142,7 @@ async function stop() {
       .evaluate((el) => el.classList.contains("acknowledged")),
     false,
   );
+  await page.locator('[data-close="sos-panel"]').click();
   await page.locator("#sos-audio").click();
   assert.match(
     await page.locator("#sos-audio-status").innerText(),
@@ -139,6 +151,7 @@ async function stop() {
   await stop();
   await start();
   await page.reload();
+  await page.locator("#open-sos").click();
   await page.waitForSelector(".sos-alert:not(.acknowledged)");
   const restored = await (await fetch(local + "/local/state")).json();
   assert.equal(restored.sos_alerts[0].operator_acknowledged_at, ack);
@@ -153,8 +166,15 @@ async function stop() {
     assert.equal(response.status, 200);
   }
   await page.reload();
+  await page.locator("#open-sos").click();
   await page.waitForSelector(".sos-alert:not(.acknowledged)");
-  assert.equal(await page.locator(".sos-alert").count(), 2);
+  assert.equal(await page.locator(".sos-alert").count(), 1);
+  await page.locator('[data-close="sos-panel"]').click();
+  await page.locator("#open-history").click();
+  await page.locator("#event-filter").selectOption("sos");
+  await page.waitForFunction(
+    () => document.querySelectorAll(".history-event").length === 2,
+  );
   assert.deepEqual(errors, []);
   console.log(
     "PASS: real dashboard, blocked audio status, keyboard ACK/focus, duplicate, multiple SOS, reload/restart and Recording Clear persistence. Physical speaker playback remains untested.",

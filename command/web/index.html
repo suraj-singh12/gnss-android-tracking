@@ -6,19 +6,34 @@
     <title>GNSS · Command Centre</title>
     <link rel="stylesheet" href="/style.css" />
     <script src="/map.js" defer></script>
+    <script src="/sos-alarm.js" defer></script>
     <script src="/app.js" defer></script>
   </head>
   <body>
     <header>
       <div class="brand">
         <span class="brand-mark">G</span>
-        <div>GNSS<span>Command Centre</span></div>
+        <div>
+          GNSS Command Centre<span id="party-summary"
+            >Local field workspace</span
+          >
+        </div>
       </div>
       <div class="header-tools">
         <button id="sos-audio">Enable / test SOS sound</button>
         <button id="open-quality">Quality settings</button
         ><button id="open-map">Map & layers</button
         ><a href="/local/field-report">Export diagnostics</a>
+        <button id="open-history" aria-label="Open Event History">
+          Events
+        </button>
+        <button
+          id="open-sos"
+          class="emergency"
+          aria-label="Open SOS emergencies"
+        >
+          SOS <span id="sos-count">0</span>
+        </button>
       </div>
       <span id="connection" role="status">Connecting to Command…</span>
     </header>
@@ -41,10 +56,12 @@
         ><button id="clear" class="quiet">Clear Recording</button>
       </div>
     </section>
-    <section id="sos-panel" aria-labelledby="sos-heading" hidden>
+    <dialog id="sos-panel" class="drawer" aria-labelledby="sos-heading">
       <div class="emergency-heading">
         <h1 id="sos-heading">SOS emergencies</h1>
-        <button id="sos-history-toggle">Show event history</button>
+        <button data-close="sos-panel" aria-label="Close SOS emergencies">
+          ×
+        </button>
       </div>
       <p id="sos-summary" role="status" aria-live="polite"></p>
       <span id="sos-audio-status" role="status"
@@ -52,12 +69,46 @@
         active.</span
       >
       <div id="sos-alerts"></div>
-    </section>
-    <main>
+    </dialog>
+    <dialog id="event-history" class="drawer" aria-labelledby="history-heading">
+      <div class="dialog-heading">
+        <h1 id="history-heading">Event History</h1>
+        <button data-close="event-history" aria-label="Close Event History">
+          ×
+        </button>
+      </div>
+      <p>
+        Original occurrence, Command receipt and operator acknowledgement remain
+        separate.
+      </p>
+      <label
+        >Filter
+        <select id="event-filter">
+          <option value="all">All events</option>
+          <option value="sos">SOS events</option>
+          <option value="operations">Command operations</option>
+        </select></label
+      >
+      <a class="secondary-action" href="/local/field-report"
+        >Export full diagnostic evidence</a
+      >
+      <div id="history-events"></div>
+    </dialog>
+    <div id="sos-toast" role="alert" hidden>
+      <strong id="sos-toast-text"></strong
+      ><button id="sos-toast-view">View SOS</button
+      ><button id="sos-toast-dismiss" aria-label="Dismiss SOS notification">
+        ×
+      </button>
+    </div>
+    <main class="details-closed">
       <aside class="party-overview">
         <div class="aside-title">
           <h1>Parties</h1>
           <span id="count">0</span>
+          <button id="collapse-parties" aria-label="Collapse party sidebar">
+            ‹
+          </button>
         </div>
         <p class="muted">Contact and GNSS are independent.</p>
         <div id="devices"></div>
@@ -72,6 +123,20 @@
         <div class="canvas-toolbar">
           <span>N ↑ <span id="map-mode-label">Blank canvas</span></span>
           <div>
+            <button
+              id="toggle-parties"
+              aria-label="Toggle party sidebar"
+              aria-expanded="true"
+            >
+              Parties
+            </button>
+            <button
+              id="toggle-details"
+              aria-label="Toggle selected party details"
+              aria-expanded="false"
+            >
+              Details
+            </button>
             <button id="zoom-in" aria-label="Zoom in">+</button
             ><button id="zoom-out" aria-label="Zoom out">−</button
             ><button id="fit">Fit parties</button
@@ -100,8 +165,13 @@
           ><span>┄ Provisional</span><span id="scale-label"></span>
         </div>
       </section>
-      <aside class="party-detail">
-        <h1>Selected party</h1>
+      <aside class="party-detail" aria-label="Selected party details">
+        <div class="aside-title">
+          <h1>Selected party</h1>
+          <button id="close-details" aria-label="Close selected party details">
+            ×
+          </button>
+        </div>
         <div id="selected-detail">
           <p class="muted">
             Select a party to inspect location, history and reporting settings.
@@ -142,9 +212,91 @@
           accept=".geojson,.json,application/geo+json"
       /></label>
       <p>
-        WGS84 longitude/latitude vector data only. Files stay on this computer;
-        no online tiles or image calibration.
+        Import RFC 7946 WGS84 vectors, or prepare an OpenStreetMap area while
+        online. Saved maps stay in Command's local database and reopen without
+        internet. Unreferenced images and GeoTIFF are not supported.
       </p>
+      <label
+        >Saved maps<select id="saved-maps">
+          <option value="">Select a saved map</option>
+        </select></label
+      >
+      <a id="export-map" class="secondary-action" download="offline-map.geojson"
+        >Save map file</a
+      >
+      <details id="map-preparation">
+        <summary>Download an offline map</summary>
+        <p>
+          Map preparation uses Nominatim and Overpass, with bounded requests.
+          Field operation stays offline.
+        </p>
+        <label
+          >Location search<input
+            id="map-search"
+            placeholder="Place or landmark"
+            maxlength="120" /></label
+        ><button id="search-map">Search location</button>
+        <select
+          id="map-search-results"
+          aria-label="Location search results"
+        ></select>
+        <div class="coordinate-fields">
+          <label
+            >Latitude<input
+              id="map-lat"
+              type="number"
+              min="-85"
+              max="85"
+              step="any"
+              value="28.6139" /></label
+          ><label
+            >Longitude<input
+              id="map-lon"
+              type="number"
+              min="-180"
+              max="180"
+              step="any"
+              value="77.2090"
+          /></label>
+        </div>
+        <label
+          >Area<select id="map-area">
+            <option value="500">500 × 500 m</option>
+            <option value="1000">1 × 1 km</option>
+            <option value="custom">Custom, at most 2 × 2 km</option>
+          </select></label
+        >
+        <div class="coordinate-fields">
+          <label
+            >Width · m<input
+              id="map-width"
+              type="number"
+              min="100"
+              max="2000"
+              value="500" /></label
+          ><label
+            >Height · m<input
+              id="map-height"
+              type="number"
+              min="100"
+              max="2000"
+              value="500"
+          /></label>
+        </div>
+        <button id="preview-map">Preview area & features</button
+        ><button id="download-map" class="primary" disabled>
+          Download for Offline Use
+        </button>
+        <div id="map-preparation-status" role="status">
+          Select an area to preview available features.
+        </div>
+        <svg
+          id="map-preview"
+          role="img"
+          aria-label="Offline map area preview"
+          viewBox="0 0 400 180"
+        ></svg>
+      </details>
       <label
         >Background opacity<input
           id="map-opacity"
@@ -156,6 +308,10 @@
       /></label>
       <div id="map-metadata" role="status">No offline map loaded.</div>
       <div id="map-warning" role="alert"></div>
+      <small id="map-attribution"
+        >© OpenStreetMap contributors · ODbL. Imported maps retain their source
+        attribution.</small
+      >
       <hr />
       <label
         ><input type="checkbox" id="all-observations" /> Use All

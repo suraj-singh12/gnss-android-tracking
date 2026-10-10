@@ -86,11 +86,24 @@ func (s *Store) IngestHandler() http.Handler {
 // Only the separately bound local listener serves controls. Browser mutations must
 // be JSON and same-origin; no CORS is granted to a remote webpage.
 func (s *Store) LocalHandler(assets http.Handler) http.Handler {
+	maps := newMapProvider()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; object-src 'none'; frame-ancestors 'none'")
 		if !strings.HasPrefix(r.URL.Path, "/local/") {
 			assets.ServeHTTP(w, r)
+			return
+		}
+		if s.mapRequest(w, r, maps) {
+			return
+		}
+		if r.URL.Path == "/local/events" && r.Method == "GET" {
+			events, err := s.RecentEvents()
+			if err != nil {
+				failure(w, 503, "storage_unavailable", err)
+				return
+			}
+			respond(w, 200, events)
 			return
 		}
 		if r.URL.Path == "/local/field-report" && r.Method == "GET" {

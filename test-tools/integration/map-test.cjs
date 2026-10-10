@@ -25,6 +25,10 @@ const json = JSON.stringify({
 const parsed = map.parse(json, "test.geojson");
 assert.deepEqual(parsed.bounds, [77, 28, 77.01, 28.01]);
 assert.equal(parsed.count, 5);
+assert.equal(parsed.shapes[0].properties.name, "local");
+assert.equal(map.liveHeading({ speed_mps: 2, bearing_deg: 90 }, true), 90);
+for (const fix of [{ speed_mps: 0, bearing_deg: 90 }, { speed_mps: 2 }, { speed_mps: 2, bearing_deg: 360 }, { speed_mps: 2, bearing_deg: -1 }]) assert.equal(map.liveHeading(fix, true), null);
+assert.equal(map.liveHeading({ speed_mps: 2, bearing_deg: 90 }, false), null);
 for (const invalid of [
   "{}",
   "not json",

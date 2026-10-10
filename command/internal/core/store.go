@@ -152,6 +152,9 @@ func Open(path string) (*Store, error) {
 		}
 	}
 	state := State{Authority: id(), Policy: DefaultPolicy(), Devices: map[string]*Device{}, Points: []Point{}, Decisions: []Decision{}}
+	if _, err = db.Exec(`CREATE TABLE IF NOT EXISTS offline_maps (id TEXT PRIMARY KEY, source TEXT NOT NULL, data BLOB NOT NULL, created TEXT NOT NULL)`); err != nil {
+		return fail(err)
+	}
 	b, _ := json.Marshal(state)
 	if _, err = db.Exec("INSERT OR IGNORE INTO state(id,data) VALUES(1,?)", string(b)); err != nil {
 		return fail(err)

@@ -147,6 +147,8 @@ async function wait(check) {
       m.fix.observed_at = m.captured_at;
       m.fix.latitude += i * 0.001 + n * 0.00015;
       m.fix.longitude += i * 0.001;
+      m.fix.speed_mps = i === 1 ? 0 : 1.8;
+      m.fix.bearing_deg = [0, 90, 180, 270, 90][i];
       m.health.battery_percent = 85 - i * 12;
       m.observation = {
         observation_id: m.message_id,
@@ -186,11 +188,18 @@ async function wait(check) {
       .textContent.includes("10000 pending"),
   );
   assert.ok((await page.locator("[data-live-device]").count()) >= 4);
+  assert.equal(
+    await page.locator("path[data-live-device]").count(),
+    3,
+    "fresh moving fixes have course arrows; stationary and stale fixes do not",
+  );
   await page.screenshot({
     path: path.join(out, "command-1280-five-parties-recording.png"),
     fullPage: true,
   });
   for (const size of [
+    [1280, 720],
+    [1280, 800],
     [1440, 900],
     [760, 900],
     [430, 900],
@@ -203,6 +212,23 @@ async function wait(check) {
       ),
       false,
       "horizontal overflow",
+    );
+    if (size[0] >= 1100)
+      assert.ok(
+        await page.evaluate(() => {
+          const box = document
+            .querySelector(".recording-bar .controls")
+            .getBoundingClientRect();
+          return Math.abs(box.x + box.width / 2 - innerWidth / 2) < 2;
+        }),
+        "Recording controls are geometrically centered",
+      );
+    assert.equal(
+      await page.evaluate(
+        () => document.documentElement.scrollHeight > innerHeight,
+      ),
+      false,
+      "document vertical overflow",
     );
     assert.ok(
       await page.evaluate(() => {
@@ -226,8 +252,36 @@ async function wait(check) {
       path: path.join(out, `command-${size[0]}-five-parties.png`),
       fullPage: true,
     });
+    await page.screenshot({
+      path: path.join(out, `command-${size[0]}-${size[1]}-five-parties.png`),
+      fullPage: true,
+    });
   }
   await page.setViewportSize({ width: 1440, height: 900 });
+  if (
+    (await page.locator("#toggle-parties").getAttribute("aria-expanded")) ===
+    "false"
+  )
+    await page.locator("#toggle-parties").click();
+  if (
+    (await page.locator("#toggle-details").getAttribute("aria-expanded")) ===
+    "true"
+  )
+    await page.locator("#close-details").click();
+  assert.ok(
+    await page.evaluate(() => {
+      const width = document
+        .querySelector(".canvas")
+        .getBoundingClientRect().width;
+      return width / innerWidth >= 0.75 && width / innerWidth <= 0.85;
+    }),
+    "closed secondary detail leaves 75–85% map width",
+  );
+  await page.screenshot({
+    path: path.join(out, "command-1440-map-dominant.png"),
+    fullPage: true,
+  });
+  await page.locator("#toggle-details").click();
   const before = await page
     .locator("[data-live-device]")
     .first()
@@ -317,6 +371,130 @@ async function wait(check) {
   );
   await page.locator("#fit").click();
   await page.locator("#open-map").click();
+  // Provider-boundary fixtures only: production map storage and renderer remain real.
+  // A live public-provider download is separate acceptance evidence.
+  const downloaded = structuredClone(map);
+  downloaded.attribution =
+    "© OpenStreetMap contributors · ODbL · synthetic browser acceptance fixture";
+  downloaded.features[0].properties = { building: "yes" };
+  downloaded.features.push({
+    type: "Feature",
+    properties: { highway: "path" },
+    geometry: {
+      type: "LineString",
+      coordinates: [
+        [77.208, 28.615],
+        [77.216, 28.619],
+      ],
+    },
+  });
+  await page.route("**/local/map-search", (route) =>
+    route.fulfill({
+      json: [
+        {
+          display_name: "Acceptance fixture, Delhi",
+          lat: "28.617",
+          lon: "77.212",
+        },
+      ],
+    }),
+  );
+  const areas = [];
+  await page.route("**/local/map-preview", (route) => {
+    areas.push(route.request().postDataJSON());
+    return route.fulfill({ json: downloaded });
+  });
+  await page.locator("#map-preparation summary").click();
+  await page.locator("#map-search").fill("Delhi");
+  await page.locator("#search-map").click();
+  await page.waitForFunction(
+    () => document.querySelector("#map-search-results").options.length === 2,
+  );
+  await page.locator("#map-search-results").selectOption({ index: 1 });
+  assert.equal(await page.locator("#map-lat").inputValue(), "28.617");
+  for (const size of ["500", "1000", "custom"]) {
+    await page.locator("#map-area").selectOption(size);
+    if (size === "custom") {
+      await page.locator("#map-width").fill("1500");
+      await page.locator("#map-height").fill("300");
+    }
+    await page.locator("#preview-map").click();
+    await page.waitForFunction(
+      () => !document.querySelector("#download-map").disabled,
+    );
+    assert.match(
+      await page.locator("#map-preparation-status").innerText(),
+      /features.*KB/,
+    );
+  }
+  assert.deepEqual(
+    areas.map((a) => [a.width, a.height]),
+    [
+      [500, 500],
+      [1000, 1000],
+      [1500, 300],
+    ],
+  );
+  const mapDistance = (await state()).devices[partyIds[2]].total_m;
+  await page.screenshot({
+    path: path.join(out, "command-map-download-preview-fixture.png"),
+    fullPage: true,
+  });
+  await page.locator("#download-map").click();
+  await page.waitForFunction(() =>
+    document
+      .querySelector("#map-preparation-status")
+      .textContent.includes("Saved locally"),
+  );
+  assert.equal((await (await fetch(local + "/local/maps")).json()).length, 2);
+  assert.equal((await state()).devices[partyIds[2]].total_m, mapDistance);
+  await page.locator('[data-close="map-settings"]').click();
+  await page.reload();
+  await page.waitForSelector('[data-layer="offline-map"]');
+  assert.match(
+    await page.locator("#map-attribution").innerText(),
+    /OpenStreetMap/,
+  );
+  // Command restart + browser reload without any provider access uses the same saved map.
+  command.kill("SIGINT");
+  await once(command, "exit");
+  command = spawn(
+    process.env.GNSS_COMMAND_BINARY,
+    [
+      "-db",
+      path.join(work, "command.sqlite"),
+      "-ingest-listen",
+      phone.slice(7),
+      "-dashboard-listen",
+      local.slice(7),
+    ],
+    { stdio: "ignore" },
+  );
+  await wait(async () => {
+    try {
+      return (await fetch(local + "/local/state")).ok;
+    } catch {
+      return false;
+    }
+  });
+  await page.reload();
+  await page.waitForSelector('[data-layer="offline-map"]');
+  assert.equal((await (await fetch(local + "/local/maps")).json()).length, 2);
+  assert.equal((await state()).devices[partyIds[2]].total_m, mapDistance);
+  await page.screenshot({
+    path: path.join(out, "command-offline-map-restored.png"),
+    fullPage: true,
+  });
+  await page.locator("#open-history").click();
+  await page.locator("#event-filter").selectOption("operations");
+  await page.waitForSelector(".history-event");
+  assert.ok((await page.locator(".history-event").count()) > 0);
+  await page.screenshot({
+    path: path.join(out, "command-operations-history.png"),
+    fullPage: true,
+  });
+  await page.locator('[data-close="event-history"]').click();
+  await page.locator("#open-map").click();
   await page.locator("#map-file").setInputFiles({
     name: "bad.json",
     mimeType: "application/json",
@@ -338,6 +516,11 @@ async function wait(check) {
   await wait(async () => (await state()).policy.maximum_accuracy_m === 50);
   assert.equal((await state()).policy.enabled.maximum_speed_mps, false);
   await page.locator('[data-close="quality"]').click();
+  if (
+    (await page.locator("#toggle-details").getAttribute("aria-expanded")) ===
+    "false"
+  )
+    await page.locator("#toggle-details").click();
   await page.locator("#selected-detail .override input").fill("15");
   await page.locator("#selected-detail .override button").first().click();
   await wait(
@@ -395,6 +578,8 @@ async function wait(check) {
   });
   await page.locator("#sos-audio").click();
   await send(sos);
+  await page.waitForSelector("#sos-toast:not([hidden])");
+  await page.locator("#sos-toast-view").click();
   await page.waitForSelector(".sos-alert");
   assert.ok((await page.evaluate(() => window.__tones)) > 0);
   await wait(async () => (await page.evaluate(() => window.__tones)) >= 2);
@@ -406,10 +591,114 @@ async function wait(check) {
     path: path.join(out, "command-sos-delayed.png"),
     fullPage: true,
   });
-  await page.locator(".sos-alert button").click();
+  await page.locator(".sos-alert button").first().click();
   await wait(
     async () => !!(await state()).sos_alerts[0].operator_acknowledged_at,
   );
+  await page.locator('[data-close="sos-panel"]').click();
+  const afterACK = await page.evaluate(() => window.__tones);
+  await page.waitForTimeout(1600);
+  assert.equal(
+    await page.evaluate(() => window.__tones),
+    afterACK,
+    "last ACK immediately stops alarm cadence",
+  );
+  const later = [101, 102].map((sequence) => {
+    const a = structuredClone(sos);
+    a.message_id = a.sos.event_id = randomUUID();
+    a.sequence = sequence;
+    if (sequence === 102) {
+      const withFix = JSON.parse(
+        fs.readFileSync(
+          path.join(__dirname, "../../protocol/fixtures/sos-fix.json"),
+          "utf8",
+        ),
+      );
+      a.fix = withFix.fix;
+      a.health = withFix.health;
+      a.captured_at =
+        a.sos.triggered_at =
+        a.fix.observed_at =
+          new Date().toISOString();
+    }
+    return a;
+  });
+  for (const a of later) await send(a);
+  await page.waitForFunction(
+    () => document.querySelector("#sos-count").textContent === "2",
+  );
+  await page.locator("#sos-toast-dismiss").click();
+  const dismissed = await page.evaluate(() => window.__tones);
+  await page.waitForTimeout(2100);
+  assert.ok(
+    (await page.evaluate(() => window.__tones)) >= dismissed + 2,
+    "toast dismissal does not silence emergencies",
+  );
+  await page.locator("#open-sos").click();
+  assert.equal(await page.locator(".sos-alert").count(), 2);
+  await page
+    .locator(".sos-alert button:not(:disabled)")
+    .filter({ hasText: "Locate event observation" })
+    .click();
+  await page.waitForSelector('[data-layer="located-sos"]');
+  assert.match(
+    await page.locator("#hover").innerText(),
+    /not necessarily a current position/,
+  );
+  await page.screenshot({
+    path: path.join(out, "command-sos-located-observation.png"),
+    fullPage: true,
+  });
+  await page.locator("#open-sos").click();
+  await page.screenshot({
+    path: path.join(out, "command-multiple-sos.png"),
+    fullPage: true,
+  });
+  await page.locator(".sos-alert").first().locator("button").first().click();
+  await page.waitForFunction(
+    () => document.querySelector("#sos-count").textContent === "1",
+  );
+  const partial = await page.evaluate(() => window.__tones);
+  await page.waitForTimeout(1100);
+  assert.ok(
+    (await page.evaluate(() => window.__tones)) > partial,
+    "partial ACK keeps shared alarm active",
+  );
+  await page.locator(".sos-alert button").first().click();
+  await page.waitForFunction(
+    () => document.querySelector("#sos-count").textContent === "0",
+  );
+  await page.locator('[data-close="sos-panel"]').click();
+  await page.locator("#open-history").click();
+  await page.locator("#event-filter").selectOption("sos");
+  await page.waitForFunction(
+    () => document.querySelectorAll(".history-event").length === 3,
+  );
+  await page.locator(".history-event summary").first().click();
+  await page.locator(".history-event summary").first().focus();
+  await page.waitForTimeout(2200);
+  assert.equal(
+    await page.locator(".history-event").first().getAttribute("open"),
+    "",
+    "polling preserves open event evidence",
+  );
+  assert.equal(
+    await page
+      .locator(".history-event summary")
+      .first()
+      .evaluate((e) => e === document.activeElement),
+    true,
+    "polling preserves history keyboard focus",
+  );
+  assert.match(
+    await page.locator("#history-events").innerText(),
+    /Acknowledged/,
+  );
+  await page.screenshot({
+    path: path.join(out, "command-sos-event-history.png"),
+    fullPage: true,
+  });
+  await page.locator('[data-close="event-history"]').click();
   await page.waitForTimeout(32000);
   for (let i = 0; i < 4; i++) {
     const m = structuredClone(latestMessages[i]);
@@ -437,10 +726,23 @@ async function wait(check) {
     fullPage: true,
   });
   const violations = [];
-  for (const dialog of [null, "quality", "map-settings"]) {
+  for (const dialog of [
+    null,
+    "quality",
+    "map-settings",
+    "event-history",
+    "sos-panel",
+  ]) {
     if (dialog) {
       await page
-        .locator(dialog === "quality" ? "#open-quality" : "#open-map")
+        .locator(
+          {
+            quality: "#open-quality",
+            "map-settings": "#open-map",
+            "event-history": "#open-history",
+            "sos-panel": "#open-sos",
+          }[dialog],
+        )
         .click();
       await page.screenshot({
         path: path.join(out, `command-${dialog}-dialog.png`),
