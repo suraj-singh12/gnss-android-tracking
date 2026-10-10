@@ -1,5 +1,31 @@
 # Issue #6 functionality preservation matrix
 
+## Corrective audit · baseline 7725412
+
+The corrective branch starts from the validated PR #16 head. The existing rows
+below remain the feature inventory. The following mappings guide the correction;
+final regression evidence is recorded in `ui-acceptance.md`.
+
+| Capability | Current location | Corrective location | API/state | Regression |
+| --- | --- | --- | --- | --- |
+| Protected SOS and local/durable receipt | Tracking long-click dock | Tracking hold-progress dock | activateSos / Room observeSos | SosHoldGestureTest, SosActivityTest, CommandIntegrationTest |
+| Settings, readiness, permissions, battery exceptions, reenrollment | Flat Settings list | Labelled native sections and advanced enrollment | FieldPreflight / repository.settings | FieldPreflightTest, UiNavigationVisualTest |
+| Diagnostics, sender/storage/queues, SOS details, retry, export | Technical text and tools | Readable summaries, expandable raw evidence, tools | existing recorder / Room flows | DiagnosticsExportApi26/28/35Test, PhysicalButton tests |
+| Parties, selected evidence, override, visibility | Permanent left/right panels | Collapsible sidebar and contextual detail | /local/state, /local/override | ui-dashboard.cjs |
+| Recording modes/lifecycle/duration | Right-aligned controls | Geometrically centred toolbar | /local/recording, authoritative windows | ui-dashboard.cjs, Go recording tests |
+| Active SOS / audio / locate / per-event ACK | Large top banner | Header counter, overlay drawer and arrival toast | sos_alerts / /local/sos/acknowledge | sos-alarm-test.cjs, sos-dashboard.cjs |
+| Ordinary evidence and acknowledged SOS | Export / selected disclosure | Separate Event History drawer + export | existing field_evidence / sos_alerts | event history API and browser tests |
+| Quality eight rules / raw observations / dot interval | Quality and map dialogs | Header tools, existing dialogs | /local/quality, raw_points | ui-dashboard.cjs |
+| Blank/offline map, import/opacity/coverage | Map dialog, memory only | Map preparation/library dialog, same renderer | GeoMap / existing Command SQLite | map-test.cjs, offline_maps_test.go |
+| Live / stale / historical / provisional locations | Circle markers and paths | Course arrow only for credible moving live fixes | existing fix bearing_deg / speed_mps | marker tests / browser pan/zoom |
+
+Rendered baseline evidence: Command empty, five parties, recording, quality/map
+dialogs, invalid map, mixed stale/offline state and delayed SOS. The SOS banner
+reduces map height; recording controls are not centred; selected details repeat
+static/technical information. Android's native long-click adapter delegates timing
+and cancellation to Button, without a visible hold state or explicit pause cleanup.
+Command's audio is throttled to ten seconds, and map imports do not survive restart.
+
 Baseline: `b23b5f58845c896e7fb2c5800e577202667c1e3f`; branch
 `issue-6-integrated-ui` directly descends from PR #12 (`issue-5-sos`), which
 contains PR #11 native observation/history work. Neither dependency is merged.
@@ -27,14 +53,14 @@ contains PR #11 native observation/history work. Neither dependency is merged.
 | Contact, GNSS, battery, latest fix, qualified distance | /local/state device read model | Compact overview + selected details |
 | History completeness, pending counts and age of count | history read model | Overview + selected details |
 | Report/raw/useful counts, cadence/delayed evidence | field_evidence | Selected party Diagnostics disclosure |
-| SOS event/receipt/operator ACK | sos_alerts / POST /local/sos/acknowledge | Persistent emergency region |
+| SOS event/receipt/operator ACK | sos_alerts / POST /local/sos/acknowledge | Persistent header counter / emergency drawer / retained history |
 | Audible SOS enable/test, blocked status, recurring alarm | existing AudioContext SOS loop | Persistent toolbar control + emergency status; no competing delivery state |
 | Command diagnostic ZIP | GET /local/field-report | Global Diagnostics link |
 | Blank geographic view | existing coordinates; presentation projection | Default canvas mode |
 | Pan/zoom/fit/focus/point coordinate inspection | presentation only | Canvas controls / keyboard / point inspector |
-| Offline georeferenced background (new) | RFC 7946 GeoJSON WGS84, local file only | Map dialog; metadata/opacity/warnings |
+| Offline georeferenced background | RFC 7946 GeoJSON WGS84, existing renderer | Map dialog; validated import / preparation / persisted library / metadata / opacity / warnings |
 
-## Findings before implementation
+## Earlier pre-Issue-6 findings (historical context)
 
 Android puts setup, emergency explanation, all settings and diagnostics ahead of
 tracking controls in a single long scroll. Command repeats technical details for
@@ -44,3 +70,23 @@ are already separate backend dimensions and should remain separate labels. SOS
 cards deliberately reuse nodes to preserve focus; keep that implementation.
 Existing native service, Room flows, recording/quality HTTP actions, reconstruction,
 stable backend colours, export and SOS engine are reusable and authoritative.
+
+## Corrective parity reconciliation
+
+All inventory rows above retain their owning API/state. The correction changes
+native presentation and gesture routing, the embedded browser workspace and map
+preparation/library presentation only. It does not alter `GPS_PROVIDER`, tracking
+service ownership, Android Room/outbox schema, GNSS identities, sender priority,
+historical batching/retries/deduplication, route reconstruction, quality or recording
+calculations, SOS persistence or operator ACK transactions. The map table is an
+additive table in Command's existing SQLite database; map imports never mutate
+tracking state. Existing diagnostic ZIP and physical-button JSON formats remain.
+
+Regression evidence: the native navigation render test retains all three tabs,
+settings/admin/permissions and diagnostic tools; gesture/Activity tests verify
+cancel and one offline durable SOS; existing Android-to-Command tests cover real
+delivery, recording/history and durable SOS ACK. Browser checks exercise all eight
+quality switches, raw observations, overrides, recording modes/lifecycle, pan/zoom,
+visibility and selection, independent contact/GNSS/history states, SOS/history and
+map import/preparation/library/restart. The Go smoke fixture was extended with the
+new optional presentation marker rather than weakening its live/history assertions.

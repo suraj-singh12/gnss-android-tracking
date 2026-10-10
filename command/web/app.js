@@ -2,8 +2,14 @@
 const $ = (id) => document.getElementById(id),
   hidden = new Set(),
   svgNS = "http://www.w3.org/2000/svg";
-let state, policyRevision, selectedParty;
-let viewport, offlineMap, inspectedPoint;
+let state, policyRevision;
+let selectedParty = localStorage.getItem("gnss-selected-party");
+function selectParty(id) {
+  selectedParty = id;
+  localStorage.setItem("gnss-selected-party", id);
+  locatedSOS = undefined;
+}
+let viewport, offlineMap, inspectedPoint, locatedSOS;
 const fields = {
   minimum_forward_m: "Forward movement floor · m",
   minimum_backward_m: "Backward movement floor · m",
@@ -70,46 +76,94 @@ $("dots").onchange = () => {
   poll();
 };
 let audio;
-let sounding = false;
-let lastSound = 0;
-let showSOSEventHistory = false;
+let activeTone;
+const seenSOS = new Set();
+function stopTone() {
+  if (activeTone) {
+    try {
+      activeTone.stop();
+    } catch (_) {}
+    activeTone = undefined;
+  }
+}
+function beep() {
+  if (audio?.state !== "running") return;
+  stopTone();
+  const tone = audio.createOscillator(),
+    gain = audio.createGain();
+  activeTone = tone;
+  tone.frequency.value = 880;
+  gain.gain.value = 0.12;
+  tone.connect(gain);
+  gain.connect(audio.destination);
+  tone.onended = () => {
+    tone.disconnect();
+    gain.disconnect();
+    if (activeTone === tone) activeTone = undefined;
+  };
+  tone.start();
+  tone.stop(audio.currentTime + 0.18);
+}
+const alarm = new SosAlarm(beep, stopTone);
 async function sosSound(test = false) {
-  if (sounding) return;
-  if (!test && !state?.sos_alerts?.some((a) => !a.operator_acknowledged_at))
-    return;
-  if (!test && Date.now() - lastSound < 10000) return;
-  sounding = true;
   try {
     const Audio = window.AudioContext || window.webkitAudioContext;
     if (!Audio) throw Error("Audio unavailable");
     if (!audio && !test) throw Error("Audio requires operator activation");
     audio ||= new Audio();
+    audio.onstatechange = () => {
+      alarm.update(
+        state?.sos_alerts?.some((a) => !a.operator_acknowledged_at),
+        audio.state === "running",
+      );
+      if (audio.state !== "running") {
+        $("sos-audio").textContent = "Enable SOS sound · currently blocked";
+        $("sos-audio-status").textContent =
+          "Audio suspended / blocked. Enable sound; visual SOS stays active.";
+      }
+    };
     if (test) await audio.resume();
     if (audio.state !== "running") throw Error("Audio blocked or suspended");
-    const tone = audio.createOscillator(),
-      gain = audio.createGain();
-    tone.frequency.value = 880;
-    gain.gain.value = 0.12;
-    tone.connect(gain);
-    gain.connect(audio.destination);
-    tone.start();
-    tone.stop(audio.currentTime + 0.5);
-    lastSound = Date.now();
+    const pending = state?.sos_alerts?.some((a) => !a.operator_acknowledged_at);
+    alarm.update(pending, true);
+    if (test && !pending) beep();
     $("sos-audio").textContent = "SOS sound enabled · Test";
     $("sos-audio-status").textContent =
-      "Audible alert enabled; repeats every 10 s while SOS is unacknowledged. Check speaker volume.";
+      "Sound enabled · one shared beep every second until every SOS is acknowledged. Check speaker volume.";
   } catch (e) {
     $("sos-audio").textContent = "Enable SOS sound · currently blocked";
     $("sos-audio-status").textContent =
       "Audible alert blocked / unavailable. Enable audio and check speaker volume; visible SOS remains active.";
-  } finally {
-    sounding = false;
+    alarm.update(alarm.pending, false);
   }
 }
 $("sos-audio").onclick = () => sosSound(true);
-$("sos-history-toggle").onclick = () => {
-  showSOSEventHistory = !showSOSEventHistory;
-  renderSOS();
+$("open-sos").onclick = $("sos-toast-view").onclick = () =>
+  $("sos-panel").showModal();
+$("sos-toast-dismiss").onclick = () => {
+  $("sos-toast").hidden = true;
+};
+function detailsOpen(open) {
+  document.querySelector("main").classList.toggle("details-closed", !open);
+  $("toggle-details").setAttribute("aria-expanded", String(open));
+}
+$("toggle-details").onclick = () =>
+  detailsOpen(
+    document.querySelector("main").classList.contains("details-closed"),
+  );
+$("close-details").onclick = () => detailsOpen(false);
+window.addEventListener("resize", () => {
+  if (innerWidth <= 850) detailsOpen(false);
+  if (innerWidth <= 550) {
+    document.querySelector("main").classList.add("parties-closed");
+    $("toggle-parties").setAttribute("aria-expanded", "false");
+  }
+});
+$("toggle-parties").onclick = $("collapse-parties").onclick = () => {
+  const closed = document
+    .querySelector("main")
+    .classList.toggle("parties-closed");
+  $("toggle-parties").setAttribute("aria-expanded", String(!closed));
 };
 function renderSOS() {
   const alerts = [...(state.sos_alerts || [])].sort(
@@ -120,18 +174,27 @@ function renderSOS() {
       a.device_id.localeCompare(b.device_id),
   );
   const pending = alerts.filter((a) => !a.operator_acknowledged_at).length;
-  $("sos-panel").hidden = alerts.length === 0;
-  $("sos-panel").classList.toggle("quiet-events", pending === 0);
   $("sos-heading").textContent = pending
     ? "SOS emergencies"
     : "SOS event history";
-  $("sos-history-toggle").hidden = pending > 0;
-  $("sos-history-toggle").textContent = showSOSEventHistory
-    ? "Hide event history"
-    : "Show event history";
-  $("sos-alerts").hidden = pending === 0 && !showSOSEventHistory;
-  document.body.classList.toggle("has-events", alerts.length > 0);
-  document.body.classList.toggle("has-sos", pending > 0);
+  $("sos-count").textContent = pending;
+  $("open-sos").classList.toggle("active", pending > 0);
+  $("open-sos").setAttribute(
+    "aria-label",
+    `${pending} unacknowledged SOS emergencies`,
+  );
+  let arrived = 0;
+  for (const a of alerts) {
+    const key = a.device_id + "/" + a.event_id;
+    if (!seenSOS.has(key) && !a.operator_acknowledged_at) arrived++;
+    seenSOS.add(key);
+  }
+  if (arrived) {
+    $("sos-toast-text").textContent =
+      `${arrived} new SOS · ${pending} require acknowledgement`;
+    $("sos-toast").hidden = false;
+  }
+  if (!pending) $("sos-toast").hidden = true;
   const summary = `${pending} unacknowledged · ${alerts.length - pending} acknowledged. Receipt and operator acknowledgement are separate. Recording controls retain SOS.`;
   if ($("sos-summary").textContent !== summary)
     $("sos-summary").textContent = summary;
@@ -142,7 +205,7 @@ function renderSOS() {
     ? document.activeElement
     : null;
   let index = 0;
-  for (const a of alerts) {
+  for (const a of alerts.filter((a) => !a.operator_acknowledged_at)) {
     const key = a.device_id + "/" + a.event_id;
     let card = Array.from(root.children).find((c) => c.dataset.event === key);
     if (!card) {
@@ -163,7 +226,20 @@ function renderSOS() {
           showError(e);
         }
       };
-      card.append(details, button);
+      const locate = el("button", "Locate event observation");
+      locate.disabled = !a.fix;
+      locate.onclick = () => {
+        selectParty(a.device_id);
+        locatedSOS = a;
+        const [cx, cy] = GeoMap.project(a.fix.longitude, a.fix.latitude);
+        viewport = { cx, cy, scale: 2 };
+        $("sos-panel").close();
+        detailsOpen(true);
+        render();
+        $("hover").textContent =
+          `SOS event observation · ${a.fix.latitude}, ${a.fix.longitude} · ${time(a.fix.observed_at)} · not necessarily a current position`;
+      };
+      card.append(details, button, locate);
       root.append(card);
     }
     card.classList.toggle("acknowledged", !!a.operator_acknowledged_at);
@@ -213,17 +289,29 @@ function renderSOS() {
       root.insertBefore(card, root.children[index] || null);
     index++;
   }
+  for (const card of Array.from(root.children)) {
+    if (
+      !alerts.some(
+        (a) =>
+          !a.operator_acknowledged_at &&
+          card.dataset.event === a.device_id + "/" + a.event_id,
+      )
+    )
+      card.remove();
+  }
   if (focused && document.activeElement !== focused) focused.focus();
-  sosSound();
+  alarm.update(pending > 0, audio?.state === "running");
 }
 function render() {
   renderSOS();
+  if ($("event-history").open) renderEvents();
   $("projection-status").textContent = state.projection_error
     ? "Projection failed: " + state.projection_error
     : state.projection_pending
       ? "Projection catching up — displayed history is not fully synchronized"
       : "";
   $("connection").textContent = "Command Connected · local workspace";
+  $("connection").classList.remove("unavailable");
   const recording = state.recording;
   $("recording").textContent = recording
     ? recording.active
@@ -240,8 +328,10 @@ function render() {
     a.device_id.localeCompare(b.device_id),
   );
   $("count").textContent = devices.length;
+  $("party-summary").textContent =
+    `${devices.length} ${devices.length === 1 ? "party" : "parties"}`;
   $("no-parties").hidden = devices.length > 0;
-  selectedParty ||= devices[0]?.device_id;
+  if (!state.devices[selectedParty]) selectedParty = devices[0]?.device_id;
   // Preserve focused edits while polling; all content is created as text nodes.
   if (
     !$("devices").contains(document.activeElement) &&
@@ -415,7 +505,8 @@ function render() {
         String(selectedParty === d.device_id),
       );
       select.onclick = () => {
-        selectedParty = d.device_id;
+        selectParty(d.device_id);
+        detailsOpen(true);
         select.blur();
         render();
       };
@@ -591,7 +682,273 @@ for (const [button, dialog] of [
   $(button).onclick = () => $(dialog).showModal();
 for (const button of document.querySelectorAll("[data-close]"))
   button.onclick = () => $(button.dataset.close).close();
+let eventEvidence = [];
+let eventSnapshot;
+function renderEvents() {
+  const root = $("history-events"),
+    filter = $("event-filter").value;
+  const snapshot = JSON.stringify([filter, state?.sos_alerts, eventEvidence]);
+  if (snapshot === eventSnapshot && root.children.length) return;
+  eventSnapshot = snapshot;
+  const opened = new Set(
+    [...root.querySelectorAll("details[open]")].map((e) => e.dataset.key),
+  );
+  const focused = root.contains(document.activeElement)
+    ? document.activeElement.closest("details")?.dataset.key
+    : undefined;
+  root.replaceChildren();
+  if (filter !== "operations") {
+    for (const a of [...(state?.sos_alerts || [])].reverse()) {
+      const row = el("details", undefined, "history-event");
+      row.dataset.key = "sos/" + a.device_id + "/" + a.event_id;
+      row.open = opened.has(row.dataset.key);
+      row.append(
+        el(
+          "summary",
+          `SOS · ${a.party.id} · ${time(a.triggered_at)} · ${a.operator_acknowledged_at ? "Acknowledged" : "Unacknowledged"}`,
+        ),
+      );
+      row.append(
+        el(
+          "p",
+          `Command receipt: ${time(a.received_at)} · Operator ACK: ${a.operator_acknowledged_at ? time(a.operator_acknowledged_at) : "not acknowledged"}`,
+        ),
+      );
+      row.append(
+        el(
+          "p",
+          a.fix
+            ? `Event coordinates ${a.fix.latitude}, ${a.fix.longitude} · accuracy ±${a.fix.horizontal_accuracy_m ?? "unknown"} m · measured ${time(a.fix.observed_at)}`
+            : "No GNSS observation at activation",
+        ),
+      );
+      row.append(el("pre", JSON.stringify(a, null, 2)));
+      root.append(row);
+    }
+  }
+  if (filter !== "sos")
+    for (const e of eventEvidence) {
+      const row = el("details", undefined, "history-event");
+      row.dataset.key = "operation/" + e.ordinal;
+      row.open = opened.has(row.dataset.key);
+      row.append(
+        el(
+          "summary",
+          `${e.kind.replaceAll("_", " ")} · ${time(e.at)}${e.device_id ? " · " + (state?.devices[e.device_id]?.snapshot.party.id || e.device_id.slice(0, 8)) : ""}`,
+        ),
+      );
+      row.append(el("pre", JSON.stringify(e, null, 2)));
+      root.append(row);
+    }
+  if (!root.children.length) root.append(el("p", "No events in this view."));
+  if (focused)
+    [...root.children]
+      .find((e) => e.dataset.key === focused)
+      ?.querySelector("summary")
+      ?.focus();
+}
+async function loadEvents() {
+  const response = await fetch("/local/events");
+  if (!response.ok) throw Error("Event history unavailable");
+  eventEvidence = await response.json();
+  renderEvents();
+}
+$("open-history").onclick = () => {
+  $("event-history").showModal();
+  loadEvents().catch(showError);
+};
+$("event-filter").onchange = renderEvents;
+let preparedMap;
+let preparationRevision = 0;
+async function mapPost(path, data) {
+  const response = await fetch("/local/" + path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  const result = await response.json();
+  if (!response.ok) throw Error(result.message || "Map operation failed");
+  return result;
+}
+async function refreshMaps(selected) {
+  const response = await fetch("/local/maps");
+  if (!response.ok) throw Error("Saved map library unavailable");
+  const maps = await response.json();
+  $("saved-maps").replaceChildren(new Option("Choose saved map", ""));
+  for (const m of maps)
+    $("saved-maps").add(
+      new Option(`${m.source} · ${(m.bytes / 1024).toFixed(1)} KB`, m.id),
+    );
+  if (selected) $("saved-maps").value = selected;
+}
+function useMap(text, source, id) {
+  const parsed = GeoMap.parse(text, source);
+  offlineMap = parsed;
+  $("map-mode").value = "offline";
+  $("map-warning").textContent = "";
+  $("map-metadata").textContent =
+    `Source: ${source} · WGS84 / EPSG:4326 · Display EPSG:3857 · Coverage ${parsed.bounds.map((n) => n.toFixed(5)).join(", ")} · ${parsed.count} coordinates · saved locally`;
+  $("map-attribution").textContent = parsed.attribution;
+  $("export-map").href = "/local/maps/" + encodeURIComponent(id);
+  $("export-map").setAttribute("download", "offline-map.geojson");
+  localStorage.setItem("gnss-map-id", id);
+  viewport = undefined;
+  draw();
+  localStorage.setItem("gnss-map-mode", "offline");
+}
+async function loadSavedMap(id) {
+  const response = await fetch("/local/maps/" + encodeURIComponent(id));
+  if (!response.ok)
+    throw Error("Saved map unavailable; blank canvas remains available");
+  const source =
+    $("saved-maps").selectedOptions[0]?.textContent || "Saved offline map";
+  useMap(await response.text(), source, id);
+}
+$("saved-maps").onchange = () => {
+  if ($("saved-maps").value)
+    loadSavedMap($("saved-maps").value).catch(showError);
+};
+$("search-map").onclick = async () => {
+  $("search-map").disabled = true;
+  $("map-preparation-status").textContent = "Searching OpenStreetMap…";
+  try {
+    const results = await mapPost("map-search", {
+      text: $("map-search").value,
+    });
+    $("map-search-results").replaceChildren(new Option("Choose a place", ""));
+    for (const place of results)
+      $("map-search-results").add(
+        new Option(place.display_name, JSON.stringify([place.lat, place.lon])),
+      );
+    $("map-preparation-status").textContent =
+      `${results.length} places · choose a center, then Preview.`;
+  } catch (e) {
+    $("map-preparation-status").textContent = e.message;
+  } finally {
+    $("search-map").disabled = false;
+  }
+};
+$("map-search-results").onchange = () => {
+  if ($("map-search-results").value) {
+    const [lat, lon] = JSON.parse($("map-search-results").value);
+    $("map-lat").value = lat;
+    $("map-lon").value = lon;
+    invalidatePreparation();
+  }
+};
+function invalidatePreparation() {
+  preparationRevision++;
+  preparedMap = undefined;
+  $("download-map").disabled = true;
+}
+for (const id of ["map-lat", "map-lon", "map-width", "map-height"])
+  $(id).oninput = invalidatePreparation;
+$("map-area").onchange = () => {
+  if ($("map-area").value !== "custom")
+    $("map-width").value = $("map-height").value = $("map-area").value;
+  invalidatePreparation();
+};
+$("preview-map").onclick = async () => {
+  invalidatePreparation();
+  for (const id of ["map-lat", "map-lon", "map-width", "map-height"])
+    if (!$(id).reportValidity()) return;
+  $("preview-map").disabled = true;
+  $("map-preparation-status").textContent =
+    "Preparing bounded OSM vector area…";
+  const revision = preparationRevision;
+  const area = {
+    lat: Number($("map-lat").value),
+    lon: Number($("map-lon").value),
+    width: Number($("map-width").value),
+    height: Number($("map-height").value),
+  };
+  try {
+    const data = await mapPost("map-preview", area);
+    if (revision !== preparationRevision)
+      throw Error(
+        "Area changed while preparing. Preview the new area before downloading.",
+      );
+    const text = JSON.stringify(data),
+      parsed = GeoMap.parse(text, "OpenStreetMap");
+    preparedMap = {
+      source: `OSM ${area.lat}, ${area.lon} · ${area.width} × ${area.height} m`,
+      data,
+    };
+    $("map-preparation-status").textContent =
+      `${data.features.length} features · ${(new TextEncoder().encode(text).length / 1024).toFixed(1)} KB · roads, paths, buildings, water/land where available. Relations/tiles are not downloaded. Save for offline use.`;
+    $("map-preview").replaceChildren();
+    const a = GeoMap.project(parsed.bounds[0], parsed.bounds[1]),
+      b = GeoMap.project(parsed.bounds[2], parsed.bounds[3]);
+    const scale = Math.min(
+      380 / Math.max(1, b[0] - a[0]),
+      160 / Math.max(1, b[1] - a[1]),
+    );
+    const point = (p) => [
+      200 + (p[0] - (a[0] + b[0]) / 2) * scale,
+      90 - (p[1] - (a[1] + b[1]) / 2) * scale,
+    ];
+    for (const shape of parsed.shapes) {
+      if (shape.type === "polygon")
+        $("map-preview").append(
+          svg("path", {
+            d: shape.rings
+              .map(
+                (r) => "M" + r.map((p) => point(p).join(",")).join("L") + "Z",
+              )
+              .join(" "),
+            fill: "#d4e2d1",
+            stroke: "#718d7b",
+            "fill-rule": "evenodd",
+          }),
+        );
+      else if (shape.type === "line")
+        $("map-preview").append(
+          svg("polyline", {
+            points: shape.coordinates.map((p) => point(p).join(",")).join(" "),
+            fill: "none",
+            stroke: "#718d7b",
+          }),
+        );
+    }
+    $("download-map").disabled = false;
+  } catch (e) {
+    $("map-preparation-status").textContent =
+      e.message + " · Existing maps are retained.";
+  } finally {
+    $("preview-map").disabled = false;
+  }
+};
+$("download-map").onclick = async () => {
+  if (!preparedMap) return;
+  $("download-map").disabled = true;
+  try {
+    const saved = await mapPost("maps", preparedMap);
+    await refreshMaps(saved.id);
+    await loadSavedMap(saved.id);
+    $("map-preparation-status").textContent =
+      "Saved locally · available after restart without internet.";
+  } catch (e) {
+    $("map-preparation-status").textContent = e.message;
+    $("download-map").disabled = false;
+  }
+};
+refreshMaps()
+  .then(async () => {
+    const id = localStorage.getItem("gnss-map-id"),
+      mode = localStorage.getItem("gnss-map-mode");
+    if (id && [...$("saved-maps").options].some((o) => o.value === id)) {
+      $("saved-maps").value = id;
+      await loadSavedMap(id);
+      if (mode === "blank") {
+        $("map-mode").value = "blank";
+        localStorage.setItem("gnss-map-mode", "blank");
+        draw();
+      }
+    }
+  })
+  .catch(showError);
 $("map-mode").onchange = () => {
+  localStorage.setItem("gnss-map-mode", $("map-mode").value);
   if ($("map-mode").value === "offline" && !offlineMap) {
     $("map-warning").textContent =
       "No offline map loaded. Blank canvas remains available.";
@@ -605,17 +962,18 @@ $("map-file").onchange = async () => {
   try {
     if (file.size > 20 * 1024 * 1024)
       throw Error("Map exceeds the 20 MB limit.");
-    const parsed = GeoMap.parse(await file.text(), file.name);
-    offlineMap = parsed;
-    $("map-mode").value = "offline";
-    $("map-warning").textContent = "";
-    $("map-metadata").textContent =
-      `Source: ${parsed.source} · CRS: WGS84 / EPSG:4326 · Display: EPSG:3857 · Coverage: ${parsed.bounds.map((n) => n.toFixed(5)).join(", ")} · ${parsed.count} coordinates`;
-    viewport = undefined;
-    draw();
+    const text = await file.text();
+    GeoMap.parse(text, file.name);
+    const saved = await mapPost("maps", {
+      source: file.name,
+      data: JSON.parse(text),
+    });
+    await refreshMaps(saved.id);
+    useMap(text, file.name, saved.id);
   } catch (e) {
     offlineMap = undefined;
     $("map-mode").value = "blank";
+    localStorage.setItem("gnss-map-mode", "blank");
     $("map-metadata").textContent = "No valid offline map loaded.";
     $("map-warning").textContent =
       "Invalid map: " + e.message + " Blank canvas retained.";
@@ -623,10 +981,12 @@ $("map-file").onchange = async () => {
   }
 };
 $("fit").onclick = () => {
+  locatedSOS = undefined;
   viewport = undefined;
   draw();
 };
 $("focus-party").onclick = () => {
+  locatedSOS = undefined;
   const d = state?.devices[selectedParty];
   if (!d?.location) return;
   const [cx, cy] = GeoMap.project(
@@ -794,8 +1154,13 @@ function draw() {
                 (r) => "M" + r.map((c) => xyCoord(c).join(",")).join("L") + "Z",
               )
               .join(" "),
-            fill: "#d7e2d6",
-            stroke: "#91a399",
+            fill:
+              shape.properties?.natural === "water" || shape.properties?.water
+                ? "#c9e3ec"
+                : shape.properties?.building
+                  ? "#d5cec6"
+                  : "#dce7d4",
+            stroke: "#a6b4ad",
             "fill-rule": "evenodd",
             "stroke-width": 1,
           }),
@@ -807,8 +1172,17 @@ function draw() {
               .map((c) => xyCoord(c).join(","))
               .join(" "),
             fill: "none",
-            stroke: "#81958c",
-            "stroke-width": 2,
+            stroke: shape.properties?.waterway
+              ? "#83b8cf"
+              : shape.properties?.highway
+                ? "#a29076"
+                : "#81958c",
+            "stroke-width": shape.properties?.highway ? 3 : 2,
+            "stroke-dasharray": ["path", "footway", "track"].includes(
+              shape.properties?.highway,
+            )
+              ? "4 3"
+              : "",
           }),
         );
       else {
@@ -890,10 +1264,17 @@ function draw() {
   for (const p of live) {
     const [x, y] = xy(p),
       d = state.devices[p.device_id];
-    const marker = svg("circle", {
+    const bearing = GeoMap.liveHeading(p.fix, p.live);
+    const marker = svg(bearing == null ? "circle" : "path", {
       cx: x,
       cy: y,
       r: p.live ? 8 : 6,
+      ...(bearing == null
+        ? {}
+        : {
+            d: "M0,-12 L8,9 L0,5 L-8,9 Z",
+            transform: `translate(${x} ${y}) rotate(${bearing})`,
+          }),
       fill: p.live ? color(p.device_id) : "#fff",
       stroke: color(p.device_id),
       "stroke-width": 3,
@@ -901,10 +1282,11 @@ function draw() {
       role: "button",
       "data-point-key": p.device_id + "/live",
       "data-live-device": p.live ? p.device_id : "",
-      "aria-label": `${d.snapshot.party.id} ${gnssLabel(d)}`,
+      "aria-label": `${d.snapshot.party.id} ${gnssLabel(d)}${bearing == null ? " · direction unavailable or stationary" : ` · course ${bearing} degrees`}`,
     });
     marker.onclick = () => {
-      selectedParty = p.device_id;
+      selectParty(p.device_id);
+      detailsOpen(true);
       inspect(p);
       render();
     };
@@ -927,6 +1309,34 @@ function draw() {
     liveLayer.append(label);
   }
   $("scale-label").textContent = "WGS84 / Web Mercator · north up";
+  if (locatedSOS?.fix) {
+    const [x, y] = xy({ fix: locatedSOS.fix });
+    const layer = svg("g", { "data-layer": "located-sos" });
+    const marker = svg("path", {
+      d: "M0,-9L9,0L0,9L-9,0Z",
+      transform: `translate(${x} ${y})`,
+      fill: "#a51621",
+      stroke: "white",
+      "stroke-width": 2,
+      tabindex: 0,
+      role: "button",
+      "aria-label": `SOS event observation for ${locatedSOS.party.id}, ${time(locatedSOS.triggered_at)}; not a current position`,
+    });
+    marker.onfocus = marker.onclick = () => {
+      $("hover").textContent =
+        `SOS event observation · ${locatedSOS.fix.latitude}, ${locatedSOS.fix.longitude} · ${time(locatedSOS.fix.observed_at)} · not a current position`;
+    };
+    const label = svg("text", {
+      x: x + 13,
+      // Separate coincident event/current labels without moving either position.
+      y: y + 22,
+      fill: "#a51621",
+      "font-size": 12,
+    });
+    label.textContent = `SOS event · ${locatedSOS.party.id}`;
+    layer.append(marker, label);
+    root.append(layer);
+  }
   if (focusedPoint)
     Array.from(root.querySelectorAll?.("[data-point-key]") ?? [])
       .find((p) => p.getAttribute("data-point-key") === focusedPoint)
@@ -944,9 +1354,11 @@ async function poll() {
     if (!response.ok) throw Error(b.message || "Command unavailable");
     state = b;
     render();
+    if ($("event-history").open) loadEvents().catch(showError);
     showError(null);
   } catch (e) {
     $("connection").textContent = "Offline · Command workspace unavailable";
+    $("connection").classList.add("unavailable");
     showError(e);
   } finally {
     polling = false;

@@ -56,7 +56,7 @@ const GeoMap = (() => {
         throw Error("Polygon rings must be closed.");
       return c.map(point);
     }
-    function geometry(g, depth = 0) {
+    function geometry(g, depth = 0, properties = {}) {
       if (!g) return;
       if (depth > 16 || g.crs) throw Error("Unsupported map nesting or CRS.");
       switch (g.type) {
@@ -88,7 +88,7 @@ const GeoMap = (() => {
             });
           break;
         case "GeometryCollection":
-          for (const c of g.geometries) geometry(c, depth + 1);
+          for (const c of g.geometries) geometry(c, depth + 1, properties);
           break;
         default:
           throw Error("Unsupported GeoJSON geometry.");
@@ -98,17 +98,40 @@ const GeoMap = (() => {
       for (const f of data.features) {
         if (f.type !== "Feature" || f.crs)
           throw Error("Invalid GeoJSON feature.");
+        const first = shapes.length;
         geometry(f.geometry);
+        for (const shape of shapes.slice(first))
+          shape.properties = f.properties || {};
       }
-    else if (data.type === "Feature") geometry(data.geometry);
-    else geometry(data);
+    else if (data.type === "Feature") {
+      geometry(data.geometry);
+      for (const shape of shapes) shape.properties = data.properties || {};
+    } else geometry(data);
     if (!count) throw Error("Map has no geographic coordinates.");
     if (bounds[2] - bounds[0] > 180)
       throw Error(
         "Antimeridian-spanning maps require splitting before import.",
       );
-    return { source, shapes, bounds, count };
+    return {
+      source,
+      shapes,
+      bounds,
+      count,
+      attribution:
+        data.attribution ||
+        "Imported map · verify its source licence before distribution",
+    };
   }
-  return { project, parse };
+  function liveHeading(fix, fresh) {
+    return fresh &&
+      Number.isFinite(fix.speed_mps) &&
+      fix.speed_mps >= 0.5 &&
+      Number.isFinite(fix.bearing_deg) &&
+      fix.bearing_deg >= 0 &&
+      fix.bearing_deg < 360
+      ? fix.bearing_deg
+      : null;
+  }
+  return { project, parse, liveHeading };
 })();
 if (typeof module !== "undefined") module.exports = GeoMap;

@@ -287,3 +287,20 @@ explicit unresolved outcomes and must not be called complete.
 The original GPS_PROVIDER/Looper/foreground-service acquisition and 30-second native
 freshness rule are unchanged. No listener restart workaround is introduced. Issue #5
 retains SOS ownership, Issue #6 offline-map scope, and Issue #7 extended endurance.
+
+## Corrective operational UI adapters
+
+The deterministic Android hold adapter owns only one foreground pointer/timer and
+progress/haptic feedback. Completion calls the existing app-scoped SOS engine;
+pause/navigation/destruction cancel incomplete gestures. The tested physical-key
+experiment remains the existing Activity/controller/journal path, with no new
+background interception or effect on saved SOS delivery.
+
+Command consumes the same authoritative recording, device, SOS and quality state.
+The shared audible scheduler tests the persisted unacknowledged condition; dialogs
+and arrival notices cannot acknowledge an event. Event History reads the existing
+`field_evidence` journal (latest 500 on screen; existing full export retained).
+Offline-map preparation uses fixed, bounded Nominatim/Overpass requests and adds
+only an `offline_maps` library table to the existing Command SQLite file. Map
+import/display/preparation never feeds reconstruction, raw observations, Recording,
+live/SOS state or qualified distance. There is no parallel database or projection.

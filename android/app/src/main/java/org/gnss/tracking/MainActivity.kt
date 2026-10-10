@@ -37,6 +37,7 @@ class MainActivity : Activity() {
     private lateinit var sosStatus: TextView
     private lateinit var sosDetails: TextView
     private lateinit var emergencyDock: LinearLayout
+    private lateinit var sosHold: SosHoldGesture
     private lateinit var keyOption: CheckBox
     private val volumePattern = TripleVolumeUp { count ->
         app.recorder.sos(
@@ -53,6 +54,8 @@ class MainActivity : Activity() {
     private lateinit var cancelStartButton: Button
     private var destination = "Tracking"
     private lateinit var status: TextView
+    private lateinit var diagnosticsSummary: TextView
+    private lateinit var settingsFeedback: TextView
     private var initialized = false
     private lateinit var startButton: Button
     private lateinit var readiness: TextView
@@ -73,6 +76,29 @@ class MainActivity : Activity() {
     private val trackingIntent by lazy { Intent(this, TrackingService::class.java) }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
+    private fun styleSecondary(button: Button) {
+        button.textSize = 14f
+        button.setPadding(dp(12), dp(8), dp(12), dp(8))
+        button.setTextColor(
+            android.content.res.ColorStateList(
+                arrayOf(intArrayOf(android.R.attr.state_enabled), intArrayOf()),
+                intArrayOf(0xff24343b.toInt(), 0xff829189.toInt()),
+            )
+        )
+        val surface =
+            android.graphics.drawable.GradientDrawable().apply {
+                setColor(android.graphics.Color.WHITE)
+                cornerRadius = dp(8).toFloat()
+                setStroke(dp(1), 0xffb2c2bc.toInt())
+            }
+        button.background =
+            android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x3317654c),
+                surface,
+                null,
+            )
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -115,6 +141,7 @@ class MainActivity : Activity() {
         root.addView(navigation)
         val tabButtons = mutableMapOf<String, Button>()
         fun navigate(name: String) {
+            if (::sosHold.isInitialized) sosHold.cancel()
             destination = name
             if (::emergencyDock.isInitialized)
                 emergencyDock.visibility = if (name == "Tracking") View.VISIBLE else View.GONE
@@ -185,21 +212,60 @@ class MainActivity : Activity() {
                 text = label
                 minHeight = dp(48)
                 isAllCaps = false
+                styleSecondary(this)
                 setOnClickListener { action() }
                 content.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
             }
+        fun group(title: String, expanded: Boolean = true): LinearLayout {
+            val parent = content
+            val card =
+                LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(16), dp(8), dp(16), dp(16))
+                    background =
+                        android.graphics.drawable.GradientDrawable().apply {
+                            setColor(android.graphics.Color.WHITE)
+                            cornerRadius = dp(12).toFloat()
+                            setStroke(dp(1), 0xffdce3df.toInt())
+                        }
+                    parent.addView(
+                        this,
+                        LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) },
+                    )
+                }
+            content = card
+            val body =
+                LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    visibility = if (expanded) View.VISIBLE else View.GONE
+                }
+            val toggle =
+                button(title + if (expanded) "  −" else "  +") {
+                    val open = body.visibility != View.VISIBLE
+                    body.visibility = if (open) View.VISIBLE else View.GONE
+                    (card.getChildAt(0) as Button).apply {
+                        text = title + if (open) "  −" else "  +"
+                        contentDescription = "$title, ${if (open) "expanded" else "collapsed"}"
+                    }
+                }
+            toggle.contentDescription = "$title, ${if (expanded) "expanded" else "collapsed"}"
+            card.addView(body)
+            content = parent
+            return body
+        }
         fun physicalButtonAction(label: String, action: () -> Unit) =
             Button(this).apply {
                 text = label
                 minHeight = dp(48)
                 isAllCaps = false
+                styleSecondary(this)
                 setOnClickListener { action() }
                 physicalButtonPanel.addView(
                     this,
                     LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) },
                 )
             }
-        text("GNSS · Party Leader", 24f)
+        text("GNSS Tracker", 24f)
         trackingSummary = text("STOPPED", 32f)
         trackingSummary.accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         trackingError =
@@ -227,7 +293,7 @@ class MainActivity : Activity() {
             button("SOS — hold to activate") {
                 Toast.makeText(
                         this,
-                        "Hold SOS briefly to activate. Accessibility: use the long-click action.",
+                        "Hold continuously for 1.2 seconds. Release to cancel. Accessibility: use the long-click action.",
                         Toast.LENGTH_SHORT,
                     )
                     .show()
@@ -236,10 +302,15 @@ class MainActivity : Activity() {
         sosButton.backgroundTintList =
             android.content.res.ColorStateList.valueOf(0xffa51621.toInt())
         sosButton.minHeight = dp(64)
-        sosButton.setOnLongClickListener {
-            app.activateSos(SosTrigger.SCREEN)
-            true
-        }
+        val holdProgress =
+            ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+                contentDescription = "SOS hold progress"
+                progressTintList = android.content.res.ColorStateList.valueOf(0xffa51621.toInt())
+            }
+        sosHold =
+            SosHoldGesture(sosButton, holdProgress, { resumed && destination == "Tracking" }) {
+                app.activateSos(SosTrigger.SCREEN)
+            }
         // Keep the deliberate emergency action reachable even with large fonts or backlog.
         content.removeView(sosStatus)
         content.removeView(sosButton)
@@ -250,11 +321,14 @@ class MainActivity : Activity() {
                 setBackgroundColor(android.graphics.Color.WHITE)
                 addView(sosStatus, LinearLayout.LayoutParams(-1, -2))
                 addView(sosButton, LinearLayout.LayoutParams(-1, -2))
+                addView(holdProgress, LinearLayout.LayoutParams(-1, dp(4)))
             }
         root.addView(emergencyDock, root.childCount - 1)
         content = pages.getValue("Settings")
         text("Settings", 24f)
-        text("Emergency shortcut", 20f)
+        text("Identity, Command connection and field setup.", 14f)
+        val emergencySettings = group("Emergency shortcut", false)
+        content = emergencySettings
         keyOption =
             CheckBox(this).apply {
                 text = getString(R.string.sos_volume_option)
@@ -271,7 +345,9 @@ class MainActivity : Activity() {
         )
         content = pages.getValue("Diagnostics")
         text("Diagnostics", 24f)
-        text("SOS event details", 20f)
+        text("Operational evidence · safe to inspect while tracking.", 14f)
+        diagnosticsSummary = text("Loading operational summary…")
+        content = group("SOS event details", false)
         sosDetails = text("No saved SOS event")
         content = pages.getValue("Tracking")
         scope.launch {
@@ -283,16 +359,13 @@ class MainActivity : Activity() {
                     val relevant = rows.firstOrNull { it.deliveredAt == null } ?: rows.firstOrNull()
                     sosStatus.text =
                         when {
-                            relevant == null -> notice ?: "SOS · No saved event"
+                            relevant == null -> "SOS · No saved event"
                             pending > 0 -> "SOS Pending · $pending awaiting Command receipt"
                             else -> "SOS Received · Operator acknowledgement on Command"
                         }
-                    if (
-                        notice != null &&
-                            (notice.contains("saving", ignoreCase = true) ||
-                                notice.contains("failed", ignoreCase = true))
-                    )
-                        sosStatus.text = "$notice\n${sosStatus.text}"
+                    // A latest save failure or debounce result must not be hidden
+                    // merely because an older SOS is still queued or received.
+                    if (notice != null) sosStatus.text = "$notice\n${sosStatus.text}"
                     sosDetails.text = buildString {
                         notice?.let { appendLine(it) }
                         if (rows.isEmpty()) appendLine("SOS: no saved event")
@@ -319,11 +392,13 @@ class MainActivity : Activity() {
                 .collect {}
         }
         content = pages.getValue("Diagnostics")
+        content = group("Advanced technical evidence", false)
         status = text("Loading saved settings…")
         content = pages.getValue("Tracking")
         button("Check setup / permissions") { navigate("Settings") }
         content = pages.getValue("Settings")
-        text("Field readiness", 20f)
+        val fieldSettings = group("Permissions and battery readiness", false)
+        content = fieldSettings
         readiness = text("Checking field setup…")
         locationAction =
             button("Allow precise location") {
@@ -378,14 +453,22 @@ class MainActivity : Activity() {
                 )
             }
         content = pages.getValue("Settings")
-        text("Party", 20f)
+        val connectionSettings = group("Party and Command")
+        content = connectionSettings
+        text("Party identity", 18f)
         partyId = edit("Party ID")
         partyName = edit("Party name")
-        text("Command and reporting", 20f)
+        text("Command connection", 18f)
         endpoint = edit("Command base URL (local Wi-Fi)")
         endpoint.hint = "http://192.168.1.10:8080"
         interval = edit("Local reporting interval (seconds, 5–86400 in steps of 5)", true)
         button("Save settings") { save() }
+        settingsFeedback =
+            text("Changes apply only when saved. Command overrides remain authoritative.", 14f)
+        val settingsPage = pages.getValue("Settings")
+        val connectionCard = connectionSettings.parent as View
+        settingsPage.removeView(connectionCard)
+        settingsPage.addView(connectionCard, 2)
         content = pages.getValue("Diagnostics")
         val diagnosticTools =
             LinearLayout(this).apply {
@@ -404,18 +487,19 @@ class MainActivity : Activity() {
                 scroll.post { scroll.smoothScrollTo(0, physicalButtonPanel.bottom) }
             }
         }
-        physicalButtonPanel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(8), dp(12), dp(12))
-            visibility = View.GONE
-            background =
-                android.graphics.drawable.GradientDrawable().apply {
-                    setColor(0xffffffff.toInt())
-                    cornerRadius = dp(12).toFloat()
-                    setStroke(dp(1), 0xffdce3df.toInt())
-                }
-            content.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
-        }
+        physicalButtonPanel =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(12), dp(8), dp(12), dp(12))
+                visibility = View.GONE
+                background =
+                    android.graphics.drawable.GradientDrawable().apply {
+                        setColor(0xffffffff.toInt())
+                        cornerRadius = dp(12).toFloat()
+                        setStroke(dp(1), 0xffdce3df.toInt())
+                    }
+                content.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+            }
         TextView(this).apply {
             text = "Physical Button Test"
             textSize = 20f
@@ -423,22 +507,26 @@ class MainActivity : Activity() {
             contentDescription = "Physical Button Test details"
             physicalButtonPanel.addView(this)
         }
-        physicalButtonStatus = TextView(this).apply {
-            textSize = 16f
-            setPadding(0, dp(8), 0, dp(8))
-            accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
-            physicalButtonPanel.addView(this)
-        }
+        physicalButtonStatus =
+            TextView(this).apply {
+                textSize = 16f
+                setTextColor(0xff24343b.toInt())
+                setPadding(0, dp(8), 0, dp(8))
+                accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+                physicalButtonPanel.addView(this)
+            }
         TextView(this).apply {
             text =
                 "Only supported keys delivered to this visible Activity are recorded. Background / locked-screen / screen-off volume-button detection: Mechanism unavailable. No MediaSession or background listener is used."
             textSize = 14f
+            setTextColor(0xff24343b.toInt())
             physicalButtonPanel.addView(this)
         }
         TextView(this).apply {
             text =
                 "While this test is active, the triple-Volume-Up SOS trigger is paused. Android volume handling and previously saved SOS delivery continue. This test never creates an SOS."
             textSize = 14f
+            setTextColor(0xff24343b.toInt())
             physicalButtonPanel.addView(this)
         }
         physicalButtonStart =
@@ -457,17 +545,19 @@ class MainActivity : Activity() {
             app.physicalButtonTest.clearResults()
             refreshPhysicalButtonHistory()
         }
-        physicalButtonSummary = TextView(this).apply {
-            textSize = 14f
-            setPadding(0, dp(8), 0, dp(8))
-            physicalButtonPanel.addView(this)
-        }
+        physicalButtonSummary =
+            TextView(this).apply {
+                textSize = 14f
+                setTextColor(0xff24343b.toInt())
+                setPadding(0, dp(8), 0, dp(8))
+                physicalButtonPanel.addView(this)
+            }
         ScrollView(this).apply {
             isFillViewport = false
             addView(
                 TextView(this@MainActivity).apply {
                     textSize = 14f
-                    typeface = android.graphics.Typeface.MONOSPACE
+                    setTextColor(0xff24343b.toInt())
                     setTextIsSelectable(true)
                     physicalButtonEvents = this
                 },
@@ -496,7 +586,7 @@ class MainActivity : Activity() {
                 }
                 .show()
         }
-        content = pages.getValue("Settings")
+        content = connectionSettings
         button("Enroll with a different Command") {
             AlertDialog.Builder(this)
                 .setTitle("Change Command enrollment?")
@@ -529,6 +619,10 @@ class MainActivity : Activity() {
         }
         exportStatus =
             text("Incident evidence is saved automatically. Export does not stop tracking.")
+        pages.getValue("Diagnostics").apply {
+            removeView(diagnosticTools)
+            addView(diagnosticTools, 3)
+        }
         content = pages.getValue("Tracking")
         startButton =
             button("Loading settings…") {
@@ -578,11 +672,15 @@ class MainActivity : Activity() {
                             when {
                                 op.starting -> "STARTING"
                                 op.stopping -> "STOPPING"
-                                op.error != null || state.operationalError != null -> "ERROR"
                                 op.tracking -> "TRACKING"
+                                op.error != null || state.operationalError != null ->
+                                    "NEEDS ATTENTION"
                                 else -> "STOPPED"
                             }
                         trackingError.text = op.error ?: state.operationalError ?: ""
+                        trackingError.setTextColor(
+                            if (op.tracking) 0xff80590c.toInt() else 0xffa51621.toInt()
+                        )
                         trackingError.visibility =
                             if (trackingError.text.isEmpty()) View.GONE else View.VISIBLE
                         gnssSummary.text =
@@ -617,6 +715,21 @@ class MainActivity : Activity() {
                                 }
                         batterySummary.text =
                             "Battery · ${op.health.battery_percent?.let { "$it%" } ?: "Unavailable"}${if (op.health.charging == true) " · Charging" else ""}"
+                        diagnosticsSummary.text = buildString {
+                            appendLine("Tracking · ${if (op.tracking) "Active" else "Stopped"}")
+                            appendLine(op.fixDescription().replace("GPS:", "GNSS:"))
+                            appendLine("Command · $connection")
+                            appendLine(
+                                "Local evidence · ${state.observationSequence} observations recorded"
+                            )
+                            appendLine("Pending delivery · ${queues.gnss} GNSS · ${queues.sos} SOS")
+                            appendLine(
+                                "Persistence · ${app.observationPersistence.state.awaitingCommit} awaiting commit · ${app.observationPersistence.state.writeFailures} write failures"
+                            )
+                            append(
+                                "Export includes the complete technical journal and physical-button report."
+                            )
+                        }
                         status.text = buildString {
                             appendLine("Device: ${state.deviceId}")
                             appendLine(
@@ -738,9 +851,12 @@ class MainActivity : Activity() {
                     if (start) {
                         savingStart = false
                         attemptStart()
-                    } else
+                    } else {
+                        settingsFeedback.text =
+                            "Settings saved · ${seconds} s local reporting. Command overrides remain applied."
                         Toast.makeText(this@MainActivity, "Settings saved", Toast.LENGTH_SHORT)
                             .show()
+                    }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -750,6 +866,8 @@ class MainActivity : Activity() {
                         app.operational.update { it.copy(starting = false, error = e.message) }
                         updateStartControls()
                     }
+                    settingsFeedback.text =
+                        "Settings not saved · ${e.message ?: "Check the entered values"}"
                     if (!resumed) return@launch
                     AlertDialog.Builder(this@MainActivity)
                         .setTitle("Check settings")
@@ -921,6 +1039,7 @@ class MainActivity : Activity() {
     }
 
     override fun onPause() {
+        sosHold.cancel()
         app.physicalButtonTest.activityPaused()
         resumed = false
         volumePattern.reset()
@@ -1014,7 +1133,9 @@ class MainActivity : Activity() {
                 runCatching { getSystemService(android.os.PowerManager::class.java).isInteractive }
                     .getOrNull()
             val locked =
-                runCatching { getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked }
+                runCatching {
+                        getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked
+                    }
                     .getOrNull()
             app.physicalButtonTest.observeActivityKey(
                 event.keyCode,
@@ -1063,10 +1184,11 @@ class MainActivity : Activity() {
         val localTime = { value: String? ->
             value?.let {
                 runCatching {
-                    java.time.Instant.parse(it)
-                        .atZone(java.time.ZoneId.systemDefault())
-                        .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"))
-                }.getOrDefault("unavailable")
+                        java.time.Instant.parse(it)
+                            .atZone(java.time.ZoneId.systemDefault())
+                            .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"))
+                    }
+                    .getOrDefault("unavailable")
             } ?: "None"
         }
         physicalButtonSummary.text = buildString {
@@ -1077,49 +1199,57 @@ class MainActivity : Activity() {
             )
             appendLine("Count of actual key presses: ${history.totalPresses}")
             appendLine("Event source: Activity")
-            appendLine("Device: ${history.manufacturer ?: "unavailable"} ${history.model ?: "unavailable"}")
-            appendLine("Android: ${history.androidVersion ?: "unavailable"} (API ${history.androidApi ?: "unavailable"})")
+            appendLine(
+                "Device: ${history.manufacturer ?: "unavailable"} ${history.model ?: "unavailable"}"
+            )
+            appendLine(
+                "Android: ${history.androidVersion ?: "unavailable"} (API ${history.androidApi ?: "unavailable"})"
+            )
             appendLine("Activity result: ${history.activityResult}")
             appendLine("Activity test: ${history.activityReason}")
             append(PhysicalButtonTestController.LOCKED_SCREEN_STATUS)
         }
-        physicalButtonEvents.text =
-            buildString {
-                for (event in history.retainedEvents) {
-                    append(localTime(event.at))
-                    append("  ${event.evidence.keyName} ${event.evidence.action}  Activity")
-                    if (event.evidence.repeatCount > 0) append(" repeat=${event.evidence.repeatCount}")
-                    append("  screen=")
-                    append(
-                        when {
-                            event.evidence.screenInteractive == false -> "off"
-                            event.evidence.screenInteractive == true -> "on"
-                            else -> "unknown"
-                        }
-                    )
-                    append(" locked=${event.evidence.keyguardLocked ?: "unknown"}")
-                    appendLine()
-                }
-                if (history.olderEventsOmitted)
-                    appendLine("Showing the latest ${PhysicalButtonTestController.MAX_DISPLAY_EVENTS} events.")
-                if (isEmpty()) append("No key events recorded yet.")
+        physicalButtonEvents.text = buildString {
+            for (event in history.retainedEvents) {
+                append(localTime(event.at))
+                append("  ${event.evidence.keyName} ${event.evidence.action}  Activity")
+                if (event.evidence.repeatCount > 0) append(" repeat=${event.evidence.repeatCount}")
+                append("  screen=")
+                append(
+                    when {
+                        event.evidence.screenInteractive == false -> "off"
+                        event.evidence.screenInteractive == true -> "on"
+                        else -> "unknown"
+                    }
+                )
+                append(" locked=${event.evidence.keyguardLocked ?: "unknown"}")
+                appendLine()
             }
+            if (history.olderEventsOmitted)
+                appendLine(
+                    "Showing the latest ${PhysicalButtonTestController.MAX_DISPLAY_EVENTS} events."
+                )
+            if (isEmpty()) append("No key events recorded yet.")
+        }
     }
 
     private fun refreshPhysicalButtonHistory() {
-        if (!::physicalButtonPanel.isInitialized || physicalButtonPanel.visibility != View.VISIBLE) return
+        if (!::physicalButtonPanel.isInitialized || physicalButtonPanel.visibility != View.VISIBLE)
+            return
         renderPhysicalButtonStatus()
         schedulePhysicalButtonRefresh()
     }
 
     private fun schedulePhysicalButtonRefresh() {
-        if (!::physicalButtonPanel.isInitialized || physicalButtonPanel.visibility != View.VISIBLE) return
+        if (!::physicalButtonPanel.isInitialized || physicalButtonPanel.visibility != View.VISIBLE)
+            return
         physicalButtonRefresh?.cancel()
         physicalButtonRefresh =
             scope.launch {
                 delay(125)
                 try {
-                    val history = withContext(Dispatchers.IO) { app.recorder.physicalButtonHistory() }
+                    val history =
+                        withContext(Dispatchers.IO) { app.recorder.physicalButtonHistory() }
                     renderPhysicalButtonStatus(history)
                 } catch (e: CancellationException) {
                     throw e
@@ -1131,6 +1261,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        if (::sosHold.isInitialized) sosHold.cancel()
         if (pendingStart && (!isChangingConfigurations || savingStart))
             app.operational.update { it.copy(starting = false) }
         physicalButtonRefresh?.cancel()

@@ -120,11 +120,19 @@ Command-owned; SOS operation is described below.
 ## SOS operation and limitations (Issue #5)
 
 Save the Party/Command settings before field use. **Hold “SOS — hold to activate”**
-briefly (Android's normal long-press threshold). A tap explains how to activate;
+continuously for **1.2 seconds**. A visible progress bar and percentage show the
+hold; completion gives haptic feedback. A tap explains how to activate;
 there is no additional confirmation dialog. Accessibility users can invoke the
 button's long-click action. Immediate “trigger detected” changes to “saved on phone”
 only after durable Room save. A storage failure explicitly says **NOT SAVED**.
 The display retains the latest five event statuses, with older events still stored.
+
+Releasing early, moving outside the button plus Android's touch slop, adding/losing
+a pointer, cancellation, navigating away or pausing the Activity cancels an
+incomplete hold. Small motion inside the button is tolerated. A completed gesture
+invokes the existing durable SOS engine once; its three-second debounce is unchanged.
+The adapter does not create a second sender, service or event store. Device-specific
+touch/haptic reliability still requires physical acceptance.
 
 “Received by Command” requires a valid matching transport ACK. “Retrying” or
 “waiting for Wi-Fi” is not success. Operator acknowledgement is **Command-only**;

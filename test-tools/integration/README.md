@@ -1,5 +1,16 @@
 # Android → Command integration
 
+Corrective UI acceptance also runs `sos-alarm-test.cjs`, `sos-dashboard.cjs`,
+`ui-dashboard.cjs` and `map-test.cjs`. The browser uses the real embedded Command
+HTTP/state and SQLite paths. Only public map-provider search/preview boundaries
+are substituted with explicitly synthetic GeoJSON fixtures in the UI test;
+`TestOfflineMapProviderAndLimits` separately exercises real HTTP provider decoding,
+query bounds and cooldowns against a local fixture server. Browser checks include
+map save/reload/Command restart without provider requests, three SOS events,
+partial/final ACK, dismissal safety, credible course arrows and viewport-bound
+1280×720/800, 1440×900 and narrow layouts. These are not live OSM or speaker/device
+evidence; see `docs/ui-acceptance.md` for external and hardware acceptance gaps.
+
 From the repository root, with Go 1.24.7+, JDK 17+ and Android SDK 35/build tools
 35.0.0 installed (`ANDROID_HOME` set):
 

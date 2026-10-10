@@ -253,7 +253,7 @@ build, so its workflow commit does not become the APK's reported source revision
 ## SOS alerts and human acknowledgement
 
 SOS reception works with Recording stopped, active, resumed or cleared. The persistent
-**SOS emergencies** panel identifies the Device/Party and specific event, original
+**SOS emergencies** drawer (header SOS counter) identifies the Device/Party and specific event, original
 activation time, first Command receipt, location and accuracy when supplied, GNSS
 status and freshness at activation. Coordinates are an event observation, never a
 promise of a current position. Missing, stale/last-known and clock-anomalous observations
@@ -276,10 +276,48 @@ Command**, and does not display a human acknowledgement it has not received.
 Choose **Enable / test audible SOS alert**, then check speaker volume. Browser
 permissions may block playback until a user gesture, after suspension or on reload;
 the panel explicitly shows blocked/unavailable audio. When enabled, a short audible
-cue repeats every ten seconds while an event is unacknowledged. Visible alerts
+cue repeats every **one second** from one shared scheduler while any event is
+unacknowledged. Multiple events do not create overlapping loops. Dismissing the
+arrival notice, closing a drawer, filtering history and acknowledging only some
+events do not silence remaining emergencies. The final durable operator ACK stops
+the tone/timer immediately after the updated state is received. Refresh/restart
+restores the pending condition from Command, but browser audio may need enabling again. Visible alerts
 remain authoritative, including when the browser/network is unavailable. No internet
 or external audio asset is used. Use keyboard Tab/Enter for each event's labelled
 acknowledgement button; polling preserves that button and its captured identity.
+
+**Events** opens a separate history drawer containing all retained SOS events,
+including acknowledged events, and the latest 500 entries of the existing operation/
+receipt journal. Expand an event for original occurrence, first receipt and operator
+ACK details; full retained diagnostic evidence remains available through export.
+**Locate event observation** focuses the event coordinates, not an inferred live
+location. Arrival-notice dismissal never acknowledges an event.
+
+### Offline map preparation and library
+
+Map & layers offers exactly Blank canvas and Offline geographic map. Import
+validated RFC 7946 WGS84 GeoJSON (20 MB / 100,000 coordinates), or expand **Download
+an offline map** while online: search a place with Nominatim or enter a WGS84 center,
+choose 500 × 500 m (default), 1 × 1 km, or bounded custom 100–2000 m dimensions,
+Preview features/size, then **Download for Offline Use**. The preview fetches OSM
+ways from Overpass, not tiles: roads/paths, buildings, waterways, natural features
+and land use where available. Whole intersecting ways may extend beyond the
+requested rectangle. Multipolygon relations and raster/GeoTIFF are explicitly
+unsupported; use robust GeoJSON import for those vector features. Attribution is
+retained; OSM data is © OpenStreetMap contributors, ODbL. Search is user-triggered,
+limited to five results and at least one second between requests. Area preparation
+has a ten-second cooldown, a 25-second provider query timeout and 20 MB response cap.
+Provider failures leave saved maps intact. No public tile bulk download is used.
+
+Imported/downloaded maps share an additive `offline_maps` table in the existing
+Command SQLite file (64 maps / 256 MB maximum, no automatic deletion). Saved maps
+can be selected and exported as GeoJSON, survive Command restart and need no
+internet to display. Browser selection/mode preferences are presentation-only.
+The same GeoMap WGS84/Web Mercator renderer serves both modes; map operations do
+not modify observations, live/SOS coordinates, qualified distances or Recording.
+Blank canvas remains available on invalid/missing maps. Direction arrows use only
+fresh credible existing bearing/speed (≥0.5 m/s); stationary/unknown/stale fixes
+remain neutral markers, never history-derived headings.
 
 ### SOS field-report interpretation
 
