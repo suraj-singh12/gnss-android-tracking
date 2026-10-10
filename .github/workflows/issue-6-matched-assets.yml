@@ -80,6 +80,9 @@ jobs:
             go version -m "$binary" | grep -F 'vcs.modified=false'
           done
           cp android/app/build/outputs/apk/debug/app-debug.apk "$ASSET_DIR/"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$ASSET_DIR/app-debug.apk" | tee "$ASSET_DIR/android-package.txt"
+          grep -F "package: name='org.gnss.tracking'" "$ASSET_DIR/android-package.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$ASSET_DIR/app-debug.apk" | tee "$ASSET_DIR/android-signing.txt"
           cp docs/ui-acceptance.md "$ASSET_DIR/SETUP.md"
           python3 - <<'PY'
           import hashlib,json,os,pathlib,zipfile
@@ -93,6 +96,7 @@ jobs:
           (root/'SHA256SUMS').write_text(''.join(f"{a['sha256']}  {n}\n" for n,a in assets.items()))
           print(json.dumps(manifest,indent=2))
           PY
+          cat "$ASSET_DIR/SHA256SUMS"
       - uses: actions/upload-artifact@v4
         with:
           name: gnss-issue6-matched-${{ github.sha }}
