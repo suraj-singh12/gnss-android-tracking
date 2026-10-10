@@ -1,0 +1,117 @@
+name: Android Physical Button Test APK
+on:
+  push:
+    branches: [experiment/android-physical-button-detection]
+  workflow_dispatch:
+concurrency:
+  group: physical-button-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  validate-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+          cache-dependency-path: android/**/*.gradle*
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.7"
+          cache-dependency-path: command/go.sum
+      - name: Verify isolated source ancestry
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git merge-base --is-ancestor b23b5f58845c896e7fb2c5800e577202667c1e3f HEAD
+          test -z "$(git status --porcelain)"
+      - name: Android regression suite, lint and APK builds
+        working-directory: android
+        run: |
+          ./gradlew testStandardDebugUnitTest testButtonTestDebugUnitTest \
+            lintStandardDebug lintButtonTestDebug \
+            assembleStandardDebug assembleButtonTestDebug --console=plain
+      - name: Go regression tests and static checks
+        run: |
+          (cd command && go test -race ./... && go vet ./...)
+          (cd test-tools && go test -race ./... && go vet ./...)
+      - name: Production Room and Sender to Command integration
+        run: test-tools/integration/run.sh --console=plain
+      - name: Verify APK source and make field-test packet
+        env:
+          ASSET_DIR: ${{ runner.temp }}/physical-button-test
+        run: |
+          mkdir -p "$ASSET_DIR"
+          cp android/app/build/outputs/apk/buttonTest/debug/app-buttonTest-debug.apk "$ASSET_DIR/gnss-physical-button-test-debug.apk"
+          cat > "$ASSET_DIR/INSTALL.txt" <<'EOF'
+          GNSS Physical Button Test — Samsung field APK
+
+          This is a debug-signed, test-only APK. Its application ID is
+          org.gnss.tracking.buttontest, so it installs beside the normal GNSS app
+          and uses a separate database. Do not use it for operational tracking.
+
+          Install with Android SDK platform-tools (no Android Studio or Gradle):
+            adb install -t gnss-physical-button-test-debug.apk
+
+          Or copy the APK to the Samsung phone, open it in Files, and approve
+          “Install unknown apps” for that file manager when Android asks. Enable
+          Developer options → USB debugging only if using adb.
+
+          Open GNSS Physical Button Test → Diagnostics → Physical Button Test.
+          Run the Samsung checklist in android/DEVICE-ACCEPTANCE.md. Start Test
+          before visible-volume checks; Stop Test afterward. Background and
+          screen-off detection are unavailable in this experiment. Export
+          Diagnostics to save physical-button-report.json.
+
+          This package contains no production signing key and is not a release.
+          Keep the exact source revision and SHA256SUMS with all field evidence.
+          EOF
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, zipfile
+          root = pathlib.Path(os.environ['ASSET_DIR'])
+          sha = os.environ['GITHUB_SHA']
+          apk = root / 'gnss-physical-button-test-debug.apk'
+          with zipfile.ZipFile(apk) as archive:
+              dex = b'\n'.join(archive.read(name) for name in archive.namelist() if name.endswith('.dex'))
+          assert sha.encode() in dex, 'APK does not contain the expected BuildConfig source revision'
+          files = ['gnss-physical-button-test-debug.apk', 'INSTALL.txt']
+          manifest = {
+              'source_revision': sha,
+              'base_revision': 'b23b5f58845c896e7fb2c5800e577202667c1e3f',
+              'application_id': 'org.gnss.tracking.buttontest',
+              'android_min_sdk': 26,
+              'android_target_sdk': 35,
+              'workflow_run_url': f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+              'assets': {name: {
+                  'bytes': (root / name).stat().st_size,
+                  'sha256': hashlib.sha256((root / name).read_bytes()).hexdigest(),
+              } for name in files},
+          }
+          (root / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          (root / 'SHA256SUMS').write_text(''.join(f"{item['sha256']}  {name}\n" for name, item in manifest['assets'].items()))
+          print(json.dumps(manifest, indent=2))
+          PY
+      - id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnss-physical-button-test-${{ github.sha }}
+          path: ${{ runner.temp }}/physical-button-test
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish run and artifact links
+        env:
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        run: |
+          echo "Workflow run: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> "$GITHUB_STEP_SUMMARY"
+          echo "APK artifact: $ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "Source SHA: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"

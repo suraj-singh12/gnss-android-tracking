@@ -23,6 +23,16 @@ android {
         }.getOrNull()?.takeIf { it.matches(Regex("[0-9a-f]{40}")) } ?: "unknown"
         buildConfigField("String", "SOURCE_REVISION", "\"$revision\"")
     }
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("standard") {
+            dimension = "distribution"
+        }
+        create("buttonTest") {
+            dimension = "distribution"
+            applicationIdSuffix = ".buttontest"
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

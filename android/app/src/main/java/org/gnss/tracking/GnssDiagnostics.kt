@@ -234,6 +234,12 @@ enum class DiagnosticEvent {
     REPORT_ACK_ACCEPTED,
     REPORT_RETRY,
     NETWORK_CHANGED,
+    PHYSICAL_BUTTON_TEST_STARTED,
+    PHYSICAL_BUTTON_TEST_STOPPED,
+    PHYSICAL_BUTTON_TEST_CLEARED,
+    PHYSICAL_BUTTON_ACTIVITY_PAUSED,
+    PHYSICAL_BUTTON_ACTIVITY_RESUMED,
+    PHYSICAL_BUTTON_KEY_EVENT,
 }
 
 data class DiagnosticEntry(
@@ -247,6 +253,7 @@ data class DiagnosticEntry(
     val startReason: ServiceStartReason? = null,
     val sos: SosEvidence? = null,
     val report: ReportEvidence? = null,
+    val physicalButton: PhysicalButtonEvidence? = null,
 )
 
 data class IncidentSummary(
@@ -441,6 +448,72 @@ class DiagnosticJournal(private val directory: File, val limits: Limits = Limits
         if (e.event == DiagnosticEvent.SERVICE_DESTROY) finalizeIncident(false)
         prune()
     }
+
+    @Synchronized
+    fun physicalButtonHistory(): PhysicalButtonHistory {
+        initialize()
+        val events =
+            diagnosticFiles()
+                .filter { it.name.startsWith("timeline-") }
+                .sortedBy { it.name }
+                .flatMap { it.readLines().mapNotNull(::readEntry) }
+                .filter { it.event in physicalButtonEvents }
+        val clearAt = events.indexOfLast { it.event == DiagnosticEvent.PHYSICAL_BUTTON_TEST_CLEARED }
+        val retained = events.drop(clearAt + 1)
+        val starts = retained.withIndex().filter { it.value.event == DiagnosticEvent.PHYSICAL_BUTTON_TEST_STARTED }
+        val start = starts.lastOrNull()
+        val stop = retained.withIndex().lastOrNull {
+            it.value.event == DiagnosticEvent.PHYSICAL_BUTTON_TEST_STOPPED &&
+                (start == null || it.index > start.index)
+        }
+        val testEnd = stop?.index ?: retained.lastIndex
+        val testEvents =
+            if (start == null) emptyList()
+            else retained.subList(start.index + 1, (testEnd + 1).coerceAtLeast(start.index + 1))
+        val keyEvents = testEvents.filter { it.event == DiagnosticEvent.PHYSICAL_BUTTON_KEY_EVENT }
+        val interrupted = testEvents.any { it.event == DiagnosticEvent.PHYSICAL_BUTTON_ACTIVITY_PAUSED }
+        val presses = retained.mapNotNull { it.physicalButton }.count {
+            it.action == PhysicalButtonAction.DOWN && it.repeatCount == 0
+        }.toLong()
+        val allKeys = retained.filter { it.event == DiagnosticEvent.PHYSICAL_BUTTON_KEY_EVENT }
+        val activityResult =
+            when {
+                keyEvents.isNotEmpty() -> "DETECTED"
+                start == null || stop == null -> "INCONCLUSIVE"
+                interrupted -> "INCONCLUSIVE"
+                else -> "NOT_DETECTED"
+            }
+        val reason =
+            when (activityResult) {
+                "DETECTED" -> "At least one supported key event reached Activity.dispatchKeyEvent."
+                "NOT_DETECTED" ->
+                    "No supported event reached the Activity during this completed, uninterrupted foreground test; no physical press is inferred."
+                else ->
+                    "The test has no complete uninterrupted foreground interval, so missing events cannot be classified."
+            }
+        return PhysicalButtonHistory(
+            startedAt = start?.value?.at,
+            stoppedAt = stop?.value?.at,
+            totalPresses = presses,
+            retainedEvents = allKeys.takeLast(PhysicalButtonTestController.MAX_DISPLAY_EVENTS).mapNotNull {
+                entry -> entry.physicalButton?.let { PhysicalButtonLoggedEvent(entry.at, it) }
+            },
+            olderEventsOmitted = allKeys.size > PhysicalButtonTestController.MAX_DISPLAY_EVENTS,
+            activityResult = activityResult,
+            activityReason = reason,
+            activityWasInterrupted = interrupted,
+        )
+    }
+
+    private val physicalButtonEvents =
+        setOf(
+            DiagnosticEvent.PHYSICAL_BUTTON_TEST_STARTED,
+            DiagnosticEvent.PHYSICAL_BUTTON_TEST_STOPPED,
+            DiagnosticEvent.PHYSICAL_BUTTON_TEST_CLEARED,
+            DiagnosticEvent.PHYSICAL_BUTTON_ACTIVITY_PAUSED,
+            DiagnosticEvent.PHYSICAL_BUTTON_ACTIVITY_RESUMED,
+            DiagnosticEvent.PHYSICAL_BUTTON_KEY_EVENT,
+        )
 
     private fun signature(s: GnssDiagnostic) =
         listOf(
@@ -766,6 +839,33 @@ class DiagnosticJournal(private val directory: File, val limits: Limits = Limits
                 "sos-report.json",
                 gson.toJson(sosReport(sosEntries, ioFailures, dropped)).toByteArray(),
             )
+            val buttonHistory = physicalButtonHistory()
+            put(
+                "physical-button-report.json",
+                gson
+                    .toJson(
+                        mapOf(
+                            "schema_version" to 1,
+                            "activity" to buttonHistory,
+                            "background_volume" to
+                                mapOf(
+                                    "result" to "MECHANISM UNAVAILABLE",
+                                    "detail" to PhysicalButtonTestController.BACKGROUND_STATUS,
+                                ),
+                            "screen_off" to
+                                mapOf(
+                                    "result" to "MECHANISM UNAVAILABLE",
+                                    "detail" to PhysicalButtonTestController.BACKGROUND_STATUS,
+                                ),
+                            "media_session" to
+                                mapOf(
+                                    "result" to "MECHANISM UNAVAILABLE",
+                                    "detail" to PhysicalButtonTestController.MEDIA_SESSION_STATUS,
+                                ),
+                        )
+                    )
+                    .toByteArray(),
+            )
             for (f in diagnosticFiles().sortedBy { it.path }) {
                 val bytes =
                     if (f.extension == "jsonl") {
@@ -826,6 +926,10 @@ class DiagnosticJournal(private val directory: File, val limits: Limits = Limits
             snapshot = e.snapshot?.let(::safe),
             source = e.source?.let(::safeSource),
             sos = e.sos?.let(::safeSos),
+            physicalButton =
+                if (e.event == DiagnosticEvent.PHYSICAL_BUTTON_KEY_EVENT)
+                    e.physicalButton?.let(::safePhysicalButton)
+                else null,
             report =
                 e.report
                     ?.takeIf {
@@ -847,6 +951,14 @@ class DiagnosticJournal(private val directory: File, val limits: Limits = Limits
             count = s.count?.takeIf { it >= 0 },
             competingReports = s.competingReports?.takeIf { it >= 0 },
         )
+
+    private fun safePhysicalButton(e: PhysicalButtonEvidence): PhysicalButtonEvidence? =
+        e.takeIf {
+            physicalButtonKeyName(it.keyCode) == it.keyName &&
+                it.action in setOf(PhysicalButtonAction.DOWN, PhysicalButtonAction.UP) &&
+                it.source == PhysicalButtonSource.ACTIVITY &&
+                it.repeatCount in 0..PhysicalButtonTestController.MAX_KEY_REPEATS
+        }
 
     private fun timestamp(s: String?) =
         runCatching { java.time.Instant.parse(s).toString() }.getOrDefault("unavailable")
@@ -911,6 +1023,10 @@ class DiagnosticRecorder(
         val done: kotlinx.coroutines.CompletableDeferred<File>,
     )
 
+    private data class PhysicalButtonQuery(
+        val done: kotlinx.coroutines.CompletableDeferred<PhysicalButtonHistory>
+    )
+
     private val processGeneration = java.util.UUID.randomUUID().toString()
     private val worker = scope.launchWorker()
 
@@ -931,6 +1047,31 @@ class DiagnosticRecorder(
                 when (m) {
                     is GnssDiagnostic -> journal.append(m)
                     is DiagnosticEntry -> journal.event(m)
+                    is PhysicalButtonQuery -> {
+                        try {
+                            var history =
+                                journal.physicalButtonHistory().copy(
+                                    writerIoFailures = ioFailures,
+                                    diagnosticQueueDroppedTotal = totalLost.get(),
+                                )
+                            if (ioFailures > 0 || totalLost.get() > 0)
+                                history =
+                                    history.copy(
+                                        activityResult =
+                                            if (history.activityResult == "NOT_DETECTED")
+                                                "INCONCLUSIVE"
+                                            else history.activityResult,
+                                        activityReason =
+                                            if (history.activityResult == "NOT_DETECTED")
+                                                "Some diagnostic records were lost; absence of a key event cannot be classified."
+                                            else history.activityReason,
+                                    )
+                            m.done.complete(history)
+                        } catch (e: Exception) {
+                            m.done.completeExceptionally(e)
+                            throw e
+                        }
+                    }
                     is Export -> {
                         try {
                             m.file.outputStream().use {
@@ -995,6 +1136,38 @@ class DiagnosticRecorder(
             lost.incrementAndGet()
             totalLost.incrementAndGet()
         }
+    }
+
+    fun physicalButton(event: DiagnosticEvent, value: PhysicalButtonEvidence? = null) {
+        require(
+            event in
+                setOf(
+                    DiagnosticEvent.PHYSICAL_BUTTON_TEST_STARTED,
+                    DiagnosticEvent.PHYSICAL_BUTTON_TEST_STOPPED,
+                    DiagnosticEvent.PHYSICAL_BUTTON_TEST_CLEARED,
+                    DiagnosticEvent.PHYSICAL_BUTTON_ACTIVITY_PAUSED,
+                    DiagnosticEvent.PHYSICAL_BUTTON_ACTIVITY_RESUMED,
+                    DiagnosticEvent.PHYSICAL_BUTTON_KEY_EVENT,
+                )
+        )
+        val entry =
+            DiagnosticEntry(
+                event,
+                utc(clock.wallMillis()),
+                clock.elapsedMillis(),
+                processGeneration,
+                physicalButton = value,
+            )
+        if (!messages.trySend(entry).isSuccess) {
+            lost.incrementAndGet()
+            totalLost.incrementAndGet()
+        }
+    }
+
+    suspend fun physicalButtonHistory(): PhysicalButtonHistory {
+        val done = kotlinx.coroutines.CompletableDeferred<PhysicalButtonHistory>()
+        messages.send(PhysicalButtonQuery(done))
+        return done.await()
     }
 
     suspend fun export(file: File, build: DiagnosticBuild): File =
