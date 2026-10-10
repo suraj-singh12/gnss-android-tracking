@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.Intent
 import android.location.LocationManager
 import android.os.Looper
+import android.os.SystemClock
+import android.view.MotionEvent
 import android.view.ViewGroup
 import android.widget.Button
 import androidx.test.core.app.ApplicationProvider
@@ -14,6 +16,7 @@ import org.junit.runner.RunWith
 import org.robolectric.*
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.LooperMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], application = TrackingApp::class)
@@ -67,6 +70,49 @@ class SosActivityTest {
         assertEquals("sos", Protocol.decodeMessage(row.json).type)
         assertFalse(app.activityVisible)
         assertNull(row.deliveredAt)
+    }
+
+    @Test
+    @LooperMode(LooperMode.Mode.PAUSED)
+    fun touchHoldSavesOnceOfflineButEarlyReleaseAndActivityPauseSaveNothing() = runBlocking {
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            val button =
+                buttons(activity.get().window.decorView as ViewGroup).single {
+                    it.text.startsWith("SOS —")
+                }
+            button.layout(0, 0, 240, 64)
+            fun touch(action: Int) {
+                val e = MotionEvent.obtain(0, SystemClock.uptimeMillis(), action, 120f, 32f, 0)
+                button.dispatchTouchEvent(e)
+                e.recycle()
+            }
+            fun advance(ms: Long) =
+                shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(ms))
+            touch(MotionEvent.ACTION_DOWN)
+            advance(600)
+            activity.pause().stop()
+            advance(2000)
+            assertTrue(app.repository.dao.sosHistory().isEmpty())
+            activity.start().resume()
+            touch(MotionEvent.ACTION_DOWN)
+            advance(600)
+            touch(MotionEvent.ACTION_UP)
+            advance(1000)
+            assertTrue(app.repository.dao.sosHistory().isEmpty())
+            touch(MotionEvent.ACTION_DOWN)
+            advance(1200)
+            advance(2400)
+            touch(MotionEvent.ACTION_UP)
+            val row = saved()
+            assertEquals(1, app.repository.dao.sosHistory().size)
+            assertNull(row.deliveredAt)
+            val message = Protocol.decodeMessage(row.json)
+            assertEquals("sos", message.type)
+            assertEquals(row.messageId, message.sos!!.event_id)
+        } finally {
+            activity.pause().stop().destroy()
+        }
     }
 
     @Test

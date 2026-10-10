@@ -11,7 +11,7 @@
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
     <!-- Dynamic LAN hosts cannot be enumerated in an XML domain allowlist. The
          only transport validates the configured URL and disables redirects. -->
-    <application android:name=".TrackingApp" android:label="GNSS Tracking"
+    <application android:name=".TrackingApp" android:label="GNSS Tracker"
         android:theme="@style/AppTheme" android:allowBackup="false"
         android:fullBackupContent="@xml/backup_rules" android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@drawable/ic_device"

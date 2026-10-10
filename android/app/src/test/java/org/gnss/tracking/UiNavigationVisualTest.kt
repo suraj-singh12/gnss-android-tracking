@@ -49,6 +49,8 @@ class UiNavigationVisualTest {
         val output = System.getenv("GNSS_SCREENSHOT_DIR")?.let { File(it).apply { mkdirs() } }
         for ((width, height, font) in
             listOf(Triple(360, 800, 1f), Triple(480, 960, 1f), Triple(360, 800, 1.5f))) {
+            app.physicalButtonTest.clearResults()
+            withContext(Dispatchers.IO) { app.recorder.physicalButtonHistory() }
             val config =
                 android.content.res.Configuration(app.resources.configuration).apply {
                     fontScale = font
@@ -63,7 +65,7 @@ class UiNavigationVisualTest {
                 val h = (height * density).toInt()
                 suspend fun settle() {
                     repeat(20) {
-                        shadowOf(Looper.getMainLooper()).idle()
+                        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(10))
                         delay(10)
                     }
                     root.measure(
@@ -103,6 +105,15 @@ class UiNavigationVisualTest {
                         image.compress(Bitmap.CompressFormat.PNG, 100, it)
                     }
                     image.recycle()
+                }
+                suspend fun reveal(view: View) {
+                    val scroller =
+                        descendants(root).filterIsInstance<android.widget.ScrollView>().first()
+                    val body = scroller.getChildAt(0) as ViewGroup
+                    val bounds = android.graphics.Rect(0, 0, view.width, view.height)
+                    body.offsetDescendantRectToMyCoords(view, bounds)
+                    scroller.scrollTo(0, bounds.top)
+                    settle()
                 }
                 awaitInitialized(activity.get())
                 for ((name, op) in
@@ -145,6 +156,57 @@ class UiNavigationVisualTest {
                         assertTrue(visibleText.contains("Offline"))
                     }
                 }
+                app.operational.value =
+                    Operational(
+                        tracking = true,
+                        gnss = "fix",
+                        accuracy = 3.0,
+                        ageMillis = 1000,
+                        error = "Command unavailable; retained for retry",
+                        link = "Wi-Fi available",
+                        health = Health(wifi_connected = true),
+                    )
+                settle()
+                assertTrue(
+                    descendants(root).filterIsInstance<TextView>().any {
+                        it.isShown && it.text == "TRACKING"
+                    }
+                )
+                capture("tracking-command-unavailable")
+                val hold =
+                    descendants(root).filterIsInstance<Button>().single {
+                        it.text == "SOS — hold to activate"
+                    }
+                hold.layout(0, 0, w, 64)
+                val touch =
+                    android.view.MotionEvent.obtain(
+                        0,
+                        android.os.SystemClock.uptimeMillis(),
+                        android.view.MotionEvent.ACTION_DOWN,
+                        80f,
+                        30f,
+                        0,
+                    )
+                hold.dispatchTouchEvent(touch)
+                touch.recycle()
+                shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(600))
+                root.measure(
+                    View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY),
+                )
+                root.layout(0, 0, w, h)
+                capture("sos-hold-progress")
+                val cancel =
+                    android.view.MotionEvent.obtain(
+                        0,
+                        android.os.SystemClock.uptimeMillis(),
+                        android.view.MotionEvent.ACTION_CANCEL,
+                        80f,
+                        30f,
+                        0,
+                    )
+                hold.dispatchTouchEvent(cancel)
+                cancel.recycle()
                 withContext(Dispatchers.IO) {
                     app.repository.snapshot(
                         System.currentTimeMillis(),
@@ -185,7 +247,11 @@ class UiNavigationVisualTest {
                                 .filter { it.isShown }
                                 .map { it.text.toString() }
                         assertEquals(
-                            listOf("Physical Button Test", "Retry saved messages", "Export diagnostics"),
+                            listOf(
+                                "Physical Button Test",
+                                "Retry saved messages",
+                                "Export diagnostics",
+                            ),
                             actions,
                         )
                         descendants(tools)
@@ -201,6 +267,106 @@ class UiNavigationVisualTest {
                                 .joinToString("\n") { it.text }
                         assertTrue(diagnosticText.contains("Test status: INACTIVE"))
                         assertTrue(diagnosticText.contains("Mechanism unavailable"))
+                        descendants(tools)
+                            .filterIsInstance<Button>()
+                            .single { it.text == "Start Test" }
+                            .performClick()
+                        settle()
+                        capture("diagnostics-listening")
+                        val now = android.os.SystemClock.uptimeMillis()
+                        activity
+                            .get()
+                            .dispatchKeyEvent(
+                                android.view.KeyEvent(
+                                    now,
+                                    now,
+                                    android.view.KeyEvent.ACTION_DOWN,
+                                    android.view.KeyEvent.KEYCODE_VOLUME_UP,
+                                    0,
+                                )
+                            )
+                        activity
+                            .get()
+                            .dispatchKeyEvent(
+                                android.view.KeyEvent(
+                                    now,
+                                    now + 10,
+                                    android.view.KeyEvent.ACTION_UP,
+                                    android.view.KeyEvent.KEYCODE_VOLUME_UP,
+                                    0,
+                                )
+                            )
+                        settle()
+                        capture("diagnostics-recorded-events")
+                        assertTrue(
+                            descendants(tools).filterIsInstance<TextView>().any {
+                                it.text.contains("Count of actual key presses: 1")
+                            }
+                        )
+                        activity.pause().stop()
+                        activity.start().resume()
+                        settle()
+                        capture("diagnostics-interrupted")
+                        assertFalse(app.physicalButtonTest.listening)
+                        assertTrue(
+                            descendants(tools).filterIsInstance<TextView>().any {
+                                it.text.contains("Test status: INTERRUPTED")
+                            }
+                        )
+                        run {
+                            all.filterIsInstance<Button>()
+                                .single { it.text == "Settings" }
+                                .performClick()
+                            settle()
+                            all.filterIsInstance<Button>()
+                                .single { it.text.startsWith("Permissions and battery readiness") }
+                                .performClick()
+                            settle()
+                            reveal(
+                                all.filterIsInstance<Button>().single {
+                                    it.text.startsWith("Permissions and battery readiness")
+                                }
+                            )
+                            capture("settings-readiness-expanded")
+                            all.filterIsInstance<Button>()
+                                .single { it.text.startsWith("Emergency shortcut") }
+                                .performClick()
+                            settle()
+                            reveal(
+                                all.filterIsInstance<Button>().single {
+                                    it.text.startsWith("Emergency shortcut")
+                                }
+                            )
+                            capture("settings-emergency-expanded")
+                            (root as ViewGroup).let { view ->
+                                descendants(view)
+                                    .filterIsInstance<android.widget.ScrollView>()
+                                    .first()
+                                    .scrollTo(0, 100000)
+                            }
+                            settle()
+                            capture("settings-extended-content")
+                        }
+                        all.filterIsInstance<Button>()
+                            .single { it.text == "Diagnostics" }
+                            .performClick()
+                        settle()
+                        all.filterIsInstance<Button>()
+                            .single { it.text.startsWith("Advanced technical evidence") }
+                            .performClick()
+                        settle()
+                        reveal(
+                            all.filterIsInstance<Button>().single {
+                                it.text.startsWith("Advanced technical evidence")
+                            }
+                        )
+                        capture("diagnostics-advanced")
+                        descendants(root)
+                            .filterIsInstance<android.widget.ScrollView>()
+                            .first()
+                            .scrollTo(0, 100000)
+                        settle()
+                        capture("diagnostics-extended-content")
                     }
                     assertEquals(
                         destination,
