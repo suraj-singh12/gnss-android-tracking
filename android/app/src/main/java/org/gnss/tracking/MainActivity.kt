@@ -324,7 +324,7 @@ class MainActivity : Activity() {
         }
         TextView(this).apply {
             text =
-                "Only keys delivered to this visible Activity are recorded. Background and screen-off key observation is unavailable. No MediaSession is started because it would route media buttons to this app."
+                "Only keys delivered to this visible Activity are recorded. Background, locked-screen, and screen-off observation is unavailable. No MediaSession is started because it would route media buttons to this app."
             textSize = 14f
             physicalButtonPanel.addView(this)
         }
@@ -856,9 +856,12 @@ class MainActivity : Activity() {
             )
             appendLine("Total detected presses: ${history.totalPresses}")
             appendLine("Detection source: Activity")
+            appendLine("Device: ${history.manufacturer ?: "unavailable"} ${history.model ?: "unavailable"}")
+            appendLine("Android: ${history.androidVersion ?: "unavailable"} (API ${history.androidApi ?: "unavailable"})")
             appendLine("Activity result: ${history.activityResult}")
             appendLine("Activity test: ${history.activityReason}")
             appendLine("${PhysicalButtonTestController.BACKGROUND_STATUS}")
+            appendLine(PhysicalButtonTestController.LOCKED_SCREEN_STATUS)
             append(PhysicalButtonTestController.MEDIA_SESSION_STATUS)
         }
         physicalButtonEvents.text =

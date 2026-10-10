@@ -502,8 +502,15 @@ class DiagnosticJournal(private val directory: File, val limits: Limits = Limits
             activityResult = activityResult,
             activityReason = reason,
             activityWasInterrupted = interrupted,
+            manufacturer = safeDeviceValue(Build.MANUFACTURER),
+            model = safeDeviceValue(Build.MODEL),
+            androidVersion = safeDeviceValue(Build.VERSION.RELEASE),
+            androidApi = Build.VERSION.SDK_INT,
         )
     }
+
+    private fun safeDeviceValue(value: String?): String? =
+        value?.filterNot { it.isISOControl() }?.trim()?.take(80)?.takeIf { it.isNotEmpty() }
 
     private val physicalButtonEvents =
         setOf(
@@ -845,12 +852,24 @@ class DiagnosticJournal(private val directory: File, val limits: Limits = Limits
                 gson
                     .toJson(
                         mapOf(
-                            "schema_version" to 1,
+                            "schema_version" to 2,
                             "activity" to buttonHistory,
+                            "device" to
+                                mapOf(
+                                    "manufacturer" to buttonHistory.manufacturer,
+                                    "model" to buttonHistory.model,
+                                    "android_version" to buttonHistory.androidVersion,
+                                    "android_api" to buttonHistory.androidApi,
+                                ),
                             "background_volume" to
                                 mapOf(
                                     "result" to "MECHANISM UNAVAILABLE",
                                     "detail" to PhysicalButtonTestController.BACKGROUND_STATUS,
+                                ),
+                            "locked_screen" to
+                                mapOf(
+                                    "result" to "MECHANISM UNAVAILABLE",
+                                    "detail" to PhysicalButtonTestController.LOCKED_SCREEN_STATUS,
                                 ),
                             "screen_off" to
                                 mapOf(

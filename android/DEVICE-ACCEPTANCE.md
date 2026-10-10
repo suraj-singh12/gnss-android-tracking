@@ -442,29 +442,28 @@ integration does not establish them. Extended endurance/repeater campaigns remai
 
 For the combined PR #12 acceptance build, retain this same native-history procedure and the SOS checks above. Trigger SOS while backlog is draining; it must receive the next opportunity after one bounded in-flight request. Export both reports after reconnect/restart and confirm original SOS identity/receipt plus separate operator ACK. No GNSS listener restart or acquisition strategy change is included.
 
-## Physical Button Test — Samsung checklist
+## Generic Android Physical Button Acceptance
 
-Use the side-by-side **GNSS Physical Button Test** debug APK. It has its own app
+Use the side-by-side **GNSS Physical Button Test** debug APK on the Android device under test. It has its own app
 ID and leaves the existing GNSS app and database installed. Open **Diagnostics →
 Physical Button Test** and press **Start Test**. The Activity detector only sees
 events Android routes to this visible Activity. While the test is active, its
 triple-Volume-Up SOS adapter is paused so this experiment cannot create an SOS;
 the OS still handles volume normally and existing SOS outbox items keep sending.
-Stop Test to restore that adapter.
+Stop Test or leave the Activity to restore that adapter automatically. The test
+stops when the Activity pauses; foreground event capture is the only supported mode.
 
 1. **Screen on, Activity visible:** press Volume Up three times, then Volume
    Down three times. Confirm each received physical press appears as a `DOWN`
    and normally a matching `UP`; repeat counts are shown separately and are not
    counted as additional physical presses.
-2. **App backgrounded:** press Home, repeat the same keys, reopen the app and
-   inspect the log. Classify this as `MECHANISM UNAVAILABLE` because the
-   experiment has no background key listener. If an event is recorded, preserve
-   the exact timestamp/source and report the observed OEM behavior; this does
-   not establish a general Android guarantee.
-3. **Screen locked/off:** with test mode started, lock the phone, wait 30
-   seconds, press Volume Up and Volume Down three times each, unlock, and inspect
-   the report. Classify this as `MECHANISM UNAVAILABLE` for the current
-   implementation; never report a pass based only on an absent event.
+2. **App backgrounded:** press Home. Test mode stops automatically and SOS
+   suppression is restored. Background detection is `MECHANISM UNAVAILABLE`;
+   this app uses no background key listener. Reopen and export the report.
+3. **Screen locked/off:** lock the phone, wait 30 seconds, press Volume Up and
+   Volume Down three times each, unlock, and inspect the report. Locked-screen
+   and screen-off detection are `MECHANISM UNAVAILABLE`; never report a pass
+   based only on an absent event.
 4. **Bluetooth/headset, if available:** repeat media-button presses while the
    app is visible and backgrounded. Activity-visible deliveries can be
    `DETECTED`; background media delivery is `MECHANISM UNAVAILABLE` because no
@@ -477,8 +476,9 @@ observation was not implemented, and `INCONCLUSIVE` for an interrupted run,
 missing/truncated evidence, or a state that cannot be verified. Choose
 **Export diagnostics** after the run and retain `physical-button-report.json`.
 The ZIP avoids unrelated screen contents and user text. Physical acceptance
-must record Samsung model, Android version, key/device type and test state;
-automated tests do not establish screen-off or OEM-specific delivery.
+report includes manufacturer, model and Android version/API when the platform
+provides them. Record key/device type and test state too; automated tests do
+not establish delivery behavior for a particular physical device.
 
 When Issue #6 incorporates this experiment, the reusable integration points are
 `PhysicalButtonTestController` plus the bounded `DiagnosticRecorder` event and

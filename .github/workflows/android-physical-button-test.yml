@@ -54,7 +54,7 @@ jobs:
           mkdir -p "$ASSET_DIR"
           cp android/app/build/outputs/apk/buttonTest/debug/app-buttonTest-debug.apk "$ASSET_DIR/gnss-physical-button-test-debug.apk"
           cat > "$ASSET_DIR/INSTALL.txt" <<'EOF'
-          GNSS Physical Button Test — Samsung field APK
+          GNSS Physical Button Test — Generic Android field APK
 
           This is a debug-signed, test-only APK. Its application ID is
           org.gnss.tracking.buttontest, so it installs beside the normal GNSS app
@@ -63,14 +63,16 @@ jobs:
           Install with Android SDK platform-tools (no Android Studio or Gradle):
             adb install -t gnss-physical-button-test-debug.apk
 
-          Or copy the APK to the Samsung phone, open it in Files, and approve
+          Or copy the APK to the Android phone, open it in Files, and approve
           “Install unknown apps” for that file manager when Android asks. Enable
           Developer options → USB debugging only if using adb.
 
           Open GNSS Physical Button Test → Diagnostics → Physical Button Test.
-          Run the Samsung checklist in android/DEVICE-ACCEPTANCE.md. Start Test
-          before visible-volume checks; Stop Test afterward. Background and
-          screen-off detection are unavailable in this experiment. Export
+          Run Generic Android Physical Button Acceptance in
+          android/DEVICE-ACCEPTANCE.md. Start Test before visible-volume checks;
+          leaving the Activity stops the test and restores SOS key handling.
+          Background, locked-screen and screen-off detection are unavailable.
+          Export
           Diagnostics to save physical-button-report.json.
 
           This package contains no production signing key and is not a release.

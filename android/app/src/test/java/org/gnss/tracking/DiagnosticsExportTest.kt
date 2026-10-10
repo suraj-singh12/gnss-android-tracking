@@ -118,6 +118,11 @@ abstract class DiagnosticsExportChecks {
                 assertTrue(report.contains("DETECTED"))
                 assertTrue(report.contains("VOLUME_UP"))
                 assertTrue(report.contains("MECHANISM UNAVAILABLE"))
+                assertTrue(report.contains("\"manufacturer\""))
+                assertTrue(report.contains("\"model\""))
+                assertTrue(report.contains("\"android_version\""))
+                assertTrue(report.contains("\"android_api\""))
+                assertTrue(report.contains("locked_screen"))
             }
             assertEquals(generation, app.diagnostics.value!!.serviceGeneration)
             assertEquals(listeners, shadowOf(manager).getLocationUpdateListeners().toList())

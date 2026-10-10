@@ -34,6 +34,10 @@ data class PhysicalButtonHistory(
     val activityResult: String,
     val activityReason: String,
     val activityWasInterrupted: Boolean,
+    val manufacturer: String? = null,
+    val model: String? = null,
+    val androidVersion: String? = null,
+    val androidApi: Int? = null,
     val writerIoFailures: Long = 0,
     val diagnosticQueueDroppedTotal: Long = 0,
 )
@@ -70,7 +74,10 @@ class PhysicalButtonTestController(
   }
 
   fun activityPaused() {
-    if (listening) record(DiagnosticEvent.PHYSICAL_BUTTON_ACTIVITY_PAUSED, null)
+    if (!listening) return
+    record(DiagnosticEvent.PHYSICAL_BUTTON_ACTIVITY_PAUSED, null)
+    // End Activity-only test mode as the Activity leaves foreground so SOS is restored.
+    stop()
   }
 
   fun activityResumed() {
@@ -109,6 +116,8 @@ class PhysicalButtonTestController(
     const val MAX_KEY_REPEATS = 1000
     const val BACKGROUND_STATUS =
         "MECHANISM UNAVAILABLE — Android does not give this app a passive background volume-key listener."
+    const val LOCKED_SCREEN_STATUS =
+        "MECHANISM UNAVAILABLE — this Activity-only detector cannot receive keys while locked or screen-off."
     const val MEDIA_SESSION_STATUS =
         "MECHANISM UNAVAILABLE — a MediaSession would route media buttons to this app; no session or audio focus is taken."
   }
