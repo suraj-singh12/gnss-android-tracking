@@ -330,6 +330,9 @@ func (s *Store) saveMap(source string, b []byte) (savedMap, error) {
 	return m, tx.Commit()
 }
 func (s *Store) mapRequest(w http.ResponseWriter, r *http.Request, p *mapProvider) bool {
+	if s.terrainRequest(w, r) {
+		return true
+	}
 	path := r.URL.Path
 	if path != "/local/maps" && !strings.HasPrefix(path, "/local/maps/") && path != "/local/map-search" && path != "/local/map-preview" {
 		return false

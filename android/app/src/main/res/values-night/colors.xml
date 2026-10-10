@@ -1,0 +1,13 @@
+<resources>
+    <color name="surface">#1B2831</color>
+    <color name="background">#111B22</color>
+    <color name="ink">#E5EDF1</color>
+    <color name="muted">#B2C2CC</color>
+    <color name="line">#3D525E</color>
+    <color name="control_line">#607885</color>
+    <color name="accent">#8DDBBD</color>
+    <color name="danger">#FF9BA5</color>
+    <color name="warning">#F2C46D</color>
+    <color name="disabled_ink">#899AA5</color>
+    <color name="ripple">#338DDBBD</color>
+</resources>

@@ -145,6 +145,94 @@ not determine contact health. GNSS has its own quality/age indication.
 
 ## Local dashboard API
 
+### Appearance, header, About and recording
+
+Day/Night persists per browser. The header's **Command Connected/Disconnected** is
+browser-to-local-server contact; **connected/total Parties** uses existing Android
+contact policy. About identifies **Lt Suraj Singh**, **surajsingh5092@gmail.com**;
+opening it never silences outstanding SOS. Start opens **Start Recording from**,
+default **Current Time** on every opening. Confirm uses existing `from_now` or
+`session_beginning`; Cancel/Escape is a no-op. A read-only
+`recording_session_available` flag derives from existing session metadata; unavailable
+session selection is disabled/explained. Server validation/errors remain authoritative.
+Stop/Resume/Clear, recording boundaries and distance calculations are unchanged.
+
+### Terrain preparation and provider boundary
+
+[Copernicus GLO-30 public](https://registry.opendata.aws/copernicus-dem/) supplies
+30 m Cloud Optimized GeoTIFF tiles, no AWS account, under its
+[licence](https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM).
+It is a surface model (including buildings/vegetation), EGM2008; public coverage has
+exclusions. The bucket is not this app's small-area extraction API. OpenTopography
+is a subset-service candidate, but eligibility, authentication/quotas/payment were
+not verified. Actual endpoint requests here failed **proxy CONNECT HTTP 403**.
+**Automatic DEM acquisition is not implemented or accepted**. No credential, paid
+service, unsupported COG decoder or terrain data was fabricated. CI separately
+records reachability; a HEAD response is not successful DEM extraction.
+
+The [official Copernicus licence/citation guidance](https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM)
+requires source notices for distribution and adapted products; it is not public
+domain. A future GLO-30 adapter must retain that notice and EGM2008 metadata rather
+than relabelling heights as the EGM96 supported by the current HGT path.
+
+Supported fallback: operator-supplied **uncompressed SRTM HGT**, square 1201×1201
+(3 arc sec, ~93 m north–south) or 3601×3601 (1 arc sec, ~31 m) signed int16 big-endian
+metres. Filename `N28E077.hgt` is the southwest tile corner; first row is north.
+WGS84 / EGM96; −32768 marks void. See [USGS specifications](https://www.usgs.gov/centers/eros/science/usgs-eros-archive-digital-elevation-shuttle-radar-topography-mission-srtm).
+Obtain licensed real data separately through supported provider access; imported
+provenance is operator-supplied, not authenticated. Heights estimate radar terrain/
+surface, not receiver GNSS altitude or surveyed ground. Compressed/rectangular HGT,
+cross-tile mosaics, GeoTIFF/DTED/NetCDF and arbitrary images are unsupported.
+Extremely complex contours stop at a bounded segment limit with an explicit disabled
+Contours control; the saved DEM, hillshade/elevation and export remain available.
+Use a smaller map area rather than treating omitted contours as surveyed evidence.
+Retain the original SRTM dataset citation and distributor terms when sharing a map.
+[USGS copyright policy](https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits)
+permits free use of USGS-produced public-domain data but does not waive rights in
+third-party material; the importer cannot certify an arbitrary supplied file's licence.
+
+Download an offline map still defaults to centre-based **500×500 m** OSM vectors,
+optional 1 km or 100–2000 m custom bounds. Preview displays W/S/E/N requested bounds;
+whole intersecting ways may extend outside. Existing natural/land-use features remain.
+With terrain unchecked, no DEM is read/requested. Optional hillshade/contour/elevation
+choices use one covering local HGT file. Alternatively select a saved map and open
+**Prepare terrain from a local DEM**. Validation/storage failures retain saved vectors
+and earlier terrain. After a lost response, reopen the saved map to inspect its
+persisted result; a network error cannot promise that a committed save was rolled back.
+
+One cropped grid with one sample border is stored per map in additive
+`offline_terrain`, in the **existing SQLite DB**. Old IDs/vector bytes and all tracking
+data remain. Full tiles are not retained. Limits: one serialized preparation, HGT
+25,934,402 bytes, JSON body 36 MiB, grid 257×257, metadata 8 KiB, package 1 MiB,
+terrain library 16 MiB; existing vector limits 64 maps/256 MiB. Delete selected map
+removes its terrain, not GNSS/recordings/SOS.
+
+**Layers**, beside Focus selected, distinguishes unavailable/disabled, prepared OFF
+and visible ON. Preparation resets visibility OFF; preferences persist per map/browser.
+Toggling uses local data only, preserving view/selection. Stacking: Horn 3×3 NW/45°
+hillshade; vectors; marching-square contours; history/provisional tracks; live markers;
+SOS/controls. Voids remain transparent. Contour intervals follow relief/source spacing
+with 1/2/5 rounding (minimum 5 m at 1 arc sec, 10 m at 3); at most 16,384 segments.
+Contours are interpolated, not survey-grade. Elevation ON gives rounded metre
+estimates at pointer/point inspection, with datum/spacing and unavailable/coverage
+status. Bilinear interpolation does not fill nodata. No DEM affects GNSS or distance.
+
+GeoJSON export remains unchanged, **excluding terrain**. **Save terrain file** exports
+`.gterrain`: `GTERR001`, big-endian uint32 JSON metadata length, metadata without
+raster values, then big-endian int16 samples (−32768 void). Re-import for a saved map
+within that coverage; component flags/georeference/spacing/source/datum survive.
+Visibility is separate. Export both files for portability. Raster is not GeoJSON.
+
+Loopback-only local controls: `GET /local/maps/{id}/terrain`,
+`GET /local/maps/{id}/terrain-file`, `POST /local/maps/{id}/terrain` (filename,
+base64 data, selected components), `POST /local/maps/{id}/delete`. Same-origin JSON,
+bounds/storage validation apply. None is available on phone ingestion.
+
+Offline acceptance: prepare genuine DEM, stop Command, disconnect internet, restart
+the same DB, select/toggle layers, inspect known coordinates in both themes. Fixtures
+prove processing/storage/alignment contracts, **not provider extraction or surveyed
+alignment**. Existing OSM provider availability remains an external dependency.
+
 Loopback listener only by default; no CORS. Mutations require JSON and same-origin
 browser requests. These are Command-local controls, never a second phone protocol.
 

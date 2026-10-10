@@ -9,7 +9,27 @@ function selectParty(id) {
   localStorage.setItem("gnss-selected-party", id);
   locatedSOS = undefined;
 }
-let viewport, offlineMap, inspectedPoint, locatedSOS;
+let viewport, offlineMap, inspectedPoint, locatedSOS, terrain, activeMapID;
+function applyAppearance() {
+  const night = localStorage.getItem("gnss-appearance") === "night";
+  document.documentElement.dataset.appearance = night ? "night" : "day";
+  $("appearance").textContent = night ? "Day" : "Night";
+  $("appearance").setAttribute(
+    "aria-label",
+    `Switch to ${night ? "Day" : "Night"} appearance`,
+  );
+  if (terrain) terrain.image = undefined;
+  draw();
+}
+$("appearance").onclick = () => {
+  localStorage.setItem(
+    "gnss-appearance",
+    document.documentElement.dataset.appearance === "night" ? "day" : "night",
+  );
+  applyAppearance();
+};
+$("open-about").onclick = () => $("about").showModal();
+applyAppearance();
 const fields = {
   minimum_forward_m: "Forward movement floor · m",
   minimum_backward_m: "Backward movement floor · m",
@@ -52,7 +72,7 @@ async function post(path, data) {
   if (!response.ok) throw Error(b.message || "Command operation failed");
   await poll();
 }
-for (const action of ["start", "stop", "resume", "clear"])
+for (const action of ["stop", "resume", "clear"])
   $(action).onclick = () => {
     if (
       action === "clear" &&
@@ -64,9 +84,39 @@ for (const action of ["start", "stop", "resume", "clear"])
     post("recording", {
       action,
       confirmed: action === "clear",
-      mode: $("recording-mode").value,
     }).catch(showError);
   };
+function updateSessionChoice() {
+  const available = state?.recording_session_available === true;
+  $("session-mode").disabled = !available;
+  $("session-mode-status").textContent = available
+    ? "Uses reported Android session boundaries; Command remains authoritative."
+    : "Beginning of session unavailable: wait for Android session metadata.";
+  $("confirm-recording").disabled =
+    !!state?.recording || (!available && $("session-mode").checked);
+}
+$("start").onclick = () => {
+  $("current-mode").checked = true;
+  $("recording-start-error").textContent = "";
+  updateSessionChoice();
+  $("recording-start").showModal();
+};
+$("recording-start-form").onchange = updateSessionChoice;
+$("recording-start-form").onsubmit = async (e) => {
+  e.preventDefault();
+  $("confirm-recording").disabled = true;
+  try {
+    await post("recording", {
+      action: "start",
+      mode: $("recording-start-form").elements.mode.value,
+    });
+    $("recording-start").close();
+  } catch (err) {
+    $("recording-start-error").textContent = err.message;
+  } finally {
+    updateSessionChoice();
+  }
+};
 $("all-observations").onchange = () => draw();
 $("dots").onchange = () => {
   if (!$("dots").checkValidity()) {
@@ -310,7 +360,7 @@ function render() {
     : state.projection_pending
       ? "Projection catching up — displayed history is not fully synchronized"
       : "";
-  $("connection").textContent = "Command Connected · local workspace";
+  $("connection").textContent = "● Command Connected";
   $("connection").classList.remove("unavailable");
   const recording = state.recording;
   $("recording").textContent = recording
@@ -318,8 +368,7 @@ function render() {
       ? "Recording active · " + duration(recording.duration_s)
       : "Recording stopped · " + duration(recording.duration_s)
     : "No recording";
-  $("recording-mode").disabled = !!recording;
-  if (recording?.mode) $("recording-mode").value = recording.mode;
+  if ($("recording-start").open) updateSessionChoice();
   $("start").disabled = !!recording;
   $("stop").disabled = !recording?.active;
   $("resume").disabled = !recording || recording.active;
@@ -329,7 +378,7 @@ function render() {
   );
   $("count").textContent = devices.length;
   $("party-summary").textContent =
-    `${devices.length} ${devices.length === 1 ? "party" : "parties"}`;
+    `${devices.filter((d) => d.contact_condition === "healthy").length}/${devices.length} Parties`;
   $("no-parties").hidden = devices.length > 0;
   if (!state.devices[selectedParty]) selectedParty = devices[0]?.device_id;
   // Preserve focused edits while polling; all content is created as text nodes.
@@ -784,6 +833,9 @@ async function refreshMaps(selected) {
 function useMap(text, source, id) {
   const parsed = GeoMap.parse(text, source);
   offlineMap = parsed;
+  activeMapID = id;
+  terrain = undefined;
+  updateLayers();
   $("map-mode").value = "offline";
   $("map-warning").textContent = "";
   $("map-metadata").textContent =
@@ -803,7 +855,145 @@ async function loadSavedMap(id) {
   const source =
     $("saved-maps").selectedOptions[0]?.textContent || "Saved offline map";
   useMap(await response.text(), source, id);
+  await loadTerrain(id);
 }
+const terrainLayers = ["hillshade", "contours", "elevation"];
+function updateLayers() {
+  for (const kind of terrainLayers) {
+    const control = $("layer-" + kind),
+      available =
+        !!terrain?.components[kind] &&
+        !(kind === "contours" && terrain.contour_error);
+    control.disabled = !available;
+    control.checked =
+      available &&
+      localStorage.getItem(`gnss-layer-${activeMapID}-${kind}`) === "true";
+    $("availability-" + kind).textContent = available
+      ? "Prepared locally"
+      : kind === "contours" && terrain?.contour_error
+        ? "Unavailable: contour complexity limit; choose a smaller area."
+        : "Not downloaded / prepared";
+  }
+  $("terrain-metadata").textContent = terrain
+    ? `${terrain.source} · ${terrain.arc_seconds} arc sec (~${Math.round((terrain.arc_seconds / 3600) * 111320)} m north–south) · ${terrain.vertical_datum} · interpolated, not survey-grade${terrain.contour ? " · contours " + terrain.contour.interval + " m" : ""}`
+    : "No terrain for this map. Import a georeferenced DEM in Map & layers.";
+  $("export-terrain").hidden = !terrain;
+  if (terrain)
+    $("export-terrain").href =
+      `/local/maps/${encodeURIComponent(activeMapID)}/terrain-file`;
+}
+async function loadTerrain(id) {
+  const r = await fetch(`/local/maps/${encodeURIComponent(id)}/terrain`);
+  if (activeMapID !== id) return;
+  if (r.status === 404) {
+    terrain = undefined;
+    updateLayers();
+    draw();
+    return;
+  }
+  if (!r.ok) throw Error("Saved terrain unavailable; vector map retained.");
+  const grid = await r.json();
+  if (activeMapID !== id) return;
+  terrain = Terrain.prepare(grid);
+  updateLayers();
+  draw();
+}
+$("open-layers").onclick = () => {
+  updateLayers();
+  const dialog = $("layers");
+  if (dialog.open) dialog.close();
+  else dialog.show();
+  $("open-layers").setAttribute("aria-expanded", String(dialog.open));
+};
+$("layers").onclose = () =>
+  $("open-layers").setAttribute("aria-expanded", "false");
+$("layers").onkeydown = (event) => {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    $("layers").close();
+    $("open-layers").focus();
+  }
+};
+for (const kind of terrainLayers)
+  $("layer-" + kind).onchange = () => {
+    localStorage.setItem(
+      `gnss-layer-${activeMapID}-${kind}`,
+      String($("layer-" + kind).checked),
+    );
+    draw();
+  };
+async function attachTerrain(id, file, components) {
+  if (!file)
+    throw Error(
+      "Select a local SRTM DEM. Automatic terrain acquisition is unavailable.",
+    );
+  if (file.size > 3601 * 3601 * 2)
+    throw Error("DEM exceeds the bounded HGT import limit.");
+  const data = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  await mapPost(`maps/${encodeURIComponent(id)}/terrain`, {
+    name: file.name,
+    data,
+    components,
+  });
+  for (const kind of terrainLayers)
+    localStorage.setItem(`gnss-layer-${id}-${kind}`, "false");
+  await loadTerrain(id);
+}
+$("prepare-terrain").onclick = async () => {
+  const id = activeMapID;
+  if (!id) {
+    $("terrain-status").textContent = "Save/select a vector map first.";
+    return;
+  }
+  $("prepare-terrain").disabled = true;
+  try {
+    await attachTerrain(
+      id,
+      $("terrain-file").files[0],
+      Object.fromEntries(
+        terrainLayers.map((k) => [k, $("prepare-" + k).checked]),
+      ),
+    );
+    $("terrain-status").textContent = terrain?.contour_error
+      ? "DEM saved locally. Contours unavailable at this area's complexity; hillshade/elevation and export remain available. Choose a smaller area for contours."
+      : "Prepared and saved locally. Layers start OFF; use Layers to enable them. DEM estimate is not receiver GNSS altitude.";
+  } catch (e) {
+    $("terrain-status").textContent =
+      e.message +
+      " · Vector map retained; reopen this saved map to verify terrain.";
+  } finally {
+    $("prepare-terrain").disabled = false;
+  }
+};
+$("delete-map").onclick = async () => {
+  if (
+    !activeMapID ||
+    !confirm(
+      "Delete this saved map and its associated terrain? GNSS, recordings and SOS are retained.",
+    )
+  )
+    return;
+  try {
+    await mapPost(`maps/${encodeURIComponent(activeMapID)}/delete`, {});
+    offlineMap = terrain = undefined;
+    activeMapID = undefined;
+    localStorage.removeItem("gnss-map-id");
+    $("map-mode").value = "blank";
+    localStorage.setItem("gnss-map-mode", "blank");
+    $("map-metadata").textContent = "No offline map loaded.";
+    $("export-map").removeAttribute("href");
+    await refreshMaps();
+    updateLayers();
+    draw();
+  } catch (e) {
+    showError(e);
+  }
+};
 $("saved-maps").onchange = () => {
   if ($("saved-maps").value)
     loadSavedMap($("saved-maps").value).catch(showError);
@@ -843,6 +1033,13 @@ function invalidatePreparation() {
 }
 for (const id of ["map-lat", "map-lon", "map-width", "map-height"])
   $(id).oninput = invalidatePreparation;
+for (const id of [
+  "download-hillshade",
+  "download-contours",
+  "download-elevation",
+  "download-dem",
+])
+  $(id).onchange = invalidatePreparation;
 $("map-area").onchange = () => {
   if ($("map-area").value !== "custom")
     $("map-width").value = $("map-height").value = $("map-area").value;
@@ -862,7 +1059,15 @@ $("preview-map").onclick = async () => {
     width: Number($("map-width").value),
     height: Number($("map-height").value),
   };
+  const components = Object.fromEntries(
+    terrainLayers.map((k) => [k, $("download-" + k).checked]),
+  );
+  const demFile = $("download-dem").files[0];
   try {
+    if (Object.values(components).some(Boolean) && !demFile)
+      throw Error(
+        "Optional terrain requires a local SRTM tile. Uncheck terrain for the default vector-only download.",
+      );
     const data = await mapPost("map-preview", area);
     if (revision !== preparationRevision)
       throw Error(
@@ -873,9 +1078,11 @@ $("preview-map").onclick = async () => {
     preparedMap = {
       source: `OSM ${area.lat}, ${area.lon} · ${area.width} × ${area.height} m`,
       data,
+      components,
+      demFile,
     };
     $("map-preparation-status").textContent =
-      `${data.features.length} features · ${(new TextEncoder().encode(text).length / 1024).toFixed(1)} KB · roads, paths, buildings, water/land where available. Relations/tiles are not downloaded. Save for offline use.`;
+      `${data.features.length} features · ${(new TextEncoder().encode(text).length / 1024).toFixed(1)} KB · centre ${area.lat}, ${area.lon} · selected bounds W/S/E/N ${data.requested_bounds?.map((v) => v.toFixed(6)).join(", ") || "provider fixture: bounds unavailable"} · roads, paths, buildings, water/land where available. Relations/tiles are not downloaded. Save for offline use.`;
     $("map-preview").replaceChildren();
     const a = GeoMap.project(parsed.bounds[0], parsed.bounds[1]),
       b = GeoMap.project(parsed.bounds[2], parsed.bounds[3]);
@@ -920,15 +1127,20 @@ $("preview-map").onclick = async () => {
 };
 $("download-map").onclick = async () => {
   if (!preparedMap) return;
+  const candidate = preparedMap;
   $("download-map").disabled = true;
   try {
-    const saved = await mapPost("maps", preparedMap);
+    const saved = await mapPost("maps", candidate);
     await refreshMaps(saved.id);
     await loadSavedMap(saved.id);
+    if (Object.values(candidate.components || {}).some(Boolean))
+      await attachTerrain(saved.id, candidate.demFile, candidate.components);
     $("map-preparation-status").textContent =
       "Saved locally · available after restart without internet.";
   } catch (e) {
-    $("map-preparation-status").textContent = e.message;
+    $("map-preparation-status").textContent =
+      e.message +
+      " · Any saved vector map is retained; terrain can be prepared later.";
     $("download-map").disabled = false;
   }
 };
@@ -1011,7 +1223,27 @@ $("tracks").onpointerdown = (e) => {
   $("tracks").setPointerCapture(e.pointerId);
 };
 $("tracks").onpointermove = (e) => {
-  if (!drag) return;
+  if (!drag) {
+    if (
+      terrain &&
+      $("map-mode").value === "offline" &&
+      $("layer-elevation").checked &&
+      viewport
+    ) {
+      const root = $("tracks"),
+        rect = root.getBoundingClientRect(),
+        px =
+          viewport.cx +
+          (e.clientX - rect.left - root.clientWidth / 2) / viewport.scale,
+        py =
+          viewport.cy -
+          (e.clientY - rect.top - root.clientHeight / 2) / viewport.scale;
+      const [lon, lat] = GeoMap.unproject(px, py);
+      $("hover").textContent =
+        `${lat.toFixed(6)}, ${lon.toFixed(6)}` + terrainReadout(lon, lat);
+    }
+    return;
+  }
   viewport.cx = drag.cx - (e.clientX - drag.x) / viewport.scale;
   viewport.cy = drag.cy + (e.clientY - drag.y) / viewport.scale;
   draw();
@@ -1063,6 +1295,10 @@ function svg(tag, attrs) {
   const e = document.createElementNS(svgNS, tag);
   for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
   return e;
+}
+function terrainReadout(lon, lat) {
+  const value = Terrain.elevation(terrain, lon, lat);
+  return ` · Estimated ground elevation ${value === null ? "unavailable / out of coverage" : "~" + Math.round(value) + " m"} · ${terrain.vertical_datum} · ${terrain.arc_seconds} arc sec · not GNSS altitude`;
 }
 function draw() {
   if (!state) return;
@@ -1133,6 +1369,84 @@ function draw() {
   const xy = (p) => xyCoord(geo(p));
   root.setAttribute("viewBox", `0 0 ${w} ${h}`);
   const mapVisible = offlineMap && $("map-mode").value === "offline";
+  const terrainVisible = mapVisible && terrain;
+  const layerOn = (kind) => terrainVisible && $("layer-" + kind).checked;
+  const night = document.documentElement.dataset.appearance === "night";
+  const mapColors = night
+    ? {
+        water: "#234858",
+        building: "#48515a",
+        land: "#263d32",
+        border: "#647d73",
+        river: "#83b8cf",
+        road: "#d1b88e",
+        other: "#92ab9e",
+      }
+    : {
+        water: "#c9e3ec",
+        building: "#d5cec6",
+        land: "#dce7d4",
+        border: "#a6b4ad",
+        river: "#83b8cf",
+        road: "#a29076",
+        other: "#81958c",
+      };
+  if (layerOn("hillshade") && terrain.shades) {
+    if (!terrain.image) {
+      const c = document.createElement("canvas");
+      c.width = terrain.columns;
+      c.height = terrain.rows;
+      const context = c.getContext("2d"),
+        image = context.createImageData(c.width, c.height);
+      const [west, south, east, north] = terrain.bounds,
+        pyNorth = GeoMap.project(west, north)[1],
+        pySouth = GeoMap.project(west, south)[1];
+      // Resample north-up rows to the existing Mercator projection, not a new CRS.
+      for (let y = 0; y < c.height; y++) {
+        const py = pyNorth - (y / (c.height - 1)) * (pyNorth - pySouth);
+        const lat = GeoMap.unproject(0, py)[1];
+        const row = Math.max(
+          0,
+          Math.min(
+            c.height - 1,
+            Math.round(((north - lat) / (north - south)) * (c.height - 1)),
+          ),
+        );
+        for (let x = 0; x < c.width; x++) {
+          const a = (y * c.width + x) * 4,
+            b = (row * c.width + x) * 4;
+          const shade = terrain.shades[b];
+          image.data[a] =
+            image.data[a + 1] =
+            image.data[a + 2] =
+              night ? Math.round(25 + shade * 0.32) : shade;
+          image.data[a + 3] = terrain.shades[b + 3];
+        }
+      }
+      context.putImageData(image, 0, 0);
+      terrain.image = c.toDataURL("image/png");
+    }
+    const [west, south, east, north] = terrain.bounds,
+      tl = xyCoord(GeoMap.project(west, north)),
+      br = xyCoord(GeoMap.project(east, south)),
+      cellWidth = (br[0] - tl[0]) / (terrain.columns - 1),
+      cellHeight = (br[1] - tl[1]) / (terrain.rows - 1);
+    root.append(
+      svg("image", {
+        "data-layer": "hillshade",
+        href: terrain.image,
+        // Raster pixels cover cells; their centres must coincide with DEM nodes.
+        // Horn's unsupported outer border is transparent, not invented coverage.
+        x: tl[0] - cellWidth / 2,
+        y: tl[1] - cellHeight / 2,
+        width: cellWidth * terrain.columns,
+        height: cellHeight * terrain.rows,
+        preserveAspectRatio: "none",
+        opacity: night ? 0.8 : 0.5,
+        "pointer-events": "none",
+      }),
+    );
+  }
   $("map-mode-label").textContent = mapVisible
     ? "Offline geographic map"
     : "Blank canvas";
@@ -1156,11 +1470,11 @@ function draw() {
               .join(" "),
             fill:
               shape.properties?.natural === "water" || shape.properties?.water
-                ? "#c9e3ec"
+                ? mapColors.water
                 : shape.properties?.building
-                  ? "#d5cec6"
-                  : "#dce7d4",
-            stroke: "#a6b4ad",
+                  ? mapColors.building
+                  : mapColors.land,
+            stroke: mapColors.border,
             "fill-rule": "evenodd",
             "stroke-width": 1,
           }),
@@ -1173,10 +1487,10 @@ function draw() {
               .join(" "),
             fill: "none",
             stroke: shape.properties?.waterway
-              ? "#83b8cf"
+              ? mapColors.river
               : shape.properties?.highway
-                ? "#a29076"
-                : "#81958c",
+                ? mapColors.road
+                : mapColors.other,
             "stroke-width": shape.properties?.highway ? 3 : 2,
             "stroke-dasharray": ["path", "footway", "track"].includes(
               shape.properties?.highway,
@@ -1203,6 +1517,39 @@ function draw() {
       : state.projection_error ||
         (state.projection_pending ? "History reconstruction in progress…" : "");
   }
+  if (layerOn("contours") && terrain.contour) {
+    const lines = svg("g", {
+      "data-layer": "contours",
+      "pointer-events": "none",
+    });
+    for (const [i, segment] of terrain.contour.segments.entries()) {
+      const coords = segment.points.map((p) => xyCoord(GeoMap.project(...p)));
+      lines.append(
+        svg("polyline", {
+          points: coords.map((p) => p.join(",")).join(" "),
+          fill: "none",
+          stroke: night ? "#c4ab82" : "#79603d",
+          "stroke-width": 1,
+          opacity: 0.75,
+        }),
+      );
+      if (
+        i % 100 === 0 &&
+        Math.hypot(coords[1][0] - coords[0][0], coords[1][1] - coords[0][1]) >
+          35
+      ) {
+        const label = svg("text", {
+          x: coords[0][0],
+          y: coords[0][1] - 3,
+          fill: night ? "#ecd1a8" : "#614723",
+          "font-size": 10,
+        });
+        label.textContent = segment.level + " m";
+        lines.append(label);
+      }
+    }
+    root.append(lines);
+  }
   const overlay = svg("g", { "data-layer": "tracks" });
   root.append(overlay);
   const segments = new Map();
@@ -1215,6 +1562,8 @@ function draw() {
     inspectedPoint = p;
     $("hover").textContent =
       `${state.devices[p.device_id].snapshot.party.id} · ${p.fix.latitude.toFixed(6)}, ${p.fix.longitude.toFixed(6)} · ${time(p.fix.observed_at)} · accuracy ±${p.fix.horizontal_accuracy_m ?? "unknown"} m · ${raw ? "Unfiltered diagnostic; distance remains qualified" : p.segment_reason === "provisional" ? "Provisional movement" : "Qualified distance " + distance(p.cumulative_m ?? state.devices[p.device_id].total_m)}`;
+    if (layerOn("elevation"))
+      $("hover").textContent += terrainReadout(p.fix.longitude, p.fix.latitude);
   }
   for (const group of segments.values()) {
     const first = group[0],
@@ -1275,7 +1624,7 @@ function draw() {
             d: "M0,-12 L8,9 L0,5 L-8,9 Z",
             transform: `translate(${x} ${y}) rotate(${bearing})`,
           }),
-      fill: p.live ? color(p.device_id) : "#fff",
+      fill: p.live ? color(p.device_id) : night ? "#1b2831" : "#fff",
       stroke: color(p.device_id),
       "stroke-width": 3,
       tabindex: 0,
@@ -1315,7 +1664,7 @@ function draw() {
     const marker = svg("path", {
       d: "M0,-9L9,0L0,9L-9,0Z",
       transform: `translate(${x} ${y})`,
-      fill: "#a51621",
+      fill: night ? "#ff9ba5" : "#a51621",
       stroke: "white",
       "stroke-width": 2,
       tabindex: 0,
@@ -1330,7 +1679,7 @@ function draw() {
       x: x + 13,
       // Separate coincident event/current labels without moving either position.
       y: y + 22,
-      fill: "#a51621",
+      fill: night ? "#ff9ba5" : "#a51621",
       "font-size": 12,
     });
     label.textContent = `SOS event · ${locatedSOS.party.id}`;
@@ -1357,7 +1706,7 @@ async function poll() {
     if ($("event-history").open) loadEvents().catch(showError);
     showError(null);
   } catch (e) {
-    $("connection").textContent = "Offline · Command workspace unavailable";
+    $("connection").textContent = "● Command Disconnected";
     $("connection").classList.add("unavailable");
     showError(e);
   } finally {

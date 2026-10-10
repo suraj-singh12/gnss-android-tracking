@@ -218,7 +218,9 @@ func (s *Store) LocalHandler(assets http.Handler) http.Handler {
 // Dashboard views deliberately omit raw envelopes, decisions and window internals.
 func dashboardView(st State, now time.Time) map[string]any {
 	devices := map[string]any{}
+	sessionAvailable := false
 	for id, d := range st.Devices {
+		sessionAvailable = sessionAvailable || d.Session != nil
 		var location any
 		if d.Location != nil {
 			location = map[string]any{"fix": d.Location.Fix}
@@ -240,5 +242,5 @@ func dashboardView(st State, now time.Time) map[string]any {
 		}
 		recording = map[string]any{"recording_id": st.Recording.ID, "active": st.Recording.Active, "mode": st.Recording.Mode, "duration_s": seconds}
 	}
-	return map[string]any{"sos_alerts": st.Alerts, "devices": devices, "recording": recording, "policy": st.Policy, "points": st.Points, "raw_points": st.RawPoints, "provisional_points": st.Provisional, "projection_pending": st.ProjectionPending, "projection_error": st.ProjectionError}
+	return map[string]any{"recording_session_available": sessionAvailable, "sos_alerts": st.Alerts, "devices": devices, "recording": recording, "policy": st.Policy, "points": st.Points, "raw_points": st.RawPoints, "provisional_points": st.Provisional, "projection_pending": st.ProjectionPending, "projection_error": st.ProjectionError}
 }

@@ -6,6 +6,7 @@
     <title>GNSS · Command Centre</title>
     <link rel="stylesheet" href="/style.css" />
     <script src="/map.js" defer></script>
+    <script src="/terrain.js" defer></script>
     <script src="/sos-alarm.js" defer></script>
     <script src="/app.js" defer></script>
   </head>
@@ -14,9 +15,19 @@
       <div class="brand">
         <span class="brand-mark">G</span>
         <div>
-          GNSS Command Centre<span id="party-summary"
-            >Local field workspace</span
-          >
+          GNSS Command Centre
+          <div class="command-summary">
+            <span
+              id="connection"
+              role="status"
+              title="Browser connection to the local Command application"
+              >Connecting to Command…</span
+            ><span
+              id="party-summary"
+              title="Android parties with current Command contact / all enrolled parties"
+              >0/0 Parties</span
+            >
+          </div>
         </div>
       </div>
       <div class="header-tools">
@@ -27,6 +38,10 @@
         <button id="open-history" aria-label="Open Event History">
           Events
         </button>
+        <button id="appearance" aria-label="Switch to Night appearance">
+          Night
+        </button>
+        <button id="open-about">About</button>
         <button
           id="open-sos"
           class="emergency"
@@ -35,20 +50,10 @@
           SOS <span id="sos-count">0</span>
         </button>
       </div>
-      <span id="connection" role="status">Connecting to Command…</span>
     </header>
     <div id="error" role="alert" hidden></div>
     <section class="recording-bar" aria-label="Recording controls">
-      <span id="recording" role="status">Connecting…</span
-      ><label
-        >Start from
-        <select id="recording-mode">
-          <option value="from_now">Now</option>
-          <option value="session_beginning">
-            Beginning of Android session
-          </option>
-        </select></label
-      >
+      <span id="recording" role="status">Connecting…</span>
       <div class="controls">
         <button id="start" class="primary">Start Recording</button
         ><button id="stop">Stop Recording</button
@@ -56,6 +61,61 @@
         ><button id="clear" class="quiet">Clear Recording</button>
       </div>
     </section>
+    <dialog id="recording-start" aria-labelledby="recording-start-title">
+      <div class="dialog-heading">
+        <h1 id="recording-start-title">Start Recording from</h1>
+        <button data-close="recording-start" aria-label="Close Start Recording">
+          ×
+        </button>
+      </div>
+      <form id="recording-start-form">
+        <label
+          ><input
+            type="radio"
+            name="mode"
+            id="session-mode"
+            value="session_beginning"
+          />
+          Beginning of Android session</label
+        >
+        <p id="session-mode-status" class="muted"></p>
+        <label
+          ><input
+            type="radio"
+            name="mode"
+            id="current-mode"
+            value="from_now"
+            checked
+          />
+          Current Time</label
+        >
+        <p id="recording-start-error" role="alert"></p>
+        <div class="controls">
+          <button type="button" data-close="recording-start">Cancel</button
+          ><button id="confirm-recording" class="primary">
+            Start Recording
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="about" aria-labelledby="about-title">
+      <div class="dialog-heading">
+        <h1 id="about-title">GNSS Tracker &amp; GNSS Command Centre</h1>
+        <button data-close="about" aria-label="Close About">×</button>
+      </div>
+      <p>
+        An offline-first GNSS tracking system in which Android devices collect
+        and retain location observations, while a local Command Centre receives
+        positions, displays movement and historical tracks, manages recording
+        and handles emergency SOS alerts over a local network.
+      </p>
+      <h2>Developer</h2>
+      <p>
+        Lt Suraj Singh<br /><a href="mailto:surajsingh5092@gmail.com"
+          >surajsingh5092@gmail.com</a
+        >
+      </p>
+    </dialog>
     <dialog id="sos-panel" class="drawer" aria-labelledby="sos-heading">
       <div class="emergency-heading">
         <h1 id="sos-heading">SOS emergencies</h1>
@@ -141,6 +201,14 @@
             ><button id="zoom-out" aria-label="Zoom out">−</button
             ><button id="fit">Fit parties</button
             ><button id="focus-party">Focus selected</button>
+            <button
+              id="open-layers"
+              title="Show or hide locally prepared terrain layers"
+              aria-label="Map Layers"
+              aria-expanded="false"
+            >
+              ▱ Layers
+            </button>
           </div>
         </div>
         <div id="projection-status" role="status"></div>
@@ -179,6 +247,26 @@
         </div>
       </aside>
     </main>
+    <dialog id="layers" aria-labelledby="layers-title">
+      <div class="dialog-heading">
+        <h1 id="layers-title">Layers</h1>
+        <button data-close="layers" aria-label="Close Layers">×</button>
+      </div>
+      <p class="muted">
+        Vector features remain visible. Toggles use local data only.
+      </p>
+      <label
+        ><input type="checkbox" id="layer-hillshade" /> Hillshade
+        <small id="availability-hillshade"></small></label
+      ><label
+        ><input type="checkbox" id="layer-contours" /> Contours
+        <small id="availability-contours"></small></label
+      ><label
+        ><input type="checkbox" id="layer-elevation" /> Elevation
+        <small id="availability-elevation"></small
+      ></label>
+      <p id="terrain-metadata" class="muted"></p>
+    </dialog>
     <dialog id="quality" aria-labelledby="quality-title">
       <div class="dialog-heading">
         <h1 id="quality-title">Track quality</h1>
@@ -224,6 +312,33 @@
       <a id="export-map" class="secondary-action" download="offline-map.geojson"
         >Save map file</a
       >
+      <button id="delete-map">Delete selected map</button>
+      <details>
+        <summary>Prepare terrain from a local DEM</summary>
+        <p>
+          Online DEM acquisition is not verified. Import an uncompressed SRTM
+          tile (N28E077.hgt, 1201² or 3601² samples) covering the saved map, or
+          re-import its .gterrain export. Only a bounded subset is retained. No
+          terrain is inferred from GNSS altitude.
+        </p>
+        <label
+          >DEM file<input
+            type="file"
+            id="terrain-file"
+            accept=".hgt,.gterrain" /></label
+        ><label
+          ><input type="checkbox" id="prepare-hillshade" /> Hillshade</label
+        ><label
+          ><input type="checkbox" id="prepare-contours" /> Contour lines</label
+        ><label
+          ><input type="checkbox" id="prepare-elevation" /> Elevation
+          inspection</label
+        ><button id="prepare-terrain">Prepare selected terrain locally</button
+        ><a id="export-terrain" class="secondary-action" hidden
+          >Save terrain file</a
+        >
+        <p id="terrain-status" role="status"></p>
+      </details>
       <details id="map-preparation">
         <summary>Download an offline map</summary>
         <p>
@@ -287,6 +402,24 @@
               value="500"
           /></label>
         </div>
+        <fieldset>
+          <legend>Optional terrain · local DEM preparation</legend>
+          <p class="muted">
+            Automatic DEM download is unavailable in this build. Supply a
+            licensed SRTM HGT tile to prepare selected components; no DEM
+            request occurs for a vector-only map.
+          </p>
+          <label
+            ><input id="download-hillshade" type="checkbox" /> Hillshade</label
+          ><label
+            ><input id="download-contours" type="checkbox" /> Contours</label
+          ><label
+            ><input id="download-elevation" type="checkbox" /> Elevation
+            data</label
+          ><label
+            >Optional DEM<input id="download-dem" type="file" accept=".hgt"
+          /></label>
+        </fieldset>
         <button id="preview-map">Preview area & features</button
         ><button id="download-map" class="primary" disabled>
           Download for Offline Use
@@ -338,8 +471,8 @@
       >
     </dialog>
     <footer>
-      Local workspace · Offline geographic coordinates · Phone Tracking
-      continues independently of Command Recording
+      Offline geographic coordinates · Phone Tracking continues independently of
+      Command Recording
     </footer>
   </body>
 </html>

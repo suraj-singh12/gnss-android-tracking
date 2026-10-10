@@ -5,6 +5,13 @@ locally durable observations over Wi-Fi to a Command computer. Command interpret
 observations, records tracks and presents a local dashboard. Field operation
 requires no internet, SIM, cloud service or online map.
 
+Issue #6 extends the verified PR #17 integration with Day/Night appearance, compact
+header/About, explicit recording-start confirmation and optional locally imported
+SRTM terrain layers. Existing vector maps and GNSS/SOS/recording ownership remain.
+Automatic online DEM acquisition is **not verified/implemented**; see
+[Command terrain formats/provider boundary](command/README.md) and
+[acceptance evidence](docs/ui-acceptance.md). No physical acceptance is implied.
+
 Two independent applications communicate only through
 [Protocol v1](protocol/protocol-v1.md). Android owns measurement, durability and
 transmission. Command owns interpretation, recording, horizontal travelled

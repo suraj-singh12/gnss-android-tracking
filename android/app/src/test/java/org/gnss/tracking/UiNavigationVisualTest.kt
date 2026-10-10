@@ -29,6 +29,13 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [35], application = TrackingApp::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class UiNavigationVisualTest {
+    private data class RenderCase(
+        val width: Int,
+        val height: Int,
+        val font: Float,
+        val night: Boolean,
+    )
+
     private fun descendants(view: View): List<View> =
         listOf(view) +
             if (view is ViewGroup)
@@ -47,8 +54,16 @@ class UiNavigationVisualTest {
         shadowOf(app.getSystemService(LocationManager::class.java))
             .setProviderEnabled(LocationManager.GPS_PROVIDER, true)
         val output = System.getenv("GNSS_SCREENSHOT_DIR")?.let { File(it).apply { mkdirs() } }
-        for ((width, height, font) in
-            listOf(Triple(360, 800, 1f), Triple(480, 960, 1f), Triple(360, 800, 1.5f))) {
+        for ((width, height, font, night) in
+            listOf(
+                RenderCase(360, 800, 1f, false),
+                RenderCase(480, 960, 1f, false),
+                RenderCase(360, 800, 1.5f, false),
+                RenderCase(360, 800, 1f, true),
+                RenderCase(480, 960, 1f, true),
+                RenderCase(360, 800, 1.5f, true),
+            )) {
+            app.getSharedPreferences("appearance", 0).edit().putBoolean("night", night).commit()
             app.physicalButtonTest.clearResults()
             withContext(Dispatchers.IO) { app.recorder.physicalButtonHistory() }
             val config =
@@ -58,6 +73,11 @@ class UiNavigationVisualTest {
             @Suppress("DEPRECATION")
             app.resources.updateConfiguration(config, app.resources.displayMetrics)
             val activity = Robolectric.buildActivity(MainActivity::class.java).setup()
+            // A themed configuration context has its own Robolectric service shadow.
+            // Real Android exposes the same system GPS switch through both contexts.
+            val activityLocation =
+                shadowOf(activity.get().getSystemService(LocationManager::class.java))
+            activityLocation.setProviderEnabled(LocationManager.GPS_PROVIDER, true)
             try {
                 val root = activity.get().findViewById<View>(android.R.id.content)
                 val density = app.resources.displayMetrics.density
@@ -101,9 +121,9 @@ class UiNavigationVisualTest {
                     if (output == null) return
                     val image = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
                     root.draw(Canvas(image))
-                    File(output, "android-${width}-${font}-$name.png").outputStream().use {
-                        image.compress(Bitmap.CompressFormat.PNG, 100, it)
-                    }
+                    File(output, "android-${if(night) "night-" else ""}${width}-${font}-$name.png")
+                        .outputStream()
+                        .use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
                     image.recycle()
                 }
                 suspend fun reveal(view: View) {
@@ -237,6 +257,16 @@ class UiNavigationVisualTest {
                     all.filterIsInstance<Button>().single { it.text == destination }.performClick()
                     settle()
                     capture("nav-" + destination.lowercase())
+                    if (destination == "Settings") {
+                        val appearance = activity.get().findViewById<Button>(R.id.appearance)
+                        val bounds =
+                            android.graphics.Rect(0, 0, appearance.width, appearance.height)
+                        (root as ViewGroup).offsetDescendantRectToMyCoords(appearance, bounds)
+                        assertTrue(
+                            "Appearance must be discoverable without scrolling",
+                            bounds.top >= 0 && bounds.bottom <= h,
+                        )
+                    }
                     if (destination == "Diagnostics") {
                         val tools = activity.get().findViewById<ViewGroup>(R.id.diagnostic_tools)
                         assertTrue(tools.isShown)
@@ -391,6 +421,7 @@ class UiNavigationVisualTest {
                     )
                 shadowOf(app.getSystemService(LocationManager::class.java))
                     .setProviderEnabled(LocationManager.GPS_PROVIDER, false)
+                activityLocation.setProviderEnabled(LocationManager.GPS_PROVIDER, false)
                 activity.pause().resume()
                 all.filterIsInstance<Button>().single { it.text == "Settings" }.performClick()
                 settle()
@@ -417,11 +448,13 @@ class UiNavigationVisualTest {
                     )
                 shadowOf(app.getSystemService(LocationManager::class.java))
                     .setProviderEnabled(LocationManager.GPS_PROVIDER, true)
+                activityLocation.setProviderEnabled(LocationManager.GPS_PROVIDER, true)
             } finally {
                 activity.pause().stop().destroy()
             }
         }
         app.operational.value = Operational()
+        app.getSharedPreferences("appearance", 0).edit().putBoolean("night", false).commit()
         app.recorder.close()
     }
 

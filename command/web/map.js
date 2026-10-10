@@ -122,6 +122,12 @@ const GeoMap = (() => {
         "Imported map · verify its source licence before distribution",
     };
   }
+  function unproject(x, y) {
+    return [
+      ((x / radius) * 180) / Math.PI,
+      ((2 * Math.atan(Math.exp(y / radius)) - Math.PI / 2) * 180) / Math.PI,
+    ];
+  }
   function liveHeading(fix, fresh) {
     return fresh &&
       Number.isFinite(fix.speed_mps) &&
@@ -132,6 +138,6 @@ const GeoMap = (() => {
       ? fix.bearing_deg
       : null;
   }
-  return { project, parse, liveHeading };
+  return { project, unproject, parse, liveHeading };
 })();
 if (typeof module !== "undefined") module.exports = GeoMap;

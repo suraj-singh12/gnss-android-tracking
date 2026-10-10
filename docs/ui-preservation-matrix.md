@@ -1,5 +1,24 @@
 # Issue #6 functionality preservation matrix
 
+## PR #17 extension · starting SHA 9eee532
+
+All original rows below remain applicable. No acquisition/storage/delivery/quality/
+recording/SOS ownership changes are introduced by terrain or themes.
+
+| Capability | Previous location | Extended location | Authoritative API/state | Regression |
+| --- | --- | --- | --- | --- |
+| Recording start modes | Permanent toolbar selector | Explicit Start modal, Current Time default | Existing recording action/modes/windows; read-only session-availability flag | Browser cancel/errors/both modes; original Go/bridge recording tests |
+| Stop/Resume/Clear | Recording toolbar | Same centred toolbar | Existing recording state machine | Existing browser, Go and bridge suites |
+| Vector maps/import/export | Map & layers | Same library/downloader/import/export | Existing offline_maps/renderer; vector bytes unchanged | Existing OSM fixture/browser tests; terrain isolation/export test |
+| Terrain (new) | Not available | Local DEM preparation and Layers beside Focus selected | Additive offline_terrain binary grid; no tracking dependency | HGT guards/roundtrip/restart/delete, Node processing and browser offline restart |
+| Appearance (new) | Day only | Android Settings; Command header | Independent native/browser preference | Native resources/renders, browser persisted Night restart/axe |
+| Header status/party count | Separate top-right status | Beneath identity, independent connected/total parties | Existing contact policy/state | Browser DOM placement and server outage/reconnect |
+| About (new) | Not available | Header beside SOS/Day-Night | Static exact project/developer information | Browser content/Escape/accessibility |
+| SOS/Physical Button/diagnostics | Existing UI | Same functions in both palettes | Existing engine/journal/adapter/alarm/ACK | All previous tests retained; native Day/Night renders |
+
+Automatic DEM acquisition remains explicitly unavailable; local import/fixtures are
+not a substitute claim of external provider acceptance. See Command README.
+
 ## Corrective audit · baseline 7725412
 
 The corrective branch starts from the validated PR #16 head. The existing rows
