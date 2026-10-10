@@ -111,6 +111,8 @@ class PhysicalButtonControllerTest {
     }
 }
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35])
 class PhysicalButtonJournalTest {
     @get:Rule val temporary = TemporaryFolder()
     private var time = 1791642738000L
