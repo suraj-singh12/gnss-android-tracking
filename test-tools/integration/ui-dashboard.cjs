@@ -115,7 +115,8 @@ async function wait(check) {
       "utf8",
     ),
   );
-  const partyIds = [];
+  const partyIds = [],
+    latestMessages = [];
   const now = Date.now(),
     sessionStart = new Date(now - 120000).toISOString();
   for (let i = 0; i < 5; i++) {
@@ -138,6 +139,10 @@ async function wait(check) {
         ][i],
       };
       m.sequence = n;
+      if (i === 4) {
+        m.config_state.local_reporting_interval_s = 5;
+        m.config_state.effective_reporting_interval_s = 5;
+      }
       m.captured_at = new Date(now - age).toISOString();
       m.fix.observed_at = m.captured_at;
       m.fix.latitude += i * 0.001 + n * 0.00015;
@@ -164,6 +169,7 @@ async function wait(check) {
         };
       }
       await send(m);
+      latestMessages[i] = structuredClone(m);
     }
   }
   await post("recording", { action: "clear", confirmed: true });
@@ -217,9 +223,13 @@ async function wait(check) {
   await page.locator("#fit").click();
   await page.locator("#focus-party").click();
   await page.locator("#open-map").click();
+  const qualifiedBeforeRaw = (await state()).devices[partyIds[2]].total_m;
   await page.locator("#all-observations").check();
   assert.equal(await page.locator("#all-observations").isChecked(), true);
-  assert.ok((await state()).devices[partyIds[2]].total_m >= 0);
+  assert.equal(
+    (await state()).devices[partyIds[2]].total_m,
+    qualifiedBeforeRaw,
+  );
   const map = {
     type: "FeatureCollection",
     features: [
@@ -347,6 +357,32 @@ async function wait(check) {
   await wait(
     async () => !!(await state()).sos_alerts[0].operator_acknowledged_at,
   );
+  await page.waitForTimeout(32000);
+  for (let i = 0; i < 4; i++) {
+    const m = structuredClone(latestMessages[i]);
+    m.message_id = randomUUID();
+    m.sequence = 200 + i;
+    m.captured_at = new Date().toISOString();
+    m.fix.observed_at = m.captured_at;
+    m.observation.observation_id = m.message_id;
+    m.observation.observation_sequence = 4;
+    m.observation.measurement_elapsed_ms = 4000;
+    m.fix.latitude += 0.00015;
+    delete m.history_progress;
+    await send(m);
+  }
+  await wait(
+    async () =>
+      (await state()).devices[partyIds[4]].contact_condition === "contact_lost",
+  );
+  await page.reload();
+  await page.waitForFunction(() =>
+    document.querySelector("#devices").textContent.includes("Offline"),
+  );
+  await page.screenshot({
+    path: path.join(out, "command-mixed-online-offline-stale-queue.png"),
+    fullPage: true,
+  });
   const axe = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
     .analyze();

@@ -691,6 +691,9 @@ function draw() {
       live: d.current_position,
     }));
   const all = [...points, ...live];
+  $("track-layer-label").textContent = raw
+    ? "┄ Unfiltered / Diagnostic · distance remains qualified"
+    : "— Qualified history";
   const focusedPoint = document.activeElement?.getAttribute?.("data-point-key");
   root.replaceChildren();
   $("empty").hidden = all.length > 0;
@@ -820,11 +823,15 @@ function draw() {
         stroke,
         "stroke-width": selectedParty === first.device_id ? 2.5 : 1.5,
         opacity: raw ? 0.45 : 0.6,
-        "stroke-dasharray": provisional ? "6 5" : dash(first.device_id),
+        "stroke-dasharray": raw
+          ? "2 4"
+          : provisional
+            ? "6 5"
+            : dash(first.device_id),
       }),
     );
     for (const p of group) {
-      if (!p.dot) continue;
+      if (!p.dot && !raw) continue;
       const [x, y] = xy(p),
         circle = svg("circle", {
           cx: x,

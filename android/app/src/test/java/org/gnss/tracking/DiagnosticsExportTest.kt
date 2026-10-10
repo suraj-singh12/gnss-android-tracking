@@ -35,17 +35,15 @@ abstract class DiagnosticsExportChecks {
         val app: TrackingApp = ApplicationProvider.getApplicationContext()
         val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
         try {
-            val content =
-                (controller
-                        .get()
-                        .findViewById<android.widget.FrameLayout>(android.R.id.content)
-                        .getChildAt(0) as android.widget.ScrollView)
-                    .getChildAt(0) as android.widget.LinearLayout
-            val button =
-                (0 until content.childCount)
-                    .map { content.getChildAt(it) }
-                    .filterIsInstance<Button>()
-                    .single { it.text == "Export diagnostics" }
+            fun buttons(view: android.view.View): List<Button> =
+                (if (view is Button) listOf(view) else emptyList()) +
+                    if (view is android.view.ViewGroup)
+                        (0 until view.childCount).flatMap { buttons(view.getChildAt(it)) }
+                    else emptyList()
+            val controls = buttons(controller.get().findViewById(android.R.id.content))
+            controls.single { it.text == "Diagnostics" }.performClick()
+            val button = controls.single { it.text == "Export diagnostics" }
+            assertTrue(button.isShown)
             val before = app.operational.value
             button.performClick()
             val intent = shadowOf(controller.get()).nextStartedActivityForResult.intent
