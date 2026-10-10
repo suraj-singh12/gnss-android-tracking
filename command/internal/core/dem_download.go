@@ -108,7 +108,7 @@ func (p *mapProvider) acquireDEMReport(ctx context.Context, b [4]float64, compon
 			clip := [4]float64{math.Max(g.Bounds[0], float64(lon)), math.Max(g.Bounds[1], float64(lat)), math.Min(g.Bounds[2], float64(lon+1)), math.Min(g.Bounds[3], float64(lat+1))}
 			crop, err := importHGT(name, raw, clip, components)
 			if err != nil {
-				return g, err
+				return g, fmt.Errorf("decoded elevation data invalid: %w", err)
 			}
 			hash := sha256.Sum256(raw)
 			g.Provenance.Tiles = append(g.Provenance.Tiles, demTileEvidence{address, hex.EncodeToString(hash[:])})
