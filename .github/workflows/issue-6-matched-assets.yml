@@ -23,14 +23,32 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.7"
+          cache-dependency-path: command/go.sum
       - name: Acquire and decode real public DEM
         env:
-          GNSS_TERRAIN_PROVIDER_REPORT: ${{ runner.temp }}/terrain-provider-check.json
-        run: node test-tools/integration/dem-acquisition.cjs
+          GNSS_TERRAIN_PROVIDER_REPORT: ${{ runner.temp }}/dem-evidence/dem-source-probe.json
+        run: |
+          mkdir -p "$RUNNER_TEMP/dem-evidence"
+          node test-tools/integration/dem-acquisition.cjs
+      - name: Real automatic DEM acquisition, geographic alignment and offline restart
+        env:
+          GNSS_TERRAIN_PROVIDER_REPORT: ${{ runner.temp }}/dem-evidence/terrain-provider-check.json
+          GNSS_COMMAND_BINARY: ${{ runner.temp }}/gnss-dem-command
+          GNSS_PLAYWRIGHT_MODULE: ${{ runner.temp }}/gnss-dem-browser/node_modules/playwright
+          GNSS_SCREENSHOT_DIR: ${{ runner.temp }}/dem-evidence/visual-evidence
+        run: |
+          (cd command && go build -o "$RUNNER_TEMP/gnss-dem-command" ./cmd/party-tracker)
+          npm install --prefix "$RUNNER_TEMP/gnss-dem-browser" playwright
+          "$RUNNER_TEMP/gnss-dem-browser/node_modules/.bin/playwright" install --with-deps chromium
+          node test-tools/integration/dem-offline-acceptance.cjs
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: DEM-provider-acquisition
-          path: ${{ runner.temp }}/terrain-provider-check.json
+          path: ${{ runner.temp }}/dem-evidence
           if-no-files-found: error
   integrated:
     needs: dem-provider
@@ -118,12 +136,10 @@ jobs:
           export GNSS_SCREENSHOT_DIR="$RUNNER_TEMP/gnss-assets/visual-evidence"
           node test-tools/integration/sos-dashboard.cjs
           node test-tools/integration/ui-dashboard.cjs
-      - name: Real automatic DEM acquisition, geographic alignment and offline restart
-        env:
-          GNSS_TERRAIN_PROVIDER_REPORT: ${{ runner.temp }}/gnss-assets/terrain-provider-check.json
-          GNSS_COMMAND_BINARY: ${{ runner.temp }}/gnss-command-linux
-          GNSS_PLAYWRIGHT_MODULE: ${{ runner.temp }}/gnss-browser/node_modules/playwright
-        run: node test-tools/integration/dem-offline-acceptance.cjs
+      - uses: actions/download-artifact@v4
+        with:
+          name: DEM-provider-acquisition
+          path: ${{ runner.temp }}/gnss-assets
       - name: Verify exact revisions and generate checksum manifest
         env:
           ASSET_DIR: ${{ runner.temp }}/gnss-assets
