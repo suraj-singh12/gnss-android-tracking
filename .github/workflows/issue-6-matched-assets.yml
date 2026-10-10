@@ -7,6 +7,7 @@ on:
         integration/issue6-physical-button,
         correction/issue6-operational-ux,
         feature/issue6-terrain-appearance,
+        feature/issue6-automatic-dem,
       ]
   workflow_dispatch:
 concurrency:
@@ -15,6 +16,22 @@ concurrency:
 permissions:
   contents: read
 jobs:
+  dem-provider:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Acquire and decode real public DEM
+        env:
+          GNSS_TERRAIN_PROVIDER_REPORT: ${{ runner.temp }}/terrain-provider-check.json
+        run: node test-tools/integration/dem-acquisition.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DEM-provider-acquisition
+          path: ${{ runner.temp }}/terrain-provider-check.json
+          if-no-files-found: error
   integrated:
     runs-on: ubuntu-latest
     steps:
