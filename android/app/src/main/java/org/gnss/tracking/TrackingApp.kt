@@ -138,6 +138,12 @@ class TrackingApp : Application() {
     val recorder by lazy {
         DiagnosticRecorder(DiagnosticJournal(java.io.File(filesDir, "diagnostics")))
     }
+    // Process-local opt-in. It defaults off on cold start and writes only to Diagnostics.
+    val physicalButtonTest by lazy {
+        PhysicalButtonTestController(
+            record = recorder::physicalButton,
+        )
+    }
     val diagnostics = MutableStateFlow<GnssDiagnostic?>(null)
     val latest = LatestLocation(SystemClock)
     val health by lazy { DeviceHealth(this, latest) }

@@ -180,8 +180,27 @@ class UiNavigationVisualTest {
                         val tools = activity.get().findViewById<ViewGroup>(R.id.diagnostic_tools)
                         assertTrue(tools.isShown)
                         val actions =
-                            descendants(tools).filterIsInstance<Button>().map { it.text.toString() }
-                        assertEquals(listOf("Retry saved messages", "Export diagnostics"), actions)
+                            descendants(tools)
+                                .filterIsInstance<Button>()
+                                .filter { it.isShown }
+                                .map { it.text.toString() }
+                        assertEquals(
+                            listOf("Physical Button Test", "Retry saved messages", "Export diagnostics"),
+                            actions,
+                        )
+                        descendants(tools)
+                            .filterIsInstance<Button>()
+                            .single { it.text == "Physical Button Test" }
+                            .performClick()
+                        settle()
+                        capture("diagnostics-physical-button-expanded")
+                        val diagnosticText =
+                            descendants(tools)
+                                .filterIsInstance<TextView>()
+                                .filter { it.isShown }
+                                .joinToString("\n") { it.text }
+                        assertTrue(diagnosticText.contains("Test status: INACTIVE"))
+                        assertTrue(diagnosticText.contains("Mechanism unavailable"))
                     }
                     assertEquals(
                         destination,

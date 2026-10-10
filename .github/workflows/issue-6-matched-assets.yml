@@ -1,7 +1,7 @@
-name: Issue 6 integrated UI validation and matched assets
+name: Issue 6 physical-button integration and matched assets
 on:
   push:
-    branches: [issue-6-integrated-ui]
+    branches: [issue-6-integrated-ui, integration/issue6-physical-button]
   workflow_dispatch:
 concurrency:
   group: issue6-validation-${{ github.ref }}

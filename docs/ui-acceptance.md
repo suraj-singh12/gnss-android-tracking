@@ -2,8 +2,10 @@
 
 ## Source and compatibility
 
-Dedicated branch `issue-6-integrated-ui` starts directly from combined PR #12
-`b23b5f58845c896e7fb2c5800e577202667c1e3f`, including PR #11 native GNSS/history.
+Integration branch `integration/issue6-physical-button` starts from PR #14
+`f996767f34557da4716ff6f626aa03945bc615f7` and reuses the tested PR #15
+controller/journal source `d00e2e8e344f0e071698ec3b0add44920c06eaab`, both of
+which descend from combined PR #12 `b23b5f58845c896e7fb2c5800e577202667c1e3f`.
 No dependency PR is merged or rewritten. Android application `org.gnss.tracking`
 version 0.1, minimum Android 26, target SDK 35; Command Protocol v1 plus existing
 negotiated native-history extension. UI changes do not alter wire or persistence formats.
@@ -76,10 +78,9 @@ Command frontend/server and real HTTP/read-model state with synthetic protocol f
 Android `UiNavigationVisualTest` renders the actual native Activity with Room flows and
 Robolectric native Skia, with synthetic operational telemetry. This is equivalent
 software rendering evidence, not an emulator or attached physical device.
-The full Android suite has 180 cases: 155 ordinary cases and 25 opt-in cross-language
-cases. The separate integration step executes those 25 against the actual Go core;
-their being skipped in the ordinary suite is intentional. The Actions test-report
-artifact retains both the full-suite reports and the separate integration reports.
+The Actions test-report artifact retains the full Android suite and separate
+cross-language integration reports. Count each unique test once; an integration
+rerun is not an additional unit-test pass.
 
 ## Physical acceptance remains required
 
@@ -93,11 +94,20 @@ coordinates, font scaling/TalkBack on device, and the document export picker.
 Retain matched APK/Command diagnostic ZIPs, map provenance and screenshots. No physical
 pass, issue closure, release or merge is implied by automated software results.
 
-## Parallel physical-button experiment
+## Physical Button Test integration
 
-The Issue #6 UI does not depend on the physical-button experiment. Diagnostics
-provides `R.id.diagnostic_tools` for later insertion of its tested Physical Button
-Test controls. No key detector or SOS-engine change is introduced by the redesign.
-After both branches are ready, deliberately integrate the tested experiment and rerun
-Android, GNSS/history and SOS regressions before physical acceptance. Keep both PRs
-unmerged pending operator approval; screen-off behavior requires device testing.
+Diagnostics now has one expandable **Physical Button Test** entry beneath
+`R.id.diagnostic_tools`. It reuses `PhysicalButtonTestController` and the existing
+bounded `DiagnosticJournal`; it neither adds a key detector nor changes GNSS, Room,
+SOS persistence, sender or Command behavior. While listening, only public
+Activity-delivered events are observed and the legacy Activity triple-Volume-Up SOS
+adapter is suppressed. Stop, Activity pause and a new process restore it. The report
+is included as `physical-button-report.json`; retained evidence survives navigation,
+pause/resume and process recreation, while listening never survives a restart.
+
+Background, locked-screen and screen-off volume observation are **MECHANISM
+UNAVAILABLE**. The application does not create a MediaSession, Accessibility Service,
+root/privileged hook, audio playback, extra foreground service or OEM-specific API.
+Follow [Generic Android Physical Button Acceptance](../android/DEVICE-ACCEPTANCE.md#generic-android-physical-button-acceptance)
+on actual hardware. Keep PRs #11, #12, #14 and #15 unmerged pending review and do
+not infer a physical-device pass from the rendered or JVM evidence.
