@@ -311,6 +311,7 @@ function render() {
       ? "Projection catching up — displayed history is not fully synchronized"
       : "";
   $("connection").textContent = "Command Connected · local workspace";
+  $("connection").classList.remove("unavailable");
   const recording = state.recording;
   $("recording").textContent = recording
     ? recording.active
@@ -1357,6 +1358,7 @@ async function poll() {
     showError(null);
   } catch (e) {
     $("connection").textContent = "Offline · Command workspace unavailable";
+    $("connection").classList.add("unavailable");
     showError(e);
   } finally {
     polling = false;

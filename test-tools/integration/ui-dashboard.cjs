@@ -493,6 +493,21 @@ async function wait(check) {
   // Command restart + browser reload without any provider access uses the same saved map.
   command.kill("SIGINT");
   await once(command, "exit");
+  await page.waitForFunction(() =>
+    document
+      .querySelector("#connection")
+      .textContent.includes("Command workspace unavailable"),
+  );
+  assert.equal(
+    await page
+      .locator("#connection")
+      .evaluate((e) => e.classList.contains("unavailable")),
+    true,
+  );
+  await page.screenshot({
+    path: path.join(out, "command-workspace-unavailable.png"),
+    fullPage: true,
+  });
   command = spawn(
     process.env.GNSS_COMMAND_BINARY,
     [
@@ -514,6 +529,17 @@ async function wait(check) {
   });
   await page.reload();
   await page.waitForSelector('[data-layer="offline-map"]');
+  await page.waitForFunction(() =>
+    document
+      .querySelector("#connection")
+      .textContent.includes("Command Connected"),
+  );
+  assert.equal(
+    await page
+      .locator("#connection")
+      .evaluate((e) => e.classList.contains("unavailable")),
+    false,
+  );
   assert.equal((await (await fetch(local + "/local/maps")).json()).length, 2);
   assert.equal((await state()).devices[partyIds[2]].total_m, mapDistance);
   await page.screenshot({
@@ -677,7 +703,7 @@ async function wait(check) {
     .click();
   await page.waitForSelector('[data-layer="located-sos"]');
   assert.equal(
-    await page.locator('[data-layer="located-sos"] text').innerText(),
+    await page.locator('[data-layer="located-sos"] text').textContent(),
     "SOS event · Charlie",
   );
   assert.match(

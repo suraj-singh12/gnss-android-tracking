@@ -110,6 +110,31 @@ class SosActivityTest {
             val message = Protocol.decodeMessage(row.json)
             assertEquals("sos", message.type)
             assertEquals(row.messageId, message.sos!!.event_id)
+            withTimeout(10000) {
+                while (app.sosNotice.value != "SOS saved on phone") {
+                    shadowOf(Looper.getMainLooper()).idle()
+                    delay(10)
+                }
+            }
+            // The engine's already-tested storage failure notice must remain visible
+            // even when this earlier durable SOS is still pending.
+            app.sosNotice.value =
+                "SOS NOT SAVED — storage unavailable. Retry activation; use another emergency path."
+            val status =
+                activity
+                    .get()
+                    .javaClass
+                    .getDeclaredField("sosStatus")
+                    .apply { isAccessible = true }
+                    .get(activity.get()) as android.widget.TextView
+            withTimeout(10000) {
+                while (!status.text.contains("SOS NOT SAVED")) {
+                    shadowOf(Looper.getMainLooper()).idle()
+                    delay(10)
+                }
+            }
+            assertTrue(status.text.contains("awaiting Command receipt"))
+            assertEquals(1, app.repository.dao.sosHistory().size)
         } finally {
             activity.pause().stop().destroy()
         }

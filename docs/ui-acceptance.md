@@ -126,6 +126,10 @@ Inspection discovered and corrected narrow-header clipping, low-contrast native
 diagnostic text, zero-width narrow map layout, polling that could collapse focused
 history evidence, tiny saved maps rounding to misleading zero KB, missing map
 coordinates silently becoming zero and changed-area/stale-response preview races.
+The primary phone SOS status also retains the latest save/failure/debounce notice
+beside older queued-event receipt status, so an old pending SOS cannot hide a new
+storage failure. Command workspace outage and recovery have independent labels
+and warning/connected colours, tested with an actual stopped/restarted server.
 Expanded
 native-section captures explicitly scroll to the section under inspection. Browser
 tests assert viewport overflow, geometric recording-control centring and map width;

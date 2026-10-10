@@ -359,16 +359,13 @@ class MainActivity : Activity() {
                     val relevant = rows.firstOrNull { it.deliveredAt == null } ?: rows.firstOrNull()
                     sosStatus.text =
                         when {
-                            relevant == null -> notice ?: "SOS · No saved event"
+                            relevant == null -> "SOS · No saved event"
                             pending > 0 -> "SOS Pending · $pending awaiting Command receipt"
                             else -> "SOS Received · Operator acknowledgement on Command"
                         }
-                    if (
-                        notice != null &&
-                            (notice.contains("saving", ignoreCase = true) ||
-                                notice.contains("failed", ignoreCase = true))
-                    )
-                        sosStatus.text = "$notice\n${sosStatus.text}"
+                    // A latest save failure or debounce result must not be hidden
+                    // merely because an older SOS is still queued or received.
+                    if (notice != null) sosStatus.text = "$notice\n${sosStatus.text}"
                     sosDetails.text = buildString {
                         notice?.let { appendLine(it) }
                         if (rows.isEmpty()) appendLine("SOS: no saved event")

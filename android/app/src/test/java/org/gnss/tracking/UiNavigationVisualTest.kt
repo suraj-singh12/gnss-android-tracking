@@ -382,6 +382,41 @@ class UiNavigationVisualTest {
                 assertTrue(
                     all.filterIsInstance<Button>().single { it.text == "Tracking" }.isSelected
                 )
+                // Render actionable permission/GPS recovery, not only the granted state.
+                app.operational.value = Operational()
+                shadowOf(app)
+                    .denyPermissions(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.POST_NOTIFICATIONS,
+                    )
+                shadowOf(app.getSystemService(LocationManager::class.java))
+                    .setProviderEnabled(LocationManager.GPS_PROVIDER, false)
+                activity.pause().resume()
+                all.filterIsInstance<Button>().single { it.text == "Settings" }.performClick()
+                settle()
+                reveal(
+                    all.filterIsInstance<Button>().single {
+                        it.text.startsWith("Permissions and battery readiness")
+                    }
+                )
+                assertTrue(
+                    all.filterIsInstance<Button>()
+                        .single { it.text == "Allow precise location" }
+                        .isShown
+                )
+                assertTrue(
+                    all.filterIsInstance<Button>()
+                        .single { it.text == "Open Location settings" }
+                        .isShown
+                )
+                capture("settings-permission-attention")
+                shadowOf(app)
+                    .grantPermissions(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.POST_NOTIFICATIONS,
+                    )
+                shadowOf(app.getSystemService(LocationManager::class.java))
+                    .setProviderEnabled(LocationManager.GPS_PROVIDER, true)
             } finally {
                 activity.pause().stop().destroy()
             }
