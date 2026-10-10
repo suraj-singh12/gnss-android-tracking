@@ -24,7 +24,7 @@ import org.robolectric.annotation.Config
 class PhysicalButtonControllerTest {
     private val records = mutableListOf<Pair<DiagnosticEvent, PhysicalButtonEvidence?>>()
     private val controller =
-        PhysicalButtonTestController { event, evidence -> records += event to evidence }
+        PhysicalButtonTestController(record = { event, evidence -> records += event to evidence })
 
     @Test
     fun startStopAndRepeatsCountOnlyActualDownPressesWithoutSos() {
@@ -121,7 +121,7 @@ class PhysicalButtonJournalTest {
         DiagnosticJournal(folder, DiagnosticJournal.Limits(chunkBytes = 256 * 1024, timelineBytes = 4 * 1024 * 1024))
 
     private fun controller(journal: DiagnosticJournal) =
-        PhysicalButtonTestController { event, evidence ->
+        PhysicalButtonTestController(record = { event, evidence ->
             time += 1000
             journal.event(
                 DiagnosticEntry(
@@ -132,7 +132,7 @@ class PhysicalButtonJournalTest {
                     physicalButton = evidence,
                 )
             )
-        }
+        })
 
     private fun tap(test: PhysicalButtonTestController, key: Int = KeyEvent.KEYCODE_VOLUME_UP) {
         test.observeActivityKey(key, KeyEvent.ACTION_DOWN, 0, true, true, false)
