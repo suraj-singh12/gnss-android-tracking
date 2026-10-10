@@ -369,6 +369,15 @@ class MainActivity : Activity() {
         interval = edit("Local reporting interval (seconds, 5–86400 in steps of 5)", true)
         button("Save settings") { save() }
         content = pages.getValue("Diagnostics")
+        val diagnosticTools =
+            LinearLayout(this).apply {
+                id = R.id.diagnostic_tools
+                orientation = LinearLayout.VERTICAL
+                content.addView(this, LinearLayout.LayoutParams(-1, -2))
+            }
+        content = diagnosticTools
+        text("Diagnostic tools", 20f)
+        text("Inspect and export evidence while tracking continues.")
         button("Retry saved messages") {
             AlertDialog.Builder(this)
                 .setTitle("Retry pending delivery?")
@@ -400,7 +409,7 @@ class MainActivity : Activity() {
                 .setPositiveButton("Re-enroll") { _, _ -> save(reenroll = true) }
                 .show()
         }
-        content = pages.getValue("Diagnostics")
+        content = diagnosticTools
         button("Export diagnostics") {
             if (!exporting) {
                 try {

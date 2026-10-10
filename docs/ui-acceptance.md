@@ -92,3 +92,12 @@ coordinates, font scaling/TalkBack on device, and the document export picker.
 
 Retain matched APK/Command diagnostic ZIPs, map provenance and screenshots. No physical
 pass, issue closure, release or merge is implied by automated software results.
+
+## Parallel physical-button experiment
+
+The Issue #6 UI does not depend on the physical-button experiment. Diagnostics
+provides `R.id.diagnostic_tools` for later insertion of its tested Physical Button
+Test controls. No key detector or SOS-engine change is introduced by the redesign.
+After both branches are ready, deliberately integrate the tested experiment and rerun
+Android, GNSS/history and SOS regressions before physical acceptance. Keep both PRs
+unmerged pending operator approval; screen-off behavior requires device testing.

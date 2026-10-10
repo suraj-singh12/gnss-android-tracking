@@ -176,6 +176,13 @@ class UiNavigationVisualTest {
                     all.filterIsInstance<Button>().single { it.text == destination }.performClick()
                     settle()
                     capture("nav-" + destination.lowercase())
+                    if (destination == "Diagnostics") {
+                        val tools = activity.get().findViewById<ViewGroup>(R.id.diagnostic_tools)
+                        assertTrue(tools.isShown)
+                        val actions =
+                            descendants(tools).filterIsInstance<Button>().map { it.text.toString() }
+                        assertEquals(listOf("Retry saved messages", "Export diagnostics"), actions)
+                    }
                     assertEquals(
                         destination,
                         activity

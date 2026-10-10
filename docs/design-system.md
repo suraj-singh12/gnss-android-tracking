@@ -125,3 +125,14 @@ Target Android sizes: 360×800 dp and 480×960 dp, with 1.5× font scaling. Comm
 and on very narrow windows the party list stacks above it. Secondary content scrolls;
 SOS remains reachable. Verification evidence and remaining limits are recorded in
 [UI acceptance](ui-acceptance.md); hardware behavior is separate from synthetic rendering.
+
+### Extensible diagnostic tools
+
+Diagnostics includes a named **Diagnostic tools** native vertical group
+(`R.id.diagnostic_tools`) containing delivery retry and diagnostic export. Additional
+tested tools can be appended to that group without adding a destination or changing
+Tracking. The separate experimental Physical Button Test is not included in this
+revision. Its key detection must remain independent of the existing SOS engine.
+Integration requires a reviewed, deliberate merge/rebase after both branches are
+ready, followed by Android and GNSS/SOS regression checks. Neither PR is merged
+without operator approval. Screen-off button support remains unverified.
