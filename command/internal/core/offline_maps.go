@@ -4,12 +4,14 @@ package core
 // No observation, projection, recording or sender path uses these tables/APIs.
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"math"
 	"mime"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -20,22 +22,35 @@ import (
 const mapLimit = 20 * 1024 * 1024
 
 type savedMap struct {
-	ID      string `json:"id"`
-	Source  string `json:"source"`
-	Created string `json:"created"`
-	Bytes   int    `json:"bytes"`
+	Bounds     []float64       `json:"bounds,omitempty"`
+	Components map[string]bool `json:"components,omitempty"`
+	ID         string          `json:"id"`
+	Source     string          `json:"source"`
+	Created    string          `json:"created"`
+	Bytes      int             `json:"bytes"`
 }
 type mapProvider struct {
 	client               *http.Client
 	search, overpass     string
 	dem                  string
+	demClient            *http.Client
+	demTestAttemptBudget time.Duration
+	demTestBackoff       time.Duration
+	prepared             *terrainGrid
+	preparedKey          string
+	preparedAt           time.Time
 	mu                   sync.Mutex
 	nextSearch, nextArea time.Time
 }
 
 func newMapProvider() *mapProvider {
 	// Finish before the existing local HTTP server's 30-second write deadline.
-	return &mapProvider{client: &http.Client{Timeout: 25 * time.Second}, search: "https://nominatim.openstreetmap.org/search", overpass: "https://overpass-api.de/api/interpreter", dem: "https://elevation-tiles-prod.s3.amazonaws.com/skadi"}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = (&net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}).DialContext
+	transport.TLSHandshakeTimeout = 10 * time.Second
+	transport.ResponseHeaderTimeout = 20 * time.Second
+	transport.DisableCompression = true
+	return &mapProvider{client: &http.Client{Timeout: 25 * time.Second}, demClient: &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, search: "https://nominatim.openstreetmap.org/search", overpass: "https://overpass-api.de/api/interpreter", dem: "https://elevation-tiles-prod.s3.amazonaws.com/skadi"}
 }
 func (p *mapProvider) reserve(search bool) error {
 	p.mu.Lock()
@@ -101,7 +116,7 @@ func (s *Store) RecentEvents() ([]Evidence, error) {
 func (s *Store) listMaps() ([]savedMap, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rows, err := s.db.Query(`SELECT id,source,created,length(data) FROM offline_maps ORDER BY created DESC`)
+	rows, err := s.db.Query(`SELECT m.id,m.source,m.created,length(m.data),coalesce(json_extract(m.data,'$.requested_bounds'),'null'),coalesce(substr(t.data,1,8204),x'') FROM offline_maps m LEFT JOIN offline_terrain t ON t.map_id=m.id ORDER BY m.created DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -109,8 +124,20 @@ func (s *Store) listMaps() ([]savedMap, error) {
 	result := []savedMap{}
 	for rows.Next() {
 		var m savedMap
-		if err = rows.Scan(&m.ID, &m.Source, &m.Created, &m.Bytes); err != nil {
+		var bounds string
+		var metadata []byte
+		if err = rows.Scan(&m.ID, &m.Source, &m.Created, &m.Bytes, &bounds, &metadata); err != nil {
 			return nil, err
+		}
+		json.Unmarshal([]byte(bounds), &m.Bounds)
+		if len(metadata) >= 12 {
+			n := int(binary.BigEndian.Uint32(metadata[8:12]))
+			if n <= 8192 && 12+n <= len(metadata) {
+				var g terrainGrid
+				if json.Unmarshal(metadata[12:12+n], &g) == nil {
+					m.Components = g.Components
+				}
+			}
 		}
 		result = append(result, m)
 	}

@@ -28,7 +28,7 @@ async function port() {
   return p;
 }
 async function wait(f) {
-  for (let i = 0; i < 350; i++) {
+  for (let i = 0; i < 3900; i++) {
     if (await f()) return;
     await new Promise((r) => setTimeout(r, 100));
   }
@@ -85,15 +85,17 @@ async function wait(f) {
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(local);
   await page.locator("#open-map").click();
-  await page.locator("#map-preparation summary").click();
-  const lat = 30.4598,
-    lon = 78.0644;
+  await page.locator("#map-preparation > summary").click();
+  const lat = Number(process.env.GNSS_DEM_LAT || 30.4598),
+    lon = Number(process.env.GNSS_DEM_LON || 78.0644),
+    size = String(process.env.GNSS_DEM_SIZE || 500);
   await page.locator("#map-lat").fill(String(lat));
   await page.locator("#map-lon").fill(String(lon));
+  await page.locator("#map-area").selectOption(size);
   for (const k of ["hillshade", "contours", "elevation"])
     await page.locator("#download-" + k).check();
-  assert.equal(await page.locator("#map-width").inputValue(), "500");
-  assert.equal(await page.locator("#map-height").inputValue(), "500");
+  assert.equal(await page.locator("#map-width").inputValue(), size);
+  assert.equal(await page.locator("#map-height").inputValue(), size);
   await page.locator("#preview-map").click();
   await wait(() => page.locator("#download-map").isEnabled());
   const out = process.env.GNSS_SCREENSHOT_DIR || work;
@@ -118,6 +120,15 @@ async function wait(f) {
   assert.ok(grid.provenance?.tiles.length);
   assert.equal(grid.vertical_datum, "EGM96");
   assert.equal(grid.arc_seconds, 1);
+  const onlineDownloadReport = await (
+    await fetch(local + "/local/maps/" + id + "/download-report")
+  ).json();
+  assert.equal(onlineDownloadReport.outcome, "ready");
+  assert.ok(onlineDownloadReport.attempts.length > 0);
+  assert.ok(
+    Math.abs(onlineDownloadReport.area_width_height_metres[0] - Number(size)) <
+      1e-6,
+  );
   assert.ok(
     Math.abs((map.requested_bounds[0] + map.requested_bounds[2]) / 2 - lon) <
       1e-6,
@@ -127,9 +138,13 @@ async function wait(f) {
       1e-6,
   );
   // Independent decoded raw reference: compare EVERY persisted geographic node.
-  const url =
-    "https://elevation-tiles-prod.s3.amazonaws.com/skadi/N30/N30E078.hgt.gz";
-  const response = await fetch(url, { signal: AbortSignal.timeout(25000) });
+  assert.equal(
+    grid.provenance.tiles.length,
+    1,
+    "this acceptance case uses one source tile",
+  );
+  const url = grid.provenance.tiles[0].url;
+  const response = await fetch(url, { signal: AbortSignal.timeout(120000) });
   assert.equal(response.status, 200);
   const raw = zlib.gunzipSync(Buffer.from(await response.arrayBuffer()), {
     maxOutputLength: 3601 * 3601 * 2,
@@ -141,15 +156,21 @@ async function wait(f) {
   );
   for (let y = 0; y < grid.rows; y++)
     for (let x = 0; x < grid.columns; x++) {
-      const row = Math.round((31 - grid.bounds[3]) * 3600) + y,
-        col = Math.round((grid.bounds[0] - 78) * 3600) + x,
+      const row = Math.round((Math.floor(lat) + 1 - grid.bounds[3]) * 3600) + y,
+        col = Math.round((grid.bounds[0] - Math.floor(lon)) * 3600) + x,
         v = raw.readInt16BE((row * 3601 + col) * 2);
       assert.equal(grid.samples[y * grid.columns + x], v === -32768 ? null : v);
     }
-  const nearestRow = Math.round((31 - lat) * 3600),
-    nearestCol = Math.round((lon - 78) * 3600),
+  const nearestRow = Math.round((Math.floor(lat) + 1 - lat) * 3600),
+    nearestCol = Math.round((lon - Math.floor(lon)) * 3600),
     knownHeight = raw.readInt16BE((nearestRow * 3601 + nearestCol) * 2);
-  assert.ok(knownHeight > 1000 && knownHeight < 2500);
+  if (!process.env.GNSS_DEM_LAT)
+    assert.ok(knownHeight > 1000 && knownHeight < 2500);
+  else
+    assert.ok(
+      knownHeight >= -12000 && knownHeight <= 9000 && knownHeight !== -32768,
+      "real provider sample at exact requested coordinate; not a surveyed ground truth",
+    );
   await page.locator('[data-close="map-settings"]').click();
   await page.locator("#open-layers").click();
   for (const k of ["hillshade", "contours", "elevation"]) {
@@ -286,6 +307,36 @@ async function wait(f) {
   Object.assign(report, {
     passed: true,
     real_osm_features: map.features.length,
+    osm_available_features: Object.fromEntries(
+      ["roads", "paths", "rivers", "buildings"].map((kind) => [
+        kind,
+        map.features.filter((f) =>
+          kind === "buildings"
+            ? !!f.properties.building
+            : kind === "rivers"
+              ? !!f.properties.waterway
+              : kind === "paths"
+                ? [
+                    "path",
+                    "footway",
+                    "track",
+                    "steps",
+                    "cycleway",
+                    "bridleway",
+                  ].includes(f.properties.highway)
+                : !!f.properties.highway &&
+                  ![
+                    "path",
+                    "footway",
+                    "track",
+                    "steps",
+                    "cycleway",
+                    "bridleway",
+                  ].includes(f.properties.highway),
+        ).length,
+      ]),
+    ),
+    download_diagnostics: onlineDownloadReport,
     requested_bounds: map.requested_bounds,
     grid: { bounds: grid.bounds, rows: grid.rows, columns: grid.columns },
     provenance: grid.provenance,

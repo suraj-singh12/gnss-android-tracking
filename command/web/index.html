@@ -288,75 +288,79 @@
           ×
         </button>
       </div>
-      <label
-        >Map mode<select id="map-mode">
-          <option value="blank">Blank canvas</option>
-          <option value="offline">Offline geographic map</option>
-        </select></label
-      ><label
-        >Offline map · RFC 7946 GeoJSON<input
-          id="map-file"
-          type="file"
-          accept=".geojson,.json,application/geo+json"
-      /></label>
-      <p>
-        Import RFC 7946 WGS84 vectors, or prepare an OpenStreetMap area while
-        online. Saved maps stay in Command's local database and reopen without
-        internet. Unreferenced images and GeoTIFF are not supported.
-      </p>
-      <label
-        >Saved maps<select id="saved-maps">
-          <option value="">Select a saved map</option>
-        </select></label
-      >
-      <a id="export-map" class="secondary-action" download="offline-map.geojson"
-        >Save map file</a
-      >
-      <button id="delete-map">Delete selected map</button>
-      <details>
-        <summary>Acquire or import terrain for this saved map</summary>
-        <p>
-          Download selected terrain from AWS Open Data (56°S–60°N), or import an
-          uncompressed SRTM tile (N28E077.hgt, 1201² or 3601² samples) covering
-          the saved map, or its .gterrain export. Only a bounded subset is
-          retained. No terrain is inferred from GNSS altitude. Downloads may
-          transfer up to four full source tiles; grid spacing is not accuracy.
-        </p>
-        <label
-          >DEM file<input
-            type="file"
-            id="terrain-file"
-            accept=".hgt,.gterrain" /></label
-        ><label
-          ><input type="checkbox" id="prepare-hillshade" /> Hillshade</label
-        ><label
-          ><input type="checkbox" id="prepare-contours" /> Contour lines</label
-        ><label
-          ><input type="checkbox" id="prepare-elevation" /> Elevation
-          inspection</label
-        ><button id="download-terrain">Download / retry selected terrain</button
-        ><button id="prepare-terrain">Prepare selected terrain locally</button
-        ><a id="export-terrain" class="secondary-action" hidden
-          >Save terrain file</a
-        >
-        <p id="terrain-status" role="status"></p>
-      </details>
+      <section class="map-section" aria-labelledby="current-map-title">
+        <h2 id="current-map-title">Current Map</h2>
+        <p id="current-map-name">Blank canvas · no saved map selected</p>
+        <p id="current-map-layers" class="muted">No terrain downloaded</p>
+        <div class="current-map-controls">
+          <label
+            >Map mode<select id="map-mode">
+              <option value="blank">Blank canvas</option>
+              <option value="offline">Offline geographic map</option>
+            </select></label
+          >
+          <button id="choose-saved-map">Choose another saved map</button>
+        </div>
+        <details>
+          <summary>Display & geographic details</summary>
+          <label
+            ><input type="checkbox" id="all-observations" /> Use All
+            Observations</label
+          >
+          <p>
+            Unfiltered diagnostic track. Travelled distance always uses
+            qualified observations.
+          </p>
+          <label
+            >Display-dot interval<input
+              id="dots"
+              type="number"
+              min="10"
+              max="86400"
+              step="10"
+              value="30"
+            />
+            seconds</label
+          >
+          <label
+            >Background opacity<input
+              id="map-opacity"
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value="0.5"
+          /></label>
+          <div id="map-metadata" role="status">No offline map loaded.</div>
+          <small id="map-attribution"
+            >© OpenStreetMap contributors · ODbL. Imported maps retain their
+            source attribution.</small
+          >
+        </details>
+        <div id="map-warning" role="alert"></div>
+      </section>
       <details id="map-preparation">
-        <summary>Download an offline map</summary>
+        <summary>Download Map</summary>
+        <p class="map-workflow">
+          Location → Area → Terrain → Preview → Download
+        </p>
         <p>
           Map preparation uses Nominatim and Overpass, with bounded requests.
           Field operation stays offline.
         </p>
-        <label
-          >Location search<input
-            id="map-search"
-            placeholder="Place or landmark"
-            maxlength="120" /></label
-        ><button id="search-map">Search location</button>
-        <select
-          id="map-search-results"
-          aria-label="Location search results"
-        ></select>
+        <div class="map-search-row">
+          <label
+            >Location search<input
+              id="map-search"
+              placeholder="Place or landmark"
+              maxlength="120" /></label
+          ><button id="search-map">Search location</button>
+          <select
+            id="map-search-results"
+            aria-label="Location search results"
+            hidden
+          ></select>
+        </div>
         <div class="coordinate-fields">
           <label
             >Latitude<input
@@ -385,7 +389,7 @@
             <option value="custom">Custom, at most 2 × 2 km</option>
           </select></label
         >
-        <div class="coordinate-fields">
+        <div class="coordinate-fields" id="custom-map-dimensions">
           <label
             >Width · m<input
               id="map-width"
@@ -406,12 +410,15 @@
         </div>
         <fieldset>
           <legend>Optional terrain · automatic offline acquisition</legend>
-          <p class="muted">
-            Real elevation data downloads from AWS Open Data Terrain Tiles
-            (Mapzen Skadi, WGS84 / EGM96). Coverage: 56°S–60°N; 1 arc sec grid,
-            varying source accuracy. Vectors save first even if terrain fails.
-            No DEM request occurs for a vector-only map.
-          </p>
+          <details class="map-provider-notice">
+            <summary>Provider coverage & attribution</summary>
+            <p class="muted">
+              Real elevation data downloads from AWS Open Data Terrain Tiles
+              (Mapzen Skadi, WGS84 / EGM96). Coverage: 56°S–60°N; 1 arc sec
+              grid, varying source accuracy. Vectors save first even if terrain
+              fails. No DEM request occurs for a vector-only map.
+            </p>
+          </details>
           <label
             ><input id="download-hillshade" type="checkbox" /> Hillshade</label
           ><label
@@ -421,10 +428,12 @@
             data</label
           >
         </fieldset>
-        <button id="preview-map">Preview area & features</button
-        ><button id="download-map" class="primary" disabled>
-          Download for Offline Use
-        </button>
+        <div class="map-actions">
+          <button id="preview-map">Preview area & features</button
+          ><button id="download-map" class="primary" disabled>
+            Download for Offline Use
+          </button>
+        </div>
         <div id="map-preparation-status" role="status">
           Select an area to preview available features.
         </div>
@@ -435,41 +444,89 @@
           viewBox="0 0 400 180"
         ></svg>
       </details>
-      <label
-        >Background opacity<input
-          id="map-opacity"
-          type="range"
-          min="0"
-          max="1"
-          step="0.05"
-          value="0.5"
-      /></label>
-      <div id="map-metadata" role="status">No offline map loaded.</div>
-      <div id="map-warning" role="alert"></div>
-      <small id="map-attribution"
-        >© OpenStreetMap contributors · ODbL. Imported maps retain their source
-        attribution.</small
+      <section
+        class="map-download-feedback"
+        aria-label="Terrain download progress"
       >
-      <hr />
-      <label
-        ><input type="checkbox" id="all-observations" /> Use All
-        Observations</label
-      >
-      <p>
-        Unfiltered diagnostic track. Travelled distance always uses qualified
-        observations.
-      </p>
-      <label
-        >Display-dot interval<input
-          id="dots"
-          type="number"
-          min="10"
-          max="86400"
-          step="10"
-          value="30"
-        />
-        seconds</label
-      >
+        <p id="download-progress" role="status" aria-live="polite" hidden></p>
+        <button id="cancel-download" hidden>Cancel download</button>
+        <details id="download-diagnostics">
+          <summary>Download diagnostics</summary>
+          <p>
+            Unavailable measurements are marked null. No credentials are
+            recorded.
+          </p>
+          <pre id="download-report-text">No terrain download report yet.</pre>
+          <button id="copy-download-report">Copy diagnostics</button>
+          <button id="export-download-report">Export download report</button>
+        </details>
+      </section>
+      <details id="maps-library" open>
+        <summary>Saved Maps</summary>
+        <label
+          >Selected saved map<select id="saved-maps">
+            <option value="">Select a saved map</option>
+          </select></label
+        >
+        <div id="saved-map-list" aria-label="Saved map library"></div>
+        <details>
+          <summary>Import & manage maps</summary>
+          <p>
+            Import RFC 7946 WGS84 GeoJSON. Unreferenced images and GeoTIFF are
+            not supported.
+          </p>
+          <label
+            >Import GeoJSON<input
+              id="map-file"
+              type="file"
+              accept=".geojson,.json,application/geo+json"
+          /></label>
+          <a
+            id="export-map"
+            class="secondary-action"
+            download="offline-map.geojson"
+            >Export selected map</a
+          >
+          <button id="delete-map">Delete selected map</button>
+        </details>
+        <details>
+          <summary>Acquire or import terrain for this saved map</summary>
+          <p>
+            Download selected components (AWS Skadi, 56°S–60°N), or import a
+            covering SRTM .hgt tile or .gterrain package. Only a bounded subset
+            is retained; grid spacing is not accuracy. No terrain is inferred
+            from GNSS altitude.
+          </p>
+          <div class="terrain-options">
+            <label
+              ><input type="checkbox" id="prepare-hillshade" /> Hillshade</label
+            ><label
+              ><input type="checkbox" id="prepare-contours" /> Contours</label
+            ><label
+              ><input type="checkbox" id="prepare-elevation" /> Elevation</label
+            >
+          </div>
+          <button id="download-terrain">
+            Download / retry selected terrain
+          </button>
+          <details>
+            <summary>Local DEM import & terrain export</summary>
+            <label
+              >DEM file<input
+                type="file"
+                id="terrain-file"
+                accept=".hgt,.gterrain"
+            /></label>
+            <button id="prepare-terrain">
+              Prepare selected terrain locally
+            </button>
+            <a id="export-terrain" class="secondary-action" hidden
+              >Save terrain file</a
+            >
+          </details>
+          <p id="terrain-status" role="status"></p>
+        </details>
+      </details>
     </dialog>
     <footer>
       Offline geographic coordinates · Phone Tracking continues independently of

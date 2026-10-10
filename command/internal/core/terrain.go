@@ -223,11 +223,19 @@ func mapAreaBounds(b []byte) ([4]float64, error) {
 func (s *Store) terrainRequest(w http.ResponseWriter, r *http.Request, p *mapProvider) bool {
 	path := strings.TrimPrefix(r.URL.Path, "/local/maps/")
 	parts := strings.Split(path, "/")
-	if !strings.HasPrefix(r.URL.Path, "/local/maps/") || len(parts) != 2 || (parts[1] != "terrain" && parts[1] != "terrain-file" && parts[1] != "terrain-download" && parts[1] != "delete") {
+	if !strings.HasPrefix(r.URL.Path, "/local/maps/") || len(parts) != 2 || (parts[1] != "terrain" && parts[1] != "terrain-file" && parts[1] != "terrain-download" && parts[1] != "download-report" && parts[1] != "delete") {
 		return false
 	}
 	mapID := parts[0]
 	w.Header().Set("Cache-Control", "no-store")
+	if r.Method == "GET" && parts[1] == "download-report" {
+		s.downloadReport(w, mapID)
+		return true
+	}
+	if parts[1] == "download-report" {
+		failure(w, 405, "method_not_allowed", errors.New("use GET for download reports"))
+		return true
+	}
 	if r.Method == "GET" && (parts[1] == "terrain" || parts[1] == "terrain-file") {
 		s.mu.Lock()
 		var b []byte
@@ -309,6 +317,10 @@ func (s *Store) terrainRequest(w http.ResponseWriter, r *http.Request, p *mapPro
 		return true
 	}
 	bounds, err := mapAreaBounds(mapBytes)
+	if err == nil && parts[1] == "terrain-download" {
+		s.downloadTerrainResponse(w, r, p, mapID, bounds, in.Components)
+		return true
+	}
 	var g terrainGrid
 	if err == nil {
 		if parts[1] == "terrain-download" {

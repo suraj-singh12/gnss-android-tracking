@@ -44,6 +44,7 @@ func revisionFromSettings(settings []debug.BuildSetting) Revision {
 func sosRef(event string) string { h := sha256.Sum256([]byte(event)); return fmt.Sprintf("%x", h[:8]) }
 
 type Evidence struct {
+	Download             *DEMReport         `json:"terrain_download,omitempty"`
 	SOSRef               string             `json:"sos_event_ref,omitempty"`
 	SOSTriggered         string             `json:"sos_triggered_at,omitempty"`
 	SOSAcknowledged      *string            `json:"sos_operator_acknowledged_at,omitempty"`
