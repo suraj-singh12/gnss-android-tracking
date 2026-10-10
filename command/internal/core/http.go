@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func respond(w http.ResponseWriter, status int, v any) {
@@ -119,7 +120,7 @@ func (s *Store) LocalHandler(assets http.Handler) http.Handler {
 				failure(w, 503, "storage_unavailable", err)
 				return
 			}
-			respond(w, 200, dashboardView(st))
+			respond(w, 200, dashboardView(st, s.Now()))
 			return
 		}
 		if r.Method != "POST" {
@@ -202,7 +203,7 @@ func (s *Store) LocalHandler(assets http.Handler) http.Handler {
 }
 
 // Dashboard views deliberately omit raw envelopes, decisions and window internals.
-func dashboardView(st State) map[string]any {
+func dashboardView(st State, now time.Time) map[string]any {
 	devices := map[string]any{}
 	for id, d := range st.Devices {
 		var location any
@@ -213,7 +214,18 @@ func dashboardView(st State) map[string]any {
 	}
 	var recording any
 	if st.Recording != nil {
-		recording = map[string]any{"recording_id": st.Recording.ID, "active": st.Recording.Active}
+		// Duration is derived here from authoritative recording windows, never by the browser.
+		seconds := 0.0
+		for _, window := range st.Recording.Windows {
+			end := now
+			if window.Stop != nil {
+				end = *window.Stop
+			}
+			if end.After(window.Start) {
+				seconds += end.Sub(window.Start).Seconds()
+			}
+		}
+		recording = map[string]any{"recording_id": st.Recording.ID, "active": st.Recording.Active, "mode": st.Recording.Mode, "duration_s": seconds}
 	}
 	return map[string]any{"sos_alerts": st.Alerts, "devices": devices, "recording": recording, "policy": st.Policy, "points": st.Points, "raw_points": st.RawPoints, "provisional_points": st.Provisional, "projection_pending": st.ProjectionPending, "projection_error": st.ProjectionError}
 }

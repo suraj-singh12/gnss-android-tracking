@@ -125,12 +125,11 @@ state. Retired windows never participate in rebuilds or later recordings.
 Only location messages enter tracks; SOS fixes remain alert telemetry and never enter tracks.
 
 Distance is horizontal haversine with radius **6,371,008.8 m**, wrapped longitude
-deltas, no altitude component and no edge rounding. The renderer uses original
-WGS84 accepted coordinates projected about the earliest accepted point across all
-devices by `(observed_at,device_id,sequence,message_id)`. Earlier backlog can change
-that origin, so projection is recomputed consistently. SVG fits with equal X/Y scale,
-north up. A separate geographic overlay allows a later offline map layer underneath.
-Projection never influences acceptance or travelled distance.
+deltas, no altitude component and no edge rounding. The backend retains its original local metric projection for derived views. The
+Issue #6 renderer projects original WGS84 coordinates to Web Mercator for both blank
+and offline GeoJSON modes, north up. Pan/zoom persists through polling; Fit/Focus
+are explicit actions. Projection never influences acceptance or travelled distance.
+See [map format and alignment inspection](../docs/design-system.md#exactly-two-map-modes).
 
 The canvas dominates the page. Dynamic device cards show totals, independent contact
 and GNSS conditions, last seen, location age, battery and reporting/config state.
@@ -173,18 +172,19 @@ against in-process HTTP listeners. Also run `go test ./...` and `go vet ./...` f
 
 Limitations: retained raw data, derived arrays and full evidence export favor correctness over
 large-history performance; long-duration field capacity is not yet established.
-The equirectangular view targets small local areas, not polar/global operation.
+The Web Mercator display targets local areas; polar coordinates are clamped and
+antimeridian-spanning offline datasets require splitting before import.
 Cross-build success does not prove physical execution on macOS/Windows. The
 [automated Android integration](../test-tools/integration/README.md) proves
 application boundaries; [physical LAN acceptance](../android/DEVICE-ACCEPTANCE.md)
-remains required. Offline maps, polished Issue #6 UI, installers/signing and
-release workflows remain their later issues. Issue #5 SOS behavior is documented below.
+remains required. Issue #6 supplies the workspace and offline GeoJSON maps.
+Installers/production signing and release workflows remain separate. Issue #5 SOS behavior is documented below.
 The Issue #4 Protocol v1 amendment permits reporting intervals of 5–86400 s in
 5-second steps (default 10 s); Android/Command responsibilities are unchanged.
 
 ## Issue #4 field evidence
 
-Use **Export field-test report** on the local dashboard after testing (also
+Use **Export diagnostics** on the local dashboard after testing (also
 `GET /local/field-report`). It downloads one `gnss-field-report-<UTC>.zip` with
 `manifest.json` and `field-report.json`; no external tooling is required. Export
 is read-only, does not stop ingestion/recording, and is absent from the LAN phone
@@ -405,3 +405,7 @@ nor the Issue #7 high-volume/endurance capacity. Run
 `go test -v ./internal/core -run TestFiveDeviceShortBatchPerformance` to measure
 on the intended laptop. Native one-second retention increases phone storage/IO
 relative to interval-only snapshots; no automatic raw-data deletion is enabled.
+
+## Issue #6 operational interface
+
+See [UI setup and acceptance](../docs/ui-acceptance.md) and [shared design system](../docs/design-system.md) for the three-destination Android interface, Command workspace, recording/quality controls, protected SOS and exactly two offline canvas/map modes. The existing tracking and SOS engines remain authoritative.

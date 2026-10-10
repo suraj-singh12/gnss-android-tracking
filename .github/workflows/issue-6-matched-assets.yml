@@ -1,0 +1,100 @@
+name: Issue 6 integrated UI validation and matched assets
+on:
+  push:
+    branches: [issue-6-integrated-ui]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  integrated:
+    runs-on: ubuntu-latest
+    env:
+      GNSS_SCREENSHOT_DIR: ${{ runner.temp }}/gnss-assets/visual-evidence
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+          cache-dependency-path: android/**/*.gradle*
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.7"
+          cache-dependency-path: command/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate ancestry and source cleanliness
+        run: |
+          git merge-base --is-ancestor b23b5f58845c896e7fb2c5800e577202667c1e3f HEAD
+          test -z "$(git status --porcelain)"
+      - name: Android tests, lint and debug APK
+        working-directory: android
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug --console=plain
+      - name: Go tests and protocol checks
+        run: |
+          (cd command && go test -race ./... && go vet ./...)
+          (cd test-tools && go test -race ./... && go vet ./...)
+          node test-tools/integration/map-test.cjs
+      - name: Real Android to Command integration
+        run: test-tools/integration/run.sh --console=plain
+      - name: Build matched portable Command applications
+        working-directory: command
+        run: |
+          mkdir -p "$RUNNER_TEMP/gnss-assets"
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -buildvcs=true -o "$RUNNER_TEMP/gnss-assets/gnss-command-darwin-arm64" ./cmd/party-tracker
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -buildvcs=true -o "$RUNNER_TEMP/gnss-assets/gnss-command-windows-amd64.exe" ./cmd/party-tracker
+          go build -o "$RUNNER_TEMP/gnss-command-linux" ./cmd/party-tracker
+      - name: Browser verification including SOS and offline maps
+        run: |
+          npm install --prefix "$RUNNER_TEMP/gnss-browser" playwright @axe-core/playwright
+          "$RUNNER_TEMP/gnss-browser/node_modules/.bin/playwright" install --with-deps chromium
+          export GNSS_COMMAND_BINARY="$RUNNER_TEMP/gnss-command-linux"
+          export GNSS_PLAYWRIGHT_MODULE="$RUNNER_TEMP/gnss-browser/node_modules/playwright"
+          export GNSS_AXE_MODULE="$RUNNER_TEMP/gnss-browser/node_modules/@axe-core/playwright"
+          export GNSS_SCREENSHOT_DIR="$RUNNER_TEMP/gnss-assets/visual-evidence"
+          node test-tools/integration/sos-dashboard.cjs
+          node test-tools/integration/ui-dashboard.cjs
+      - name: Verify exact revisions and generate checksum manifest
+        env:
+          ASSET_DIR: ${{ runner.temp }}/gnss-assets
+        run: |
+          test -z "$(git status --porcelain)"
+          for binary in "$ASSET_DIR"/gnss-command-*; do
+            go version -m "$binary" | tee "$binary.build-info.txt"
+            go version -m "$binary" | grep -F "vcs.revision=$GITHUB_SHA"
+            go version -m "$binary" | grep -F 'vcs.modified=false'
+          done
+          cp android/app/build/outputs/apk/debug/app-debug.apk "$ASSET_DIR/"
+          cp docs/ui-acceptance.md "$ASSET_DIR/SETUP.md"
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,zipfile
+          root=pathlib.Path(os.environ['ASSET_DIR']); sha=os.environ['GITHUB_SHA']
+          names=['app-debug.apk','gnss-command-darwin-arm64','gnss-command-windows-amd64.exe']
+          with zipfile.ZipFile(root/names[0]) as z:
+              assert any(sha.encode() in z.read(n) for n in z.namelist() if n.endswith('.dex'))
+          assets={n:{'sha256':hashlib.sha256((root/n).read_bytes()).hexdigest(),'bytes':(root/n).stat().st_size} for n in names}
+          manifest={'source_revision':sha,'android_version':'0.1','command_protocol':1,'android_min_sdk':26,'android_target_sdk':35,'assets':assets}
+          (root/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
+          (root/'SHA256SUMS').write_text(''.join(f"{a['sha256']}  {n}\n" for n,a in assets.items()))
+          print(json.dumps(manifest,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gnss-issue6-matched-${{ github.sha }}
+          path: ${{ runner.temp }}/gnss-assets
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gnss-issue6-test-reports-${{ github.sha }}
+          path: |
+            android/app/build/reports
+            android/app/build/test-results
+            ${{ runner.temp }}/gnss-assets/visual-evidence

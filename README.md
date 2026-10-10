@@ -48,3 +48,7 @@ sections in the existing Android/Command runbooks. Physical volume keys are limi
 to the foreground Android Activity; locked-screen activation is unsupported.
 Issue #4 remains under physical acceptance on its frozen candidate; do not install
 SOS builds during that testing or merge either branch automatically.
+
+## Issue #6 operational interface
+
+See [UI setup and acceptance](docs/ui-acceptance.md) and [shared design system](docs/design-system.md) for the three-destination Android interface, Command workspace, recording/quality controls, protected SOS and exactly two offline canvas/map modes. The existing tracking and SOS engines remain authoritative.
