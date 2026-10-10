@@ -52,3 +52,9 @@ SOS builds during that testing or merge either branch automatically.
 ## Issue #6 operational interface
 
 See [UI setup and acceptance](docs/ui-acceptance.md) and [shared design system](docs/design-system.md) for the three-destination Android interface, Diagnostics Physical Button Test, Command workspace, recording/quality controls, protected SOS and exactly two offline canvas/map modes. The existing tracking and SOS engines remain authoritative.
+
+The corrective UI adds deterministic SOS hold progress, a shared one-second Command
+alarm, emergency/event drawers, collapsible party/detail panels and a persistent
+offline vector-map library with optional bounded online preparation. Acceptance
+builds are three separate Android/macOS ARM64/Windows x64 artifacts from one source
+revision; see the acceptance guide for filenames, signatures and field limitations.

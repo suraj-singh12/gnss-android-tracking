@@ -1,7 +1,12 @@
 name: Issue 6 physical-button integration and matched assets
 on:
   push:
-    branches: [issue-6-integrated-ui, integration/issue6-physical-button]
+    branches:
+      [
+        issue-6-integrated-ui,
+        integration/issue6-physical-button,
+        correction/issue6-operational-ux,
+      ]
   workflow_dispatch:
 concurrency:
   group: issue6-validation-${{ github.ref }}
@@ -43,6 +48,15 @@ jobs:
         working-directory: android
         run: |
           ./gradlew testDebugUnitTest lintDebug assembleDebug --console=plain
+          python3 - <<'PY'
+          import pathlib,xml.etree.ElementTree as E
+          roots=[E.parse(p).getroot() for p in pathlib.Path('app/build/test-results/testDebugUnitTest').glob('TEST-*.xml')]
+          totals={k:sum(int(r.get(k,0)) for r in roots) for k in ['tests','failures','errors','skipped']}
+          print('Android full suite:',totals)
+          for r in roots:
+              if 'PhysicalButton' in r.get('name','') or 'SosHold' in r.get('name','') or 'SosActivity' in r.get('name',''):
+                  print(r.get('name'),{k:r.get(k) for k in totals})
+          PY
           mkdir -p "$RUNNER_TEMP/gnss-test-reports/android-full"
           cp -R app/build/reports app/build/test-results "$RUNNER_TEMP/gnss-test-reports/android-full/"
       - name: Go tests and protocol checks
@@ -50,15 +64,30 @@ jobs:
           (cd command && go test -race ./... && go vet ./...)
           (cd test-tools && go test -race ./... && go vet ./...)
           node test-tools/integration/map-test.cjs
+          node test-tools/integration/sos-alarm-test.cjs
       - name: Real Android to Command integration
         run: test-tools/integration/run.sh --console=plain
+      - name: Record cross-language test counts
+        run: |
+          python3 - <<'PY'
+          import pathlib,xml.etree.ElementTree as E
+          for p in pathlib.Path('android/app/build/test-results/testDebugUnitTest').glob('TEST-*.xml'):
+              r=E.parse(p).getroot()
+              if r.get('name','').endswith('CommandIntegrationTest'):
+                  print('Real Android-to-Command:',{k:r.get(k) for k in ['tests','failures','errors','skipped']})
+          PY
       - name: Build matched portable Command applications
         working-directory: command
         run: |
           mkdir -p "$RUNNER_TEMP/gnss-assets"
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -buildvcs=true -o "$RUNNER_TEMP/gnss-assets/gnss-command-darwin-arm64" ./cmd/party-tracker
-          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -buildvcs=true -o "$RUNNER_TEMP/gnss-assets/gnss-command-windows-amd64.exe" ./cmd/party-tracker
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -buildvcs=true -o "$RUNNER_TEMP/gnss-assets/GNSS-Command-macos-arm64" ./cmd/party-tracker
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -buildvcs=true -o "$RUNNER_TEMP/gnss-assets/GNSS-Command-windows-x64.exe" ./cmd/party-tracker
           go build -o "$RUNNER_TEMP/gnss-command-linux" ./cmd/party-tracker
+      - name: Attempt bounded real online map acceptance and record external result
+        env:
+          GNSS_COMMAND_BINARY: ${{ runner.temp }}/gnss-command-linux
+          GNSS_MAP_ACCEPTANCE_REPORT: ${{ runner.temp }}/gnss-assets/map-online-acceptance.json
+        run: node test-tools/integration/map-online-acceptance.cjs
       - name: Browser verification including SOS and offline maps
         run: |
           npm install --prefix "$RUNNER_TEMP/gnss-browser" playwright @axe-core/playwright
@@ -74,20 +103,20 @@ jobs:
           ASSET_DIR: ${{ runner.temp }}/gnss-assets
         run: |
           test -z "$(git status --porcelain)"
-          for binary in "$ASSET_DIR"/gnss-command-*; do
+          for binary in "$ASSET_DIR/GNSS-Command-macos-arm64" "$ASSET_DIR/GNSS-Command-windows-x64.exe"; do
             go version -m "$binary" | tee "$binary.build-info.txt"
             go version -m "$binary" | grep -F "vcs.revision=$GITHUB_SHA"
             go version -m "$binary" | grep -F 'vcs.modified=false'
           done
-          cp android/app/build/outputs/apk/debug/app-debug.apk "$ASSET_DIR/"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$ASSET_DIR/app-debug.apk" | tee "$ASSET_DIR/android-package.txt"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "$ASSET_DIR/GNSS-Tracker-debug.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$ASSET_DIR/GNSS-Tracker-debug.apk" | tee "$ASSET_DIR/android-package.txt"
           grep -F "package: name='org.gnss.tracking'" "$ASSET_DIR/android-package.txt"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$ASSET_DIR/app-debug.apk" | tee "$ASSET_DIR/android-signing.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$ASSET_DIR/GNSS-Tracker-debug.apk" | tee "$ASSET_DIR/android-signing.txt"
           cp docs/ui-acceptance.md "$ASSET_DIR/SETUP.md"
           python3 - <<'PY'
           import hashlib,json,os,pathlib,zipfile
           root=pathlib.Path(os.environ['ASSET_DIR']); sha=os.environ['GITHUB_SHA']
-          names=['app-debug.apk','gnss-command-darwin-arm64','gnss-command-windows-amd64.exe']
+          names=['GNSS-Tracker-debug.apk','GNSS-Command-macos-arm64','GNSS-Command-windows-x64.exe']
           with zipfile.ZipFile(root/names[0]) as z:
               assert any(sha.encode() in z.read(n) for n in z.namelist() if n.endswith('.dex'))
           assets={n:{'sha256':hashlib.sha256((root/n).read_bytes()).hexdigest(),'bytes':(root/n).stat().st_size} for n in names}
@@ -99,8 +128,31 @@ jobs:
           cat "$ASSET_DIR/SHA256SUMS"
       - uses: actions/upload-artifact@v4
         with:
-          name: gnss-issue6-matched-${{ github.sha }}
-          path: ${{ runner.temp }}/gnss-assets
+          name: GNSS-Tracker-Android-debug
+          path: ${{ runner.temp }}/gnss-assets/GNSS-Tracker-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GNSS-Command-macOS-arm64
+          path: ${{ runner.temp }}/gnss-assets/GNSS-Command-macos-arm64
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GNSS-Command-Windows-x64
+          path: ${{ runner.temp }}/gnss-assets/GNSS-Command-windows-x64.exe
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GNSS-Acceptance-Evidence-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/gnss-assets/*.txt
+            ${{ runner.temp }}/gnss-assets/*.json
+            ${{ runner.temp }}/gnss-assets/*.md
+            ${{ runner.temp }}/gnss-assets/SHA256SUMS
+            ${{ runner.temp }}/gnss-assets/visual-evidence
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
