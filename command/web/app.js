@@ -643,7 +643,8 @@ $("zoom-in").onclick = () => zoom(1.5);
 $("zoom-out").onclick = () => zoom(1 / 1.5);
 let drag;
 $("tracks").onpointerdown = (e) => {
-  if (e.target.tagName !== "svg" || !viewport) return;
+  if (e.target.closest?.('[role="button"]') || e.button !== 0 || !viewport)
+    return;
   drag = { x: e.clientX, y: e.clientY, cx: viewport.cx, cy: viewport.cy };
   $("tracks").setPointerCapture(e.pointerId);
 };

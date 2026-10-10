@@ -286,6 +286,36 @@ async function wait(check) {
     path: path.join(out, "command-offline-map.png"),
     fullPage: true,
   });
+  // Drag on the painted geographic background, rather than only testing keyboard pan.
+  const dragStart = await page.evaluate(() => {
+    const bounds = document.querySelector("#tracks").getBoundingClientRect();
+    for (const fraction of [0.25, 0.35, 0.65, 0.75]) {
+      const x = bounds.x + bounds.width * fraction;
+      const y = bounds.y + bounds.height * 0.35;
+      if (
+        document.elementFromPoint(x, y)?.closest('[data-layer="offline-map"]')
+      )
+        return { x, y };
+    }
+    return null;
+  });
+  assert.ok(
+    dragStart,
+    "A painted offline-map background must be available for pan",
+  );
+  const beforeMapPan = await page
+    .locator("[data-live-device]")
+    .first()
+    .getAttribute("cx");
+  await page.mouse.move(dragStart.x, dragStart.y);
+  await page.mouse.down();
+  await page.mouse.move(dragStart.x + 60, dragStart.y + 30, { steps: 5 });
+  await page.mouse.up();
+  assert.notEqual(
+    await page.locator("[data-live-device]").first().getAttribute("cx"),
+    beforeMapPan,
+  );
+  await page.locator("#fit").click();
   await page.locator("#open-map").click();
   await page.locator("#map-file").setInputFiles({
     name: "bad.json",
