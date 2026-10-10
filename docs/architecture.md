@@ -57,7 +57,7 @@ an untested dependency now. Kotlin + Room/SQLite is the Android direction.
 - **Raw:** every structurally valid unique received observation, including stale,
   inaccurate and implausible fixes. Preserve original coordinates and metadata.
   Retries have one logical raw row; receipt diagnostics may have multiple attempts.
-- **Valid:** raw observations assessed as sufficiently accurate, fresh *at capture*,
+- **Valid:** raw observations assessed as sufficiently accurate, fresh _at capture_,
   and physically plausible under explicit Command quality settings.
 - **Track:** significant movement accepted from valid observations within a recording
   segment. Track rejection never deletes raw data. Store reasons and policy revision
@@ -140,11 +140,11 @@ first accepted point in that recording is its recording start.
 Command persists UTC lifecycle boundaries with sufficient precision for ordered
 operations. Active windows are half-open `[start, stop)` in `observed_at` time:
 
-| Action | Effect |
-| --- | --- |
-| Start Recording | From no current recording, create recording + active segment/window. While already active, no-op. While stopped, use Resume. |
-| Stop Recording | Close active window; stop extending live-time recording, continue positions/status/SOS reception. Already stopped is a no-op. |
-| Resume | Same recording, new segment/window; no line or distance edge across stop. Already active is a no-op. |
+| Action          | Effect                                                                                                                                                                                    |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Start Recording | From no current recording, create recording + active segment/window. While already active, no-op. While stopped, use Resume.                                                              |
+| Stop Recording  | Close active window; stop extending live-time recording, continue positions/status/SOS reception. Already stopped is a no-op.                                                             |
+| Resume          | Same recording, new segment/window; no line or distance edge across stop. Already active is a no-op.                                                                                      |
 | Clear Recording | Require UI confirmation; delete current derived tracks/distances and retire its recording/windows. Retain identities, configuration and raw observations. Return to no current recording. |
 
 Points observed before start, during stop, or after stop have no membership in that
@@ -160,7 +160,7 @@ candidate processing. No recording state is transmitted to control phone trackin
 ## Distance and rendering
 
 Cumulative travelled distance is the sum of **horizontal geographic distances**
-between consecutive accepted chronological points *within valid segments*. Sum
+between consecutive accepted chronological points _within valid segments_. Sum
 segment totals per device per recording; segment first points add zero distance.
 Altitude contributes **nothing** to v1 distance. It remains telemetry. Use WGS84
 lat/lon and a documented, deterministic geographic distance function (v1 rendering
@@ -221,13 +221,13 @@ ordinary backlog delay. A request already in flight may take its existing bounde
 original observation receives the next live opportunity; history does not need a current ACK. No extra transport, identity, outbox, control
 channel, GNSS listener or runtime dependency is introduced.
 
-| State | Authoritative evidence / meaning |
-| --- | --- |
-| TRIGGER_DETECTED | Local immediate feedback; not proof of storage or delivery |
-| SAVED_LOCALLY | Room transaction returned after commit; immutable identity and activation time |
-| WAITING_FOR_NETWORK | Saved, no Wi-Fi; cannot transmit without a LAN path |
-| SENT / RETRYING | Attempt evidence and durable retry metadata; still awaiting receipt |
-| COMMAND_RECEIVED | Matching validated v1 stored/duplicate ACK committed to Room |
+| State                 | Authoritative evidence / meaning                                                   |
+| --------------------- | ---------------------------------------------------------------------------------- |
+| TRIGGER_DETECTED      | Local immediate feedback; not proof of storage or delivery                         |
+| SAVED_LOCALLY         | Room transaction returned after commit; immutable identity and activation time     |
+| WAITING_FOR_NETWORK   | Saved, no Wi-Fi; cannot transmit without a LAN path                                |
+| SENT / RETRYING       | Attempt evidence and durable retry metadata; still awaiting receipt                |
+| COMMAND_RECEIVED      | Matching validated v1 stored/duplicate ACK committed to Room                       |
 | OPERATOR_ACKNOWLEDGED | Command-only persisted acknowledgement of device + event; not transmitted to phone |
 
 One successful activation is one event/message (`event_id=message_id`). Retries
@@ -255,6 +255,7 @@ activation is unsupported in this implementation. Future rugged-device/PTT input
 can call this engine through an authorized adapter without changing delivery.
 The unresolved Issue #4 GNSS stall remains unresolved; an SOS with unavailable or
 stale location is still saved and delivered truthfully.
+
 ## Final Issue #4 reliability amendment (2026-10-09)
 
 Raw SQLite commit precedes ACK and schedules restart-safe projection work. Derivation
@@ -305,7 +306,10 @@ an `offline_maps` library table to the existing Command SQLite file. The PR #17
 extension adds an associated `offline_terrain` table in that same file: bounded
 binary DEM crops, not GeoJSON raster samples. One source grid supports the selected
 hillshade, contours and elevation inspection; all use the existing map projection.
-Automatic DEM acquisition is not verified; local SRTM HGT import is the supported
-preparation path. Map
+Automatic acquisition uses fixed public AWS Open Data Skadi HTTPS tiles (maximum
+four), stitching via existing HGT crops into the same binary package/renderer.
+Vectors save first; terrain errors/retries retain vectors and previous terrain.
+Provider I/O never holds the Store mutex. No background download or new storage
+engine. Local HGT import remains available. Map
 import/display/preparation never feeds reconstruction, raw observations, Recording,
 live/SOS state or qualified distance. There is no parallel database or projection.

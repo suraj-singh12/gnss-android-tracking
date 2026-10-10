@@ -875,8 +875,8 @@ function updateLayers() {
         : "Not downloaded / prepared";
   }
   $("terrain-metadata").textContent = terrain
-    ? `${terrain.source} · ${terrain.arc_seconds} arc sec (~${Math.round((terrain.arc_seconds / 3600) * 111320)} m north–south) · ${terrain.vertical_datum} · interpolated, not survey-grade${terrain.contour ? " · contours " + terrain.contour.interval + " m" : ""}`
-    : "No terrain for this map. Import a georeferenced DEM in Map & layers.";
+    ? `${terrain.source} · ${terrain.arc_seconds} arc sec (~${Math.round((terrain.arc_seconds / 3600) * 111320)} m north–south) · ${terrain.vertical_datum} · interpolated, not survey-grade${terrain.contour ? " · contours " + terrain.contour.interval + " m" : ""}${terrain.provenance ? " · " + terrain.provenance.attribution : ""}`
+    : "No terrain for this map. Download / retry terrain or import a DEM in Map & layers.";
   $("export-terrain").hidden = !terrain;
   if (terrain)
     $("export-terrain").href =
@@ -925,7 +925,7 @@ for (const kind of terrainLayers)
 async function attachTerrain(id, file, components) {
   if (!file)
     throw Error(
-      "Select a local SRTM DEM. Automatic terrain acquisition is unavailable.",
+      "Select a local SRTM DEM or use Download / retry selected terrain.",
     );
   if (file.size > 3601 * 3601 * 2)
     throw Error("DEM exceeds the bounded HGT import limit.");
@@ -968,6 +968,38 @@ $("prepare-terrain").onclick = async () => {
       " · Vector map retained; reopen this saved map to verify terrain.";
   } finally {
     $("prepare-terrain").disabled = false;
+  }
+};
+async function downloadTerrain(id, components) {
+  await mapPost(`maps/${encodeURIComponent(id)}/terrain-download`, {
+    components,
+  });
+  for (const kind of terrainLayers)
+    localStorage.setItem(`gnss-layer-${id}-${kind}`, "false");
+  await loadTerrain(id);
+}
+$("download-terrain").onclick = async () => {
+  if (!activeMapID) {
+    $("terrain-status").textContent = "Save/select a vector map first.";
+    return;
+  }
+  $("download-terrain").disabled = true;
+  $("terrain-status").textContent = "Acquiring real elevation data…";
+  try {
+    await downloadTerrain(
+      activeMapID,
+      Object.fromEntries(
+        terrainLayers.map((k) => [k, $("prepare-" + k).checked]),
+      ),
+    );
+    $("terrain-status").textContent =
+      "Terrain saved for offline use. Layers start OFF; enable them in Layers.";
+  } catch (e) {
+    $("terrain-status").textContent =
+      e.message +
+      " · Vector map and previous terrain retained. Retry selected terrain when connectivity returns.";
+  } finally {
+    $("download-terrain").disabled = false;
   }
 };
 $("delete-map").onclick = async () => {
@@ -1037,7 +1069,6 @@ for (const id of [
   "download-hillshade",
   "download-contours",
   "download-elevation",
-  "download-dem",
 ])
   $(id).onchange = invalidatePreparation;
 $("map-area").onchange = () => {
@@ -1062,12 +1093,7 @@ $("preview-map").onclick = async () => {
   const components = Object.fromEntries(
     terrainLayers.map((k) => [k, $("download-" + k).checked]),
   );
-  const demFile = $("download-dem").files[0];
   try {
-    if (Object.values(components).some(Boolean) && !demFile)
-      throw Error(
-        "Optional terrain requires a local SRTM tile. Uncheck terrain for the default vector-only download.",
-      );
     const data = await mapPost("map-preview", area);
     if (revision !== preparationRevision)
       throw Error(
@@ -1079,7 +1105,6 @@ $("preview-map").onclick = async () => {
       source: `OSM ${area.lat}, ${area.lon} · ${area.width} × ${area.height} m`,
       data,
       components,
-      demFile,
     };
     $("map-preparation-status").textContent =
       `${data.features.length} features · ${(new TextEncoder().encode(text).length / 1024).toFixed(1)} KB · centre ${area.lat}, ${area.lon} · selected bounds W/S/E/N ${data.requested_bounds?.map((v) => v.toFixed(6)).join(", ") || "provider fixture: bounds unavailable"} · roads, paths, buildings, water/land where available. Relations/tiles are not downloaded. Save for offline use.`;
@@ -1133,10 +1158,28 @@ $("download-map").onclick = async () => {
     const saved = await mapPost("maps", candidate);
     await refreshMaps(saved.id);
     await loadSavedMap(saved.id);
-    if (Object.values(candidate.components || {}).some(Boolean))
-      await attachTerrain(saved.id, candidate.demFile, candidate.components);
+    for (const kind of terrainLayers)
+      $("prepare-" + kind).checked = !!candidate.components?.[kind];
+    if (Object.values(candidate.components || {}).some(Boolean)) {
+      $("map-preparation-status").textContent =
+        "Vector map saved. Acquiring real elevation data…";
+      try {
+        await downloadTerrain(saved.id, candidate.components);
+      } catch (e) {
+        $("map-preparation-status").textContent =
+          "Vector map saved for offline use. Terrain unavailable: " +
+          e.message +
+          " · Select this saved map and use Download / retry selected terrain.";
+        preparedMap = undefined; // retry terrain, never create duplicate vectors
+        return;
+      }
+    }
+    preparedMap = undefined;
     $("map-preparation-status").textContent =
-      "Saved locally · available after restart without internet.";
+      "Saved locally · available after restart without internet." +
+      (terrain?.contour_error
+        ? " Contours unavailable: complexity limit; choose a smaller area. Other terrain retained."
+        : "");
   } catch (e) {
     $("map-preparation-status").textContent =
       e.message +

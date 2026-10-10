@@ -33,6 +33,7 @@ jobs:
           path: ${{ runner.temp }}/terrain-provider-check.json
           if-no-files-found: error
   integrated:
+    needs: dem-provider
     runs-on: ubuntu-latest
     steps:
       - name: Define visual evidence directory
@@ -117,10 +118,12 @@ jobs:
           export GNSS_SCREENSHOT_DIR="$RUNNER_TEMP/gnss-assets/visual-evidence"
           node test-tools/integration/sos-dashboard.cjs
           node test-tools/integration/ui-dashboard.cjs
-      - name: Record real DEM candidate access separately from local terrain tests
+      - name: Real automatic DEM acquisition, geographic alignment and offline restart
         env:
           GNSS_TERRAIN_PROVIDER_REPORT: ${{ runner.temp }}/gnss-assets/terrain-provider-check.json
-        run: node test-tools/integration/terrain-provider-check.cjs
+          GNSS_COMMAND_BINARY: ${{ runner.temp }}/gnss-command-linux
+          GNSS_PLAYWRIGHT_MODULE: ${{ runner.temp }}/gnss-browser/node_modules/playwright
+        run: node test-tools/integration/dem-offline-acceptance.cjs
       - name: Verify exact revisions and generate checksum manifest
         env:
           ASSET_DIR: ${{ runner.temp }}/gnss-assets

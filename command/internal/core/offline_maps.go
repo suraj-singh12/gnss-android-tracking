@@ -28,13 +28,14 @@ type savedMap struct {
 type mapProvider struct {
 	client               *http.Client
 	search, overpass     string
+	dem                  string
 	mu                   sync.Mutex
 	nextSearch, nextArea time.Time
 }
 
 func newMapProvider() *mapProvider {
 	// Finish before the existing local HTTP server's 30-second write deadline.
-	return &mapProvider{client: &http.Client{Timeout: 25 * time.Second}, search: "https://nominatim.openstreetmap.org/search", overpass: "https://overpass-api.de/api/interpreter"}
+	return &mapProvider{client: &http.Client{Timeout: 25 * time.Second}, search: "https://nominatim.openstreetmap.org/search", overpass: "https://overpass-api.de/api/interpreter", dem: "https://elevation-tiles-prod.s3.amazonaws.com/skadi"}
 }
 func (p *mapProvider) reserve(search bool) error {
 	p.mu.Lock()
@@ -330,7 +331,7 @@ func (s *Store) saveMap(source string, b []byte) (savedMap, error) {
 	return m, tx.Commit()
 }
 func (s *Store) mapRequest(w http.ResponseWriter, r *http.Request, p *mapProvider) bool {
-	if s.terrainRequest(w, r) {
+	if s.terrainRequest(w, r, p) {
 		return true
 	}
 	path := r.URL.Path
