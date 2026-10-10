@@ -151,6 +151,30 @@ SOS retries back off and allow ordinary reports between failed attempts.
 Force-stop, reboot and OEM termination can prevent execution/transmission; reopen
 and explicitly Start Tracking when required. No Wi-Fi path means no transmission.
 
+### Physical Button Test (Diagnostics experiment)
+
+Open **Diagnostics → Diagnostic tools → Physical Button Test**, expand the entry,
+then choose **Start Test**. It records only whitelisted standard Android key events
+actually delivered to the resumed Activity. Key-down, key-up and repeat count are
+shown separately; only a non-repeat key-down counts as one physical press. The
+bounded history and device manufacturer/model/Android release/API evidence are
+stored in the existing Diagnostics journal and exported as
+`physical-button-report.json`.
+
+`LISTENING` means the Activity is eligible to observe an event, not that Android
+will route every hardware key to it. Background, locked-screen and screen-off
+volume-button detection are explicitly **MECHANISM UNAVAILABLE**. No MediaSession,
+Accessibility Service, root API, audio playback, foreground service or OEM API is
+used. Stopping the test produces an inactive result. Leaving the Activity while it
+is listening records an interrupted, inconclusive test and stops it; a process
+restart always starts with test mode off while retained evidence remains readable.
+
+While the test is active, its Activity adapter suppresses the existing triple
+Volume-Up SOS shortcut so a diagnostic run cannot create an SOS. Android's normal
+volume handling is not consumed, previously saved SOS events continue delivery,
+and the normal shortcut is restored on stop, pause or process restart. The
+protected on-screen SOS action and durable SOS engine are unchanged.
+
 ### Physical-key scope and public API investigation
 
 The checkbox enables **three short Volume Up press/release pairs within 1.5 seconds**
