@@ -3,47 +3,50 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Command · Party tracker</title>
+    <title>GNSS · Command Centre</title>
     <link rel="stylesheet" href="/style.css" />
+    <script src="/map.js" defer></script>
     <script src="/app.js" defer></script>
   </head>
   <body>
     <header>
-      <div class="brand">COMMAND <span>Party tracker</span></div>
+      <div class="brand">
+        <span class="brand-mark">G</span>
+        <div>GNSS<span>Command Centre</span></div>
+      </div>
+      <div class="header-tools">
+        <button id="sos-audio">Enable / test SOS sound</button>
+        <button id="open-quality">Quality settings</button
+        ><button id="open-map">Map & layers</button
+        ><a href="/local/field-report">Export diagnostics</a>
+      </div>
+      <span id="connection" role="status">Connecting to Command…</span>
+    </header>
+    <div id="error" role="alert" hidden></div>
+    <section class="recording-bar" aria-label="Recording controls">
+      <span id="recording" role="status">Connecting…</span
+      ><label
+        >Start from
+        <select id="recording-mode">
+          <option value="from_now">Now</option>
+          <option value="session_beginning">
+            Beginning of Android session
+          </option>
+        </select></label
+      >
       <div class="controls">
-        <a href="/local/field-report">Export field-test report</a>
-        <label
-          >Recording start
-          <select id="recording-mode">
-            <option value="from_now">From now</option>
-            <option value="session_beginning">
-              From beginning of current Android tracking session
-            </option>
-          </select></label
-        >
-        <button id="start">Start Recording</button
+        <button id="start" class="primary">Start Recording</button
         ><button id="stop">Stop Recording</button
         ><button id="resume">Resume</button
         ><button id="clear" class="quiet">Clear Recording</button>
       </div>
-      <label
-        >Display-dot interval
-        <input
-          id="dots"
-          type="number"
-          min="10"
-          max="86400"
-          step="10"
-          value="30"
-        />
-        s</label
-      ><span id="recording" role="status">Connecting…</span>
-    </header>
-    <div id="error" role="alert" hidden></div>
+    </section>
     <section id="sos-panel" aria-labelledby="sos-heading" hidden>
-      <h1 id="sos-heading">SOS emergencies</h1>
+      <div class="emergency-heading">
+        <h1 id="sos-heading">SOS emergencies</h1>
+        <button id="sos-history-toggle">Show event history</button>
+      </div>
       <p id="sos-summary" role="status" aria-live="polite"></p>
-      <button id="sos-audio">Enable / test audible SOS alert</button>
       <span id="sos-audio-status" role="status"
         >Audible alert blocked until enabled. Visible alerts remain
         active.</span
@@ -51,47 +54,132 @@
       <div id="sos-alerts"></div>
     </section>
     <main>
-      <section class="canvas" aria-label="Recorded tracks">
-        <div class="canvas-note">
-          N ↑ <span>Local metric view · north up</span>
+      <aside class="party-overview">
+        <div class="aside-title">
+          <h1>Parties</h1>
+          <span id="count">0</span>
         </div>
-        <label
-          ><input type="checkbox" id="all-observations" /> Use All Observations
-          — Unfiltered / Diagnostic (distance remains qualified)</label
-        >
+        <p class="muted">Contact and GNSS are independent.</p>
+        <div id="devices"></div>
+        <p id="no-parties">
+          Waiting for party leaders.<small
+            >Configure phones with this Command’s local Wi-Fi address, then
+            start Tracking.</small
+          >
+        </p>
+      </aside>
+      <section class="canvas" aria-label="Geographic workspace">
+        <div class="canvas-toolbar">
+          <span>N ↑ <span id="map-mode-label">Blank canvas</span></span>
+          <div>
+            <button id="zoom-in" aria-label="Zoom in">+</button
+            ><button id="zoom-out" aria-label="Zoom out">−</button
+            ><button id="fit">Fit parties</button
+            ><button id="focus-party">Focus selected</button>
+          </div>
+        </div>
         <div id="projection-status" role="status"></div>
         <svg
           id="tracks"
-          role="img"
-          aria-label="Accepted geographic tracks"
+          tabindex="0"
+          role="group"
+          aria-label="Geographic tracks. Arrow keys pan; plus and minus zoom; F fits visible parties."
         ></svg>
         <div id="empty">
-          Start a recording to collect tracks.<small
-            >Phones continue Tracking when Command Recording is stopped.</small
+          No locations to display<small
+            >Live positions appear independently of Recording and historical
+            recovery.</small
           >
         </div>
         <div id="hover" role="status">
-          Hover or focus a point for travelled distance, time and accuracy.
+          Select a location point to inspect coordinates, time and accuracy.
+        </div>
+        <div class="canvas-legend">
+          <span>● Live GNSS</span
+          ><span id="track-layer-label">— Qualified history</span
+          ><span>┄ Provisional</span><span id="scale-label"></span>
         </div>
       </section>
-      <aside>
-        <div class="aside-title">
-          <h1>Devices</h1>
-          <span id="count">0</span>
-        </div>
-        <div id="devices"></div>
-        <details id="quality">
-          <summary>Track quality settings</summary>
-          <p>
-            Changes rebuild the full current recording using the new settings.
-            Start, Stop and Resume boundaries remain.
+      <aside class="party-detail">
+        <h1>Selected party</h1>
+        <div id="selected-detail">
+          <p class="muted">
+            Select a party to inspect location, history and reporting settings.
           </p>
-          <form id="quality-form"></form>
-        </details>
+        </div>
       </aside>
     </main>
+    <dialog id="quality" aria-labelledby="quality-title">
+      <div class="dialog-heading">
+        <h1 id="quality-title">Track quality</h1>
+        <button data-close="quality" aria-label="Close quality settings">
+          ×
+        </button>
+      </div>
+      <p>
+        Apply rules to rebuild the current Recording. Recording boundaries
+        remain authoritative.
+      </p>
+      <form id="quality-form"></form>
+      <div id="quality-progress" role="status"></div>
+    </dialog>
+    <dialog id="map-settings" aria-labelledby="map-title">
+      <div class="dialog-heading">
+        <h1 id="map-title">Map & layers</h1>
+        <button data-close="map-settings" aria-label="Close map settings">
+          ×
+        </button>
+      </div>
+      <label
+        >Map mode<select id="map-mode">
+          <option value="blank">Blank canvas</option>
+          <option value="offline">Offline geographic map</option>
+        </select></label
+      ><label
+        >Offline map · RFC 7946 GeoJSON<input
+          id="map-file"
+          type="file"
+          accept=".geojson,.json,application/geo+json"
+      /></label>
+      <p>
+        WGS84 longitude/latitude vector data only. Files stay on this computer;
+        no online tiles or image calibration.
+      </p>
+      <label
+        >Background opacity<input
+          id="map-opacity"
+          type="range"
+          min="0"
+          max="1"
+          step="0.05"
+          value="0.5"
+      /></label>
+      <div id="map-metadata" role="status">No offline map loaded.</div>
+      <div id="map-warning" role="alert"></div>
+      <hr />
+      <label
+        ><input type="checkbox" id="all-observations" /> Use All
+        Observations</label
+      >
+      <p>
+        Unfiltered diagnostic track. Travelled distance always uses qualified
+        observations.
+      </p>
+      <label
+        >Display-dot interval<input
+          id="dots"
+          type="number"
+          min="10"
+          max="86400"
+          step="10"
+          value="30"
+        />
+        seconds</label
+      >
+    </dialog>
     <footer>
-      Local only · Geographic distance · All accepted points form the line
+      Local workspace · Offline geographic coordinates · Phone Tracking
+      continues independently of Command Recording
     </footer>
   </body>
 </html>
