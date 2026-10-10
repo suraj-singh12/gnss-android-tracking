@@ -196,12 +196,31 @@ async function wait(check) {
     [430, 900],
   ]) {
     await page.setViewportSize({ width: size[0], height: size[1] });
+    await page.locator("#fit").click();
     assert.equal(
       await page.evaluate(
         () => document.documentElement.scrollWidth > innerWidth,
       ),
       false,
       "horizontal overflow",
+    );
+    assert.ok(
+      await page.evaluate(() => {
+        const canvas = document
+          .querySelector("#tracks")
+          .getBoundingClientRect();
+        return [...document.querySelectorAll('[data-layer="live"] text')].every(
+          (label) => {
+            const bounds = label.getBoundingClientRect();
+            return (
+              bounds.left >= canvas.left &&
+              bounds.right <= canvas.right &&
+              bounds.top >= canvas.top
+            );
+          },
+        );
+      }),
+      "Fitted party labels must remain inside the geographic canvas",
     );
     await page.screenshot({
       path: path.join(out, `command-${size[0]}-five-parties.png`),

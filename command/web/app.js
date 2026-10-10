@@ -914,8 +914,9 @@ function draw() {
     };
     liveLayer.append(marker);
     const label = svg("text", {
-      x: x + 13,
-      y: y - 12,
+      x: x + (x > w / 2 ? -13 : 13),
+      y: y < 24 ? y + 24 : y - 12,
+      "text-anchor": x > w / 2 ? "end" : "start",
       fill: color(p.device_id),
       "font-size": 12,
     });

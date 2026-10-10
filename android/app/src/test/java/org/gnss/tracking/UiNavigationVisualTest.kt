@@ -86,9 +86,13 @@ class UiNavigationVisualTest {
                             it.text == "SOS — hold to activate"
                         }
                     if (sos.isShown) {
-                        val bounds = android.graphics.Rect()
-                        assertTrue(sos.getGlobalVisibleRect(bounds))
-                        assertEquals("SOS must remain fully reachable", sos.height, bounds.height())
+                        // The test renders the content root directly, without a laid-out window.
+                        val bounds = android.graphics.Rect(0, 0, sos.width, sos.height)
+                        (root as ViewGroup).offsetDescendantRectToMyCoords(sos, bounds)
+                        assertTrue(
+                            "SOS must remain fully reachable",
+                            bounds.top >= 0 && bounds.bottom <= h,
+                        )
                     }
                 }
                 fun capture(name: String) {

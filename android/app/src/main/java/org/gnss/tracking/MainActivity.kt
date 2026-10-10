@@ -127,7 +127,7 @@ class MainActivity : Activity() {
                     text = name
                     isAllCaps = false
                     minHeight = dp(56)
-                    textSize = 14f
+                    textSize = 12f
                     minWidth = 0
                     setPadding(dp(4), dp(8), dp(4), dp(8))
                     backgroundTintList =
