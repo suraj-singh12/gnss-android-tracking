@@ -107,14 +107,14 @@ jobs:
           cat "$ASSET_DIR/SHA256SUMS"
       - uses: actions/upload-artifact@v4
         with:
-          name: gnss-matched-${{ env.SOURCE_REVISION }}
+          name: gnss-matched-${{ env.SOURCE_REVISION }}-attempt-${{ github.run_attempt }}
           path: ${{ runner.temp }}/gnss-assets
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: gnss-test-reports-${{ env.SOURCE_REVISION }}
+          name: gnss-test-reports-${{ env.SOURCE_REVISION }}-attempt-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/gnss-test-reports
             android/app/build/reports
