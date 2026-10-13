@@ -47,25 +47,34 @@ func TestAdversarialWeekMultiDeviceRandomArrivalAndRestart(t *testing.T) {
                 }
             }
             rng:=rand.New(rand.NewSource(seed))
-            rng.Shuffle(len(messages),func(i,j int){messages[i],messages[j]=messages[j],messages[i]})
+            // Atomic wire batches intentionally cannot mix devices or tracking sessions.
+            // Shuffle legal per-source batches so histories, devices, and days
+            // arrive out of order without violating Protocol v1.
+            batches:=make([][]Message,0,100)
+            for start:=0;start<len(messages);start+=68{
+                group:=messages[start:start+68]
+                for offset:=0;offset<len(group);{
+                    width:=1+rng.Intn(14)
+                    end:=offset+width
+                    if end>len(group){end=len(group)}
+                    batches=append(batches,append([]Message{},group[offset:end]...))
+                    offset=end
+                }
+            }
+            rng.Shuffle(len(batches),func(i,j int){batches[i],batches[j]=batches[j],batches[i]})
             seen:=make([]Candidate,0,len(messages))
-            for offset:=0;offset<len(messages);{
-                width:=1+rng.Intn(14)
-                end:=offset+width
-                if end>len(messages){end=len(messages)}
-                group:=messages[offset:end]
-                if _,e:=s.IngestBatch(batchBytes(t,group));e!=nil{t.Fatalf("seed %d block %d: %v",seed,offset,e)}
+            for batchIndex,group:=range batches{
+                if _,e:=s.IngestBatch(batchBytes(t,group));e!=nil{t.Fatalf("seed %d batch %d: %v",seed,batchIndex,e)}
                 for _,m:=range group{seen=append(seen,Candidate{m,now.Format(wireTime)})}
-                if offset%140<width {
+                if batchIndex%12==0{
                     st:=assertHistoryReference(t,s,sortedAdversarial(seen))
                     if st.ProjectionError!=""{t.Fatalf("projection error: %s",st.ProjectionError)}
                 }
-                offset=end
             }
             // Retry original packets; durable identity must make these no-ops.
             for k:=0;k<12;k++{
-                start:=rng.Intn(len(messages)-5)
-                a,e:=s.IngestBatch(batchBytes(t,messages[start:start+5]))
+                group:=batches[rng.Intn(len(batches))]
+                a,e:=s.IngestBatch(batchBytes(t,group))
                 if e!=nil{t.Fatalf("retry %d: %v",k,e)}
                 for _,ack:=range a.Acks {if ack.Result!="duplicate"{t.Fatalf("duplicate incorrectly counted as %q",ack.Result)}}
             }
