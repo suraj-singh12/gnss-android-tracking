@@ -3,7 +3,7 @@ on:
   push:
     branches: [issue-6-integrated-ui, integration/issue6-physical-button]
   pull_request:
-    branches: [main]
+    branches: [main, integration/combined-upgrades]
     types: [opened, synchronize, reopened]
   workflow_dispatch:
 concurrency:
@@ -15,7 +15,6 @@ permissions:
   contents: read
 jobs:
   integrated:
-    if: github.event_name != 'pull_request' || github.head_ref == 'issue-21-history-reconstruction'
     runs-on: ubuntu-latest
     steps:
       - name: Define visual evidence directory
