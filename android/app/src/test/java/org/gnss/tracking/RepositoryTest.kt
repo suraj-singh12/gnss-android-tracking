@@ -56,7 +56,7 @@ class RepositoryTest {
         assertEquals(2L, state.sequence)
         assertEquals(60, state.localInterval)
         assertEquals(30, state.config().effective_reporting_interval_s)
-        assertEquals(pending.json, repository.next(2000)!!.json)
+        assertEquals(pending.json, repository.routineBacklog(2000)!!.json)
         assertNotNull(db.dao().row(first.sequence)!!.deliveredAt)
         assertEquals(3L, repository.snapshot(2000, null, Health()).sequence)
         repository.accept(
@@ -96,11 +96,10 @@ class RepositoryTest {
     fun newestThenOldestAndHonestStatus() = runBlocking {
         val rows =
             (1..5).map { repository.snapshot(it.toLong(), null, Health(gnss_status = "no_fix")) }
-        assertEquals(5L, repository.next(100)!!.sequence)
+        assertEquals(5L, repository.routine(100)!!.sequence)
         repository.accept(rows.last(), receipt(rows.last()), 0)
-        // Remaining newest is historical now. Sender marks current delivery boundary;
-        // backlog selection uses oldest after that boundary (covered in sender test).
-        assertEquals(1L, repository.next(100, 5)!!.sequence)
+        // Status backlog has its own oldest-first selection, independent of GNSS history.
+        assertEquals(1L, repository.routineBacklog(100)!!.sequence)
         val packet = Protocol.decodeMessage(rows.first().json)
         assertEquals("status", packet.type)
         assertNull(packet.fix)
@@ -179,7 +178,7 @@ class RepositoryTest {
         assertEquals(authority, state.authority)
         assertEquals(30, state.overrideSeconds)
         assertFalse(state.deliveryPaused)
-        assertEquals(pending.json, repository.next(3)!!.json)
+        assertEquals(pending.json, repository.routineBacklog(3)!!.json)
         assertFalse(db.dao().row(pending.sequence)!!.quarantined)
     }
 
@@ -217,7 +216,7 @@ class RepositoryTest {
         sender.step()
         val failed = db.dao().row(current.sequence)!!
         assertTrue(failed.nextAttemptMillis > clock.now)
-        assertEquals(backlog.sequence, repository.next(clock.now)!!.sequence)
+        assertEquals(backlog.sequence, repository.routineBacklog(clock.now)!!.sequence)
         clock.now += 100 // Network comes back before the persisted retry deadline.
         sender.connectivityRestored()
         assertEquals(failed.copy(nextAttemptMillis = 0), db.dao().row(current.sequence))

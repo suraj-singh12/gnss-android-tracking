@@ -7,12 +7,21 @@ plugins {
 android {
     namespace = "org.gnss.tracking"
     compileSdk = 35
+    buildFeatures { buildConfig = true }
     defaultConfig {
         applicationId = "org.gnss.tracking"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
         versionName = "0.1"
+        val revision = runCatching {
+            providers.exec {
+                workingDir(rootDir.parentFile)
+                commandLine("git", "rev-parse", "HEAD")
+                isIgnoreExitValue = true
+            }.standardOutput.asText.get().trim()
+        }.getOrNull()?.takeIf { it.matches(Regex("[0-9a-f]{40}")) } ?: "unknown"
+        buildConfigField("String", "SOURCE_REVISION", "\"$revision\"")
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -23,6 +32,7 @@ android {
         srcDir("../../protocol/fixtures")
         exclude("**/*.md")
     }
+    testOptions { unitTests.isIncludeAndroidResources = true }
     lint { abortOnError = true }
 }
 
@@ -39,3 +49,8 @@ dependencies {
     testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation("androidx.test:core:1.6.1")
 }
+
+// Robolectric 4.14's API 35 native loader shares a fonts ZIP filesystem across
+// sandboxes. Isolate classes to prevent native initialization in one SDK/shadow
+// configuration from contaminating another; retain every API-boundary assertion.
+tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach { forkEvery = 1 }

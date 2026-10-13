@@ -107,3 +107,17 @@ func TestStrictACKShape(t *testing.T) {
 		}
 	}
 }
+
+func TestFiveSecondAckContract(t *testing.T) {
+	b, err := os.ReadFile("../../protocol/fixtures/ack-five-second.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{"5", "10", "15", "20", "30", "60", "86400", "1", "6", "86405"} {
+		changed := strings.Replace(string(b), `"reporting_interval_override_s": 5`, `"reporting_interval_override_s": `+n, 1)
+		valid := n != "1" && n != "6" && n != "86405"
+		if err := validateAck([]byte(changed)); (err == nil) != valid {
+			t.Fatalf("override %s: %v", n, err)
+		}
+	}
+}

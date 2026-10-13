@@ -1,13 +1,16 @@
 package core
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func respond(w http.ResponseWriter, status int, v any) {
@@ -22,6 +25,10 @@ func failure(w http.ResponseWriter, status int, code string, err error) {
 func (s *Store) IngestHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ingress := s.Now().UTC()
+		if r.URL.Path == "/api/v1/history" || r.URL.Path == "/api/v1/capabilities" {
+			s.historyHandler(w, r)
+			return
+		}
 		if r.URL.Path != "/api/v1/messages" {
 			failure(w, 404, "unsupported_endpoint", errors.New("unknown endpoint"))
 			return
@@ -59,7 +66,11 @@ func (s *Store) IngestHandler() http.Handler {
 			failure(w, 400, "invalid_message", err)
 			return
 		}
-		ack, err := s.ingestAt(b, ingress)
+		role := "live"
+		if r.Header.Get("X-GNSS-Delivery-Role") == "history" {
+			role = "history"
+		}
+		ack, err := s.ingestRole(b, ingress, role)
 		if err != nil {
 			if errors.Is(err, ErrConflict) {
 				failure(w, 409, "identity_conflict", err)
@@ -82,6 +93,18 @@ func (s *Store) LocalHandler(assets http.Handler) http.Handler {
 			assets.ServeHTTP(w, r)
 			return
 		}
+		if r.URL.Path == "/local/field-report" && r.Method == "GET" {
+			var b bytes.Buffer
+			if err := s.ExportFieldReport(&b); err != nil {
+				failure(w, 503, "storage_unavailable", err)
+				return
+			}
+			w.Header().Set("Content-Type", "application/zip")
+			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=gnss-field-report-%s.zip", s.Now().UTC().Format("20060102T150405Z")))
+			w.Header().Set("Cache-Control", "no-store")
+			_, _ = w.Write(b.Bytes())
+			return
+		}
 		if r.URL.Path == "/local/state" && r.Method == "GET" {
 			dot := 30
 			if v := r.URL.Query().Get("dot_interval_s"); v != "" {
@@ -97,7 +120,7 @@ func (s *Store) LocalHandler(assets http.Handler) http.Handler {
 				failure(w, 503, "storage_unavailable", err)
 				return
 			}
-			respond(w, 200, dashboardView(st))
+			respond(w, 200, dashboardView(st, s.Now()))
 			return
 		}
 		if r.Method != "POST" {
@@ -125,15 +148,34 @@ func (s *Store) LocalHandler(assets http.Handler) http.Handler {
 			return
 		}
 		switch r.URL.Path {
+		case "/local/sos/acknowledge":
+			err = s.AcknowledgeSOS(str(v["device_id"]), str(v["event_id"]))
 		case "/local/recording":
 			if str(v["action"]) == "clear" && v["confirmed"] != true {
 				err = errors.New("clear requires explicit confirmation")
 			} else {
-				err = s.Action(str(v["action"]))
+				mode := str(v["mode"])
+				if mode == "" {
+					mode = "from_now"
+				}
+				err = s.ActionMode(str(v["action"]), mode)
 			}
 		case "/local/quality":
 			var p Policy
 			err = json.Unmarshal(b, &p)
+			if err == nil && v["enabled"] != nil {
+				switches, ok := v["enabled"].(map[string]any)
+				if !ok {
+					err = errors.New("quality enabled must be an object")
+				} else {
+					for _, enabled := range switches {
+						if _, ok := enabled.(bool); !ok {
+							err = errors.New("quality switches must be booleans")
+							break
+						}
+					}
+				}
+			}
 			if err == nil {
 				err = s.SetPolicy(p)
 			}
@@ -161,18 +203,29 @@ func (s *Store) LocalHandler(assets http.Handler) http.Handler {
 }
 
 // Dashboard views deliberately omit raw envelopes, decisions and window internals.
-func dashboardView(st State) map[string]any {
+func dashboardView(st State, now time.Time) map[string]any {
 	devices := map[string]any{}
 	for id, d := range st.Devices {
 		var location any
 		if d.Location != nil {
 			location = map[string]any{"fix": d.Location.Fix}
 		}
-		devices[id] = map[string]any{"device_id": id, "track_color": d.Color, "track_dash": d.Dash, "snapshot": map[string]any{"party": d.Snapshot.Party, "health": d.Snapshot.Health, "config_state": d.Snapshot.Config}, "location": location, "last_contact": d.Contact, "desired_config": d.Desired, "config_converged": d.Converged, "contact_condition": d.ContactCondition, "gnss_condition": d.GNSSCondition, "location_age_s": d.LocationAge, "total_m": d.Total}
+		devices[id] = map[string]any{"device_id": id, "track_color": d.Color, "track_dash": d.Dash, "snapshot": map[string]any{"party": d.Snapshot.Party, "health": d.Snapshot.Health, "config_state": d.Snapshot.Config}, "location": location, "current_position": d.CurrentPosition, "live_x_m": d.LiveX, "live_y_m": d.LiveY, "location_reason": d.LocationReason, "last_contact": d.Contact, "desired_config": d.Desired, "config_converged": d.Converged, "contact_condition": d.ContactCondition, "gnss_condition": d.GNSSCondition, "location_age_s": d.LocationAge, "total_m": d.Total, "field_evidence": d.Evidence, "history": d.History}
 	}
 	var recording any
 	if st.Recording != nil {
-		recording = map[string]any{"recording_id": st.Recording.ID, "active": st.Recording.Active}
+		// Duration is derived here from authoritative recording windows, never by the browser.
+		seconds := 0.0
+		for _, window := range st.Recording.Windows {
+			end := now
+			if window.Stop != nil {
+				end = *window.Stop
+			}
+			if end.After(window.Start) {
+				seconds += end.Sub(window.Start).Seconds()
+			}
+		}
+		recording = map[string]any{"recording_id": st.Recording.ID, "active": st.Recording.Active, "mode": st.Recording.Mode, "duration_s": seconds}
 	}
-	return map[string]any{"devices": devices, "recording": recording, "policy": st.Policy, "points": st.Points}
+	return map[string]any{"sos_alerts": st.Alerts, "devices": devices, "recording": recording, "policy": st.Policy, "points": st.Points, "raw_points": st.RawPoints, "provisional_points": st.Provisional, "projection_pending": st.ProjectionPending, "projection_error": st.ProjectionError}
 }

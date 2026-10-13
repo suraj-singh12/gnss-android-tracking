@@ -46,13 +46,20 @@ class MemoryStore : MessageStore {
             .filter { it.deliveredAt == null && !it.quarantined && it.type != "sos" }
             .maxByOrNull { it.sequence }
 
-    override suspend fun next(now: Long, currentAfter: Long): Outbound? {
-        val eligible =
-            rows.filter { it.deliveredAt == null && !it.quarantined && it.nextAttemptMillis <= now }
-        return eligible.filter { it.type == "sos" }.minByOrNull { it.sequence }
-            ?: newest()?.takeIf { it.sequence > currentAfter && it.nextAttemptMillis <= now }
-            ?: eligible.minByOrNull { it.sequence }
-    }
+    private fun eligible(now: Long) =
+        rows.filter { it.deliveredAt == null && !it.quarantined && it.nextAttemptMillis <= now }
+
+    override suspend fun sos(now: Long) =
+        eligible(now).filter { it.type == "sos" }.minByOrNull { it.sequence }
+
+    override suspend fun historical(now: Long, target: Int) =
+        eligible(now).filter { it.type == "location" }.sortedBy { it.sequence }.take(1)
+
+    override suspend fun routine(now: Long) =
+        eligible(now).filter { it.type == "status" }.maxByOrNull { it.sequence }
+
+    override suspend fun routineBacklog(now: Long) =
+        eligible(now).filter { it.type == "status" }.minByOrNull { it.sequence }
 
     override suspend fun resetTransientRetryTiming() {
         for (index in rows.indices) {
@@ -85,6 +92,32 @@ class MemoryStore : MessageStore {
 }
 
 class SenderTest {
+    @Test
+    fun fixAgeUsesElapsedTimeAcrossWallClockEdits() {
+        var wall = 100000L
+        var elapsed = 1000L
+        val clock =
+            object : Clock {
+                override fun wallMillis() = wall
+
+                override fun elapsedMillis() = elapsed
+            }
+        val latest = LatestLocation(clock)
+        latest.enabled = true
+        val measured = Fix(utc(wall), 0, 28.0, 77.0, 3.0, null, null, null, null)
+        latest.update(Observation(measured, elapsed))
+        wall += 3600000
+        elapsed += 1000
+        assertEquals(1000L, latest.currentFix()!!.fix_age_ms)
+        assertEquals(measured.observed_at, latest.currentFix()!!.observed_at)
+        assertNotNull(latest.clockWarning())
+        wall -= 7200000
+        assertEquals(1000L, latest.age())
+        elapsed += 30001
+        assertNull(latest.currentFix())
+        assertEquals("unknown", latest.status())
+    }
+
     private fun ack(json: String, result: String = "stored"): Response {
         val message = Protocol.decodeMessage(json)
         return Response(
@@ -112,6 +145,7 @@ class SenderTest {
             }
         sender.step()
         sender.step()
+        clock.now += 10000
         store.snapshot(clock.now, null, Health())
         repeat(4) { sender.step() }
         assertEquals(listOf(5L, 1L, 6L, 2L, 3L, 4L), sent)
@@ -307,5 +341,76 @@ class SenderTest {
         assertFalse(store.rows.first().quarantined)
         sender.step()
         assertEquals(listOf(1L), store.delivered)
+    }
+
+    @Test
+    fun deliveryEvidenceCannotBreakSendingAndHasNoRawIdentity() = runBlocking {
+        val store = MemoryStore()
+        val clock = FakeClock()
+        val row = store.snapshot(clock.now, null, Health())
+        val seen = mutableListOf<ReportEvidence>()
+        val sender =
+            Sender(
+                store,
+                Transport { _, json -> ack(json) },
+                clock,
+                deliveryEvidence = { _, report ->
+                    seen.add(report)
+                    throw IllegalStateException("disk failed")
+                },
+            ) {
+                store.snapshot(clock.now, null, Health())
+            }
+        sender.step()
+        assertEquals(listOf(row.sequence), store.delivered)
+        assertEquals(2, seen.size)
+        assertEquals(reportReference(row.messageId), seen.first().reference)
+        assertFalse(com.google.gson.Gson().toJson(seen).contains(row.messageId))
+        assertNotNull(sender.diagnostics.lastAckElapsed)
+    }
+
+    @Test
+    fun effectiveIntervalChangesRescheduleLiveWithoutWaitingForOldCadence() = runBlocking {
+        val clock = FakeClock()
+        val store = MemoryStore()
+        store.installation = store.installation.copy(localInterval = 30)
+        val liveTimes = mutableListOf<Long>()
+        val transport =
+            object : Transport {
+                override suspend fun post(endpoint: String, immutableJson: String) =
+                    ack(immutableJson)
+
+                override suspend fun postRole(
+                    endpoint: String,
+                    json: String,
+                    role: String,
+                ): Response {
+                    if (role == "live") liveTimes.add(clock.now)
+                    return ack(json)
+                }
+            }
+        val sender = Sender(store, transport, clock) { error("No synthetic current report") }
+        suspend fun current() =
+            store.snapshot(
+                clock.now,
+                Fix(utc(clock.now), 0, 28.0, 77.0, 1.0, null, null, null, null),
+                Health(gnss_status = "fix"),
+            )
+        current()
+        sender.step()
+        sender.step() // Empty historical opportunity.
+        clock.now += 5000
+        store.installation = store.installation.copy(localInterval = 5)
+        current()
+        sender.step()
+        sender.step()
+        clock.now += 5000
+        store.installation = store.installation.copy(localInterval = 30)
+        current()
+        sender.step() // This observation may synchronize historically, not at 5 s live cadence.
+        clock.now += 25000
+        current()
+        sender.step()
+        assertEquals(listOf(100000L, 105000L, 135000L), liveTimes)
     }
 }

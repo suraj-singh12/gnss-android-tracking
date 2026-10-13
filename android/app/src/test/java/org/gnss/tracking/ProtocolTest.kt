@@ -1,5 +1,6 @@
 package org.gnss.tracking
 
+import java.time.Instant
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -8,6 +9,36 @@ class ProtocolTest {
 
     private val message
         get() = Protocol.decodeMessage(fixture("location-normal.json"))
+
+    @Test
+    fun nativeMetadataAndHistoricalBatchFixturesAgree() {
+        val native = Protocol.decodeMessage(fixture("location-native-session.json"))
+        assertEquals(native.message_id, native.observation!!.observation_id)
+        val row =
+            Outbound(
+                native.sequence,
+                native.message_id,
+                native.type,
+                Instant.parse(native.captured_at).toEpochMilli(),
+                Protocol.encode(native),
+            )
+        assertEquals(
+            Protocol.parse(fixture("history-batch-v1/request.json")),
+            Protocol.parse(HistoryProtocol.batch(listOf(row))),
+        )
+        assertEquals(
+            native.message_id,
+            HistoryProtocol.receipts(fixture("history-batch-v1/ack.json"), listOf(row))
+                .single()
+                .message,
+        )
+        val progress = Protocol.parse(fixture("status-history-progress.json"))
+        progress.getAsJsonObject("history_progress").addProperty("pending_observations", -1)
+        assertTrue(runCatching { Protocol.decodeMessage(progress.toString()) }.isFailure)
+        progress.getAsJsonObject("history_progress").addProperty("pending_observations", 0)
+        progress.getAsJsonObject("history_progress").addProperty("oldest_pending_sequence", 2)
+        assertTrue(runCatching { Protocol.decodeMessage(progress.toString()) }.isFailure)
+    }
 
     @Test
     fun allWireFixturesRoundTrip() {
@@ -113,8 +144,8 @@ class ProtocolTest {
 
     @Test
     fun localAndRemoteIntervals() {
-        for (v in listOf(0, 9, 15, 86410, Int.MAX_VALUE)) assertFalse(validInterval(v))
-        for (v in listOf(10, 20, 30, 60, 86400)) assertTrue(validInterval(v))
+        for (v in listOf(0, 1, 6, 9, 86405, Int.MAX_VALUE)) assertFalse(validInterval(v))
+        for (v in listOf(5, 10, 15, 20, 30, 60, 86400)) assertTrue(validInterval(v))
         val authority = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
         val initial = ConfigState(local_reporting_interval_s = 20)
         val enrolled =

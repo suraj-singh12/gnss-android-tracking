@@ -10,6 +10,23 @@ import android.os.BatteryManager
 class DeviceHealth(private val context: Context, private val latest: LatestLocation) {
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
 
+    fun networkState(changes: Long): NetworkState {
+        val wifi = wifiNetwork()
+        val capabilities = wifi?.let { connectivity.getNetworkCapabilities(it) }
+        val links = wifi?.let { connectivity.getLinkProperties(it) }
+        return NetworkState(
+            runCatching {
+                    context.getSystemService(android.net.wifi.WifiManager::class.java).isWifiEnabled
+                }
+                .getOrNull(),
+            wifi != null,
+            capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED),
+            links?.linkAddresses?.any { it.address is java.net.Inet4Address },
+            links?.linkAddresses?.any { it.address is java.net.Inet6Address },
+            changes,
+        )
+    }
+
     // Select Wi-Fi even if it has no internet validation or cellular is the default.
     fun wifiNetwork(): Network? =
         connectivity.allNetworks.firstOrNull {
