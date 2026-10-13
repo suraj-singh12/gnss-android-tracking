@@ -441,3 +441,36 @@ Physical Wi-Fi reassociation/GNSS/OEM power/battery remain acceptance requiremen
 integration does not establish them. Extended endurance/repeater campaigns remain Issue #7.
 
 For the combined PR #12 acceptance build, retain this same native-history procedure and the SOS checks above. Trigger SOS while backlog is draining; it must receive the next opportunity after one bounded in-flight request. Export both reports after reconnect/restart and confirm original SOS identity/receipt plus separate operator ACK. No GNSS listener restart or acquisition strategy change is included.
+
+## Generic Android Physical Button Acceptance
+
+Use the normal integrated GNSS Tracking application: open **Diagnostics →
+Diagnostic tools → Physical Button Test**, expand it, then choose **Start Test**.
+This is an Activity-only diagnostic using public Android key delivery. It supports
+ordinary compatible Android devices without manufacturer-specific dependencies.
+The test is not a background or locked-screen detector.
+
+1. With the screen on and the diagnostic Activity visible, press Volume Up three
+   times and Volume Down three times. Confirm each delivered press displays a
+   non-repeat `DOWN` (one actual press) and normally a matching `UP`. Confirm no
+   new SOS event is created while the test is listening.
+2. Choose **Stop Test**, then verify the existing supported triple-Volume-Up SOS
+   adapter is available again. Do not use the experiment as a substitute for the
+   protected on-screen SOS control.
+3. Start again, press a key, then press Home. Reopen Diagnostics and confirm the
+   run is marked interrupted/inconclusive, retained events remain readable, and
+   normal SOS key handling has been restored.
+4. Lock or turn off the screen. Report background, locked-screen and screen-off
+   volume-key detection as **MECHANISM UNAVAILABLE**; an absent event is not a
+   negative hardware result. No MediaSession or accessibility/key interception is
+   used to manufacture a result.
+5. Export Diagnostics and retain `physical-button-report.json` with the device
+   manufacturer/model and Android release/API. Record the actual hardware, key,
+   delivery state and any device-specific observation. Automated tests do not
+   establish physical-device acceptance.
+
+Use `DETECTED` only for an observed delivered event, `NOT_DETECTED` only after a
+complete uninterrupted visible-Activity test, and `INCONCLUSIVE` for pause,
+restart, unavailable data or record loss. The integrated APK uses the normal
+application ID `org.gnss.tracking`; it does not migrate, delete or overwrite data
+from the former separate `org.gnss.tracking.buttontest` experiment.

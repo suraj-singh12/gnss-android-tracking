@@ -9,4 +9,5 @@
     <string name="diagnostics_export_failed">Diagnostics export failed. Try again; saved incidents are retained.</string>
     <string name="sos_volume_option">Enable triple Volume Up SOS while this app is open</string>
     <string name="sos_read_failed">Cannot read saved SOS — check storage</string>
+    <string name="physical_button_read_failed">Cannot read saved button-test results — check diagnostic storage.</string>
 </resources>

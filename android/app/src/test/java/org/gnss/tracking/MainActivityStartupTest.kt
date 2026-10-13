@@ -132,7 +132,7 @@ class MainActivityStartupTest {
                 await { app.operational.value.tracking }
                 assertTrue(app.repository.state().tracking)
                 assertFalse(app.operational.value.starting)
-                assertEquals("Tracking active", button.text.toString())
+                assertEquals("Stop Tracking", button.text.toString())
                 button.performClick()
                 assertNull(shadowOf(app).nextStartedService)
             } finally {
@@ -568,7 +568,7 @@ class MainActivityStartupTest {
                 }
             }
             buttons(activity.get().findViewById(android.R.id.content))
-                .single { it.text == "Stop Tracking" }
+                .single { it.text == "Cancel Start" }
                 .performClick()
             org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
                 .getButton(android.app.AlertDialog.BUTTON_POSITIVE)

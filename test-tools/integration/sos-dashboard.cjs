@@ -79,7 +79,7 @@ async function stop() {
   await start();
   const first = await send(fixture);
   browser = await chromium.launch({
-    executablePath: process.env.GNSS_CHROMIUM || "/usr/bin/chromium",
+    executablePath: process.env.GNSS_CHROMIUM || undefined,
     headless: true,
     args: ["--no-sandbox", "--autoplay-policy=user-gesture-required"],
   });
@@ -103,6 +103,8 @@ async function stop() {
     true,
   );
   await page.keyboard.press("Enter");
+  await page.waitForSelector("#sos-history-toggle");
+  await page.locator("#sos-history-toggle").click();
   await page.waitForSelector(".sos-alert.acknowledged");
   const state = await (await fetch(local + "/local/state")).json();
   const ack = state.sos_alerts[0].operator_acknowledged_at;
