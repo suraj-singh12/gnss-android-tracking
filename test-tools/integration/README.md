@@ -60,6 +60,7 @@ compared exactly, including segment UUIDs and projected coordinates.
 | Five-second amendment | Local 5 → real Command override 5 → ACK adoption/Room reopen → local edit 15 retains effective 5 → Clear falls back to 15/converges; local/control reject 1, 6, 86405 |
 | Lost response | Exact saved retry, duplicate with original first receipt, one row/track effect/distance effect per observation |
 | Current-first recovery | Sender wire order D A B C, live D never rolls back, history A B C D; failed retry deadline cleared on restore |
+| Stale recovery + reserved SOS | New current saved before old backlog; SOS precedes current and never enters tracks; complete trigger/operator workflow also covered below |
 | Stale recovery + reserved SOS | Legacy status recovery retry retained; native live observation precedes oldest history when available; reserved SOS precedes ordinary work and never enters tracks |
 | Arrival permutations | A B C D / D A B C / C A D B / D A B B C yield identical point IDs, geometry, segments, cumulative distance; old backlog stays historically valid while live is stale |
 | Bad GNSS | Raw retained with explicit jitter/poor/unknown/stale/jump rejection reasons, recovery opens segment without bridge; turn, sideways and reversal accepted; altitude does not add distance |
@@ -127,6 +128,37 @@ review found no Activity-driven GPS registration; absence of CPU wake protection
 was a concrete lifecycle gap. The precise trigger on the reported phone remains
 unconfirmed until the updated physical retest and diagnostic evidence.
 
+## Issue #5 SOS extension
+
+The existing bridge now additionally drives the production central SOS engine into
+real Room/Sender and real Command HTTP/SQLite. Offline creation competes with 100
+tracking envelopes; a stale GNSS snapshot is retained truthfully. The suite checks
+transactional debounce, exact priority payload, phone database reopen, actual lost
+response after durable Command storage, immutable duplicate/original receipt,
+remote interval change, recording Stop/Resume/Clear independence, event-specific
+operator ACK, a second emergency, Command process restart, phone restoration and
+browser-state reload through the real local handler. A wrong matching-identity ACK
+mutation also proves the phone remains pending until a valid duplicate ACK, even
+when a human has already acknowledged the event on Command.
+
+All prior tracking scenarios still run. This bridge proves software boundary and
+storage behavior, not physical Wi-Fi availability, native GNSS, locked-screen key
+routing, OS process recovery or browser-speaker playback. Follow the separate SOS
+section in the canonical device-acceptance runbook after Issue #4 physical acceptance.
+
+An optional real-browser check uses a built Command binary, Node and an external
+Playwright installation (test dependencies only; Command adds no runtime dependency):
+
+```sh
+GNSS_COMMAND_BINARY=/absolute/path/to/party-tracker \
+GNSS_PLAYWRIGHT_MODULE=/absolute/path/to/playwright \
+GNSS_CHROMIUM=/absolute/path/to/chromium \
+node test-tools/integration/sos-dashboard.cjs
+```
+
+It verifies the actual embedded dashboard, blocked audio status, keyboard ACK and
+focus stability, duplicate delivery, multiple SOS, browser reload, real Command
+restart and Recording Clear persistence. It does not establish speaker audibility.
 Issue #4 field regressions additionally exercise 100 old status envelopes before an
 offline rectangle: current location first, lost ACK, phone/Command persistence
 reopen, duplicate ACK, GNSS history before statuses, 80 m chronological geometry
@@ -160,6 +192,8 @@ full oracle, rejected provisional junction/recovery, policy switches, session mo
 late joins, stale queue/explicit unresolved outcomes, old receiver metadata backfill,
 and live display while projection is busy. Shared native/batch fixtures are consumed
 by both production parsers.
+
+Combined SOS reconciliation additionally holds a real native-history request in flight, saves a no-fix SOS in Room, then proves SOS is the next HTTP request after release. Its immutable retry after both restarts produces one alert and no route/distance. Five-device performance includes SOS requests during recovery; latencies are measured rather than hardware guarantees.
 
 The native two-outage comparison retains 100 one-second measurements per phone
 at 30-second live cadence. Continuous delivery and 41–49 / 52–79 recovery blocks

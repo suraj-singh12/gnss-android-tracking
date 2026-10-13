@@ -64,6 +64,8 @@ fun interface Transport {
     fun wifiAvailable(): Boolean = true
 }
 
+class WifiUnavailable : java.io.IOException("Wi-Fi unavailable")
+
 class LanTransport(private val network: () -> Network?) : Transport {
     private var selectedNetwork: Network? = null
     private var client: OkHttpClient? = null
@@ -95,7 +97,7 @@ class LanTransport(private val network: () -> Network?) : Transport {
         path: String,
         role: String,
     ): Response {
-        val wifi = network() ?: throw java.io.IOException("Wi-Fi unavailable")
+        val wifi = network() ?: throw WifiUnavailable()
         val currentGeneration = generation.get()
         if (selectedNetwork != wifi || boundGeneration != currentGeneration) {
             client?.connectionPool?.evictAll()
@@ -182,9 +184,14 @@ class Sender(
     private val store: MessageStore,
     private val transport: Transport,
     private val clock: Clock,
+    private val evidence: (DiagnosticEvent, SosEvidence) -> Unit = { _, _ -> },
     private val deliveryEvidence: (DiagnosticEvent, ReportEvidence) -> Unit = { _, _ -> },
     private val capture: suspend () -> Outbound,
 ) {
+    private fun record(kind: DiagnosticEvent, value: SosEvidence) {
+        runCatching { evidence(kind, value) }
+    }
+
     private val mutex = Mutex()
     private var recovering = true
     private var failures = 0
@@ -247,13 +254,13 @@ class Sender(
             if (!endpointBlocked) waitUntil = 0
         }
 
-    suspend fun step() =
+    suspend fun step(sosOnly: Boolean = false) =
         mutex.withLock {
             attemptedLastStep = false
-            stepNative()
+            stepNative(sosOnly)
         }
 
-    private suspend fun stepNative() {
+    private suspend fun stepNative(sosOnly: Boolean) {
         val state = store.state()
         if (generation != state.endpointGeneration) {
             generation = state.endpointGeneration
@@ -276,6 +283,7 @@ class Sender(
         if (state.endpoint.isEmpty() || state.deliveryPaused || endpointBlocked) return
         // SOS bypasses ordinary retry backoff, but respects its own durable deadline.
         val priority = store.sos(clock.wallMillis())
+        if (sosOnly && priority == null) return
         if (priority == null && (!transport.wifiAvailable() || clock.elapsedMillis() < waitUntil))
             return
         val now = clock.wallMillis()
@@ -356,6 +364,18 @@ class Sender(
         // Capability discovery is itself a bounded request; newly raised SOS gets the next one.
         if (role != "sos" && store.sos(clock.wallMillis()) != null) return
         val selected = if (batchEligible && batchSupported == true) rows else rows.take(1)
+        if (role == "sos") {
+            val row = selected.single()
+            record(
+                DiagnosticEvent.SOS_SEND_ATTEMPT,
+                SosEvidence(sosReference(row.messageId), count = row.attempts + 1),
+            )
+            if (store.newest() != null || store.historical(clock.wallMillis(), 0).isNotEmpty())
+                record(
+                    DiagnosticEvent.SOS_PREEMPTED_BACKLOG,
+                    SosEvidence(sosReference(row.messageId), competingReports = 1),
+                )
+        }
         selected.forEach { record(DiagnosticEvent.REPORT_SEND_ATTEMPT, it) }
         attemptedLastStep = true
         diagnostics = diagnostics.copy(lastAttemptElapsed = clock.elapsedMillis())
@@ -382,6 +402,11 @@ class Sender(
                         )
                 store.acceptBatch(selected, receipts, state.endpointGeneration)
                 selected.forEach { record(DiagnosticEvent.REPORT_ACK_ACCEPTED, it) }
+                if (role == "sos")
+                    record(
+                        DiagnosticEvent.SOS_TRANSPORT_ACK_ACCEPTED,
+                        SosEvidence(sosReference(selected.single().messageId)),
+                    )
                 diagnostics =
                     diagnostics.copy(
                         lastAckElapsed = clock.elapsedMillis(),
@@ -450,6 +475,13 @@ class Sender(
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
+            if (role == "sos") {
+                val kind =
+                    if (e is WifiUnavailable) DiagnosticEvent.SOS_NETWORK_UNAVAILABLE
+                    else if (receivedResponse) DiagnosticEvent.SOS_TRANSPORT_ACK_REJECTED else null
+                if (kind != null)
+                    record(kind, SosEvidence(sosReference(selected.single().messageId)))
+            }
             if (receivedResponse && transport.wifiAvailable()) {
                 if (role == "history") adaptation.reachableFailure()
             } else adaptation.reset()
@@ -480,6 +512,11 @@ class Sender(
             )
             record(DiagnosticEvent.REPORT_RETRY, it)
         }
+        if (role == "sos")
+            record(
+                DiagnosticEvent.SOS_RETRY_BACKOFF,
+                SosEvidence(sosReference(rows.single().messageId), durationMs = retry.delayMillis),
+            )
         if (role != "sos") {
             failures = count
             waitUntil =

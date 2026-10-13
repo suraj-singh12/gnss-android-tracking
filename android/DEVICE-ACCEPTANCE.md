@@ -301,6 +301,54 @@ indiscriminately. Recorder retention limits still apply; export promptly after a
 Real GNSS/GPSTest activation, screen-off/Doze/OEM effects and physical offline/reconnect
 behaviour remain physical acceptance; no automated verdict substitutes for these.
 
+## Issue #5 SOS acceptance — separate from Issue #4 physical testing
+
+**Do not install/deploy Issue #5 builds while Issue #4 remains under physical
+acceptance.** PR #11 / `8fbcabbc2443aae75178a50160ee1248830611dd` is the frozen Issue #4
+candidate. This SOS branch is independently based on it; GNSS stall remains unresolved.
+Run the following only after scheduling separate SOS acceptance on an authorized
+candidate. Automated results cannot establish physical-key/locked-screen reliability.
+
+Minimum physical SOS tests (retain Android and Command ZIP exports afterwards):
+
+1. Configure Party and the isolated local Wi-Fi receiver; Start Tracking. Tap SOS
+   once: no activation. Hold SOS briefly: immediate detection, then saved status,
+   then Command-received only after a valid ACK. Confirm the Command event/party/time
+   and test audible enablement, blocked audio, speaker volume and keyboard ACK.
+2. Enable the foreground triple Volume Up checkbox. One/two presses, holds, slow
+   triples and mixed Volume Down must not activate. Three short presses within
+   1.5 seconds must activate once. Verify ordinary volume controls still work.
+   Record manufacturer/model, Android version, pattern timing and actual outcome.
+   Lock/off the screen and foreground another app: this adapter is unsupported
+   there; do not depend on it or claim a pass. Open/unlock and use on-screen SOS.
+3. Disconnect Wi-Fi, activate SOS, hide the Activity while Tracking stays active,
+   and restore Wi-Fi after an extended outage with accumulated ordinary reports.
+   Confirm the same event reaches Command before backlog, then current tracking
+   and old backlog continue. Use the automatic evidence instead of observing the
+   exact reconnect moment. No communication path means no transmission.
+4. Disable GPS or wait until the known Issue #4 stall produces stale GNSS; activate
+   SOS. It must save/deliver immediately with unavailable or honestly aged last-known
+   location, preserving accuracy and original time. Do not open GPSTest to manufacture
+   a fresh location result for this test. SOS does not fix that stall.
+5. Stop Command during activation, restart it against the same database, and confirm
+   delivery eventually occurs. Acknowledge that event, reload the browser and restart
+   Command again: the acknowledgement time and first receipt must remain unchanged.
+6. Rapidly trigger again within three seconds: no second logical emergency. Activate
+   deliberately after three seconds: a distinct event. Start/Stop/Resume/Clear Command
+   Recording: both emergency events and individual acknowledgements remain intact.
+7. Recreate the phone process using an approved test procedure while an SOS is pending;
+   reopen/Start Tracking if Android does not restore the service. Verify exact event
+   survival/delivery and record whether OS recovery actually occurred. Repeat with
+   screen off/Doze/OEM battery policy on intended hardware. Force-stop/reboot/OEM kill
+   provide no automatic-transmission guarantee; explicitly restart when needed.
+8. Export both reports soon after the run. Review all six SOS assessments and exact
+   evidence; missing data, no competing backlog, no retry, no restart or truncated
+   history must remain INCONCLUSIVE. Physical-key scope remains a hardware item;
+   exporter file-picker behavior and browser speakers also require a real device.
+
+These tests cover field behavior only within the supported trigger scope. The
+original Issue #5 desired locked-screen physical activation remains an explicit
+acceptance limitation, not a capability inferred from unit/emulator tests.
 ## Offline rectangle and historical reconciliation retest
 
 Use the matched APK and Command assets from the same final product SHA. The temporary
@@ -391,3 +439,38 @@ uninstall a phone holding unacknowledged history; signing/release packaging rema
 If GNSS stalls, retain the existing GPSTest A/B procedure without reopening our Activity.
 Physical Wi-Fi reassociation/GNSS/OEM power/battery remain acceptance requirements; automated
 integration does not establish them. Extended endurance/repeater campaigns remain Issue #7.
+
+For the combined PR #12 acceptance build, retain this same native-history procedure and the SOS checks above. Trigger SOS while backlog is draining; it must receive the next opportunity after one bounded in-flight request. Export both reports after reconnect/restart and confirm original SOS identity/receipt plus separate operator ACK. No GNSS listener restart or acquisition strategy change is included.
+
+## Generic Android Physical Button Acceptance
+
+Use the normal integrated GNSS Tracking application: open **Diagnostics →
+Diagnostic tools → Physical Button Test**, expand it, then choose **Start Test**.
+This is an Activity-only diagnostic using public Android key delivery. It supports
+ordinary compatible Android devices without manufacturer-specific dependencies.
+The test is not a background or locked-screen detector.
+
+1. With the screen on and the diagnostic Activity visible, press Volume Up three
+   times and Volume Down three times. Confirm each delivered press displays a
+   non-repeat `DOWN` (one actual press) and normally a matching `UP`. Confirm no
+   new SOS event is created while the test is listening.
+2. Choose **Stop Test**, then verify the existing supported triple-Volume-Up SOS
+   adapter is available again. Do not use the experiment as a substitute for the
+   protected on-screen SOS control.
+3. Start again, press a key, then press Home. Reopen Diagnostics and confirm the
+   run is marked interrupted/inconclusive, retained events remain readable, and
+   normal SOS key handling has been restored.
+4. Lock or turn off the screen. Report background, locked-screen and screen-off
+   volume-key detection as **MECHANISM UNAVAILABLE**; an absent event is not a
+   negative hardware result. No MediaSession or accessibility/key interception is
+   used to manufacture a result.
+5. Export Diagnostics and retain `physical-button-report.json` with the device
+   manufacturer/model and Android release/API. Record the actual hardware, key,
+   delivery state and any device-specific observation. Automated tests do not
+   establish physical-device acceptance.
+
+Use `DETECTED` only for an observed delivered event, `NOT_DETECTED` only after a
+complete uninterrupted visible-Activity test, and `INCONCLUSIVE` for pause,
+restart, unavailable data or record loss. The integrated APK uses the normal
+application ID `org.gnss.tracking`; it does not migrate, delete or overwrite data
+from the former separate `org.gnss.tracking.buttontest` experiment.

@@ -122,15 +122,14 @@ recording, adding its distances without a connector. Devices join dynamically;
 first accepted points add zero. Clear requires explicit UI confirmation and retires
 the current recording, dropping derived results while preserving raw/device/config
 state. Retired windows never participate in rebuilds or later recordings.
-Only location messages enter tracks; SOS fixes remain telemetry for future Issue #5.
+Only location messages enter tracks; SOS fixes remain alert telemetry and never enter tracks.
 
 Distance is horizontal haversine with radius **6,371,008.8 m**, wrapped longitude
-deltas, no altitude component and no edge rounding. The renderer uses original
-WGS84 accepted coordinates projected about the earliest accepted point across all
-devices by `(observed_at,device_id,sequence,message_id)`. Earlier backlog can change
-that origin, so projection is recomputed consistently. SVG fits with equal X/Y scale,
-north up. A separate geographic overlay allows a later offline map layer underneath.
-Projection never influences acceptance or travelled distance.
+deltas, no altitude component and no edge rounding. The backend retains its original local metric projection for derived views. The
+Issue #6 renderer projects original WGS84 coordinates to Web Mercator for both blank
+and offline GeoJSON modes, north up. Pan/zoom persists through polling; Fit/Focus
+are explicit actions. Projection never influences acceptance or travelled distance.
+See [map format and alignment inspection](../docs/design-system.md).
 
 The canvas dominates the page. Dynamic device cards show totals, independent contact
 and GNSS conditions, last seen, location age, battery and reporting/config state.
@@ -173,18 +172,19 @@ against in-process HTTP listeners. Also run `go test ./...` and `go vet ./...` f
 
 Limitations: retained raw data, derived arrays and full evidence export favor correctness over
 large-history performance; long-duration field capacity is not yet established.
-The equirectangular view targets small local areas, not polar/global operation.
+The Web Mercator display targets local areas; polar coordinates are clamped and
+antimeridian-spanning offline datasets require splitting before import.
 Cross-build success does not prove physical execution on macOS/Windows. The
 [automated Android integration](../test-tools/integration/README.md) proves
 application boundaries; [physical LAN acceptance](../android/DEVICE-ACCEPTANCE.md)
-remains required. SOS alerts/operator acknowledgement, offline maps, polished
-Issue #6 UI, installers/signing and release workflows remain their later issues.
+remains required. Issue #6 supplies the workspace and offline GeoJSON maps.
+Installers/production signing and release workflows remain separate. Issue #5 SOS behavior is documented below.
 The Issue #4 Protocol v1 amendment permits reporting intervals of 5–86400 s in
 5-second steps (default 10 s); Android/Command responsibilities are unchanged.
 
 ## Issue #4 field evidence
 
-Use **Export field-test report** on the local dashboard after testing (also
+Use **Export diagnostics** on the local dashboard after testing (also
 `GET /local/field-report`). It downloads one `gnss-field-report-<UTC>.zip` with
 `manifest.json` and `field-report.json`; no external tooling is required. Export
 is read-only, does not stop ingestion/recording, and is absent from the LAN phone
@@ -250,6 +250,58 @@ Git checkout with VCS stamping enabled; unknown revision is reported honestly if
 A temporary workflow-only APK branch must check out the frozen **product SHA** for the
 build, so its workflow commit does not become the APK's reported source revision.
 
+## SOS alerts and human acknowledgement
+
+SOS reception works with Recording stopped, active, resumed or cleared. The persistent
+**SOS emergencies** panel identifies the Device/Party and specific event, original
+activation time, first Command receipt, location and accuracy when supplied, GNSS
+status and freshness at activation. Coordinates are an event observation, never a
+promise of a current position. Missing, stale/last-known and clock-anomalous observations
+are explicit. No SOS observation becomes a recording track point.
+
+**Acknowledge this SOS** records the first human acknowledgement time durably for
+that exact Device/event pair. It keeps the event and its first receipt timestamp;
+repeated clicks/retries are idempotent. A duplicate phone packet cannot reset an
+acknowledgement. Multiple independent events have separate controls/statuses.
+Unacknowledged events remain prominent when a device loses contact, on browser
+reload and after restarting Command with the same SQLite database. Recording Clear
+retains all emergencies. There is no cancellation/delete control. Acknowledged
+history remains visible and stored under existing indefinite raw/state retention.
+
+The phone's transport ACK proves Command storage, not operator acknowledgement.
+Command alone owns human acknowledgement. No additional phone return channel or
+ACK-piggyback configuration field is added. The phone can confirm **Received by
+Command**, and does not display a human acknowledgement it has not received.
+
+Choose **Enable / test audible SOS alert**, then check speaker volume. Browser
+permissions may block playback until a user gesture, after suspension or on reload;
+the panel explicitly shows blocked/unavailable audio. When enabled, a short audible
+cue repeats every ten seconds while an event is unacknowledged. Visible alerts
+remain authoritative, including when the browser/network is unavailable. No internet
+or external audio asset is used. Use keyboard Tab/Enter for each event's labelled
+acknowledgement button; polling preserves that button and its captured identity.
+
+### SOS field-report interpretation
+
+The existing **Export field-test report** ZIP captures durable SOS receipt/duplicate/
+conflict evidence, original activation/first receipt, human acknowledgement and
+restoration after database opening. SOS-specific export evidence uses the same
+bounded opaque 16-hex event reference as Android; no event coordinates, Party labels
+or raw envelopes are exported. Existing ordinary tracking evidence retains its
+previous identifier correlation contract. SOS-only devices use opaque aggregate
+keys rather than installation UUIDs. Use the operational alert view to map an
+event UUID to its exported reference (first 16 hex characters of SHA-256 of the UUID).
+
+For each event, automatic assessments cover **SOS saved locally**, **SOS preempted
+backlog**, **SOS delivered after reconnect**, **SOS retries deduplicated**, **Operator
+ACK persisted**, and **SOS survived restart**. Command marks the first three
+INCONCLUSIVE because they require Android evidence. Dedupe PASS requires retained
+stored + identical duplicate transitions with unchanged first receipt; ACK-persisted
+PASS requires the same human acknowledgement timestamp restored at a later database
+open; survival PASS requires stored + restoration evidence. A new event with no
+restart/retry data remains INCONCLUSIVE. Evidence is automatic: no packet counting,
+queue observation or failure-time SQLite inspection is required. Legacy SOS raw
+records are upgraded to alerts; missing legacy evidence is never fabricated.
 ### Field reliability evidence (schema 2)
 
 Reports include per-type unique/delayed counts, last unique receipt, current
@@ -335,3 +387,25 @@ old measurements cannot move the current marker backward. Clock anomalies remain
 explainable, and no automatic correction is performed.
 
 Live freshness also requires capture-time fix age within 30 seconds and rejects measurements/captures more than five seconds in the future (a stricter enabled clock tolerance still applies). Disabling or enlarging historical age/clock rules cannot relax these current-position/evidence bounds.
+
+### Short synthetic acceptance profile
+
+The combined PR #12 five-device test retains 600 original one-second observations per
+phone (3,000 total), sends current first, retries stored batches, interleaves 30
+live retries and raises five no-fix SOS requests while recovery runs. On a cloud
+workspace limited to two CPUs, alongside Android validation, without race instrumentation: mean envelope 980 B;
+155 history requests; 3,041,865 B history bodies; 13,795 B request headers;
+975,940 B ACK bodies; 14,725 B response headers. Catch-up ingestion took 42.13 s,
+maximum live durable ACK 736 ms, maximum SOS durable ACK 221 ms, final projection
+flush 1.72 s. SQLite allocation increased 23,498,752 B, including raw, indexes,
+projection and evidence; it is not network traffic. Total heap allocation was
+2,741,584,568 B, with 26,758,424 B retained at measurement. This short profile
+exercises increasing recording size; it establishes neither battery consumption
+nor the Issue #7 high-volume/endurance capacity. Run
+`go test -v ./internal/core -run TestFiveDeviceShortBatchPerformance` to measure
+on the intended laptop. Native one-second retention increases phone storage/IO
+relative to interval-only snapshots; no automatic raw-data deletion is enabled.
+
+## Issue #6 operational interface
+
+See [UI setup and acceptance](../docs/ui-acceptance.md) and [shared design system](../docs/design-system.md) for the three-destination Android interface, Command workspace, recording/quality controls, protected SOS and exactly two offline canvas/map modes. The existing tracking and SOS engines remain authoritative.

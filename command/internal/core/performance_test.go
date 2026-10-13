@@ -24,6 +24,8 @@ func TestFiveDeviceShortBatchPerformance(t *testing.T) {
 	requests, bodyBytes, headerBytes, ackBytes, responseHeaders, interleavedLives := 0, 0, 0, 0, 0, 0
 	sourceBytes := 0
 	liveLatency := time.Duration(0)
+	sosLatency := time.Duration(0)
+	sosRequests := 0
 	handler := s.IngestHandler()
 	for d := 0; d < 5; d++ {
 		session := id()
@@ -89,6 +91,24 @@ func TestFiveDeviceShortBatchPerformance(t *testing.T) {
 					liveLatency = elapsed
 				}
 			}
+			if requests%30 == 0 {
+				sos := emergency(t, perDevice+1+sosRequests, float64(perDevice))
+				sos.Device = deviceID
+				sos.Fix = nil
+				sos.Health.GNSS = "no_fix"
+				began := time.Now()
+				result := httptest.NewRecorder()
+				request := httptest.NewRequest("POST", "/api/v1/messages", bytes.NewReader(encode(t, sos)))
+				request.Header.Set("Content-Type", "application/json")
+				handler.ServeHTTP(result, request)
+				if result.Code != 200 {
+					t.Fatal(result.Code, result.Body.String())
+				}
+				if elapsed := time.Since(began); elapsed > sosLatency {
+					sosLatency = elapsed
+				}
+				sosRequests++
+			}
 			start = end
 		}
 	}
@@ -102,5 +122,5 @@ func TestFiveDeviceShortBatchPerformance(t *testing.T) {
 	s.db.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
 	after, _ := os.Stat(path)
 	runtime.ReadMemStats(&memoryAfter)
-	t.Logf("5 devices x %d observations: mean serialized observation=%d B, history requests=%d (+5 individual live requests), batch body bytes=%d, measured HTTP history request headers=%d B, durable ACK bodies=%d B, HTTP response headers=%d B, interleaved live retries=%d, catch-up ingestion=%s, max individual live durable ACK latency=%s, projection flush=%s, SQLite allocated delta=%d B (raw/indexes/projection/evidence included), total heap allocations=%d B, retained heap=%d B", perDevice, sourceBytes/(5*perDevice), requests, bodyBytes, headerBytes, ackBytes, responseHeaders, interleavedLives, ingestion, liveLatency, projection, after.Size()-before.Size(), memoryAfter.TotalAlloc-memoryBefore.TotalAlloc, memoryAfter.HeapAlloc)
+	t.Logf("5 devices x %d observations: mean serialized observation=%d B, history requests=%d (+5 individual live requests), batch body bytes=%d, measured HTTP history request headers=%d B, durable ACK bodies=%d B, HTTP response headers=%d B, interleaved live retries=%d, catch-up ingestion=%s, max individual live durable ACK latency=%s, SOS requests during recovery=%d, max SOS durable ACK latency=%s, projection flush=%s, SQLite allocated delta=%d B (raw/indexes/projection/evidence included), total heap allocations=%d B, retained heap=%d B", perDevice, sourceBytes/(5*perDevice), requests, bodyBytes, headerBytes, ackBytes, responseHeaders, interleavedLives, ingestion, liveLatency, sosRequests, sosLatency, projection, after.Size()-before.Size(), memoryAfter.TotalAlloc-memoryBefore.TotalAlloc, memoryAfter.HeapAlloc)
 }
