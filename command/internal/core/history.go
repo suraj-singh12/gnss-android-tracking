@@ -48,6 +48,13 @@ type HistoryState struct {
 }
 
 func populateHistory(tx *sql.Tx, st *State, now time.Time) error {
+	raw, err := candidates(tx, "")
+	if err != nil {
+		return err
+	}
+	return populateHistoryFromRaw(tx, st, now, raw)
+}
+func populateHistoryFromRaw(tx *sql.Tx, st *State, now time.Time, raw []Candidate) error {
 	for _, d := range st.Devices {
 		current := ""
 		if d.Session != nil {
@@ -61,29 +68,17 @@ func populateHistory(tx *sql.Tx, st *State, now time.Time) error {
 			current = d.PhoneQueue.Session
 		}
 		d.HistorySessions = map[string]*HistoryState{}
-		rows, e := tx.Query("SELECT session,sequence FROM observation_identity WHERE device=? ORDER BY session,sequence", d.ID)
-		if e != nil {
-			return e
-		}
 		sets := map[string]map[int64]bool{}
-		for rows.Next() {
-			var session string
-			var n int64
-			if e = rows.Scan(&session, &n); e != nil {
-				break
+		for _, c := range raw {
+			if c.Device == d.ID && c.Observation != nil {
+				o := c.Observation
+				if sets[o.Session] == nil {
+					sets[o.Session] = map[int64]bool{}
+				}
+				sets[o.Session][o.Sequence] = true
 			}
-			if sets[session] == nil {
-				sets[session] = map[int64]bool{}
-			}
-			sets[session][n] = true
 		}
-		if e == nil {
-			e = rows.Err()
-		}
-		rows.Close()
-		if e != nil {
-			return e
-		}
+		var e error
 		if current != "" && sets[current] == nil {
 			sets[current] = map[int64]bool{}
 		}
@@ -99,7 +94,7 @@ func populateHistory(tx *sql.Tx, st *State, now time.Time) error {
 			}
 			h.ProcessedThrough = h.ReceivedThrough
 			var known string
-			e = tx.QueryRow(`SELECT known FROM raw WHERE device=? AND json_extract(known,'$.history_progress.tracking_session_id')=? ORDER BY json_extract(known,'$.history_progress.measured_at') DESC LIMIT 1`, d.ID, session).Scan(&known)
+			e = tx.QueryRow(`SELECT known FROM raw WHERE device=? AND json_extract(known,'$.history_progress') IS NOT NULL AND json_extract(known,'$.history_progress.tracking_session_id')=? ORDER BY json_extract(known,'$.history_progress.measured_at') DESC LIMIT 1`, d.ID, session).Scan(&known)
 			if e != nil && e != sql.ErrNoRows {
 				return e
 			}
@@ -259,7 +254,7 @@ func (s *Store) projectionCandidates(tx *sql.Tx, device string) ([]Candidate, er
 }
 func windowIncludes(w Window, m Message) bool {
 	t := instant(m.Fix.Observed)
-	if t.Before(w.Start) || (w.Stop != nil && !t.Before(*w.Stop)) {
+	if (!w.AllHistory && t.Before(w.Start)) || (w.Stop != nil && !t.Before(*w.Stop)) {
 		return false
 	}
 	if w.Sessions != nil {
@@ -399,6 +394,11 @@ func (s *Store) processProjectionLocked() error {
 		}
 	}
 	// Keep unaffected projections; compute only devices with durable pending work.
+	if e != nil {
+		tx.Rollback()
+		s.mu.Unlock()
+		return e
+	}
 	previousPoints, previousDecisions := st.Points, st.Decisions
 	allDevices := st.Devices
 	affected := map[string]*Device{}
@@ -520,107 +520,212 @@ func (s *Store) processProjectionLocked() error {
 	}
 	return tx.Commit()
 }
+
+// Render the authoritative projection, including independent qualified sections
+// after sequence gaps. Transport prefixes must never gate successful derivation.
+type ReconstructionState struct {
+	Received       int            `json:"durably_received"`
+	Eligible       int            `json:"eligible"`
+	Excluded       int            `json:"excluded_by_boundaries"`
+	Processed      int            `json:"projected"`
+	Accepted       int            `json:"accepted"`
+	Rejected       int            `json:"rejected"`
+	Reasons        map[string]int `json:"rejection_reasons"`
+	Qualified      int            `json:"qualified_points"`
+	Segments       int            `json:"qualified_segments"`
+	Missing        int64          `json:"known_missing_sequences"`
+	Unresolved     int            `json:"reported_unresolved"`
+	KnownLoss      int64          `json:"reported_collection_loss"`
+	Earliest       string         `json:"earliest_received_observed_at,omitempty"`
+	ClockUncertain int            `json:"clock_uncertain"`
+	Projection     string         `json:"projection"`
+	Error          string         `json:"projection_error,omitempty"`
+	Route          string         `json:"route_condition"`
+	Inventory      string         `json:"inventory_scope"`
+}
+
 func populateViews(tx *sql.Tx, st *State) error {
+	raw, err := candidates(tx, "")
+	if err != nil {
+		return err
+	}
+	return populateViewsFromRaw(tx, st, raw, true)
+}
+func populateViewsFromRaw(tx *sql.Tx, st *State, raw []Candidate, diagnosticRaw bool) error {
 	st.RawPoints = []Point{}
-	st.Provisional = []Point{}
-	if st.Recording == nil {
-		return nil
+	st.Provisional = []Point{} // Retained API field; live markers are independent.
+	pending := map[string]bool{}
+	rows, err := tx.Query("SELECT device FROM projection_work")
+	if err != nil {
+		return err
 	}
-	raw, e := candidates(tx, "")
-	if e != nil {
-		return e
+	for rows.Next() {
+		var device string
+		if err = rows.Scan(&device); err != nil {
+			break
+		}
+		pending[device] = true
 	}
-	sort.Slice(raw, func(i, j int) bool { return less(raw[i].Message, raw[j].Message, true) })
-	seqs := map[string]map[int64]bool{}
-	through := map[string]int64{}
-	identities := map[string]*ObservationIdentity{}
-	for _, c := range raw {
-		if o := c.Observation; o != nil {
-			key := c.Device + "/" + o.Session
-			if seqs[key] == nil {
-				seqs[key] = map[int64]bool{}
-			}
-			seqs[key][o.Sequence] = true
-			identities[c.Device+"/"+c.ID] = o
+	if err == nil {
+		err = rows.Err()
+	}
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	revisions := map[string]int64{}
+	if st.Recording != nil {
+		for _, w := range st.Recording.Windows {
+			revisions[w.ID] = w.Policy.Revision
 		}
 	}
-	for key, set := range seqs {
-		for set[through[key]+1] {
-			through[key]++
-		}
-	}
-	// An explicitly unresolved protocol entry is a known outcome, not a
-	// perpetual projection barrier. Receipt completeness stays separately false.
+	members := map[string]bool{}
+	segments := map[string]map[string]bool{}
 	for device, d := range st.Devices {
-		for session, h := range d.HistorySessions {
-			if h.ProcessedThrough > through[device+"/"+session] {
-				through[device+"/"+session] = h.ProcessedThrough
+		r := &ReconstructionState{Reasons: map[string]int{}, Projection: "completed", Inventory: "Only received observations and timestamped per-session reports are known; unreported retained sessions and offline backlog are unknown."}
+		if pending[device] {
+			r.Projection = "pending"
+			if st.ProjectionError != "" {
+				r.Projection = "failed"
+				r.Error = st.ProjectionError
 			}
 		}
+		for _, h := range d.HistorySessions {
+			latest := h.LatestReceived
+			if q := h.LatestReported; q != nil {
+				if q.Latest > latest {
+					latest = q.Latest
+				}
+				r.Unresolved += len(q.Unresolved)
+				r.KnownLoss += q.KnownLoss
+			}
+			if latest > int64(h.Received) {
+				r.Missing += latest - int64(h.Received)
+			}
+		}
+		d.Reconstruction = r
+		segments[device] = map[string]bool{}
 	}
-	filtered := []Point{}
-	for _, point := range st.Points {
-		o := identities[point.Device+"/"+point.Message]
-		if o == nil || o.Sequence <= through[point.Device+"/"+o.Session] {
-			filtered = append(filtered, point)
+	for _, c := range raw {
+		r := st.Devices[c.Device].Reconstruction
+		r.Received++
+		if r.Earliest == "" || c.Fix.Observed < r.Earliest {
+			r.Earliest = c.Fix.Observed
+		}
+		if absClock(c.Message) > liveClockTolerance(st.Policy) || futureCandidate(c.Message, c.Received, st.Policy) {
+			r.ClockUncertain++
+		}
+		included := false
+		if st.Recording != nil {
+			for _, w := range st.Recording.Windows {
+				if !windowIncludes(w, c.Message) {
+					continue
+				}
+				included = true
+				members[w.ID+"/"+c.Device+"/"+c.ID] = true
+				if diagnosticRaw {
+					st.RawPoints = append(st.RawPoints, Point{Device: c.Device, Message: c.ID, Sequence: c.Sequence, Fix: *c.Fix, Window: w.ID, Segment: w.ID + "/" + c.Device + "/" + sourceSession(c.Message), Reason: "unfiltered_diagnostic", Dot: true})
+				}
+			}
+		}
+		if included {
+			r.Eligible++
+		} else {
+			r.Excluded++
 		}
 	}
-	st.Points = filtered
+	for _, d := range st.Decisions {
+		if !members[d.Window+"/"+d.Device+"/"+d.Message] || d.Revision != revisions[d.Window] {
+			continue
+		}
+		r := st.Devices[d.Device].Reconstruction
+		r.Processed++
+		if d.Reason == "accepted" {
+			r.Accepted++
+		} else {
+			r.Rejected++
+			r.Reasons[d.Reason]++
+		}
+	}
+	// A pending policy/Stop operation must not label obsolete qualification or
+	// excluded measurements as current authoritative geometry. Keep cached source
+	// results in SQLite for retry, but expose only the selected window/policy view.
+	qualified := []Point{}
 	for _, d := range st.Devices {
 		d.Total = 0
+		d.UsefulPoints = 0
 	}
-	for _, point := range filtered {
-		if point.Distance > st.Devices[point.Device].Total {
-			st.Devices[point.Device].Total = point.Distance
+	for _, p := range st.Points {
+		if members[p.Window+"/"+p.Device+"/"+p.Message] && p.Revision == revisions[p.Window] {
+			qualified = append(qualified, p)
+			d := st.Devices[p.Device]
+			d.Reconstruction.Qualified++
+			d.UsefulPoints++
+			if p.Distance > d.Total {
+				d.Total = p.Distance
+			}
+			segments[p.Device][p.Segment] = true
 		}
 	}
-	for _, w := range st.Recording.Windows {
-		for device := range st.Devices {
-			group := []Candidate{}
-			lastReceived := time.Time{}
-			section := 0
-			flush := func() {
-				if len(group) > 0 {
-					pp, _ := Derive(group, w.Policy, fmt.Sprintf("%s/provisional/%s/%d", w.ID, device, section), 0)
-					origins := map[string]float64{}
-					for i := range pp {
-						if _, ok := origins[pp[i].Segment]; !ok {
-							origins[pp[i].Segment] = pp[i].Distance
-						}
-						pp[i].Distance -= origins[pp[i].Segment]
-						pp[i].Reason = "provisional"
-						pp[i].Dot = true
-					}
-					st.Provisional = append(st.Provisional, pp...)
-					group = nil
-					section++
-				}
-			}
-			for _, c := range raw {
-				if c.Device != device || !windowIncludes(w, c.Message) {
-					continue
-				}
-				st.RawPoints = append(st.RawPoints, Point{Device: device, Message: c.ID, Sequence: c.Sequence, Fix: *c.Fix, Window: w.ID, Segment: w.ID + "/" + device + "/" + sourceSession(c.Message), Reason: "unfiltered_diagnostic", Dot: true})
-				if c.Observation == nil || c.Observation.Sequence <= through[device+"/"+c.Observation.Session] {
-					continue
-				}
-				var role string
-				_ = tx.QueryRow("SELECT role FROM receipt_roles WHERE device=? AND message=?", device, c.ID).Scan(&role)
-				_, fresh := receiptQuality(c.Message, c.Received, st.Policy)
-				if role != "live" || !fresh {
-					continue
-				}
-				r := instant(c.Received)
-				if !lastReceived.IsZero() && r.Sub(lastReceived) > time.Duration(4*c.Config.Effective+10)*time.Second {
-					flush()
-				}
-				group = append(group, c)
-				lastReceived = r
-			}
-			flush()
+	st.Points = qualified
+	for device, d := range st.Devices {
+		r := d.Reconstruction
+		r.Segments = len(segments[device])
+		r.Route = "qualified_geometry"
+		switch {
+		case st.Recording == nil:
+			r.Route = "no_recording"
+		case r.Projection == "failed":
+			r.Route = "projection_failed"
+		case r.Projection == "pending":
+			r.Route = "projection_pending"
+		case r.Received == 0:
+			r.Route = "no_observations_received"
+		case r.Eligible == 0:
+			r.Route = "excluded_by_recording_boundaries"
+		case r.Processed != r.Eligible:
+			r.Route = "projection_inconsistent"
+		case r.Accepted == 0:
+			r.Route = "quality_filtered"
 		}
 	}
 	return nil
+}
+
+// Versioned non-destructive upgrade of the existing persisted JSON model. Keep
+// lifecycle instants/IDs and raw bytes; invalidate only the derived projection.
+func (s *Store) upgradeHistoryReconstruction() error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	st, err := loadState(tx)
+	if err != nil {
+		return err
+	}
+	if st.HistoryReconstructionVersion >= 1 {
+		return nil
+	}
+	if r := st.Recording; r != nil && r.Mode == "session_beginning" {
+		r.Mode = "from_beginning"
+		for i := range r.Windows {
+			r.Windows[i].Sessions = nil
+			r.Windows[i].AllHistory = i == 0 && r.Windows[i].Reason == "start"
+		}
+	}
+	st.HistoryReconstructionVersion = 1
+	st.ProjectionVersion++
+	for device := range st.Devices {
+		if _, err = tx.Exec(`INSERT INTO projection_work(device,earliest) VALUES(?, '') ON CONFLICT(device) DO UPDATE SET earliest='',generation=generation+1`, device); err != nil {
+			return err
+		}
+	}
+	st.ProjectionPending = len(st.Devices) > 0
+	if err = saveState(tx, st); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) recordProjectionFailure(err error) {
@@ -731,4 +836,133 @@ func sourceSession(m Message) string {
 		return "legacy"
 	}
 	return m.Observation.Session
+}
+
+// The dashboard consumes only newly committed rows. This cache has no authority:
+// SQLite is reread on restart, and quality/projection still run exclusively in the
+// worker. It avoids JSON decoding every retained envelope on every two-second poll.
+func (s *Store) viewCandidates(tx *sql.Tx, p Policy) ([]Candidate, error) {
+	if s.dashboardCounters == nil {
+		s.dashboardCounters = map[string]*Counters{}
+	}
+	rows, err := tx.Query(`SELECT r.rowid,r.known,r.received,COALESCE(rr.role,'') FROM raw r LEFT JOIN receipt_roles rr ON rr.device=r.device AND rr.message=r.message WHERE r.rowid>? ORDER BY r.rowid`, s.viewRaw.Row)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var row int64
+		var known, received, role string
+		if err = rows.Scan(&row, &known, &received, &role); err != nil {
+			return nil, err
+		}
+		var m Message
+		if err = json.Unmarshal([]byte(known), &m); err != nil {
+			return nil, err
+		}
+		c := s.dashboardCounters[m.Device]
+		if c == nil {
+			c = &Counters{}
+			s.dashboardCounters[m.Device] = c
+		}
+		c.Reports++
+		c.LastReceipt = received
+		switch m.Type {
+		case "location":
+			c.LocationReports++
+			c.RawFixes++
+		case "sos":
+			c.SOSReports++
+		default:
+			c.RoutineReports++
+		}
+		class, _ := receiptClass(m, received, p)
+		if class == "delayed_backlog" || role == "history" {
+			c.DelayedReports++
+			if m.Type == "location" {
+				c.DelayedLocations++
+			} else if m.Type == "status" {
+				c.DelayedRoutine++
+			}
+		}
+		if m.Type == "location" {
+			v := Candidate{m, received}
+			at := sort.Search(len(s.viewRaw.Candidates), func(i int) bool { return !less(s.viewRaw.Candidates[i].Message, m, true) })
+			s.viewRaw.Candidates = append(s.viewRaw.Candidates, Candidate{})
+			copy(s.viewRaw.Candidates[at+1:], s.viewRaw.Candidates[at:])
+			s.viewRaw.Candidates[at] = v
+		}
+		s.viewRaw.Row = row
+	}
+	return s.viewRaw.Candidates, rows.Err()
+}
+
+// Cadence/retry summaries consume the existing evidence journal incrementally;
+// exports retain full events and verdicts. No second persistent authority exists.
+func (s *Store) populateDashboardEvidence(tx *sql.Tx, st *State, now time.Time) error {
+	if s.dashboardReceipts == nil {
+		s.dashboardReceipts = map[string][]Receipt{}
+	}
+	rows, err := tx.Query("SELECT ordinal,data FROM field_evidence WHERE ordinal>? ORDER BY ordinal", s.dashboardEvidenceRow)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var ordinal int64
+		var b string
+		if err = rows.Scan(&ordinal, &b); err != nil {
+			break
+		}
+		var e Evidence
+		if err = json.Unmarshal([]byte(b), &e); err != nil {
+			break
+		}
+		e.Ordinal = ordinal
+		if c := s.dashboardCounters[e.Device]; c != nil {
+			if e.Kind == "duplicate" {
+				c.Duplicates++
+			}
+			if e.Kind == "conflict" || (e.Kind == "batch_rejected" && e.FailureCode == "identity_conflict") {
+				c.Conflicts++
+			}
+			if e.Kind == "stored" && e.DeliveryRole != "history" && e.TimingClass == "current_like" && (e.Type == "location" || e.Type == "status") {
+				key := e.Device + "/" + e.Type
+				sample := s.dashboardReceipts[key]
+				if len(sample) == 0 || e.Captured > sample[len(sample)-1].Captured {
+					sample = append(sample, Receipt{Evidence: e, Class: e.TimingClass})
+					if len(sample) > 16 {
+						sample = sample[len(sample)-16:]
+					}
+					s.dashboardReceipts[key] = sample
+				}
+			}
+		}
+		s.dashboardEvidenceRow = ordinal
+	}
+	if err == nil {
+		err = rows.Err()
+	}
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	report := FieldReport{Generated: now.UTC().Format(wireTime), Devices: map[string]*Counters{}}
+	for device, d := range st.Devices {
+		if c := s.dashboardCounters[device]; c != nil {
+			copy := *c
+			copy.Expected = d.Snapshot.Config.Effective
+			copy.Useful = d.Reconstruction.Qualified
+			copy.ProjectionReasons = d.Reconstruction.Reasons
+			report.Devices[device] = &copy
+		}
+	}
+	for _, sample := range s.dashboardReceipts {
+		report.Receipts = append(report.Receipts, sample...)
+	}
+	sort.Slice(report.Receipts, func(i, j int) bool { return report.Receipts[i].Ordinal < report.Receipts[j].Ordinal })
+	analyzeField(&report, st.Policy)
+	for device, d := range st.Devices {
+		d.Evidence = report.Devices[device]
+	}
+	return nil
 }

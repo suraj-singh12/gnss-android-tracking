@@ -71,6 +71,10 @@ func redactSOSReport(r *FieldReport) {
 			delete(r.History, device)
 			r.History[opaque] = h
 		}
+		if v, ok := r.Reconstruction[device]; ok {
+			delete(r.Reconstruction, device)
+			r.Reconstruction[opaque] = v
+		}
 		if h, ok := r.HistorySessions[device]; ok {
 			delete(r.HistorySessions, device)
 			r.HistorySessions[opaque] = h

@@ -1,15 +1,21 @@
-name: Issue 6 physical-button integration and matched assets
+name: Integrated validation and matched acceptance assets
 on:
   push:
     branches: [issue-6-integrated-ui, integration/issue6-physical-button]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 concurrency:
   group: issue6-validation-${{ github.ref }}
   cancel-in-progress: true
+env:
+  SOURCE_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
 permissions:
   contents: read
 jobs:
   integrated:
+    if: github.event_name != 'pull_request' || github.head_ref == 'issue-21-history-reconstruction'
     runs-on: ubuntu-latest
     steps:
       - name: Define visual evidence directory
@@ -17,6 +23,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -47,8 +54,8 @@ jobs:
           cp -R app/build/reports app/build/test-results "$RUNNER_TEMP/gnss-test-reports/android-full/"
       - name: Go tests and protocol checks
         run: |
-          (cd command && go test -race ./... && go vet ./...)
-          (cd test-tools && go test -race ./... && go vet ./...)
+          (cd command && go test -race -v ./... && go vet ./...)
+          (cd test-tools && go test -race -v ./... && go vet ./...)
           node test-tools/integration/map-test.cjs
       - name: Real Android to Command integration
         run: test-tools/integration/run.sh --console=plain
@@ -69,6 +76,7 @@ jobs:
           export GNSS_SCREENSHOT_DIR="$RUNNER_TEMP/gnss-assets/visual-evidence"
           node test-tools/integration/sos-dashboard.cjs
           node test-tools/integration/ui-dashboard.cjs
+          node test-tools/integration/history-dashboard.cjs
       - name: Verify exact revisions and generate checksum manifest
         env:
           ASSET_DIR: ${{ runner.temp }}/gnss-assets
@@ -76,7 +84,7 @@ jobs:
           test -z "$(git status --porcelain)"
           for binary in "$ASSET_DIR"/gnss-command-*; do
             go version -m "$binary" | tee "$binary.build-info.txt"
-            go version -m "$binary" | grep -F "vcs.revision=$GITHUB_SHA"
+            go version -m "$binary" | grep -F "vcs.revision=$SOURCE_REVISION"
             go version -m "$binary" | grep -F 'vcs.modified=false'
           done
           cp android/app/build/outputs/apk/debug/app-debug.apk "$ASSET_DIR/"
@@ -86,7 +94,7 @@ jobs:
           cp docs/ui-acceptance.md "$ASSET_DIR/SETUP.md"
           python3 - <<'PY'
           import hashlib,json,os,pathlib,zipfile
-          root=pathlib.Path(os.environ['ASSET_DIR']); sha=os.environ['GITHUB_SHA']
+          root=pathlib.Path(os.environ['ASSET_DIR']); sha=os.environ['SOURCE_REVISION']
           names=['app-debug.apk','gnss-command-darwin-arm64','gnss-command-windows-amd64.exe']
           with zipfile.ZipFile(root/names[0]) as z:
               assert any(sha.encode() in z.read(n) for n in z.namelist() if n.endswith('.dex'))
@@ -99,14 +107,14 @@ jobs:
           cat "$ASSET_DIR/SHA256SUMS"
       - uses: actions/upload-artifact@v4
         with:
-          name: gnss-issue6-matched-${{ github.sha }}
+          name: gnss-matched-${{ env.SOURCE_REVISION }}
           path: ${{ runner.temp }}/gnss-assets
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: gnss-issue6-test-reports-${{ github.sha }}
+          name: gnss-test-reports-${{ env.SOURCE_REVISION }}
           path: |
             ${{ runner.temp }}/gnss-test-reports
             android/app/build/reports

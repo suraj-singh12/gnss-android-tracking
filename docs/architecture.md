@@ -134,11 +134,20 @@ Command creates UUID `recording_id` and `segment_id` values; these never origina
 on Android and are not required in phone packets/ACKs. Track ownership is
 `(recording_id, device_id, segment_id)`; labels do not own tracks. Device count is
 dynamic, with no default party count. Two participating devices yield two tracks;
-five yield five. A newly discovered device can join during recording, and its
+five yield five; twenty yield twenty. No fixed participating-device limit is
+configured; the deterministic variable-population suite includes twenty devices.
+A newly discovered device can join during recording, and its
 first accepted point in that recording is its recording start.
 
 Command persists UTC lifecycle boundaries with sufficient precision for ordered
-operations. Active windows are half-open `[start, stop)` in `observed_at` time:
+operations. **From Now** uses Command's clock at the operator action, before waiting
+for existing projection work. Its windows are half-open `[start, stop)` in original
+`observed_at` time. **From Beginning** opens the initial window with no lower
+observation-time bound, spanning all retained eligible history actually received,
+including legacy observations, earlier Android sessions and devices joining later.
+It can start with no phones or session reports. Stop supplies the same exclusive
+upper bound; Resume always creates a new `[resume, stop)` window, never backfills
+stopped intervals. No packet arrival or session report can move these boundaries:
 
 | Action | Effect |
 | --- | --- |
@@ -147,12 +156,12 @@ operations. Active windows are half-open `[start, stop)` in `observed_at` time:
 | Resume | Same recording, new segment/window; no line or distance edge across stop. Already active is a no-op. |
 | Clear Recording | Require UI confirmation; delete current derived tracks/distances and retire its recording/windows. Retain identities, configuration and raw observations. Return to no current recording. |
 
-Points observed before start, during stop, or after stop have no membership in that
-window even if received while recording is active. Late delivery may rebuild a
+In bounded From Now/Resume windows, points observed before start, during stop,
+or after stop have no membership in that window even if received while recording is active. Late delivery may rebuild a
 closed window for observations measured while it was active; Stop is not a ban on
 recovering its historical data. A cleared recording must never be resurrected by
-backlog/restart; raw retained after Clear does not automatically enter a later
-recording. New windows determine new membership. Resume's first point is independent;
+backlog/restart; new windows determine membership after Clear. An explicit new From Beginning
+selection intentionally reuses retained raw history; From Now excludes older data. Resume's first point is independent;
 it carries previous segments' cumulative distance but adds no connector. SOS event
 locations are telemetry, not track points; only location messages enter track
 candidate processing. No recording state is transmitted to control phone tracking.
@@ -265,9 +274,10 @@ appropriate projection state. Projection pending/error is explicit. Full chronol
 derivation remains the deterministic oracle for points, segments and distance.
 
 Fresh live markers do not consult old historical movement anchors. Incomplete native
-history creates provisional live sections with zero starting section distance. Late
-history reconciles those sections through canonical derivation, never adding provisional
-distance twice. A quality-rejected junction does not invalidate later candidates.
+history yields independently qualified sections separated at missing original
+observation sequences. A missing sequence never hides all later history or creates
+a distance connector. Late history reconciles those sections through canonical
+derivation, replacing earlier partial geometry/distance atomically. A quality-rejected junction does not invalidate later candidates.
 
 Every quality rule has an enabled switch and retained numeric threshold. Disabled
 movement floors contribute zero; the uncertainty threshold applies only when enabled.
@@ -277,9 +287,12 @@ freshness remain mandatory. All policy edits reconsider retained raw data while 
 recording lifecycle windows. An unfiltered diagnostic view changes neither policy nor
 authoritative distance. No accuracy circles are drawn.
 
-Recording can start from Command now or from the identified current Android session.
-The session mode selects that source session; late delivery does not change original
-membership. Contact, GNSS, live availability and history completeness are separate.
+Recording starts From Now or From Beginning of all retained history, as defined
+above. The local API retains `session_beginning` as an alias for `from_beginning`;
+the operator label deliberately no longer says current session. A versioned JSON
+upgrade removes old single-session eligibility restrictions, keeps original
+window IDs/time boundaries and requeues existing projections without changing raw
+wire bytes, devices, configuration, SOS or retired recordings. Contact, GNSS, live availability and history completeness are separate.
 Phone queue counts carry measurement time; disconnected phone state is unknown.
 Received-through means actual contiguous raw receipt; processed-through may include
 explicit unresolved outcomes and must not be called complete.
@@ -287,3 +300,40 @@ explicit unresolved outcomes and must not be called complete.
 The original GPS_PROVIDER/Looper/foreground-service acquisition and 30-second native
 freshness rule are unchanged. No listener restart workaround is introduced. Issue #5
 retains SOS ownership, Issue #6 offline-map scope, and Issue #7 extended endurance.
+
+## Issue #21 reconstruction accounting
+
+Transport ACK means the original raw SQLite commit succeeded, even if subsequent
+projection fails. Each device's dashboard/field export separately reports received
+GNSS count, recording-eligible/excluded count, projected decisions, accepted and
+rejected counts with reasons, qualified point/section count, earliest received
+measurement, known sequence gaps, reported unresolved/loss, and pending/failed/
+completed projection. Failure retains durable work and retries; the valid ACK is
+never revoked. A completed projection is the route over received eligible data,
+not proof that every phone observation reached Command.
+
+Phone progress describes one session at a reported time. All known session facts
+remain separate; unreported sessions, earlier retained inventory and an offline
+phone's current backlog cannot be inferred from a zero-pending latest-session
+report. `received_through` is a contiguous receipt prefix; `processed_through`
+includes known unresolved delivery outcomes and is not geometry reconstruction.
+The interface calls these delivery outcomes and avoids global synchronization claims.
+
+Clock checks compare original capture/measurement UTC and capture age, and reject
+future captures against their original first receipt under the enabled policy.
+Clock uncertainty is counted even when its quality control is disabled. Consistent
+phone clock skew into the past cannot be proven or corrected by this protocol;
+From Now membership follows supplied original observation UTC and may be uncertain.
+Receipt time is never substituted, and no clock correction moves a window.
+
+Dashboard polling reuses an incremental in-memory raw cursor and bounded cadence
+samples from the existing evidence journal; those caches have no persistence or
+tracking authority. Diagnostic raw geometry is requested only when its existing
+view is selected. The full evidence analysis/export remains on demand. Qualified
+geometry retains every accepted point; Fit parties reveals sections outside a
+preserved operator viewport, with an explicit out-of-view indication.
+
+While a quality-policy change or Stop is pending/failed, the read model suppresses
+cached points whose policy revision or window membership is obsolete. Their raw
+observations and persisted projection work remain available for retry. Successful
+qualification under the selected policy is never inferred from a receipt prefix.

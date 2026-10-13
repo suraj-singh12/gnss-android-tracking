@@ -61,7 +61,7 @@ for (const action of ["start", "stop", "resume", "clear"])
       mode: $("recording-mode").value,
     }).catch(showError);
   };
-$("all-observations").onchange = () => draw();
+$("all-observations").onchange = () => poll();
 $("dots").onchange = () => {
   if (!$("dots").checkValidity()) {
     $("dots").reportValidity();
@@ -343,11 +343,29 @@ function render() {
           ),
         );
       }
+      if (d.reconstruction) {
+        const r = d.reconstruction;
+        status.append(
+          el("div", reconstructionLabel(d)),
+          el("div", `GNSS durably received: ${r.durably_received} · eligible: ${r.eligible} · outside boundaries: ${r.excluded_by_boundaries}`),
+          el("div", `Projection: ${r.projection} · processed: ${r.projected} · accepted: ${r.accepted} · rejected: ${r.rejected}`),
+          el("div", `Earliest received measurement: ${r.earliest_received_observed_at ? time(r.earliest_received_observed_at) : "unknown until history arrives"}`),
+          el("div", `Known missing sequences: ${r.known_missing_sequences} · reported unresolved: ${r.reported_unresolved} · reported collection loss: ${r.reported_collection_loss}`),
+          el("div", r.inventory_scope),
+        );
+        const drawing = el("div", "Qualified geometry available; drawing status updating…");
+        drawing.setAttribute("data-drawing-device", d.device_id);
+        status.append(drawing);
+        if (r.projection_error) status.append(el("div", r.projection_error));
+        if (r.clock_uncertain) status.append(el("div", `${r.clock_uncertain} observations have clock uncertainty; original times are unchanged.`));
+        for (const [reason, count] of Object.entries(r.rejection_reasons))
+          status.append(el("div", `${reason.replaceAll("_", " ")}: ${count}`));
+      }
       if (d.history)
         status.append(
           el(
             "div",
-            `History: ${d.history.condition} · received through ${d.history.received_through} · processed through ${d.history.processed_through}`,
+            `History: ${d.history.condition} · received through ${d.history.received_through} · known delivery outcomes through ${d.history.processed_through}`,
           ),
           el(
             "div",
@@ -559,19 +577,34 @@ function gnssLabel(d) {
       ? "GNSS Stale"
       : "GNSS · " + d.gnss_condition.replaceAll("_", " ");
 }
+function reconstructionLabel(d) {
+  const r = d.reconstruction;
+  if (!r) return "Route status unavailable";
+  const condition = {
+    no_recording: "No recording selected",
+    no_observations_received: "No GNSS observations received",
+    excluded_by_recording_boundaries: "History outside recording boundaries",
+    quality_filtered: "All eligible history rejected by quality rules",
+    projection_pending: "Route reconstruction pending",
+    projection_failed: "Route reconstruction failed — retrying",
+    projection_inconsistent: "Route projection inconsistent — export diagnostics",
+    qualified_geometry: `${r.qualified_points} qualified points / ${r.qualified_segments} sections`,
+  }[r.route_condition] || "Route status unknown";
+  return condition;
+}
 function historyLabel(d) {
   const h = d.history,
     q = h?.last_reported_phone_queue;
   if (!h) return "History · unavailable";
   const condition =
     {
-      catching_up: "Synchronizing",
+      catching_up: "Receiving history",
       unresolved: "History Incomplete",
       incomplete: "History Incomplete",
-      synchronized: "Fully synchronized",
+      synchronized: "Reported session received",
       unknown: "Unknown",
     }[h.condition] || "Unknown";
-  return `History: ${condition}${q?.unresolved_sequences?.length ? " · " + q.unresolved_sequences.length + " unresolved" : ""}${q ? " · " + q.pending_observations + " pending" : ""}${q && !h.phone_state_recent ? " (last reported; current count unknown)" : ""}`;
+  return `${reconstructionLabel(d)}${d.reconstruction?.known_missing_sequences ? " · " + d.reconstruction.known_missing_sequences + " missing" : ""} · Phone: ${condition}${q?.unresolved_sequences?.length ? " · " + q.unresolved_sequences.length + " unresolved" : ""}${q ? " · " + q.pending_observations + " pending" : ""}${q && !h.phone_state_recent ? " (last reported; current count unknown)" : ""}`;
 }
 const descriptions = {
   maximum_accuracy_m: "Reject imprecise fixes above this accuracy radius.",
@@ -776,10 +809,13 @@ function draw() {
   $("map-mode-label").textContent = mapVisible
     ? "Offline geographic map"
     : "Blank canvas";
-  if (!mapVisible)
-    $("projection-status").textContent =
-      state.projection_error ||
-      (state.projection_pending ? "History reconstruction in progress…" : "");
+  const outsideView = points.some(p => { const [x,y]=xy(p); return x<0 || x>w || y<0 || y>h; });
+  const projectionStatus = state.projection_error
+    ? "Projection failed: " + state.projection_error
+    : state.projection_pending
+      ? "History reconstruction in progress…"
+      : outsideView ? "Historical geometry extends beyond this view — use Fit parties." : "";
+  $("projection-status").textContent = projectionStatus;
   if (mapVisible) {
     const layer = svg("g", {
       "data-layer": "offline-map",
@@ -826,8 +862,7 @@ function draw() {
     );
     $("projection-status").textContent = outside
       ? "Some GNSS observations are outside map coverage. Tracks remain available."
-      : state.projection_error ||
-        (state.projection_pending ? "History reconstruction in progress…" : "");
+      : projectionStatus;
   }
   const overlay = svg("g", { "data-layer": "tracks" });
   root.append(overlay);
@@ -848,6 +883,9 @@ function draw() {
       provisional = first.segment_reason === "provisional";
     overlay.append(
       svg("polyline", {
+        "data-device": first.device_id,
+        "data-segment": first.segment_id,
+        "data-qualified-points": raw ? "" : group.length,
         points: group.map((p) => xy(p).join(",")).join(" "),
         fill: "none",
         stroke,
@@ -883,6 +921,16 @@ function draw() {
         }
       };
       overlay.append(circle);
+    }
+  }
+  for (const label of document.querySelectorAll("[data-drawing-device]")) {
+    const device = label.getAttribute("data-drawing-device");
+    if (hidden.has(device)) label.textContent = "Drawing hidden by operator · qualified geometry retained";
+    else if (raw) label.textContent = "Unfiltered diagnostic drawing selected · qualified geometry retained";
+    else {
+      const sections = [...root.querySelectorAll("polyline[data-qualified-points]")].filter(e => e.getAttribute("data-device") === device);
+      const count = sections.reduce((n,e) => n + Number(e.getAttribute("data-qualified-points")), 0);
+      label.textContent = `Qualified drawing: ${count} points / ${sections.length} sections` + (points.some(p => p.device_id === device && (() => {const [x,y]=xy(p);return x<0||x>w||y<0||y>h;})()) ? " · outside this view; use Fit parties" : "");
     }
   }
   const liveLayer = svg("g", { "data-layer": "live" });
@@ -938,7 +986,7 @@ async function poll() {
   polling = true;
   try {
     const response = await fetch(
-      "/local/state?dot_interval_s=" + encodeURIComponent($("dots").value),
+      "/local/state?dot_interval_s=" + encodeURIComponent($("dots").value) + ($("all-observations").checked ? "&include_raw=true" : ""),
     );
     const b = await response.json();
     if (!response.ok) throw Error(b.message || "Command unavailable");

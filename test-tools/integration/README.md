@@ -202,3 +202,36 @@ delivers 80 current first, then the two oldest blocks without regressing live st
 all original Room identities are retained. A poor-accuracy raw point is reconsidered
 by full policy reconstruction, and the final zero-pending report certifies receipt
 and completed projection independently.
+
+## Issue #21 complete retained history
+
+The real Room/Sender/HTTP/SQLite suite adds separate simulated 1-, 2- and 7-day
+outages across five installations and ten retained tracking sessions. Command is
+stopped during Room capture, then starts From Beginning with zero device inventory.
+Original saved rows survive Room reopening, newest observations precede older
+blocks, one late device reports no fix, projection fails after durable ACK, Command
+restarts before recovery, and a policy edit runs during backfill. Sender drains
+original outboxes through negotiated history; exact duplicates add no observation.
+The test-only bridge's independent membership selector and one-pass `Derive` engine
+compare exact accepted IDs, boundaries, decisions and unrounded cumulative distance.
+Final restart retains the same geometry. Logged duration covers receipt plus
+reconstruction; Go tests separately measure projection-only passes over 2,240 rows, and variable
+three-/twenty-device populations (twenty devices, forty sessions, 1,180 observations).
+These are measured software cases, not a fixed device limit or a hardware capacity promise.
+
+The existing browser suites still run. `history-dashboard.cjs` additionally drives
+real HTTP/SQLite and Chromium with five devices/ten sessions, scrambled old blocks,
+a missing sequence/recovery, quality-filtered empty route, unknown offline inventory
+and From Now exclusions. It compares the actual SVG qualified point/section counts
+to the read model; fixture GNSS is not physical field acceptance.
+
+```sh
+GNSS_COMMAND_BINARY=/absolute/path/to/party-tracker \
+GNSS_PLAYWRIGHT_MODULE=/absolute/path/to/playwright \
+GNSS_AXE_MODULE=/absolute/path/to/axe-core/playwright \
+GNSS_CHROMIUM=/absolute/path/to/chromium \
+node test-tools/integration/history-dashboard.cjs
+```
+
+Follow the genuine 24-hour offline procedure in the existing
+[device acceptance runbook](../../android/DEVICE-ACCEPTANCE.md) for hardware evidence.
