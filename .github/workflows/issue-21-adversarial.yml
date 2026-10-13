@@ -1,0 +1,28 @@
+name: Adversarial recovery QA (temporary experiment)
+on:
+  push:
+    branches: [experiment/issue-21-adversarial-simulation]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  attack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.7"
+          cache-dependency-path: command/go.sum
+      - name: Execute adversarial field simulations with race detector
+        working-directory: command
+        run: |
+          go test -race -count=1 -timeout=30m -run '^TestAdversarial' -v ./internal/core
+      - name: Verify complete Command regression suite
+        working-directory: command
+        run: |
+          go test -race ./... 
+          go vet ./...
