@@ -152,12 +152,13 @@ func lessLive(a, b Message) bool { a.Observation = nil; b.Observation = nil; ret
 // Derivation is the restartable state of the existing accepted-anchor engine.
 // Raw history remains in SQLite; checkpoints contain only the credible anchor and heading.
 type Derivation struct {
-	Anchor  *Point  `json:"anchor"`
-	Recent  []Point `json:"recent"`
-	Seen    string  `json:"seen"`
-	Pending string  `json:"pending"`
-	Total   float64 `json:"total"`
-	Session string  `json:"session"`
+	SourceSequence int64   `json:"source_sequence"`
+	Anchor         *Point  `json:"anchor"`
+	Recent         []Point `json:"recent"`
+	Seen           string  `json:"seen"`
+	Pending        string  `json:"pending"`
+	Total          float64 `json:"total"`
+	Session        string  `json:"session"`
 }
 
 func accuracy(f Fix) float64 {
@@ -188,6 +189,12 @@ func (state *Derivation) Feed(raw Candidate, p Policy, window string) (points []
 		pending = "tracking_session"
 		anchor = nil
 		recent = nil
+	}
+	if m.Observation != nil {
+		if state.Session == session && m.Observation.Sequence > state.SourceSequence+1 {
+			pending = "missing_observations"
+		}
+		state.SourceSequence = m.Observation.Sequence
 	}
 	state.Session = session
 	if key == seen {

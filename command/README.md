@@ -151,7 +151,7 @@ browser requests. These are Command-local controls, never a second phone protoco
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /local/state?dot_interval_s=30` | Current recording, devices and projected geographic points |
-| `POST /local/recording` | `{ "action": "start" / "stop" / "resume" / "clear", "confirmed": true, "mode": "from_now" / "session_beginning" }` (mode selected on Start; confirmation required for Clear) |
+| `POST /local/recording` | `{ "action": "start" / "stop" / "resume" / "clear", "confirmed": true, "mode": "from_now" / "from_beginning" }` (mode selected on Start; confirmation required for Clear) |
 | `POST /local/override` | `{ "device_id": UUID, "reporting_interval_override_s": 30 / null }` |
 | `POST /local/quality` | Complete quality snapshot using the field names in `GET /local/state` |
 
@@ -341,8 +341,12 @@ Live freshness remains mandatory and maximum-accuracy enablement controls its fi
 The default-OFF Use All Observations view is Unfiltered / Diagnostic and leaves qualified
 distance/settings unchanged. History dots/lines are subdued; the live marker is distinct.
 
-Start Recording accepts `mode: "from_now"` (default) or `"session_beginning"`.
-The latter requires reported durable Android session metadata. Stop/Resume retain the
+Start Recording accepts `mode: "from_now"` (default) or `"from_beginning"`.
+From Beginning includes all received retained eligible GNSS history across every
+source session, even before Command started, and permits zero known devices.
+The old local API value `session_beginning` remains an alias. The first From
+Beginning window has no lower observation-time bound; Stop is exclusive and Resume
+always uses its new Command-clock boundary. Stop/Resume retain the
 same recording with separate windows; Clear retains raw/config/device state. There are
 no inferred recording connectors across windows or Android sessions.
 
@@ -372,13 +376,33 @@ synchronization PASS requires a recent zero-pending report, no known collection 
 contiguous receipt and completed projection. Projection-update evidence records
 counts/distances after derivation; raw ACK evidence explicitly labels pending work.
 
-Beginning-of-session recording binds known phones to their reported current source
-session; a late joining phone binds the session reported by its first fresh live
-observation or current queue progress while the window is active. Resume binds currently reported sessions in a new window at Resume time.
-From-now accepts only observations measured at/after the operator boundary. Source
-sessions never share an accepted movement connector. Diagnostic raw lines also keep
-source-session boundaries. Provisional distance is section-local, starts at zero,
-and is never added to authoritative totals. All display layers share one origin.
+From Beginning automatically incorporates historical-only late joins and earlier
+sessions as their original observations arrive. It never requires a fresh live fix
+or a reported current session to select history. From Now accepts only observations
+measured at/after the persisted operator instant. Later receipt cannot move it.
+Source sessions, missing original sequences, invalid GNSS gaps and recording
+windows never share a distance connector. Qualified partial sections remain
+visible; recovered missing entries cause canonical suffix reconciliation. Live
+markers remain independent of projection, and the retained provisional API array
+is now empty because successful partial projections are shown directly.
+
+Existing persisted `session_beginning` recordings upgrade non-destructively to all
+retained-history membership, preserving window IDs, UTC Start/Stop, original raw
+bytes, SOS/configuration and retired recordings. Only derived state is requeued.
+No phone wire protocol, capture cadence or Room migration is needed.
+
+Per-device diagnostics show durable GNSS receipts, eligible and boundary-excluded
+observations, projected/accepted/rejected counts, reasons, qualified points and
+sections, earliest **received** measurement, known missing sequences, reported
+unresolved entries/collection loss and projection pending/failure/completion.
+Earliest retained phone history remains unknown until inventory/observations are
+reported; the protocol reports one session at a time. A latest-session zero-pending
+report never proves global phone completeness. Offline/stale counts are last reports.
+
+`GET /local/state?include_raw=true` additionally includes diagnostic raw geometry;
+ordinary polling returns qualified geometry and compact incremental summaries.
+Full evidence/cadence verdicts remain in Export diagnostics. Routes outside the
+preserved viewport are explicitly indicated; use Fit parties to see all sections.
 
 Historical ordering is the original per-session GNSS sequence, with session-start/ID
 ordering between sessions; queued legacy history uses observed time and precedes

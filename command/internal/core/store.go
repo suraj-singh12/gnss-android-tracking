@@ -23,6 +23,7 @@ type ReportedSession struct {
 	Envelope int64  `json:"report_sequence"`
 }
 type Device struct {
+	Reconstruction   *ReconstructionState     `json:"reconstruction"`
 	Session          *ReportedSession         `json:"reported_tracking_session,omitempty"`
 	CurrentPosition  bool                     `json:"current_position"`
 	LiveX            *float64                 `json:"live_x_m"`
@@ -48,12 +49,13 @@ type Device struct {
 	Evidence         *Counters                `json:"field_evidence,omitempty"`
 }
 type Window struct {
-	ID       string            `json:"segment_id"`
-	Start    time.Time         `json:"start"`
-	Stop     *time.Time        `json:"stop"`
-	Policy   Policy            `json:"policy"`
-	Reason   string            `json:"reason"`
-	Sessions map[string]string `json:"sessions,omitempty"`
+	AllHistory bool              `json:"all_retained_history,omitempty"`
+	ID         string            `json:"segment_id"`
+	Start      time.Time         `json:"start"`
+	Stop       *time.Time        `json:"stop"`
+	Policy     Policy            `json:"policy"`
+	Reason     string            `json:"reason"`
+	Sessions   map[string]string `json:"sessions,omitempty"`
 }
 type Recording struct {
 	ID      string   `json:"recording_id"`
@@ -101,32 +103,37 @@ func absClock(m Message) float64 {
 }
 
 type State struct {
-	Alerts            []SOSAlert         `json:"sos_alerts"`
-	Authority         string             `json:"authority_id"`
-	Policy            Policy             `json:"policy"`
-	Devices           map[string]*Device `json:"devices"`
-	Recording         *Recording         `json:"recording"`
-	Points            []Point            `json:"points"`
-	Decisions         []Decision         `json:"decisions"`
-	RawVersion        int64              `json:"raw_version"`
-	ProjectionVersion int64              `json:"projection_version"`
-	ProjectionPending bool               `json:"projection_pending"`
-	ProjectionError   string             `json:"projection_error,omitempty"`
-	RawPoints         []Point            `json:"raw_points,omitempty"`
-	Provisional       []Point            `json:"provisional_points,omitempty"`
+	HistoryReconstructionVersion int                `json:"history_reconstruction_version"`
+	Alerts                       []SOSAlert         `json:"sos_alerts"`
+	Authority                    string             `json:"authority_id"`
+	Policy                       Policy             `json:"policy"`
+	Devices                      map[string]*Device `json:"devices"`
+	Recording                    *Recording         `json:"recording"`
+	Points                       []Point            `json:"points"`
+	Decisions                    []Decision         `json:"decisions"`
+	RawVersion                   int64              `json:"raw_version"`
+	ProjectionVersion            int64              `json:"projection_version"`
+	ProjectionPending            bool               `json:"projection_pending"`
+	ProjectionError              string             `json:"projection_error,omitempty"`
+	RawPoints                    []Point            `json:"raw_points,omitempty"`
+	Provisional                  []Point            `json:"provisional_points,omitempty"`
 }
 type Store struct {
-	db            *sql.DB
-	mu            sync.Mutex
-	Now           func() time.Time
-	wake          chan struct{}
-	stop          chan struct{}
-	done          chan struct{}
-	closeOnce     sync.Once
-	closeError    error
-	projectionMu  sync.Mutex
-	projectionRaw map[string]*rawCursor
-	projections   map[string]*ProjectionCache
+	viewRaw              rawCursor
+	dashboardCounters    map[string]*Counters
+	dashboardEvidenceRow int64
+	dashboardReceipts    map[string][]Receipt
+	db                   *sql.DB
+	mu                   sync.Mutex
+	Now                  func() time.Time
+	wake                 chan struct{}
+	stop                 chan struct{}
+	done                 chan struct{}
+	closeOnce            sync.Once
+	closeError           error
+	projectionMu         sync.Mutex
+	projectionRaw        map[string]*rawCursor
+	projections          map[string]*ProjectionCache
 }
 
 var ErrConflict = errors.New("identity conflict")
@@ -209,6 +216,7 @@ func Open(path string) (*Store, error) {
 	}
 	for _, q := range []string{
 		`CREATE TABLE IF NOT EXISTS observation_identity(device TEXT NOT NULL, session TEXT NOT NULL, sequence INTEGER NOT NULL, observation TEXT NOT NULL, message TEXT NOT NULL, PRIMARY KEY(device,session,sequence), UNIQUE(device,observation))`,
+		`CREATE INDEX IF NOT EXISTS raw_history_progress ON raw(device,json_extract(known,'$.history_progress.tracking_session_id'),json_extract(known,'$.history_progress.measured_at')) WHERE json_extract(known,'$.history_progress') IS NOT NULL`,
 		`CREATE TABLE IF NOT EXISTS receipt_roles(device TEXT NOT NULL,message TEXT NOT NULL,role TEXT NOT NULL,PRIMARY KEY(device,message))`,
 		`CREATE TABLE IF NOT EXISTS projection_work(device TEXT PRIMARY KEY, earliest TEXT NOT NULL, generation INTEGER NOT NULL DEFAULT 0)`,
 	} {
@@ -242,6 +250,9 @@ func Open(path string) (*Store, error) {
 		}
 	}
 	if err = s.backfillObservationIdentity(); err != nil {
+		return fail(err)
+	}
+	if err = s.upgradeHistoryReconstruction(); err != nil {
 		return fail(err)
 	}
 	go s.projectionLoop()
@@ -487,22 +498,6 @@ func (s *Store) ingestMessage(tx *sql.Tx, st *State, m Message, b []byte, receiv
 		d.Location = &copy
 		d.LocationReceived = first
 	}
-	if r := st.Recording; r != nil && r.Active && r.Mode == "session_beginning" {
-		w := &r.Windows[len(r.Windows)-1]
-		if w.Sessions == nil {
-			w.Sessions = map[string]string{}
-		}
-		session, start := "", ""
-		if d.Session != nil {
-			session, start = d.Session.ID, d.Session.Start
-		}
-		if session != "" && w.Sessions[m.Device] == "" {
-			w.Sessions[m.Device] = session
-			if w.Reason == "start" && instant(start).Before(w.Start) {
-				w.Start = instant(start)
-			}
-		}
-	}
 	refreshLive(st)
 	if result == "stored" && m.Type == "sos" {
 		st.Alerts = append(st.Alerts, alertFrom(m, first))
@@ -527,6 +522,7 @@ func (s *Store) ingestMessage(tx *sql.Tx, st *State, m Message, b []byte, receiv
 }
 
 func (s *Store) change(kind, device string, fn func(*State, time.Time, *sql.Tx) error) error {
+	now := s.Now().UTC() // Capture the operator boundary before waiting for existing work.
 	if kind == "policy_changed" || strings.HasPrefix(kind, "recording_") {
 		s.projectionMu.Lock()
 		if e := s.processProjectionLocked(); e != nil {
@@ -546,13 +542,12 @@ func (s *Store) change(kind, device string, fn func(*State, time.Time, *sql.Tx) 
 		return err
 	}
 	before := recordingEvidence(st)
-	now := s.Now().UTC()
 	if err = fn(&st, now, tx); err != nil {
 		return err
 	}
 	if kind == "policy_changed" || strings.HasPrefix(kind, "recording_") {
 		st.ProjectionVersion++
-		st.ProjectionPending = true
+		st.ProjectionPending = len(st.Devices) > 0
 		for id := range st.Devices {
 			if _, err = tx.Exec(`INSERT INTO projection_work(device,earliest) VALUES(?, '') ON CONFLICT(device) DO UPDATE SET earliest='',generation=generation+1`, id); err != nil {
 				return err
@@ -621,14 +616,7 @@ func (s *Store) ActionMode(action, mode string) error {
 		open := func(reason string) {
 			r.Active = true
 			w := Window{ID: id(), Start: now, Policy: st.Policy, Reason: reason}
-			if r.Mode == "session_beginning" {
-				w.Sessions = map[string]string{}
-				for device, d := range st.Devices {
-					if d.Session != nil {
-						w.Sessions[device] = d.Session.ID
-					}
-				}
-			}
+			w.AllHistory = r.Mode == "from_beginning" && reason == "start"
 			r.Windows = append(r.Windows, w)
 		}
 		switch action {
@@ -639,29 +627,15 @@ func (s *Store) ActionMode(action, mode string) error {
 				}
 				return ErrAction
 			}
-			if mode != "from_now" && mode != "session_beginning" {
+			if mode == "session_beginning" {
+				mode = "from_beginning"
+			} // Compatible local API alias.
+			if mode != "from_now" && mode != "from_beginning" {
 				return fmt.Errorf("unknown recording mode")
 			}
 			r = &Recording{ID: id(), Mode: mode}
 			st.Recording = r
 			open("start")
-			if mode == "session_beginning" {
-				w := &r.Windows[len(r.Windows)-1]
-				w.Sessions = map[string]string{}
-				for device, d := range st.Devices {
-					if d.Session != nil {
-						w.Sessions[device] = d.Session.ID
-						t := instant(d.Session.Start)
-						if t.Before(w.Start) {
-							w.Start = t
-						}
-					}
-				}
-
-				if len(w.Sessions) == 0 {
-					return fmt.Errorf("no reported Android tracking session; wait for session metadata")
-				}
-			}
 		case "stop":
 			if r == nil {
 				return ErrAction
@@ -738,7 +712,8 @@ func (s *Store) SetOverride(device string, v *int) error {
 		return nil
 	})
 }
-func (s *Store) Snapshot(dot int) (State, error) {
+func (s *Store) Snapshot(dot int) (State, error) { return s.snapshot(dot, true, true) }
+func (s *Store) snapshot(dot int, fullEvidence, diagnosticRaw bool) (State, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
@@ -779,10 +754,14 @@ func (s *Store) Snapshot(dot int) (State, error) {
 		}
 		d.CurrentPosition = d.Location != nil && d.GNSSCondition == "valid" && d.LocationAge != nil && *d.LocationAge <= liveAgeLimit(st.Policy)
 	}
-	if err := populateHistory(tx, &st, now); err != nil {
+	raw, err := s.viewCandidates(tx, st.Policy)
+	if err != nil {
 		return st, err
 	}
-	if err := populateViews(tx, &st); err != nil {
+	if err := populateHistoryFromRaw(tx, &st, now, raw); err != nil {
+		return st, err
+	}
+	if err := populateViewsFromRaw(tx, &st, raw, diagnosticRaw); err != nil {
 		return st, err
 	}
 	// Use the same origin for qualified, unfiltered, provisional and live layers.
@@ -828,13 +807,20 @@ func (s *Store) Snapshot(dot int) (State, error) {
 			st.Provisional[i].X, st.Provisional[i].Y = Project(st.Provisional[i].Fix, *origin)
 		}
 	}
-	report, err := s.fieldReport(tx)
-	if err != nil {
-		return st, err
+	if fullEvidence {
+		report, err := s.fieldReport(tx)
+		if err != nil {
+			return st, err
+		}
+		for id, d := range st.Devices {
+			d.Evidence = report.Devices[id]
+		}
+	} else {
+		if err = s.populateDashboardEvidence(tx, &st, now); err != nil {
+			return st, err
+		}
 	}
-	for id, d := range st.Devices {
-		d.Evidence = report.Devices[id]
-	}
+
 	return st, nil
 }
 func mathMax(a, b float64) float64 {

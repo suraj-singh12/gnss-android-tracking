@@ -427,7 +427,7 @@ uninstall a phone holding unacknowledged history; signing/release packaging rema
    oldest-block recovery and eventual contiguous receipt/phone pending-zero evidence.
 5. Repeat outages before the first backlog drains. Compare final qualified route/distance
    with raw Diagnostic view. Change each quality switch; raw counts must not shrink.
-6. Test Recording From session beginning and From now, delayed history, Stop/move/Resume,
+6. Test Recording From Beginning of retained history and From Now, delayed history, Stop/move/Resume,
    no connector, then confirmed Clear. Unrelated Android sessions must remain separate.
 7. Raise SOS offline and during recovery. Confirm immutable delivery and separate operator
    acknowledgment. Restart Command mid-sync; exports must show duplicate receipt without
@@ -474,3 +474,49 @@ complete uninterrupted visible-Activity test, and `INCONCLUSIVE` for pause,
 restart, unavailable data or record loss. The integrated APK uses the normal
 application ID `org.gnss.tracking`; it does not migrate, delete or overwrite data
 from the former separate `org.gnss.tracking.buttontest` experiment.
+
+## Issue #21: genuine 24-hour offline route reconstruction
+
+Use a separate acceptance handset or a compatible signer; retain the existing
+Room and Command databases. Export phone/Command diagnostics before the run and
+record the exact embedded source revisions and SHA-256 of all applications. Do
+not equate Robolectric, cross-builds or CI with physical GNSS/OEM/Windows acceptance.
+
+1. Verify Android and Command UTC/timezone against a trusted clock. Record any
+   uncertainty. Configure the existing LAN endpoint and normal quality policy;
+   record all eight controls. Start Android tracking and confirm durable GNSS
+   observation counters advance. Use five stable device identities where available.
+2. Shut down Command (or isolate its receiver) for an actual 24 hours. Leave phone
+   capture active through screen-off and normal movement, including stationary
+   intervals/turns. On one handset Stop Tracking, wait, then Start a second session.
+   Record session boundaries and any storage/collection-loss warning; do not clear
+   pending observations or reinstall the application.
+3. Before reconnecting, start Command **From Beginning**, including a run with no
+   connected phones/session reports. Save a screenshot of the empty recording.
+   Connect phones in stages, including a late device and one reporting no fix.
+   Preserve original timestamps; do not change clock settings to force eligibility.
+4. Observe per-device durable receipt, recording eligibility, rejection reasons,
+   qualified point/section count, earliest received measurement and projection
+   pending/failed/completed. Save intermediate screenshots and both applications'
+   diagnostic ZIPs. A zero-pending phone report or transport ACK alone is not a pass.
+   Keep unknown/offline backlog explicitly unknown; record unresolved/missing entries.
+5. After transfer, use **Fit parties** and inspect the full route, each session and
+   known stopped/invalid/missing interval. No connector or distance should span those
+   boundaries. Record original accepted observation IDs/segments/unrounded totals
+   from Command evidence against the retained original capture evidence, using the
+   same selected policy; repeat an explicit quality edit and export its revision.
+6. Stop Command Recording, continue moving, Resume, reconnect delayed history and
+   verify the stopped interval remains excluded. In a separate **From Now** recording,
+   send saved older history: it must remain durable raw and outside its boundary.
+   Confirmed Clear removes recording geometry while retaining raw data and SOS.
+7. Restart Command against the same database during and after recovery, and reopen
+   Android without removing Room. Compare IDs, receipt counts and final geometry/
+   distance. Exercise SOS reception/operator ACK normally during recovery. Export
+   final diagnostics/screenshots and report durations/volumes and any errors.
+
+A physical pass requires the actual 24-hour elapsed run and retained evidence. If
+only fewer devices or a shorter interval were tested, state that exact limitation.
+Consistent clock skew into the past cannot be established by the wire protocol;
+report uncertain boundary attribution instead of substituting receipt time. This
+checklist validates reconstruction and diagnosis, not Issue #22 bulk-transfer speed
+or Issue #23 native Windows performance.
