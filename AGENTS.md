@@ -1,0 +1,51 @@
+# Repository agent instructions
+
+Applies to the entire `gnss-android-tracking` repository. These are stable **working rules**, not a substitute for the checked-out source, current GitHub Issues or canonical documentation. If reality differs from an older note, verify the implementation and update the owning documentation; do not silently assume either is correct.
+
+## 1. Current state and safe Git workflow
+
+- Before edits, check `git status --short`, active branch, `git rev-parse HEAD`, upstream ancestry and a small relevant `git log`. Inspect the **current issue and PR state** using GitHub when available. Do not rely on SHA values, issue status or architecture summaries copied into old prompts.
+- Independent issue branches are mandatory. The combined testing/integration destination is **`integration/combined-upgrades`**. Feature PRs target that branch, **not `main`**. Resolve any branch ancestry changes explicitly; do not accidentally incorporate another unreviewed feature.
+- **No automatic merges into either the integration branch or `main`.** Merging a reviewed combined branch into `main` requires the operator's explicit, specific authorization. “Proceed”, green CI, a request for implementation or an issue's completion are not merge authorization.
+- Do not close issues, create releases, delete branches, reset shared state, force-push or rewrite unrelated commits without explicit approval. Leave unrelated working-tree changes untouched.
+- Existing stacked feature/terrain PRs and other in-progress branches must not be merged, retargeted or overwritten incidentally. Check for overlaps before changing shared code.
+- Implement one coherent approved issue per branch. Open a reviewable PR with linked issue, exact head SHA, tests and limitations. Wait for operator approval before integration.
+
+## 2. Canonical reading order (read only what the task needs)
+
+1. **This `AGENTS.md`** for universal engineering and Git rules.
+2. **The current GitHub Issue/PR** for feature requirements, acceptance conditions and dependencies; inspect its latest comments and relevant recent code changes.
+3. **`README.md`** for the product map, only when orientation is needed.
+4. **`docs/architecture.md`** for cross-component authority, recording, data flow and persistence; consult affected sections, not necessarily the entire file.
+5. **`protocol/protocol-v1.md`** and `protocol/fixtures/` for wire contracts or compatibility work. This is the normative cross-app contract.
+6. Component guidance **only for components touched**: `android/README.md`, `command/README.md`, `test-tools/README.md`, `test-tools/integration/README.md`, `android/DEVICE-ACCEPTANCE.md`. For UI changes also consult `docs/design-system.md`, `docs/ui-acceptance.md` and `docs/ui-preservation-matrix.md`.
+7. Read the **actual relevant source, callers/callees, tests, configuration and recent diffs**. Broaden inspection only when dependency edges or a failing test justify it.
+
+No generated “current architecture” snapshot or previous agent summary is authoritative. Source + present Git state + current issue + canonical contract establish the truth. Avoid repeatedly dumping/reading the whole repository, unrelated issues or all documents on every task. If using a retained understanding from earlier work, quickly verify the specific changed interfaces and upstream diffs before relying on it.
+
+## 3. Preserve the system's authorities
+
+- **Android** owns actual GNSS measurements, local Room durability, tracking sessions and outbound transmission. **Command** owns durable receipt/ACK, raw SQLite history, quality policy, recording windows, chronological projection, distance and display. `protocol-v1.md` owns interchange.
+- Reuse and extend the existing architecture, canonical IDs, persistence, sender, transaction boundaries, evidence, correction/projection/checkpoint machinery and tests. Do not add competing databases, parallel tracking/recording authorities, duplicate queue engines or architecture rewrites without evidence that existing mechanisms cannot safely satisfy requirements.
+- Preserve immutable original message/observation identities, session sequences, measurement timestamps, accepted/rejected reasoning, transactional **durable storage before ACK**, idempotent retries, retained raw data, SOS and its separate operator acknowledgement.
+- Never invent GNSS fixes, connect recording/session/unknown gaps as real traveled distance, convert old history into fresh live position or claim synchronization solely because a request returned 200. Quality and operator recording controls remain authoritative.
+- Field operation is **offline-first**: local Wi-Fi, no SIM/internet/cloud dependency, offline assets; Android and portable Command must work independently. Command source development must remain practical on macOS and Windows, separately from packaged/release binaries.
+- The number of phones is **variable**. Use **20 simultaneous phones as the ordinary capacity/performance benchmark**, including a 21st joining later where relevant, but never hard-code a 20-device maximum.
+- Android OS restrictions, background-service behavior, timing and battery limits must be represented accurately. A successful Linux CI cross-build is not proof of actual Android, macOS or Windows runtime behavior.
+
+## 4. Efficient implementation and verification
+
+- Inspect first, identify/reproduce a failure or measurable bottleneck, then implement the smallest coherent safe change. Prefer **one complete execution** covering targeted implementation, regression tests, self-review, documentation, commits and a review PR, rather than unnecessary staged re-prompts.
+- Start with fast, relevant tests; use existing build/test caches when safe. Do not rerun expensive full suites after every small edit. **Before marking a PR ready**, run required complete regressions, end-to-end real Room/Sender → Command checks for cross-app changes, browser/UI tests for UI changes, and measured stress/race tests for concurrency/performance changes.
+- Existing verification entry points: `cd android && ./gradlew testDebugUnitTest lintDebug assembleDebug --console=plain`; `cd command && go test -race ./... && go vet ./...`; `cd test-tools && go test -race ./... && go vet ./...`; `test-tools/integration/run.sh --console=plain`. Follow the component guides for setup, execution and any additional checks.
+- For real cross-app integration, a skipped bridge test is **not** a pass. Keep unit tests, race checks, native-runtime acceptance, network fault injection and actual field validation distinct. Never fabricate counts, performance, timings, device reachability or verified artifacts.
+- Maintain compatibility for old stored data and negotiated older protocol peers. Add tests for restart, error/ACK loss, duplicates, malformed input, partial synchronization, device churn, SOS/live priority and policy/recording boundaries as appropriate.
+- Prefer profiling to speculative performance rewrites. Record comparable baseline/after metrics, exact workload and environment, including bytes, observation counts and stage timings when throughput is involved.
+- Update the **existing owning documentation** for any changed behavior; avoid parallel documents or duplicated instructions. Preserve the established design/UI vocabulary and existing interfaces unless the issue explicitly authorizes a change.
+
+## 5. Pull request and reporting contract
+
+- Use a focused PR **to `integration/combined-upgrades`**. Confirm current base/head and review the actual diff for scope, data loss, security, compatibility and unintended rewrites.
+- Use the existing integrated validation workflow, adjusted for integration-targeted PRs as needed. Produce Android APK, macOS ARM64 and Windows AMD64 Command acceptance assets from the **same exact tested source SHA**, with manifest/checksums and honest build/signature evidence where relevant. Prefer reusing existing workflows instead of duplicating them.
+- Final report: root cause/requirements, concrete modifications, tests with pass/fail/skip, performance numbers where applicable, exact branch and commit, PR + CI/artifact links, unsolved issues, and field/native limitations. Never claim a future test, upload, merge or release has happened unless confirmed.
+- Do **not** merge the PR or close its issue. Operator decides integration and ultimate release.
