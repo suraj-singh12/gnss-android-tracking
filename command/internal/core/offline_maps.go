@@ -29,9 +29,18 @@ type savedMap struct {
 	Created    string          `json:"created"`
 	Bytes      int             `json:"bytes"`
 }
+const (
+	primaryOverpass = "https://overpass-api.de/api/interpreter"
+	fallbackOverpass = "https://overpass.private.coffee/api/interpreter"
+)
+
+// A failed live vector preview can retry with another public Overpass instance.
+// The choice is scoped to this Command process; no fabricated map is substituted.
 type mapProvider struct {
 	client               *http.Client
 	search, overpass     string
+	overpassFallback     string
+	fallbackUntil        time.Time
 	dem                  string
 	demClient            *http.Client
 	demTestAttemptBudget time.Duration
@@ -50,7 +59,7 @@ func newMapProvider() *mapProvider {
 	transport.TLSHandshakeTimeout = 10 * time.Second
 	transport.ResponseHeaderTimeout = 20 * time.Second
 	transport.DisableCompression = true
-	return &mapProvider{client: &http.Client{Timeout: 25 * time.Second}, demClient: &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, search: "https://nominatim.openstreetmap.org/search", overpass: "https://overpass-api.de/api/interpreter", dem: "https://elevation-tiles-prod.s3.amazonaws.com/skadi"}
+	return &mapProvider{client: &http.Client{Timeout: 25 * time.Second}, demClient: &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, search: "https://nominatim.openstreetmap.org/search", overpass: primaryOverpass, overpassFallback: fallbackOverpass, dem: "https://elevation-tiles-prod.s3.amazonaws.com/skadi"}
 }
 func (p *mapProvider) reserve(search bool) error {
 	p.mu.Lock()
@@ -65,6 +74,21 @@ func (p *mapProvider) reserve(search bool) error {
 	*next = time.Now().Add(interval)
 	return nil
 }
+type mapProviderHTTPError int
+func (e mapProviderHTTPError) Error() string { return fmt.Sprintf("map provider returned HTTP %d", int(e)) }
+
+func transientMapProviderError(err error) bool {
+	if errors.Is(err, context.Canceled) {
+		return false
+	}
+	var code mapProviderHTTPError
+	if errors.As(err, &code) {
+		return int(code) == 429 || int(code) >= 500
+	}
+	// Timeout, dial, TLS and other transport errors can be retried elsewhere.
+	return true
+}
+
 func (p *mapProvider) request(ctx context.Context, method, address, body string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, method, address, strings.NewReader(body))
 	if err != nil {
@@ -81,7 +105,7 @@ func (p *mapProvider) request(ctx context.Context, method, address, body string)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("map provider returned HTTP %d", resp.StatusCode)
+		return nil, mapProviderHTTPError(resp.StatusCode)
 	}
 	b, err := io.ReadAll(io.LimitReader(resp.Body, mapLimit+1))
 	if len(b) > mapLimit {
@@ -485,8 +509,33 @@ func (p *mapProvider) area(ctx context.Context, lat, lon, width, height float64)
 	}
 	bbox := fmt.Sprintf("%.7f,%.7f,%.7f,%.7f", lat-dy, lon-dx, lat+dy, lon+dx)
 	query := fmt.Sprintf(`[out:json][timeout:20][maxsize:20000000];(way["highway"](%s);way["building"](%s);way["waterway"](%s);way["natural"](%s);way["landuse"](%s););out geom;`, bbox, bbox, bbox, bbox, bbox)
-	b, err := p.request(ctx, "POST", p.overpass, url.Values{"data": {query}}.Encode())
+	// The local HTTP server has a 30-second write deadline: never chain two
+	// 25-second live requests in one response. Instead, a later explicit Preview
+	// retry uses the alternative provider following the existing 10-second
+	// cooldown. Custom test providers remain hermetic unless they set a custom
+	// fallback as well.
+	canFallback := p.overpassFallback != "" &&
+		(p.overpass == primaryOverpass || p.overpassFallback != fallbackOverpass)
+	endpoint := p.overpass
+	if canFallback {
+		p.mu.Lock()
+		if time.Now().Before(p.fallbackUntil) {
+			endpoint = p.overpassFallback
+		}
+		p.mu.Unlock()
+	}
+	b, err := p.request(ctx, "POST", endpoint, url.Values{"data": {query}}.Encode())
 	if err != nil {
+		if canFallback && transientMapProviderError(err) {
+			p.mu.Lock()
+			if endpoint == p.overpass {
+				p.fallbackUntil = time.Now().Add(5 * time.Minute)
+			} else {
+				p.fallbackUntil = time.Time{}
+			}
+			p.mu.Unlock()
+			return nil, fmt.Errorf("OSM vector provider %s unavailable: %w; retry Preview to send this map area to alternate public provider %s", endpoint, err, p.overpassFallback)
+		}
 		return nil, err
 	}
 	var result struct {

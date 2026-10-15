@@ -7,7 +7,9 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 const validOfflineMap = `{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"highway":"path"},"geometry":{"type":"LineString","coordinates":[[77,28],[77.001,28.001]]}}]}`
@@ -118,5 +120,48 @@ func TestOfflineMapProviderAndLimits(t *testing.T) {
 	}
 	if _, err = p.area(context.Background(), 28, 180, 500, 500); err == nil {
 		t.Fatal("antimeridian area accepted")
+	}
+}
+
+
+// A public Overpass timeout or overload must not permanently disable vector
+// preparation. A second user-requested Preview can use a different real
+// instance; the production API still fails honestly if neither succeeds.
+func TestOfflineMapTransientOverpassRecovery(t *testing.T) {
+	var originalCalls, backupCalls atomic.Int32
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		originalCalls.Add(1)
+		http.Error(w, "busy", http.StatusServiceUnavailable)
+	}))
+	defer primary.Close()
+	backup := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		backupCalls.Add(1)
+		if r.Method != http.MethodPost || r.Header.Get("Content-Type") != "application/x-www-form-urlencoded" {
+			t.Errorf("fallback changed wire contract: %s %s", r.Method, r.Header.Get("Content-Type"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"elements":[{"id":31,"tags":{"highway":"path"},"geometry":[{"lat":28,"lon":77},{"lat":28.001,"lon":77.001}]}]}`))
+	}))
+	defer backup.Close()
+
+	p := newMapProvider()
+	p.overpass, p.overpassFallback = primary.URL, backup.URL
+	_, err := p.area(context.Background(), 28, 77, 500, 500)
+	if err == nil || !strings.Contains(err.Error(), "retry Preview") {
+		t.Fatalf("must report real first-provider failure, got %v", err)
+	}
+	if originalCalls.Load() != 1 || backupCalls.Load() != 0 {
+		t.Fatal("unbounded implicit failover inside one HTTP request")
+	}
+	// Simulate a new explicit Preview after the provider reservation period.
+	p.mu.Lock()
+	p.nextArea = time.Time{}
+	p.mu.Unlock()
+	data, err := p.area(context.Background(), 28, 77, 500, 500)
+	if err != nil {
+		t.Fatalf("second Preview must recover using fallback: %v", err)
+	}
+	if err := validateMap(data); err != nil || originalCalls.Load() != 1 || backupCalls.Load() != 1 {
+		t.Fatalf("fallback did not produce valid original OSM ways: %v; primary=%d backup=%d", err, originalCalls.Load(), backupCalls.Load())
 	}
 }

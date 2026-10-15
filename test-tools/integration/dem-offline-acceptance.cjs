@@ -18,7 +18,10 @@ const report = {
   checked_at: new Date().toISOString(),
   passed: false,
 };
-let command, browser;
+let command, browser, page;
+const errors = [];
+const previewAttempts = [];
+let acceptanceStage = "command_start";
 async function port() {
   const s = net.createServer();
   s.listen(0, "127.0.0.1");
@@ -78,10 +81,9 @@ async function wait(f) {
     args: ["--no-sandbox"],
   });
   const context = await browser.newContext({
-      viewport: { width: 1440, height: 900 },
-    }),
-    page = await context.newPage();
-  const errors = [];
+    viewport: { width: 1440, height: 900 },
+  });
+  page = await context.newPage();
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(local);
   await page.locator("#open-map").click();
@@ -96,20 +98,47 @@ async function wait(f) {
     await page.locator("#download-" + k).check();
   assert.equal(await page.locator("#map-width").inputValue(), size);
   assert.equal(await page.locator("#map-height").inputValue(), size);
-  await page.locator("#preview-map").click();
-  await wait(() => page.locator("#download-map").isEnabled());
+  // A live OSM/Overpass failure used to leave Download disabled for 390 s,
+  // resulting in an opaque timeout even after the UI displayed the real error.
+  // Give an external transient one bounded retry after the provider cooldown;
+  // never substitute mock vector data or make a failed real-provider test green.
   const out = process.env.GNSS_SCREENSHOT_DIR || work;
   fs.mkdirSync(out, { recursive: true });
+  acceptanceStage = "live_vector_preview";
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    await page.locator("#preview-map").click();
+    let timeoutError = "";
+    try {
+      await page.waitForFunction(() => {
+        const status = document.querySelector("#map-preparation-status")?.textContent || "";
+        return !document.querySelector("#download-map")?.disabled ||
+          status.includes("Existing maps are retained.");
+      }, null, { timeout: 42000 });
+    } catch (e) {
+      timeoutError = e.message;
+    }
+    const status = (await page.locator("#map-preparation-status").textContent()) || "";
+    previewAttempts.push({ attempt, status, timeout_error: timeoutError });
+    if (await page.locator("#download-map").isEnabled()) break;
+    if (attempt === 2)
+      throw Error("Live OpenStreetMap vector preview failed; " +
+        previewAttempts.map(x => "attempt " + x.attempt + ": " + x.status +
+          (x.timeout_error ? " (" + x.timeout_error + ")" : "")).join("; "));
+    // mapProvider.reserve() applies a ten-second cooldown to area queries.
+    await new Promise(resolve => setTimeout(resolve, 11000));
+  }
   await page.screenshot({
     path: path.join(out, "real-dem-area-preview.png"),
     fullPage: true,
   });
+  acceptanceStage = "live_map_and_terrain_download";
   await page.locator("#download-map").click();
   await wait(async () =>
     (await page.locator("#map-preparation-status").textContent()).includes(
       "Saved locally",
     ),
   );
+  acceptanceStage = "terrain_verification";
   const maps = await (await fetch(local + "/local/maps")).json();
   assert.equal(maps.length, 1);
   const id = maps[0].id;
@@ -262,6 +291,7 @@ async function wait(f) {
       await fetch(local + "/local/maps/" + id + "/terrain-file")
     ).arrayBuffer(),
   );
+  acceptanceStage = "offline_restart";
   command.kill("SIGTERM");
   await once(command, "exit");
   await start(true);
@@ -354,8 +384,35 @@ async function wait(f) {
     external_browser_requests: externalBrowserRequests,
   });
 })()
-  .catch((e) => {
+  .catch(async (e) => {
     report.error = e.stack;
+    report.failed_stage = acceptanceStage;
+    report.preview_attempts = previewAttempts;
+    report.browser_errors = errors;
+    if (page) {
+      try {
+        report.ui_state = await page.evaluate(() => ({
+          preview_status: document.querySelector("#map-preparation-status")?.textContent,
+          download_progress: document.querySelector("#download-progress")?.textContent,
+          terrain_status: document.querySelector("#terrain-status")?.textContent,
+          preview_enabled: !document.querySelector("#preview-map")?.disabled,
+          download_enabled: !document.querySelector("#download-map")?.disabled,
+        }));
+      } catch (uiError) {
+        report.ui_state_error = String(uiError);
+      }
+      try {
+        const out = process.env.GNSS_SCREENSHOT_DIR || work;
+        fs.mkdirSync(out, { recursive: true });
+        await page.screenshot({
+          path: path.join(out, "real-map-acceptance-failure.png"),
+          fullPage: true,
+          timeout: 10000,
+        });
+      } catch (screenError) {
+        report.failure_screenshot_error = String(screenError);
+      }
+    }
     process.exitCode = 1;
   })
   .finally(async () => {
