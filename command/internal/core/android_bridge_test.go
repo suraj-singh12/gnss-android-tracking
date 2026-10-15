@@ -5,6 +5,7 @@ package core
 // are stdin/stdout only, never added to the LAN listener or the product binary.
 import (
 	"bufio"
+	"database/sql"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -87,6 +88,27 @@ func TestAndroidBridge(t *testing.T) {
 			_, err = s.db.Exec(`CREATE TRIGGER integration_fail BEFORE UPDATE ON state BEGIN SELECT RAISE(ABORT,'integration disk failure'); END`)
 		case "restore_storage":
 			_, err = s.db.Exec("DROP TRIGGER integration_fail")
+		case "fail_projection":
+			_, err = s.db.Exec(`CREATE TRIGGER integration_projection_fail BEFORE DELETE ON projection_work BEGIN SELECT RAISE(ABORT,'integration projection failure'); END`)
+		case "restore_projection":
+			_, err = s.db.Exec("DROP TRIGGER integration_projection_fail")
+		case "reference":
+			var tx *sql.Tx
+			tx, err = s.db.Begin()
+			if err == nil {
+				var st State
+				var original []Candidate
+				st, err = loadState(tx)
+				if err == nil {
+					original, err = candidates(tx, "")
+				}
+				if err == nil {
+					pp, dd := historyReference(original, st)
+					result["points"] = pp
+					result["decisions"] = dd
+				}
+				tx.Rollback()
+			}
 		case "field_report":
 			result["report"], err = s.FieldReport()
 		case "inspect":
