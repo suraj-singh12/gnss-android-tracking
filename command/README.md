@@ -582,7 +582,8 @@ timestamped phone queue state. A permanent protocol rejection is unresolved, not
 a GNSS quality rejection is stored history. Exports include these distinctions and projection
 state without copying coordinates, raw envelopes, databases or secrets.
 
-Derived arrays live in the existing SQLite projection cache (`projection_state`),
+Derived arrays live in the existing SQLite projection cache (`projection_state`,
+with ordered `projection_chunks` for larger routes),
 separate from the frequently updated device/receipt state. This is an additive
 migration of the old state JSON; raw/wire, configuration, lifecycle and evidence are
 retained. ACK commits update only lightweight receipt state and durable projection
@@ -591,6 +592,10 @@ accepted-anchor checkpoints; late history reprocesses the dependent suffix. Work
 has per-device generations so one busy phone cannot invalidate every other phone.
 Caches regenerate from raw after restart. Dashboard live snapshots never wait for
 an in-flight reconstruction; pending/error remains visible.
+Large projections are replaced atomically in chunks of at most 512 points and
+512 decisions per SQLite value. Legacy single-value projections remain readable.
+This avoids exhausting embedded SQLite's 256 MiB memory allowance while binding
+one dense route JSON value; it does not make the in-memory route model constant-size.
 
 History exports contain each identified Android session. `received_through` is an
 actual contiguous identity prefix. `processed_through` additionally admits explicit

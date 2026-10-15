@@ -180,6 +180,10 @@ func Open(path string) (*Store, error) {
 		tx.Rollback()
 		return fail(err)
 	}
+	if _, err = tx.Exec(`CREATE TABLE IF NOT EXISTS projection_chunks(ordinal INTEGER PRIMARY KEY,data TEXT NOT NULL)`); err != nil {
+		tx.Rollback()
+		return fail(err)
+	}
 	if _, err = tx.Exec(`INSERT OR IGNORE INTO projection_state SELECT 1,json_object('points',json_extract(data,'$.points'),'decisions',json_extract(data,'$.decisions')) FROM state WHERE id=1`); err != nil {
 		tx.Rollback()
 		return fail(err)
@@ -317,14 +321,71 @@ func loadState(tx *sql.Tx) (State, error) {
 	if err = tx.QueryRow("SELECT data FROM projection_state WHERE id=1").Scan(&b); err != nil {
 		return st, err
 	}
-	var projection struct {
-		Points    []Point    `json:"points"`
-		Decisions []Decision `json:"decisions"`
-	}
+	var projection savedProjection
 	if err = json.Unmarshal([]byte(b), &projection); err == nil {
 		st.Points, st.Decisions = projection.Points, projection.Decisions
 	}
+	if err != nil || !projection.Chunked {
+		return st, err
+	}
+	rows, err := tx.Query("SELECT data FROM projection_chunks ORDER BY ordinal")
+	if err != nil {
+		return st, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		if err = rows.Scan(&b); err != nil {
+			return st, err
+		}
+		var part savedProjection
+		if err = json.Unmarshal([]byte(b), &part); err != nil {
+			return st, err
+		}
+		st.Points = append(st.Points, part.Points...)
+		st.Decisions = append(st.Decisions, part.Decisions...)
+	}
+	err = rows.Err()
 	return st, err
+}
+
+type savedProjection struct {
+	Chunked   bool       `json:"chunked,omitempty"`
+	Points    []Point    `json:"points"`
+	Decisions []Decision `json:"decisions"`
+}
+
+// Bound each SQLite value: a monolithic dense-history JSON projection can exceed
+// the embedded runtime's 256 MiB allowance due to SQLite's temporary copies.
+// This is the same derived cache, atomically replaced with its receipt metadata.
+const projectionChunkRecords = 512
+
+func saveProjection(tx *sql.Tx, st State) error {
+	if _, err := tx.Exec("DELETE FROM projection_chunks"); err != nil {
+		return err
+	}
+	chunked := len(st.Points) > projectionChunkRecords || len(st.Decisions) > projectionChunkRecords
+	header := savedProjection{Chunked: chunked, Points: st.Points, Decisions: st.Decisions}
+	if chunked {
+		header.Points, header.Decisions = nil, nil
+		points, decisions := st.Points, st.Decisions
+		for ordinal := 0; len(points) > 0 || len(decisions) > 0; ordinal++ {
+			pn, dn := min(len(points), projectionChunkRecords), min(len(decisions), projectionChunkRecords)
+			b, err := json.Marshal(savedProjection{Points: points[:pn], Decisions: decisions[:dn]})
+			if err != nil {
+				return err
+			}
+			if _, err = tx.Exec("INSERT INTO projection_chunks(ordinal,data) VALUES(?,?)", ordinal, string(b)); err != nil {
+				return err
+			}
+			points, decisions = points[pn:], decisions[dn:]
+		}
+	}
+	b, err := json.Marshal(header)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec("UPDATE projection_state SET data=? WHERE id=1", string(b))
+	return err
 }
 func saveReceiptState(tx *sql.Tx, st State) error {
 	st.Points = nil
@@ -347,14 +408,7 @@ func saveState(tx *sql.Tx, st State) error {
 			d.UsefulPoints++
 		}
 	}
-	b, err := json.Marshal(struct {
-		Points    []Point    `json:"points"`
-		Decisions []Decision `json:"decisions"`
-	}{st.Points, st.Decisions})
-	if err != nil {
-		return err
-	}
-	if _, err = tx.Exec("UPDATE projection_state SET data=? WHERE id=1", string(b)); err != nil {
+	if err := saveProjection(tx, st); err != nil {
 		return err
 	}
 	return saveReceiptState(tx, st)

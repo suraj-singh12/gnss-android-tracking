@@ -349,6 +349,14 @@ live/SOS state or qualified distance. There is no parallel database or projectio
 
 ## Issue #22 synchronization changes
 
+Dense-history stress exposed the embedded SQLite runtime's 256 MiB limit when
+binding the whole derived geometry as one JSON value. The existing projection
+cache now stores larger arrays in ordered `projection_chunks`, each with at most
+512 points and 512 decisions. The small `projection_state` header, chunks and
+receipt metadata change in one transaction; legacy single-value caches remain
+readable. Raw receipt/identities and chronological reconstruction are unchanged.
+This bounds SQLite values, not the total retained in-memory geometry.
+
 The existing Sender also drains retained data while the Android Activity is visible
 and Tracking is OFF. That path cannot invoke current capture or register GNSS.
 Sync All Now resets transient backoff; Pause stops new history selection and retains

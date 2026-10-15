@@ -4,8 +4,68 @@ import (
 	"bytes"
 	"fmt"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 )
+
+func TestProjectionChunksPreserveOrderRestartAndRollback(t *testing.T) {
+	s, _, path := open(t)
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := loadState(tx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for n := 0; n < projectionChunkRecords*3+7; n++ {
+		st.Points = append(st.Points, Point{Message: fmt.Sprint(n), Sequence: int64(n), Distance: float64(n) / 7})
+		if n%2 == 0 {
+			st.Decisions = append(st.Decisions, Decision{Message: fmt.Sprint(n), Reason: "accuracy"})
+		}
+	}
+	if err = saveState(tx, st); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	tx, err = s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := loadState(tx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(st.Points, got.Points) || !reflect.DeepEqual(st.Decisions, got.Decisions) {
+		t.Fatal("chunked projection changed order, identity or distance across restart")
+	}
+	// Replacing the projection and receipt metadata must roll back together.
+	if err = saveState(tx, State{Devices: map[string]*Device{}}); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	tx, err = s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	got, err = loadState(tx)
+	if err != nil || !reflect.DeepEqual(st.Points, got.Points) || !reflect.DeepEqual(st.Decisions, got.Decisions) {
+		t.Fatalf("rollback lost original projection: %v", err)
+	}
+}
 
 func TestHistoryDiskFullHasNoACKAndRecovers(t *testing.T) {
 	s, _, _ := open(t)

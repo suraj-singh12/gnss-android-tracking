@@ -251,9 +251,16 @@ class TrackingApp : Application() {
             }
         }
         workScope.launch {
+            var visibleWifi: android.net.Network? = null
             while (isActive) {
                 if (activityVisible && !operational.value.tracking) {
                     try {
+                        val wifi = health.wifiNetwork()
+                        if (wifi != visibleWifi) {
+                            visibleWifi = wifi
+                            transport.invalidate()
+                            if (wifi != null) sender.connectivityRestored()
+                        }
                         val snapshot = health.snapshot()
                         operational.update { it.copy(health = snapshot) }
                         sender.step(
@@ -266,6 +273,7 @@ class TrackingApp : Application() {
                         sosNotice.value = "Saved delivery unavailable — check storage and receiver"
                     }
                 }
+                if (!activityVisible || operational.value.tracking) visibleWifi = null
                 delay(
                     if (activityVisible && !operational.value.tracking && sender.attemptedLastStep)
                         1

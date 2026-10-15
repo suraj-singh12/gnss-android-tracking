@@ -364,6 +364,14 @@ source generator streamed bounded batches; the production read model and oracle
 still retain data proportional to history. Full dense 2/7-day and twenty-phone
 12.1-million-observation capacity are **not certified** by these measurements.
 
+An additional baseline dense one-day run completed receipt in 207.778 s and
+residual reconstruction in 1.003 s (4,320 requests, identical source bytes).
+A subsequent candidate two-day dense stress completed receipt but failed while
+persisting the projection: the single JSON value exhausted embedded SQLite's
+256 MiB runtime allowance. That failed run is not a pass. The resulting bounded
+projection-chunk fix has restart/order/rollback regression coverage; dense stress
+must be rerun against it before certifying the larger workload.
+
 The real Room/Sender bridge completed **29 tests, zero skips/failures/errors** in
 564.306 s. Its twenty-plus-late-phone Tracking OFF case took 45.736 s including
 Room setup, forced lost replies, reopen/restart and oracle checks: **2,016 original

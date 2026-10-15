@@ -284,7 +284,9 @@ Sync All Now is local and foreground. It never requests location permissions,
 registers a provider, starts Tracking or creates a new measurement. Pausing is
 process-local; cold start defaults to automatic foreground delivery. Permanent
 quarantine/enrollment errors still use the existing confirmed Retry saved messages
-control after correction. Wi-Fi/Command failures retain bounded retries. Android
+control after correction. Wi-Fi/Command failures retain bounded retries. Visible-app Wi-Fi route changes
+invalidate the bound transport and reset transient timing/capability negotiation,
+including with Tracking OFF; they never restart location collection. Android
 reboot, force-stop, screen-off/OEM termination and background restrictions require
 physical acceptance; this control does not claim unrestricted background transfer.
 
