@@ -318,3 +318,18 @@ identity. History batches are historical. A role never overrides actual freshnes
 Historical eligibility does not depend on another current or status ACK. Recovery
 blocks are contiguous outstanding observation sequences separated by delivered
 or unresolved outcomes; blocks are scheduling boundaries, not movement segments.
+
+
+### Command recording and completeness (Issue #21)
+
+No wire changes are required. Command From Beginning spans all retained eligible
+observations received across sessions and late-connected devices, without requiring
+an inventory report. From Now uses a persistent Command-clock boundary against
+original `fix.observed_at`; arrival time cannot move it. Stop/Resume remain half-open
+observation-time boundaries. Session/observation identities and original timestamps
+remain immutable. Missing sequence entries split qualified distance sections until
+recovered. ACK certifies durable receipt only, never projection or drawing success.
+`history_progress` describes the specified session at `measured_at`, not all retained
+phone sessions or an offline phone's unknown present queue. Clock checks can detect
+UTC/capture-age mismatch and future capture, but cannot establish consistent
+past clock skew or invent corrected measurement times.
