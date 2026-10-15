@@ -11,6 +11,9 @@ on:
         feature/issue6-dem-reliability-map-ui,
         integration/for-main-history-reconstruction,
       ]
+  pull_request:
+    branches: [integration/combined-upgrades]
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 concurrency:
   group: issue6-validation-${{ github.ref }}
