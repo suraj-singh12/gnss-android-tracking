@@ -151,11 +151,11 @@ Day/Night persists per browser. The header's **Command Connected/Disconnected** 
 browser-to-local-server contact; **connected/total Parties** uses existing Android
 contact policy. About identifies **Lt Suraj Singh**, **surajsingh5092@gmail.com**;
 opening it never silences outstanding SOS. Start opens **Start Recording from**,
-default **Current Time** on every opening. Confirm uses existing `from_now` or
-`session_beginning`; Cancel/Escape is a no-op. A read-only
-`recording_session_available` flag derives from existing session metadata; unavailable
-session selection is disabled/explained. Server validation/errors remain authoritative.
-Stop/Resume/Clear, recording boundaries and distance calculations are unchanged.
+default **Current Time** on every opening. Confirm uses `from_now` or
+`from_beginning`; Cancel/Escape is a no-op. From Beginning selects all retained
+source sessions and works before any phone has connected; it does **not** require
+`recording_session_available`. Server validation/errors remain authoritative.
+Stop/Resume/Clear and recording distance calculation retain their established semantics.
 
 ### Automatic terrain preparation and provider boundary
 
@@ -335,7 +335,7 @@ browser requests. These are Command-local controls, never a second phone protoco
 | Endpoint                             | Purpose                                                                                                                                                                      |
 | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET /local/state?dot_interval_s=30` | Current recording, devices and projected geographic points                                                                                                                   |
-| `POST /local/recording`              | `{ "action": "start" / "stop" / "resume" / "clear", "confirmed": true, "mode": "from_now" / "session_beginning" }` (mode selected on Start; confirmation required for Clear) |
+| `POST /local/recording`              | `{ "action": "start" / "stop" / "resume" / "clear", "confirmed": true, "mode": "from_now" / "from_beginning" }` (mode selected on Start; confirmation required for Clear) |
 | `POST /local/override`               | `{ "device_id": UUID, "reporting_interval_override_s": 30 / null }`                                                                                                          |
 | `POST /local/quality`                | Complete quality snapshot using the field names in `GET /local/state`                                                                                                        |
 
@@ -564,10 +564,16 @@ Live freshness remains mandatory and maximum-accuracy enablement controls its fi
 The default-OFF Use All Observations view is Unfiltered / Diagnostic and leaves qualified
 distance/settings unchanged. History dots/lines are subdued; the live marker is distinct.
 
-Start Recording accepts `mode: "from_now"` (default) or `"session_beginning"`.
-The latter requires reported durable Android session metadata. Stop/Resume retain the
-same recording with separate windows; Clear retains raw/config/device state. There are
-no inferred recording connectors across windows or Android sessions.
+Start Recording accepts `mode: "from_now"` (default) or `"from_beginning"`.
+From Beginning has no lower observation-time boundary for its initial window,
+includes all retained received observations across every Android tracking session,
+and can begin with zero known phones. The old API value `"session_beginning"`
+remains an alias. From Now uses the persisted Command operator-time boundary and
+excludes earlier measurements regardless of when they arrive. Stop closes the
+active window, while delayed qualifying history can still be received and rebuilt
+inside that window. Resume creates a separate time-bounded segment of the same
+recording. Clear retains original raw GNSS, device identities and configuration.
+A missing sequence or session gap never creates an invented distance connector.
 
 The phone listener adds GET /api/v1/capabilities and POST /api/v1/history. Batch version 1
 is atomic and durably ACKed; malformed/conflicting entries identify an index/observation.
@@ -594,13 +600,36 @@ synchronization PASS requires a recent zero-pending report, no known collection 
 contiguous receipt and completed projection. Projection-update evidence records
 counts/distances after derivation; raw ACK evidence explicitly labels pending work.
 
-Beginning-of-session recording binds known phones to their reported current source
-session; a late joining phone binds the session reported by its first fresh live
-observation or current queue progress while the window is active. Resume binds currently reported sessions in a new window at Resume time.
-From-now accepts only observations measured at/after the operator boundary. Source
-sessions never share an accepted movement connector. Diagnostic raw lines also keep
-source-session boundaries. Provisional distance is section-local, starts at zero,
-and is never added to authoritative totals. All display layers share one origin.
+Historical-only late joins and earlier Android sessions become eligible for From
+Beginning as their original observations arrive. No current-session inventory or
+fresh live fix is needed. The first From Beginning window accepts the full retained
+observation history (before its Stop boundary); Resume always starts at the new
+Command-clock boundary. Source sessions, missing original sequences and recording
+windows cannot share a distance connector. Successful qualified partial route sections
+appear even beyond unresolved sequence gaps and are reconciled on later delivery.
+Unfiltered / Diagnostic shows all received observations *inside the recording
+boundaries*, independent of GNSS-quality acceptance. The dashboard requests raw
+geometry only when that diagnostic layer is enabled, retaining the same map/terrain
+renderer and geographic origin. No historical backlog becomes a fresh live marker.
+
+
+
+### Correct historical reconstruction and acceptance
+
+The receiver first persists each unique valid GNSS observation and its original
+measurement/session/sequence in the existing SQLite raw store, then commits a durable
+ACK. Reconstructing the recording and displaying its geographic points are separate
+steps. The per-device dashboard distinguishes durable GNSS receipt, eligibility,
+recording-boundary exclusions, projection pending/failed/complete, accepted and
+rejected fixes, known missing identities, qualified route sections and drawing count.
+A recent empty Android queue is not proof of complete historical reconstruction.
+
+The tested October 2026 Android/Command field report used the **old**
+`session_beginning` semantics; it received multi-session backlog but excluded five
+later sessions of a phone from its active recording. This repair explicitly selects
+all retained sessions for the first From Beginning window. The modern Issue #6
+map-first UI, SOS, Day/Night, saved map library, automatic DEM, terrain layers,
+downloader and associated tests remain preserved.
 
 Historical ordering is the original per-session GNSS sequence, with session-start/ID
 ordering between sessions; queued legacy history uses observed time and precedes
