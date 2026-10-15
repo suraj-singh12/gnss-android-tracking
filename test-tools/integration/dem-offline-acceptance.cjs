@@ -105,11 +105,45 @@ async function wait(f) {
     fullPage: true,
   });
   await page.locator("#download-map").click();
-  await wait(async () =>
-    (await page.locator("#map-preparation-status").textContent()).includes(
-      "Saved locally",
-    ),
-  );
+  // The live provider can fail or stall independently of the application.
+  // Do not disguise a real provider failure as a generic 390-second timeout.
+  // Capture the exact status and persisted download diagnostics for triage.
+  let lastStatus = "";
+  try {
+    await wait(async () => {
+      lastStatus = (await page.locator("#map-preparation-status").textContent()) || "";
+      if (/Terrain unavailable|Download failed|Failed to|error:/i.test(lastStatus))
+        throw Error("Map acquisition reported failure: " + lastStatus);
+      return lastStatus.includes("Saved locally");
+    });
+  } catch (error) {
+    const mapsAtFailure = await fetch(local + "/local/maps")
+      .then((r) => r.json())
+      .catch((e) => ({ error: String(e) }));
+    const reports = [];
+    if (Array.isArray(mapsAtFailure))
+      for (const item of mapsAtFailure) {
+        const detail = await fetch(local + "/local/maps/" + item.id + "/download-report")
+          .then(async (r) => ({ status: r.status, body: await r.text() }))
+          .catch((e) => ({ error: String(e) }));
+        reports.push({ id: item.id, detail });
+      }
+    const failure = {
+      stage: "map_download",
+      last_ui_status: lastStatus,
+      maps: mapsAtFailure,
+      download_reports: reports,
+      browser_errors: errors,
+      original_error: String(error),
+    };
+    Object.assign(report, { failure });
+    fs.mkdirSync(out, { recursive: true });
+    await page.screenshot({
+      path: path.join(out, "real-dem-download-failure.png"),
+      fullPage: true,
+    }).catch(() => {});
+    throw Error("Real DEM acquisition failed: " + JSON.stringify(failure));
+  }
   const maps = await (await fetch(local + "/local/maps")).json();
   assert.equal(maps.length, 1);
   const id = maps[0].id;
