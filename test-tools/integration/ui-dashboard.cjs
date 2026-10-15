@@ -110,7 +110,8 @@ async function wait(check) {
     "opening Start dialog must not mutate recording",
   );
   assert.equal(await page.locator("#current-mode").isChecked(), true);
-  assert.equal(await page.locator("#session-mode").isDisabled(), true);
+  assert.equal(await page.locator("#session-mode").isEnabled(), true);
+  assert.match(await page.locator("#session-mode-status").textContent(), /all received tracking sessions/);
   await page
     .locator('#recording-start [data-close="recording-start"]')
     .last()
@@ -220,7 +221,7 @@ async function wait(check) {
   });
   await page.locator("#confirm-recording").click();
   await wait(
-    async () => (await state()).recording?.mode === "session_beginning",
+    async () => (await state()).recording?.mode === "from_beginning",
   );
   await page.reload();
   await page.waitForFunction(
