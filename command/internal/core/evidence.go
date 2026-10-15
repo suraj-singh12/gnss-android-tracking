@@ -134,7 +134,7 @@ func recordingEvidence(st State) *RecordingEvidence {
 				var part *WindowParticipation
 				for _, point := range e.Points {
 					t := instant(point.Observed)
-					if point.Device == id && !t.Before(w.Start) && (w.Stop == nil || t.Before(*w.Stop)) {
+					if point.Device == id && (w.AllHistory || !t.Before(w.Start)) && (w.Stop == nil || t.Before(*w.Stop)) {
 						if part == nil {
 							part = &WindowParticipation{Device: id, Window: w.ID, First: point.Observed, StartDistance: point.Distance}
 						}
@@ -254,6 +254,7 @@ type Verdict struct {
 	Evidence any    `json:"evidence,omitempty"`
 }
 type FieldReport struct {
+	Reconstruction      map[string]*ReconstructionState     `json:"reconstruction"`
 	HistorySessions     map[string]map[string]*HistoryState `json:"history_sessions"`
 	History             map[string]*HistoryState            `json:"history"`
 	ProjectionPending   bool                                `json:"projection_pending"`
@@ -319,9 +320,14 @@ func (s *Store) fieldReport(tx *sql.Tx) (FieldReport, error) {
 	if err = populateHistory(tx, &st, s.Now()); err != nil {
 		return r, err
 	}
+	if err = populateViews(tx, &st); err != nil {
+		return r, err
+	}
+	r.Reconstruction = map[string]*ReconstructionState{}
 	r.History = map[string]*HistoryState{}
 	r.HistorySessions = map[string]map[string]*HistoryState{}
 	for id, d := range st.Devices {
+		r.Reconstruction[id] = d.Reconstruction
 		r.History[id] = d.History
 		r.HistorySessions[id] = d.HistorySessions
 	}
@@ -496,8 +502,21 @@ func (s *Store) fieldReport(tx *sql.Tx) (FieldReport, error) {
 		if h.Condition == "unresolved" {
 			verdict, reason = "FAIL", "Permanent delivery rejection remains unresolved"
 		}
-		if h.Condition == "synchronized" && !r.ProjectionPending && r.ProjectionError == "" {
-			verdict, reason = "PASS", "Contiguous durable identities and recent zero-pending phone report; projection work complete"
+		allKnown := true
+		for _, session := range r.HistorySessions[device] {
+			if session.Condition == "unresolved" {
+				verdict, reason = "FAIL", "A known session reports unresolved delivery entries"
+			}
+			if session.Condition == "incomplete" {
+				verdict, reason = "FAIL", "A known session reports collection loss"
+			}
+			q := session.LatestReported
+			if q == nil || q.Pending != 0 || len(q.Unresolved) > 0 || q.KnownLoss > 0 || session.ReceivedThrough < q.Latest {
+				allKnown = false
+			}
+		}
+		if allKnown && h.Condition == "synchronized" && !r.ProjectionPending && r.ProjectionError == "" {
+			verdict, reason = "PASS", "Known sessions have contiguous durable identities, current session reports zero pending, and projection completed. Unreported inventory remains unknown"
 		}
 		r.Verdicts = append(r.Verdicts, Verdict{Scenario: "native_history_synchronization", Device: device, Result: verdict, Reason: reason})
 	}
