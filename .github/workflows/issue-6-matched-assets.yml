@@ -9,6 +9,7 @@ on:
         feature/issue6-terrain-appearance,
         feature/issue6-automatic-dem,
         feature/issue6-dem-reliability-map-ui,
+        integration/for-main-history-reconstruction,
       ]
   workflow_dispatch:
 concurrency:
@@ -56,6 +57,8 @@ jobs:
           if-no-files-found: error
   integrated:
     needs: dem-provider
+    # A blocked real DEM provider must not skip independent Android/history tests.
+    if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Define visual evidence directory
@@ -140,8 +143,10 @@ jobs:
           export GNSS_SCREENSHOT_DIR="$RUNNER_TEMP/gnss-assets/visual-evidence"
           node test-tools/integration/sos-dashboard.cjs
           node test-tools/integration/ui-dashboard.cjs
+          node test-tools/integration/history-dashboard.cjs
           node test-tools/integration/map-download-ui.cjs
       - uses: actions/download-artifact@v4
+        if: needs.dem-provider.result == 'success'
         with:
           name: DEM-provider-acquisition
           path: ${{ runner.temp }}/gnss-assets
