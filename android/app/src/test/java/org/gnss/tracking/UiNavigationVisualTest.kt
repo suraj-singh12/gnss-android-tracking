@@ -334,13 +334,24 @@ class UiNavigationVisualTest {
                         )
                         activity.pause().stop()
                         activity.start().resume()
-                        settle()
-                        capture("diagnostics-interrupted")
+                        // The controller stops synchronously, but the Activity's
+                        // persisted diagnostic state is displayed asynchronously.
+                        // Do not assume that 200 ms on a shared CI runner is
+                        // sufficient for Robolectric's flows / main-looper work.
                         assertFalse(app.physicalButtonTest.listening)
+                        var interruptedVisible = false
+                        for (attempt in 1..30) {
+                            settle()
+                            interruptedVisible =
+                                descendants(tools).filterIsInstance<TextView>().any {
+                                    it.text.contains("Test status: INTERRUPTED")
+                                }
+                            if (interruptedVisible) break
+                        }
+                        capture("diagnostics-interrupted")
                         assertTrue(
-                            descendants(tools).filterIsInstance<TextView>().any {
-                                it.text.contains("Test status: INTERRUPTED")
-                            }
+                            "Activity resume must eventually render persisted INTERRUPTED diagnostic state",
+                            interruptedVisible,
                         )
                         run {
                             all.filterIsInstance<Button>()
