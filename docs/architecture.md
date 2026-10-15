@@ -138,7 +138,16 @@ five yield five. A newly discovered device can join during recording, and its
 first accepted point in that recording is its recording start.
 
 Command persists UTC lifecycle boundaries with sufficient precision for ordered
-operations. Active windows are half-open `[start, stop)` in `observed_at` time:
+operations. Active windows are half-open `[start, stop)` in `observed_at` time.
+Two start modes share the same authoritative raw store: `from_now` selects
+observations measured on/after the operator's persisted Start instant;
+`from_beginning` selects **all retained received history** for the initial
+window, including observations predating Start and source sessions not yet known.
+It has no lower observation-time bound and can start with zero connected devices.
+The former `session_beginning` request value is a compatibility alias. New
+source sessions and delayed history are discovered without relying on a currently
+reported live session or inventing continuity. Stop still limits the initial
+window from above; Resume creates a new lower time boundary.
 
 | Action          | Effect                                                                                                                                                                                    |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -147,15 +156,27 @@ operations. Active windows are half-open `[start, stop)` in `observed_at` time:
 | Resume          | Same recording, new segment/window; no line or distance edge across stop. Already active is a no-op.                                                                                      |
 | Clear Recording | Require UI confirmation; delete current derived tracks/distances and retire its recording/windows. Retain identities, configuration and raw observations. Return to no current recording. |
 
-Points observed before start, during stop, or after stop have no membership in that
-window even if received while recording is active. Late delivery may rebuild a
-closed window for observations measured while it was active; Stop is not a ban on
-recovering its historical data. A cleared recording must never be resurrected by
-backlog/restart; raw retained after Clear does not automatically enter a later
-recording. New windows determine new membership. Resume's first point is independent;
-it carries previous segments' cumulative distance but adds no connector. SOS event
+For `from_now` and every Resume window, observations measured before that
+window's Start or after its Stop have no membership even if received later.
+The first `from_beginning` window alone includes observations before Start.
+Late delivery can rebuild a closed window if measured within its true boundaries;
+Stop is not a ban on recovering historical data. A cleared recording must never
+be resurrected automatically by backlog/restart; retained raw can be used by a
+**new** From Beginning recording. Resume's first point is independent and carries
+the previous accepted cumulative distance without inventing a connector. SOS event
 locations are telemetry, not track points; only location messages enter track
 candidate processing. No recording state is transmitted to control phone tracking.
+
+A projection worker separately derives chronologically qualified sections from
+durably received raw. A gap in original Android observation sequence can yield
+separate provisional-length **qualified sections**, rather than suppressing every
+point after a missing sequence. When missing real observations arrive, affected
+sections are reprocessed deterministically. Projection failure is visible and
+never relabelled successful by a transport ACK. Diagnostic raw geometry remains
+inside the chosen recording windows, is requested only for the unfiltered view,
+and never changes quality totals. The dashboard reports durable receipt, recording
+eligibility and exclusion, projection/quality results and actual rendered points
+as distinct stages.
 
 ## Distance and rendering
 
