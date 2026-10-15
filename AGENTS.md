@@ -17,7 +17,7 @@ Applies to the entire `gnss-android-tracking` repository. These are stable **wor
 
 ## 2. Canonical reading order (read only what the task needs)
 
-1. **This `AGENTS.md`**, checked against the dedicated guidance branch's approved version, for universal engineering and Git rules.
+1. **Read `AGENTS.md` at the start of every Codex task**, compare it with the approved guidance branch and current operator instructions. Report any contradictions or outdated rules to the operator before implementation. Do not silently assume the file remains aligned.
 2. **The current GitHub Issue/PR** for feature requirements, acceptance conditions and dependencies; inspect its latest comments and relevant recent code changes.
 3. **`README.md`** for the product map, only when orientation is needed.
 4. **`docs/architecture.md`** for cross-component authority, recording, data flow and persistence; consult affected sections, not necessarily the entire file.
