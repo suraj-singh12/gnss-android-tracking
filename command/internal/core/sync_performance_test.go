@@ -51,6 +51,7 @@ func TestSyncFleetPerformance(t *testing.T) {
 		bytes, ack, requests, source int
 		latency                      []time.Duration
 		liveLatency, sosLatency      time.Duration
+		liveSamples, sosSamples      []time.Duration
 		elapsed                      time.Duration
 		err                          error
 	}
@@ -193,10 +194,13 @@ func TestSyncFleetPerformance(t *testing.T) {
 						}
 						r.bytes += len(wire)
 						r.ack += len(reply)
+						elapsed := time.Since(began)
 						if i == 0 {
-							r.liveLatency = max(r.liveLatency, time.Since(began))
+							r.liveLatency = max(r.liveLatency, elapsed)
+							r.liveSamples = append(r.liveSamples, elapsed)
 						} else {
-							r.sosLatency = max(r.sosLatency, time.Since(began))
+							r.sosLatency = max(r.sosLatency, elapsed)
+							r.sosSamples = append(r.sosSamples, elapsed)
 						}
 					}
 				}
@@ -208,11 +212,14 @@ func TestSyncFleetPerformance(t *testing.T) {
 	transfer := time.Since(start)
 	bodyBytes, ackBytes, requests, sourceBytes := 0, 0, 0, 0
 	latencies := []time.Duration{}
+	liveSamples, sosSamples := []time.Duration{}, []time.Duration{}
 	for r := range results {
 		if r.err != nil {
 			t.Fatal(r.err)
 		}
 		latencies = append(latencies, r.latency...)
+		liveSamples = append(liveSamples, r.liveSamples...)
+		sosSamples = append(sosSamples, r.sosSamples...)
 		sourceBytes += r.source
 		bodyBytes += r.bytes
 		ackBytes += r.ack
@@ -227,9 +234,41 @@ func TestSyncFleetPerformance(t *testing.T) {
 	if err := s.db.QueryRow("SELECT COUNT(*) FROM raw").Scan(&count); err != nil || count != expected {
 		t.Fatalf("accounting %d: %v", count, err)
 	}
+	// Stream exact identity accounting independently of receipt echo and geometry.
+	members := map[string]bool{}
+	for d := 1; d <= devices; d++ {
+		members[fmt.Sprintf("11111111-1111-4111-8111-%012d", d)] = true
+	}
+	rows, err := s.db.Query("SELECT device,message,sequence FROM raw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	highest := samples
+	if priority {
+		highest += 2
+	}
+	accounted := 0
+	for rows.Next() {
+		var device, id string
+		var sequence int64
+		if err = rows.Scan(&device, &id, &sequence); err != nil {
+			rows.Close()
+			t.Fatal(err)
+		}
+		if !members[device] || sequence < 1 || sequence > int64(highest) || id != fmt.Sprintf("00000000-0000-4000-8000-%012d", sequence) {
+			rows.Close()
+			t.Fatalf("unexpected original identity: %s/%s/%d", device, id, sequence)
+		}
+		accounted++
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil || accounted != expected {
+		t.Fatalf("identity accounting %d/%d: %v", accounted, expected, err)
+	}
 	projectionStart := time.Now()
 	s.projectionMu.Lock()
-	err := s.processProjectionLocked()
+	err = s.processProjectionLocked()
 	s.projectionMu.Unlock()
 	if err != nil {
 		t.Fatal(err)
@@ -239,6 +278,12 @@ func TestSyncFleetPerformance(t *testing.T) {
 	st, err := s.snapshot(30, false, false)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if st.ProjectionPending || st.ProjectionError != "" {
+		t.Fatalf("reconstruction unresolved: pending=%v error=%s", st.ProjectionPending, st.ProjectionError)
+	}
+	if priority && len(st.Alerts) != devices {
+		t.Fatalf("SOS dedupe/ownership: %d alerts for %d phones", len(st.Alerts), devices)
 	}
 	t.Logf("dashboard_read_model=%s", time.Since(viewStart))
 	tx, err := s.db.Begin()
@@ -260,6 +305,15 @@ func TestSyncFleetPerformance(t *testing.T) {
 	}
 	if !reflect.DeepEqual(pp, st.Points) || !reflect.DeepEqual(dd, st.Decisions) {
 		t.Fatalf("chronological geometry differs: %d/%d", len(pp), len(st.Points))
+	}
+	if priority {
+		percentiles := func(values []time.Duration) (time.Duration, time.Duration, time.Duration) {
+			sort.Slice(values, func(i, j int) bool { return values[i] < values[j] })
+			return values[len(values)/2], values[len(values)*95/100], values[len(values)*99/100]
+		}
+		l50, l95, l99 := percentiles(liveSamples)
+		s50, s95, s99 := percentiles(sosSamples)
+		t.Logf("live_receipts=%d ACK_p50=%s p95=%s p99=%s SOS_receipts=%d ACK_p50=%s p95=%s p99=%s", len(liveSamples), l50, l95, l99, len(sosSamples), s50, s95, s99)
 	}
 	runtime.ReadMemStats(&memoryAfter)
 	sort.Slice(latencies, func(i, j int) bool { return latencies[i] < latencies[j] })

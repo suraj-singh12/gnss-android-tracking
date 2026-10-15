@@ -292,11 +292,11 @@ Do not run a corpus whose retained SQLite/evidence/geometry cannot fit the host.
 
 `BATCH=20000` reproduces the original target; 64000 exercises the existing 64 KiB
 ceiling. Every request uses original stable device/message/session identities and
-checks every returned ACK; exact raw count and chronological accepted IDs/decisions/
+checks every returned ACK; a separate streaming SQL pass accounts for every original device/message/sequence tuple, alongside exact raw count and chronological accepted IDs/decisions/
 segments/distance are verified. `PRIORITY=1` adds one actual fresh live fix and one
 SOS per phone during backlog, reporting their durable ACK latencies separately.
 The same live/SOS identities are retried periodically during continued backlog,
-including its final stages; printed latencies are per-phone maxima. Retries must
+including its final stages; printed per-phone latencies are maxima, with separate aggregate per-request p50/p95/p99 for live and SOS. Retries must
 not create extra observations or alerts. This does not prove operator reaction time
 or physical speaker audibility.
 
@@ -317,3 +317,62 @@ It independently fails a skipped real bridge suite. SQLite disk-full regression
 uses `max_page_count` to produce real `SQLITE_FULL`: no ACK/partial raw commit, then
 successful immutable retry after the cap is removed. Native slow disks, radios,
 Android OS restrictions and the full dense fleet remain separate acceptance work.
+
+### Measured local evidence — 2026-10-15
+
+Sequential before/after runs on this Linux cloud host used a two-CPU quota,
+`GOMAXPROCS=2`, 8 GiB memory limit, local disk, real loopback HTTP and SQLite
+`synchronous=FULL`. Baseline application: `d78ef85e689ca43281127599e814b04cb99aefc8`;
+candidate application: `7a6f926749b8a765530c5d591fb66d5da3015c58`. Subsequent changes
+add benchmark identity/latency reporting only. The same burst corpus and immutable
+IDs were used on both revisions, with 20,000 / 64,000-byte history targets and one
+in-flight request per phone. Times are host-specific; they exclude Android Room
+seeding and physical Wi-Fi. Reconstruction below is the residual flush after
+transfer; concurrent worker CPU is not added twice.
+
+| Phones | Source days | Observations/phone | Before receipt (s) | After receipt (s) | Before / after residual reconstruction (s) |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 1 | 600 | 0.436 | 0.298 | 0.000 / 0.005 |
+| 1 | 2 | 1,200 | 1.053 | 0.561 | 0.000 / 0.006 |
+| 1 | 7 | 4,200 | 8.544 | 2.076 | 0.046 / 0.063 |
+| 5 | 1 | 600 | 1.474 | 1.292 | 0.000 / 0.050 |
+| 5 | 2 | 1,200 | 4.318 | 2.774 | 0.000 / 0.087 |
+| 5 | 7 | 4,200 | 26.927 | 10.798 | 0.252 / 0.292 |
+| 20 | 1 | 600 | 6.550 | 5.253 | 0.000 / 0.135 |
+| 20 | 2 | 1,200 | 16.418 | 11.018 | 0.309 / 0.413 |
+| 20 | 7 | 4,200 | 91.586 | 49.185 | 2.151 / 2.524 |
+
+The twenty-phone seven-day sparse case retained **84,000 historical observations**,
+plus twenty original fresh live fixes and twenty SOS events. Source history was
+83,734,960 bytes. Requests fell from 4,340 to 1,340; total request payloads were
+84,217,360 / 84,121,360 bytes and ACK payloads 26,665,360 / 26,578,360 bytes. Every
+original identity was retained, with identical **59,660 qualified points**, exact
+section membership/decisions and unrounded distance against chronological derivation.
+Candidate throughput was 1,708.6 raw messages/s; retained Go heap at measurement
+was 566,326,312 bytes and cumulative allocation 18,579,044,056 bytes (not peak RSS).
+These data show remaining allocation/reconstruction scaling costs; no universal
+30-second or dense-fleet promise is made.
+
+A separate dense one-phone one-day **86,400 observations at 1 Hz** case passed:
+85,050,522 source-history bytes, 85,415,248 total request payload bytes, 27,422,890
+ACK bytes, 1,348 history requests, 56.664 s receipt, 1.037 s residual reconstruction,
+86,402 retained raw messages including live/SOS, and 86,401 qualified points. The
+source generator streamed bounded batches; the production read model and oracle
+still retain data proportional to history. Full dense 2/7-day and twenty-phone
+12.1-million-observation capacity are **not certified** by these measurements.
+
+The real Room/Sender bridge completed **29 tests, zero skips/failures/errors** in
+564.306 s. Its twenty-plus-late-phone Tracking OFF case took 45.736 s including
+Room setup, forced lost replies, reopen/restart and oracle checks: **2,016 original
+observations, 285 history attempts, zero new captures**. This duration is not a
+pure network throughput measurement. An earlier local attempt exhausted this host
+while overlapping Gradle workloads; it failed and was superseded by the isolated
+1-GiB-JVM run, never counted as passed.
+
+A final 20-phone / 600-observation latency/accounting probe additionally passed
+streaming SQL identity checks and verified one retained SOS alert per phone despite
+retries. Live ACK p50/p95/p99: 340.823 / 707.911 / 787.319 ms; SOS: 150.794 /
+396.852 / 717.281 ms (40 requests of each). It ran alongside an Android build and
+is reported separately from the controlled comparison. SQLite-only fsync duration
+was not isolated; receiver timings include queue/parse/transaction costs. Actual
+Android radios, OEM screen-off behavior and native macOS/Windows remain untested.
