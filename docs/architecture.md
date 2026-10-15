@@ -362,7 +362,9 @@ authoritative. Command validates each strict-decoded batch entry without decodin
 its JSON twice. Identity conflict lookup uses independent existing unique indexes;
 only the affected device's live quality is refreshed during ingest. Projection and
 dashboard cursors append received groups and sort once instead of inserting each
-row into the middle of a retained slice. The accepted-anchor derivation, quality
+row into the middle of a retained slice. The existing bounded projection wake
+channel coalesces for at most 250 ms, and fully invalidated passes keep durable work
+without saving identical geometry. The accepted-anchor derivation, quality
 switches, recording windows, durable commit/ACK and SOS human acknowledgement are
 unchanged.
 

@@ -335,3 +335,20 @@ root/privileged hook, audio playback, extra foreground service or OEM-specific A
 Follow [Generic Android Physical Button Acceptance](../android/DEVICE-ACCEPTANCE.md)
 on actual hardware. Keep PRs #11, #12, #14 and #15 unmerged pending review and do
 not infer a physical-device pass from the rendered or JVM evidence.
+
+## Issue #22 foreground synchronization controls
+
+On Tracking, **Sync All Now** resumes retained history and clears transient retry
+timing; **Pause history sync** preserves pending data and permits an in-flight
+receipt to finish. Both work independently of Start/Stop. Stop's confirmation now
+explains that visible-app synchronization remains available without GNSS collection.
+History shows queued, durable ACK and unresolved facts, with Command reconstruction
+separate. Diagnostics payload-byte counters cover only this process lifetime.
+
+For acceptance, retain history, Stop, select Sync All Now and confirm the provider
+is not registered, no service starts, zero observations are newly captured and the
+same saved IDs reach Command. Pause/resume, reopen and reconnect should retain
+progress. With Tracking OFF keep the application visible: this implementation does
+not promise screen-off/background transfer. Use the Android device-acceptance
+runbook for actual OEM/radio/OS results. Command's existing receiver/reconstruction
+stage displays remain unchanged; remote Sync All remains Issue #25.

@@ -123,6 +123,7 @@ jobs:
         env:
           GNSS_SYNC_BENCH: "1"
           GNSS_SYNC_PRIORITY: "1"
+          GNSS_SYNC_PATTERN: "bursts"
           GNSS_SYNC_BATCH: "64000"
           GNSS_SYNC_DEVICES: "20"
           GNSS_SYNC_SAMPLES: "600"

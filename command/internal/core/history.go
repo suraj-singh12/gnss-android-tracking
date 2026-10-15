@@ -331,6 +331,15 @@ func (s *Store) projectionLoop() {
 		case <-s.stop:
 			return
 		case <-s.wake:
+			// Coalesce the existing bounded wake channel. Raw ACK/live/SOS do not
+			// wait for geometry; coalescing adds at most 250 ms before a pass.
+			timer := time.NewTimer(250 * time.Millisecond)
+			select {
+			case <-timer.C:
+			case <-s.stop:
+				timer.Stop()
+				return
+			}
 			if err := s.processProjection(); err != nil {
 				s.recordProjectionFailure(err)
 			}
@@ -455,6 +464,12 @@ func (s *Store) processProjectionLocked() error {
 		if _, err = tx.Exec("DELETE FROM projection_work WHERE device=? AND generation=?", device, generation); err != nil {
 			return err
 		}
+	}
+	if len(accepted) == 0 {
+		// Every device advanced during computation. Retain its durable work and
+		// existing projection instead of serializing/committing identical geometry.
+		s.notifyProjection()
+		return nil
 	}
 	latest.Points = []Point{}
 	latest.Decisions = []Decision{}

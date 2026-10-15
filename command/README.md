@@ -673,7 +673,10 @@ rollback, first receipt timestamps and complete ACK validation retain their rule
 Identity lookups use each existing unique index independently. Ingest refreshes only
 the affected device's live quality. Incremental projection/dashboard cursors sort
 newly read groups once, preserving the canonical ordering while avoiding repeated
-middle-of-slice copies across concurrent phones. Projection remains separate from
+middle-of-slice copies across concurrent phones. The existing wake channel coalesces
+notifications for at most 250 ms before a worker pass; a computation invalidated by
+new raw data retains its durable queue without rewriting identical geometry.
+Projection remains separate from
 receipt; its pending/error/completed and eligible/qualified route counts remain
 visible. Missing/offline phone inventory cannot establish global completion.
 

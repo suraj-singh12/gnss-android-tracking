@@ -274,13 +274,17 @@ benchmark (not a mocked receiver and not an Android performance measurement):
 ```sh
 cd command
 GNSS_SYNC_BENCH=1 GNSS_SYNC_DEVICES=20 GNSS_SYNC_DAYS=7 \
-GNSS_SYNC_SAMPLES=4200 GNSS_SYNC_BATCH=64000 GNSS_SYNC_PRIORITY=1 \
+GNSS_SYNC_SAMPLES=4200 GNSS_SYNC_BATCH=64000 GNSS_SYNC_PRIORITY=1 GNSS_SYNC_PATTERN=bursts \
 go test ./internal/core -run '^TestSyncFleetPerformance$' -count=1 -timeout=30m -v
 ```
 
 `SAMPLES` is observations **per phone**, distributed over `DAYS`; 4,200 over seven
 days is a defined sparse corpus, not dense native capture or evidence for Issue #24's
-future adaptive policy. For 1/2/7-day dense 1 Hz use 86,400 / 172,800 / 604,800 samples
+future adaptive policy. `PATTERN=bursts` models retained walking bursts (one-second
+samples), stationary jitter, vehicle motion/turns, poor accuracy and long known
+observation gaps. The default uniform pattern is a simpler scaling fixture. Both
+preserve original synthetic measurement/elapsed times and immutable IDs; neither
+claims real field sampling statistics or changes Android capture. For 1/2/7-day dense 1 Hz use 86,400 / 172,800 / 604,800 samples
 per phone respectively. Repeat for 1/5/20 phones; no production device limit exists.
 The generator retains one batch per phone in memory; final production reconstruction
 and the independent one-pass oracle still need resources proportional to history.
@@ -291,7 +295,10 @@ ceiling. Every request uses original stable device/message/session identities an
 checks every returned ACK; exact raw count and chronological accepted IDs/decisions/
 segments/distance are verified. `PRIORITY=1` adds one actual fresh live fix and one
 SOS per phone during backlog, reporting their durable ACK latencies separately.
-It does not prove operator reaction time or physical speaker audibility.
+The same live/SOS identities are retried periodically during continued backlog,
+including its final stages; printed latencies are per-phone maxima. Retries must
+not create extra observations or alerts. This does not prove operator reaction time
+or physical speaker audibility.
 
 Output separates source/request/ACK payload bytes, request count/concurrency,
 transfer including durable receipt, receiver handler time (sum across requests,

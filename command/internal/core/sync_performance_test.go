@@ -76,11 +76,39 @@ func TestSyncFleetPerformance(t *testing.T) {
 					m.ID = fmt.Sprintf("00000000-0000-4000-8000-%012d", n)
 					m.Sequence = int64(n)
 					offset := int64(n) * int64(days) * 86400000 / int64(samples)
+					within, block := (n-1)%100, (n-1)/100
+					period := int64(days) * 86400000 / int64((samples+99)/100)
+					bursts := os.Getenv("GNSS_SYNC_PATTERN") == "bursts" && period > 600000
+					if bursts {
+						local := int64(within+1) * 1000
+						if within >= 50 {
+							local = 50000 + int64(within-49)*10000
+						}
+						offset = int64(block)*period + local
+					}
 					at := base.Add(time.Duration(offset) * time.Millisecond).Format(wireTime)
 					m.Captured = at
 					fix := *template.Fix
 					fix.Observed = at
 					fix.Lon = float64(n) * 5 / Radius / radians
+					if bursts {
+						x, y := float64(block)*150, float64(block%2)*30
+						switch {
+						case within < 50:
+							x += float64(within) * 5
+						case within < 80:
+							x += 245 + float64(within%3-1)*0.3
+						default:
+							x += 245 + float64(within-79)*50
+							y += float64(within-79) * 2
+						}
+						fix.Lon = x / Radius / radians
+						fix.Lat = y / Radius / radians
+						if within == 97 {
+							accuracy := 150.0
+							fix.Accuracy = &accuracy
+						}
+					}
 					m.Fix = &fix
 					o := *template.Observation
 					o.ID = m.ID
@@ -125,7 +153,7 @@ func TestSyncFleetPerformance(t *testing.T) {
 				r.ack += len(ack)
 				r.requests++
 
-				if priority && r.requests == 1 {
+				if priority && (r.requests == 1 || n > samples || (n-1)/600 != (n-1-len(messages))/600) {
 					live := template
 					live.Device = messages[0].Device
 					live.Sequence = int64(samples + 1)
@@ -163,10 +191,12 @@ func TestSyncFleetPerformance(t *testing.T) {
 							r.err = fmt.Errorf("priority receipt: %s %v", reply, e)
 							return
 						}
+						r.bytes += len(wire)
+						r.ack += len(reply)
 						if i == 0 {
-							r.liveLatency = time.Since(began)
+							r.liveLatency = max(r.liveLatency, time.Since(began))
 						} else {
-							r.sosLatency = time.Since(began)
+							r.sosLatency = max(r.sosLatency, time.Since(began))
 						}
 					}
 				}
@@ -187,7 +217,7 @@ func TestSyncFleetPerformance(t *testing.T) {
 		bodyBytes += r.bytes
 		ackBytes += r.ack
 		requests += r.requests
-		t.Logf("phone completion=%s live_ACK=%s SOS_ACK=%s", r.elapsed, r.liveLatency, r.sosLatency)
+		t.Logf("phone completion=%s max_live_ACK=%s max_SOS_ACK=%s", r.elapsed, r.liveLatency, r.sosLatency)
 	}
 	var count int
 	expected := devices * samples
@@ -234,5 +264,5 @@ func TestSyncFleetPerformance(t *testing.T) {
 	runtime.ReadMemStats(&memoryAfter)
 	sort.Slice(latencies, func(i, j int) bool { return latencies[i] < latencies[j] })
 	t.Logf("source_bytes=%d receiver_handler_sum_including_queue_parse_commit=%s ACK_RTT_p50=%s p95=%s p99=%s total_allocated=%d heap=%d", sourceBytes, time.Duration(receiverNanos.Load()), latencies[len(latencies)/2], latencies[len(latencies)*95/100], latencies[len(latencies)*99/100], memoryAfter.TotalAlloc-memoryBefore.TotalAlloc, memoryAfter.HeapAlloc)
-	t.Logf("devices=%d samples/phone=%d source_days=%d batch_target=%d concurrency=1/phone requests=%d request_bytes=%d ack_bytes=%d transfer_including_durable_receipt=%s reconstruction_flush=%s observations/s=%.1f raw=%d qualified=%d", devices, samples, days, limit, requests, bodyBytes, ackBytes, transfer, projection, float64(count)/transfer.Seconds(), count, len(st.Points))
+	t.Logf("devices=%d samples/phone=%d source_days=%d batch_target=%d concurrency=1/phone history_requests=%d request_bytes=%d ack_bytes=%d transfer_including_durable_receipt=%s reconstruction_flush=%s observations/s=%.1f raw=%d qualified=%d", devices, samples, days, limit, requests, bodyBytes, ackBytes, transfer, projection, float64(count)/transfer.Seconds(), count, len(st.Points))
 }
