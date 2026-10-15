@@ -14,11 +14,11 @@ const { chromium } = require(
 );
 const work = fs.mkdtempSync(path.join(os.tmpdir(), "gnss-real-dem-"));
 const report = {
-  source_revision: process.env.GITHUB_SHA || "local-unfrozen",
+  source_revision: process.env.SOURCE_REVISION || process.env.GITHUB_SHA || "local-unfrozen",
   checked_at: new Date().toISOString(),
   passed: false,
 };
-let command, browser;
+let command, browser, acceptancePage;
 async function port() {
   const s = net.createServer();
   s.listen(0, "127.0.0.1");
@@ -81,6 +81,7 @@ async function wait(f) {
       viewport: { width: 1440, height: 900 },
     }),
     page = await context.newPage();
+  acceptancePage = page;
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(local);
@@ -354,8 +355,16 @@ async function wait(f) {
     external_browser_requests: externalBrowserRequests,
   });
 })()
-  .catch((e) => {
+  .catch(async (e) => {
     report.error = e.stack;
+    if (acceptancePage) {
+      try {
+        report.visible_failure_state = (await acceptancePage.locator("body").innerText()).slice(0, 16000);
+        const output = process.env.GNSS_SCREENSHOT_DIR || work;
+        fs.mkdirSync(output, { recursive: true });
+        await acceptancePage.screenshot({ path: path.join(output, "real-dem-failure.png"), fullPage: true });
+      } catch (captureError) { report.failure_capture_error = String(captureError); }
+    }
     process.exitCode = 1;
   })
   .finally(async () => {

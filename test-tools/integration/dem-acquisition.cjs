@@ -21,7 +21,7 @@ const fs = require("node:fs"),
   if (elevation < 1000 || elevation > 2500)
     throw Error(`Unexpected Mussoorie height ${elevation}`);
   const report = {
-    source_revision: process.env.GITHUB_SHA || "local-unfrozen",
+    source_revision: process.env.SOURCE_REVISION || process.env.GITHUB_SHA || "local-unfrozen",
     checked_at: new Date().toISOString(),
     url,
     http_status: r.status,
