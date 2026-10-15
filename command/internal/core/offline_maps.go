@@ -534,7 +534,7 @@ func (p *mapProvider) area(ctx context.Context, lat, lon, width, height float64)
 				p.fallbackUntil = time.Time{}
 			}
 			p.mu.Unlock()
-			return nil, fmt.Errorf("OSM vector provider %s unavailable: %w; retry Preview to use alternate provider", endpoint, err)
+			return nil, fmt.Errorf("OSM vector provider %s unavailable: %w; retry Preview to send this map area to alternate public provider %s", endpoint, err, p.overpassFallback)
 		}
 		return nil, err
 	}
