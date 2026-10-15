@@ -356,6 +356,9 @@ cache now stores larger arrays in ordered `projection_chunks`, each with at most
 receipt metadata change in one transaction; legacy single-value caches remain
 readable. Raw receipt/identities and chronological reconstruction are unchanged.
 This bounds SQLite values, not the total retained in-memory geometry.
+Cold dashboard reads also use one query-only connection to that same WAL file,
+serialized by the view mutex rather than the ingestion mutex. A blocked-read
+regression requires a concurrent SOS to commit before the read is released.
 
 The existing Sender also drains retained data while the Android Activity is visible
 and Tracking is OFF. That path cannot invoke current capture or register GNSS.

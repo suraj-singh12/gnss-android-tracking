@@ -369,8 +369,23 @@ residual reconstruction in 1.003 s (4,320 requests, identical source bytes).
 A subsequent candidate two-day dense stress completed receipt but failed while
 persisting the projection: the single JSON value exhausted embedded SQLite's
 256 MiB runtime allowance. That failed run is not a pass. The resulting bounded
-projection-chunk fix has restart/order/rollback regression coverage; dense stress
-must be rerun against it before certifying the larger workload.
+projection-chunk fix has restart/order/rollback regression coverage. Its subsequent
+two-day dense rerun passed: 172,800 original history records, 170,288,865 source
+bytes, 109.676 s receipt, 1.031 s residual reconstruction and exact geometry.
+The seven-day rerun passed: 604,800 history records, 596,921,886 source bytes,
+473.435 s receipt, 4.482 s residual reconstruction and 604,801 qualified points
+(including LIVE). All original identities and the chronological oracle matched.
+LIVE ACK p99 was 206.473 ms; SOS p99 13.477 ms (1,009 requests each). Cold dashboard
+materialization took 29.424 s; this exposed ingestion-mutex contention, subsequently
+removed using one bounded read-only WAL connection. The large read-model cost
+itself remains. These are local stress results, not full dense-fleet certification.
+
+At projection-chunk commit `47633ec`, a controlled twenty-phone/4,200-observation
+rerun passed in 49.362 s receipt / 0.771 s residual reconstruction. Peak process
+RSS was 647,456 KiB; CPU time 72.127 s user / 6.614 s system for the Go test command.
+The one-phone dense one-day rerun passed in 49.556 s receipt / 0.572 s residual,
+peak RSS 814,196 KiB; CPU 70.692 s user / 6.844 s system. These CPU figures include
+the harness/oracle. They precede the independent dashboard-reader change.
 
 The real Room/Sender bridge completed **29 tests, zero skips/failures/errors** in
 564.306 s. Its twenty-plus-late-phone Tracking OFF case took 45.736 s including

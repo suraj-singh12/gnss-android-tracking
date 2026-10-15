@@ -311,13 +311,16 @@ func (s *Store) FieldReport() (FieldReport, error) {
 	return s.fieldReport(tx)
 }
 func (s *Store) fieldReport(tx *sql.Tx) (FieldReport, error) {
+	return s.fieldReportAt(tx, s.Now())
+}
+func (s *Store) fieldReportAt(tx *sql.Tx, now time.Time) (FieldReport, error) {
 	st, err := loadState(tx)
 	if err != nil {
 		return FieldReport{}, err
 	}
-	r := FieldReport{Schema: 2, ProjectionDecisions: st.Decisions, Policy: st.Policy, Generated: s.Now().UTC().Format(wireTime), Revision: BuildRevision(), Coverage: "Unique counts include all retained raw messages. Retry, operation and restart evidence begins when this recorder was installed. ACK offered does not prove phone receipt. Phone queue figures are explicitly timestamped last reports, not inferred current depth; physical radio state is unknown.", Devices: map[string]*Counters{}, Receipts: []Receipt{}, Events: []Evidence{}, Gaps: []Gap{}, Verdicts: []Verdict{}, Recording: recordingEvidence(st)}
+	r := FieldReport{Schema: 2, ProjectionDecisions: st.Decisions, Policy: st.Policy, Generated: now.UTC().Format(wireTime), Revision: BuildRevision(), Coverage: "Unique counts include all retained raw messages. Retry, operation and restart evidence begins when this recorder was installed. ACK offered does not prove phone receipt. Phone queue figures are explicitly timestamped last reports, not inferred current depth; physical radio state is unknown.", Devices: map[string]*Counters{}, Receipts: []Receipt{}, Events: []Evidence{}, Gaps: []Gap{}, Verdicts: []Verdict{}, Recording: recordingEvidence(st)}
 	r.ProjectionPending, r.ProjectionError = st.ProjectionPending, st.ProjectionError
-	if err = populateHistory(tx, &st, s.Now()); err != nil {
+	if err = populateHistory(tx, &st, now); err != nil {
 		return r, err
 	}
 	if err = populateViews(tx, &st); err != nil {

@@ -596,6 +596,10 @@ Large projections are replaced atomically in chunks of at most 512 points and
 512 decisions per SQLite value. Legacy single-value projections remain readable.
 This avoids exhausting embedded SQLite's 256 MiB memory allowance while binding
 one dense route JSON value; it does not make the in-memory route model constant-size.
+Dashboard materialization uses one separately serialized, query-only WAL connection
+to the same SQLite file. Its consistent read transaction cannot hold the ingestion
+mutex or writer connection while decoding a cold history. Private `:memory:` stores
+retain their single-connection path. Large dashboard payloads can still be expensive.
 
 History exports contain each identified Android session. `received_through` is an
 actual contiguous identity prefix. `processed_through` additionally admits explicit

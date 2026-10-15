@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -12,7 +13,8 @@ import (
 	"sync"
 	"time"
 
-	_ "github.com/ncruces/go-sqlite3/driver"
+	"github.com/ncruces/go-sqlite3"
+	"github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
 )
 
@@ -119,6 +121,8 @@ type State struct {
 	Provisional                  []Point            `json:"provisional_points,omitempty"`
 }
 type Store struct {
+	viewMu               sync.Mutex
+	viewDB               *sql.DB
 	viewRaw              rawCursor
 	dashboardCounters    map[string]*Counters
 	dashboardEvidenceRow int64
@@ -265,12 +269,34 @@ func Open(path string) (*Store, error) {
 	if err = s.upgradeHistoryReconstruction(); err != nil {
 		return fail(err)
 	}
+	if path != ":memory:" {
+		// A single bounded WAL reader uses the same authoritative database. Cold
+		// dashboard materialization must not hold the ingestion mutex/connection.
+		s.viewDB, err = driver.Open(path, func(c *sqlite3.Conn) error {
+			return c.Exec("PRAGMA query_only=ON; PRAGMA busy_timeout=5000")
+		})
+		if err != nil {
+			return fail(err)
+		}
+		s.viewDB.SetMaxOpenConns(1)
+		if err = s.viewDB.Ping(); err != nil {
+			s.viewDB.Close()
+			return fail(err)
+		}
+	}
 	go s.projectionLoop()
 	s.notifyProjection()
 	return s, nil
 }
 func (s *Store) Close() error {
-	s.closeOnce.Do(func() { close(s.stop); <-s.done; s.closeError = s.db.Close() })
+	s.closeOnce.Do(func() {
+		close(s.stop)
+		<-s.done
+		if s.viewDB != nil {
+			s.closeError = s.viewDB.Close()
+		}
+		s.closeError = errors.Join(s.closeError, s.db.Close())
+	})
 	return s.closeError
 }
 
@@ -774,9 +800,19 @@ func (s *Store) SetOverride(device string, v *int) error {
 }
 func (s *Store) Snapshot(dot int) (State, error) { return s.snapshot(dot, true, true) }
 func (s *Store) snapshot(dot int, fullEvidence, diagnosticRaw bool) (State, error) {
+	s.viewMu.Lock()
+	defer s.viewMu.Unlock()
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	tx, err := s.db.Begin()
+	now := s.Now()
+	db := s.viewDB
+	if db == nil {
+		// Private :memory: databases cannot share a second connection.
+		db = s.db
+		defer s.mu.Unlock()
+	} else {
+		s.mu.Unlock()
+	}
+	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return State{}, err
 	}
@@ -785,7 +821,6 @@ func (s *Store) snapshot(dot int, fullEvidence, diagnosticRaw bool) (State, erro
 	if err != nil {
 		return st, err
 	}
-	now := s.Now()
 	refreshLive(&st)
 	for _, d := range st.Devices {
 		d.Converged = configEqual(d.Desired, d.Snapshot.Config.Config)
@@ -868,7 +903,7 @@ func (s *Store) snapshot(dot int, fullEvidence, diagnosticRaw bool) (State, erro
 		}
 	}
 	if fullEvidence {
-		report, err := s.fieldReport(tx)
+		report, err := s.fieldReportAt(tx, now)
 		if err != nil {
 			return st, err
 		}

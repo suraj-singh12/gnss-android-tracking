@@ -2,11 +2,74 @@ package core
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net/http/httptest"
 	"reflect"
+	"sync"
 	"testing"
+	"time"
+
+	"github.com/ncruces/go-sqlite3"
+	"github.com/ncruces/go-sqlite3/driver"
 )
+
+func TestColdDashboardReaderDoesNotBlockDurableSOS(t *testing.T) {
+	s, _, _ := open(t)
+	ingest(t, s, message(t, 1, 0, 0, 0, 1))
+	entered, release := make(chan struct{}), make(chan struct{})
+	var enterOnce, releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	defer unblock()
+	conn, err := s.viewDB.Conn(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = conn.Raw(func(c any) error {
+		return c.(driver.Conn).Raw().SetAuthorizer(func(action sqlite3.AuthorizerActionCode, table, column, schema, inner string) sqlite3.AuthorizerReturnCode {
+			if action == sqlite3.AUTH_READ && table == "raw" {
+				enterOnce.Do(func() { close(entered); <-release })
+			}
+			return sqlite3.AUTH_OK
+		})
+	})
+	conn.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	viewDone := make(chan error, 1)
+	go func() { _, err := s.snapshot(30, false, false); viewDone <- err }()
+	select {
+	case <-entered:
+	case err := <-viewDone:
+		t.Fatalf("dashboard never reached blocked read: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("dashboard read did not start")
+	}
+	sos := emergency(t, 2, 1)
+	body := encode(t, sos)
+	ackDone := make(chan error, 1)
+	go func() { _, err := s.Ingest(body); ackDone <- err }()
+	select {
+	case err := <-ackDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("cold dashboard read blocked SOS durable receipt")
+	}
+	var retained int
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM raw WHERE message=?", sos.ID).Scan(&retained); err != nil || retained != 1 {
+		t.Fatalf("SOS ACK was not durable: count=%d error=%v", retained, err)
+	}
+	unblock()
+	if err := <-viewDone; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.viewDB.Exec("DELETE FROM raw"); err == nil {
+		t.Fatal("dashboard connection must remain read only")
+	}
+}
 
 func TestProjectionChunksPreserveOrderRestartAndRollback(t *testing.T) {
 	s, _, path := open(t)
