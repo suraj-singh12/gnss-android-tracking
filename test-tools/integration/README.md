@@ -313,7 +313,10 @@ Use `-cpuprofile=/outside/repository/sync.pprof -o /outside/repository/sync.test
 
 The matched-assets workflow checks out the exact PR head for all jobs, runs a
 20-phone sparse benchmark with live/SOS, and uploads its log with existing reports.
-It independently fails a skipped real bridge suite. SQLite disk-full regression
+It independently fails a skipped real bridge suite. External DEM/provider acceptance
+runs in parallel and publishes its own same-source artifact; it cannot delay or
+skip independent GNSS/Android checks. A provider failure still fails the workflow
+and is reported separately from successfully built matched applications. SQLite disk-full regression
 uses `max_page_count` to produce real `SQLITE_FULL`: no ACK/partial raw commit, then
 successful immutable retry after the cap is removed. Native slow disks, radios,
 Android OS restrictions and the full dense fleet remain separate acceptance work.

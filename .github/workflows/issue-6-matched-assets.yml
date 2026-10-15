@@ -63,8 +63,7 @@ jobs:
           path: ${{ runner.temp }}/dem-evidence
           if-no-files-found: error
   integrated:
-    needs: dem-provider
-    # A blocked real DEM provider must not skip independent Android/history tests.
+    # External provider evidence has its own job/artifact; GNSS validation is independent.
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
@@ -168,11 +167,6 @@ jobs:
           node test-tools/integration/ui-dashboard.cjs
           node test-tools/integration/history-dashboard.cjs
           node test-tools/integration/map-download-ui.cjs
-      - uses: actions/download-artifact@v4
-        if: needs.dem-provider.result == 'success'
-        with:
-          name: DEM-provider-acquisition
-          path: ${{ runner.temp }}/gnss-assets
       - name: Verify exact revisions and generate checksum manifest
         env:
           ASSET_DIR: ${{ runner.temp }}/gnss-assets
