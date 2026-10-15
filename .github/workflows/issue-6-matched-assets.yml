@@ -13,7 +13,7 @@ on:
         integration/for-main-history-reconstruction,
       ]
   pull_request:
-    branches: [integration/combined-upgrades]
+    branches: [main, integration/combined-upgrades]
     types: [opened, synchronize, reopened]
   workflow_dispatch:
 concurrency:
