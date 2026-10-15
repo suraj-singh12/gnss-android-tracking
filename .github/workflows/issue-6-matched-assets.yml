@@ -3,6 +3,7 @@ on:
   push:
     branches:
       [
+        main,
         issue-6-integrated-ui,
         integration/issue6-physical-button,
         correction/issue6-operational-ux,
