@@ -21,6 +21,7 @@ const report = {
 let command, browser, page;
 const errors = [];
 const previewAttempts = [];
+let acceptanceStage = "command_start";
 async function port() {
   const s = net.createServer();
   s.listen(0, "127.0.0.1");
@@ -103,6 +104,7 @@ async function wait(f) {
   // never substitute mock vector data or make a failed real-provider test green.
   const out = process.env.GNSS_SCREENSHOT_DIR || work;
   fs.mkdirSync(out, { recursive: true });
+  acceptanceStage = "live_vector_preview";
   for (let attempt = 1; attempt <= 2; attempt++) {
     await page.locator("#preview-map").click();
     let timeoutError = "";
@@ -129,12 +131,14 @@ async function wait(f) {
     path: path.join(out, "real-dem-area-preview.png"),
     fullPage: true,
   });
+  acceptanceStage = "live_map_and_terrain_download";
   await page.locator("#download-map").click();
   await wait(async () =>
     (await page.locator("#map-preparation-status").textContent()).includes(
       "Saved locally",
     ),
   );
+  acceptanceStage = "terrain_verification";
   const maps = await (await fetch(local + "/local/maps")).json();
   assert.equal(maps.length, 1);
   const id = maps[0].id;
@@ -287,6 +291,7 @@ async function wait(f) {
       await fetch(local + "/local/maps/" + id + "/terrain-file")
     ).arrayBuffer(),
   );
+  acceptanceStage = "offline_restart";
   command.kill("SIGTERM");
   await once(command, "exit");
   await start(true);
@@ -381,10 +386,7 @@ async function wait(f) {
 })()
   .catch(async (e) => {
     report.error = e.stack;
-    report.failed_stage = previewAttempts.length &&
-      !previewAttempts.some(x => !x.timeout_error &&
-        !x.status.includes("Existing maps are retained."))
-      ? "live_vector_preview" : "acceptance";
+    report.failed_stage = acceptanceStage;
     report.preview_attempts = previewAttempts;
     report.browser_errors = errors;
     if (page) {
