@@ -66,7 +66,7 @@ jobs:
   integrated:
     needs: dem-provider
     # A blocked real DEM provider must not skip independent Android/history tests.
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Define visual evidence directory
