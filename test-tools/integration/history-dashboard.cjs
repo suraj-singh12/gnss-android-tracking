@@ -103,8 +103,11 @@ async function wait(check) {
     fullPage: true,
   });
 
-  await page.locator("#recording-mode").selectOption("from_beginning");
   await page.locator("#start").click();
+  // Issue6's current Start modal must allow all-history with no known phones.
+  assert.equal(await page.locator("#session-mode").isEnabled(), true);
+  await page.locator("#session-mode").check();
+  await page.locator("#confirm-recording").click();
   await wait(async () => (await state()).recording?.mode === "from_beginning");
   assert.equal(Object.keys((await state()).devices).length, 0);
   const fixture = JSON.parse(fs.readFileSync(path.join(__dirname, "../../protocol/fixtures/location-native-session.json"), "utf8"));
