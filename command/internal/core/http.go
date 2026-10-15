@@ -128,7 +128,7 @@ func (s *Store) LocalHandler(assets http.Handler) http.Handler {
 				}
 				dot = n
 			}
-			st, err := s.Snapshot(dot)
+			st, err := s.snapshot(dot, false, r.URL.Query().Get("include_raw") == "true")
 			if err != nil {
 				failure(w, 503, "storage_unavailable", err)
 				return
@@ -225,7 +225,7 @@ func dashboardView(st State, now time.Time) map[string]any {
 		if d.Location != nil {
 			location = map[string]any{"fix": d.Location.Fix}
 		}
-		devices[id] = map[string]any{"device_id": id, "track_color": d.Color, "track_dash": d.Dash, "snapshot": map[string]any{"party": d.Snapshot.Party, "health": d.Snapshot.Health, "config_state": d.Snapshot.Config}, "location": location, "current_position": d.CurrentPosition, "live_x_m": d.LiveX, "live_y_m": d.LiveY, "location_reason": d.LocationReason, "last_contact": d.Contact, "desired_config": d.Desired, "config_converged": d.Converged, "contact_condition": d.ContactCondition, "gnss_condition": d.GNSSCondition, "location_age_s": d.LocationAge, "total_m": d.Total, "field_evidence": d.Evidence, "history": d.History}
+		devices[id] = map[string]any{"device_id": id, "track_color": d.Color, "track_dash": d.Dash, "snapshot": map[string]any{"party": d.Snapshot.Party, "health": d.Snapshot.Health, "config_state": d.Snapshot.Config}, "location": location, "current_position": d.CurrentPosition, "live_x_m": d.LiveX, "live_y_m": d.LiveY, "location_reason": d.LocationReason, "last_contact": d.Contact, "desired_config": d.Desired, "config_converged": d.Converged, "contact_condition": d.ContactCondition, "gnss_condition": d.GNSSCondition, "location_age_s": d.LocationAge, "total_m": d.Total, "field_evidence": d.Evidence, "history": d.History, "history_sessions": d.HistorySessions, "reconstruction": d.Reconstruction}
 	}
 	var recording any
 	if st.Recording != nil {
