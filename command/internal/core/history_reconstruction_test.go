@@ -469,3 +469,54 @@ func TestHistoryVariableDevicePopulationIncludingTwenty(t *testing.T) {
 		})
 	}
 }
+
+
+// A fresh Command B has no prior Android receipts. The phone sends only pending
+// observations from the middle of a tracking session; missing earlier sequences
+// must neither block the available route nor fabricate previous movement.
+// Command's original raw is reusable by a later From Beginning recording without
+// asking Android to replay already ACKed observations.
+func TestHistoryFreshCommandPendingOnlyAndRecordLater(t *testing.T) {
+	s, now, _ := open(t)
+	*now = base.Add(7 * 24 * time.Hour)
+	if err := s.ActionMode("start", "from_now"); err != nil {
+		t.Fatal(err)
+	}
+	session := id()
+	pending := []Message{
+		observationMessage(t, 120, session),
+		observationMessage(t, 121, session),
+		observationMessage(t, 122, session),
+	}
+	for _, m := range []Message{pending[2], pending[0], pending[1]} {
+		if _, err := s.ingestRole(encode(t, m), *now, "history"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	st := snapshot(t, s)
+	if len(st.Points) != 0 || st.Devices[device].Reconstruction.Received != 3 ||
+		st.Devices[device].Reconstruction.Excluded != 3 {
+		t.Fatalf("From Now cannot admit old backlog, but must store it: %+v", st.Devices[device].Reconstruction)
+	}
+	var before int
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM raw").Scan(&before); err != nil || before != 3 {
+		t.Fatal("raw backlog not durable", before, err)
+	}
+	action(t, s, "clear")
+	if err := s.ActionMode("start", "from_beginning"); err != nil {
+		t.Fatal(err)
+	}
+	st = snapshot(t, s)
+	if len(st.Points) != 3 || st.Devices[device].Reconstruction.Eligible != 3 ||
+		st.Devices[device].Reconstruction.Accepted != 3 ||
+		st.Devices[device].Reconstruction.Projection != "completed" {
+		t.Fatalf("fresh receiver / late selection failed: %+v", st.Devices[device].Reconstruction)
+	}
+	if st.Devices[device].Total <= 0 {
+		t.Fatal("pending-only new Command must calculate the known section distance")
+	}
+	var after int
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM raw").Scan(&after); err != nil || after != before {
+		t.Fatal("re-recording duplicated or lost retained raw data", before, after, err)
+	}
+}
