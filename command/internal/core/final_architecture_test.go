@@ -257,7 +257,7 @@ func TestEachQualitySwitchChangesOnlyItsRule(t *testing.T) {
 	}
 }
 
-func TestProvisionalSectionsReconcileAfterRejectedJunction(t *testing.T) {
+func TestQualifiedSectionsReconcileAfterRejectedJunction(t *testing.T) {
 	s, now, _ := open(t)
 	action(t, s, "start")
 	session := id()
@@ -273,8 +273,8 @@ func TestProvisionalSectionsReconcileAfterRejectedJunction(t *testing.T) {
 	*now = base.Add(51 * time.Second)
 	ingest(t, s, c)
 	st := snapshot(t, s)
-	if len(st.Provisional) != 1 || st.Provisional[0].Message != c.ID || st.Provisional[0].Distance != 0 || !st.Devices[device].CurrentPosition {
-		t.Fatal("later valid live point lost", st.Provisional)
+	if len(st.Points) != 2 || st.Points[1].Message != c.ID || st.Points[1].Distance != 0 || st.Points[0].Segment == st.Points[1].Segment || !st.Devices[device].CurrentPosition {
+		t.Fatal("later qualified section lost or bridged", st.Points)
 	}
 	all := []Candidate{raw(a)}
 	for n := 2; n < 50; n++ {
@@ -375,7 +375,7 @@ func TestSessionModeLateJoinAndResumeKeepBoundaries(t *testing.T) {
 	*now = base.Add(30 * time.Second)
 	ingest(t, s, after)
 	st := snapshot(t, s)
-	if len(st.Recording.Windows) != 2 || st.Recording.Windows[1].Sessions[device] != session || st.Devices[device].Total != 0 {
+	if len(st.Recording.Windows) != 2 || st.Recording.Windows[1].AllHistory || !st.Recording.Windows[1].Start.Equal(base.Add(25*time.Second)) || st.Devices[device].Total != 0 {
 		t.Fatal("resume joined stopped interval", st.Recording, st.Devices[device].Total)
 	}
 	for _, p := range st.Points {
@@ -545,7 +545,7 @@ func TestLaterCallbackWithOlderMeasurementCannotRegressLive(t *testing.T) {
 	}
 }
 
-func TestDelayedHistoryCannotChooseLateJoinCurrentSession(t *testing.T) {
+func TestDelayedHistoryJoinsWithoutChoosingCurrentSession(t *testing.T) {
 	s, now, _ := open(t)
 	*now = base.Add(time.Second)
 	ingest(t, s, observationMessage(t, 1, id()))
@@ -561,8 +561,8 @@ func TestDelayedHistoryCannotChooseLateJoinCurrentSession(t *testing.T) {
 		t.Fatal(e)
 	}
 	st := snapshot(t, s)
-	if st.Recording.Windows[0].Sessions[old.Device] != "" || len(st.Points) != 1 {
-		t.Fatal("old backlog falsely identified a current session")
+	if st.Devices[old.Device].Session != nil || len(st.Points) != 2 {
+		t.Fatal("historical-only join must participate without claiming a current session")
 	}
 	current := id()
 	status := message(t, 2, 100, 0, 0, 1)
@@ -585,8 +585,8 @@ func TestDelayedHistoryCannotChooseLateJoinCurrentSession(t *testing.T) {
 		t.Fatal(e)
 	}
 	st = snapshot(t, s)
-	if st.Recording.Windows[0].Sessions[old.Device] != current || len(st.Points) != 2 {
-		t.Fatal("explicit current source session not selected", st.Recording, st.Points)
+	if st.Devices[old.Device].Session.ID != current || len(st.Points) != 3 || st.Devices[old.Device].Total != 0 {
+		t.Fatal("current and retained sessions conflated", st.Recording, st.Points)
 	}
 }
 func TestQualitySwitchControlRejectsNonBooleanAndUnknownNames(t *testing.T) {
