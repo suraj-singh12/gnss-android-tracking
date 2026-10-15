@@ -227,7 +227,7 @@ class ObservationPersistenceTest {
         }
         val db =
             Room.databaseBuilder(app, TrackingDatabase::class.java, name)
-                .addMigrations(TrackingDatabase.MIGRATION_1_2)
+                .addMigrations(TrackingDatabase.MIGRATION_1_2, TrackingDatabase.MIGRATION_2_3)
                 .build()
         try {
             val repo = Repository(db, clock)

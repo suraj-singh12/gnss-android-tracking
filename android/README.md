@@ -42,7 +42,7 @@ and GPS enabled and Battery Saver off; notification refusal needs Settings befor
 that preserved Start intent can continue. Android itself allows an FGS without
 notification permission, but that is not healthy field setup.
 Start Tracking is a visible user action. Stop Tracking requires confirmation and
-stops collection/sending; pending messages remain for the next start. Reopening
+stops collection. Saved messages automatically synchronize while the app is visible, without restarting GNSS. **Sync All Now** resets transient retry timing; **Pause history sync** stops selecting new history requests, retaining every row. An in-flight request may still finish. SOS and live tracking remain independently eligible. Reopening
 the Activity does not restart or stop tracking. Reboot and force-stop require
 another explicit Start Tracking. Sticky service recreation can recover tracking
 and outbox after process death when Android permits it; it is not a bypass of
@@ -68,7 +68,7 @@ SSID/BSSID/MAC access is required.
 
 `TrackingService` owns `PlatformLocationSource`, reporting and the foreground
 sending loop. `TrackingApp` retains the shared `LatestLocation`, SOS engine and one
-`Sender`; while tracking is stopped its visible-Activity loop selects SOS only. Room stores one installation/configuration row plus immutable JSON
+`Sender`; while tracking is stopped its visible-Activity loop sends retained history and SOS through that same Sender, without generating GNSS or synthetic current snapshots. Closing/backgrounding the UI does not establish a transfer lifetime; reopen to resume, or use the existing user-started tracking service when collection is intended. Room stores one installation/configuration row plus immutable JSON
 snapshots and delivery metadata. Snapshot validation, sequence allocation, identity
 and outbox insertion occur in one transaction **before** transport. No destructive
 migration or backup restore is enabled; reinstall/data reset creates a new device
@@ -82,7 +82,7 @@ One sender prioritizes SOS, fresh live observations, oldest historical blocks an
 routine status. The same durable GNSS row supplies both live and history; no new fix
 copy is created on reconnect. Every live attempt grants historical work an opportunity.
 Historical eligibility needs no unrelated ACK. Negotiated atomic batches adapt from
-one observation through approximately 500 B/1/2/4/8/16/20 KB; permanent invalid entries
+one observation through approximately 500 B/1/2/4/8/16/20/32/64 KB, clamped to negotiated bytes and record counts (local safety caps 65,536 bytes and 128 records); permanent invalid entries
 remain unresolved while valid history continues. Old queued individual v1 envelopes
 remain deliverable. Missing capability falls back to individual envelopes with a warning.
 Transport uses 6-second calls and 3-second connections, network-bound DNS/sockets,
@@ -270,3 +270,26 @@ The sender reschedules the next live opportunity from its last live attempt when
 ## Issue #6 operational interface
 
 See [UI setup and acceptance](../docs/ui-acceptance.md) and [shared design system](../docs/design-system.md) for the three-destination Android interface, Command workspace, recording/quality controls, protected SOS and exactly two offline canvas/map modes. The existing tracking and SOS engines remain authoritative.
+
+### Issue #22 synchronization
+
+Room v3 adds a delivery/session/order index without changing saved JSON, IDs or
+session boundaries. A history selection reads at most 128 rows from the oldest
+pending session rather than 4,096 whole envelopes. ACK processing validates and
+updates the entire batch in one Room transaction, applying config in receipt order
+and saving installation state once. Migration 1→2→3 retains pending and ACKed data;
+older APKs cannot downgrade this schema.
+
+Sync All Now is local and foreground. It never requests location permissions,
+registers a provider, starts Tracking or creates a new measurement. Pausing is
+process-local; cold start defaults to automatic foreground delivery. Permanent
+quarantine/enrollment errors still use the existing confirmed Retry saved messages
+control after correction. Wi-Fi/Command failures retain bounded retries. Android
+reboot, force-stop, screen-off/OEM termination and background restrictions require
+physical acceptance; this control does not claim unrestricted background transfer.
+
+The History card separates pending, Room-backed durable ACK and unresolved counts.
+Diagnostics shows this process's attempted and ACKed payload bytes, latest batch
+size and retry errors. Process-local byte counters restart at zero; Room counts
+survive restart. ACKed payload bytes certify receipt, not completed Command routes.
+Command-originated synchronization remains dependent on Issue #25.

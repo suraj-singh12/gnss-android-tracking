@@ -406,7 +406,7 @@ func (s *Store) ingestRole(b []byte, ingress time.Time, role string) (Ack, error
 func (s *Store) ingestMessage(tx *sql.Tx, st *State, m Message, b []byte, received string, role string) (Ack, error) {
 	known, _ := json.Marshal(m)
 	var old, first string
-	err := tx.QueryRow("SELECT known,received FROM raw WHERE device=? AND (message=? OR sequence=?)", m.Device, m.ID, m.Sequence).Scan(&old, &first)
+	err := tx.QueryRow("SELECT known,received FROM raw WHERE device=? AND message=? UNION ALL SELECT known,received FROM raw WHERE device=? AND sequence=? LIMIT 1", m.Device, m.ID, m.Device, m.Sequence).Scan(&old, &first)
 	result := "stored"
 	if err == nil {
 		if old != string(known) {
@@ -441,7 +441,7 @@ func (s *Store) ingestMessage(tx *sql.Tx, st *State, m Message, b []byte, receiv
 				return Ack{}, startError
 			}
 			var existing string
-			e := tx.QueryRow("SELECT message FROM observation_identity WHERE device=? AND ((session=? AND sequence=?) OR observation=?)", m.Device, o.Session, o.Sequence, o.ID).Scan(&existing)
+			e := tx.QueryRow("SELECT message FROM observation_identity WHERE device=? AND session=? AND sequence=? UNION ALL SELECT message FROM observation_identity WHERE device=? AND observation=? LIMIT 1", m.Device, o.Session, o.Sequence, m.Device, o.ID).Scan(&existing)
 			if e == nil {
 				if err = writeObservationConflict(tx, st, m, received, role, "observation_sequence_conflict", existing); err != nil {
 					return Ack{}, err
@@ -504,7 +504,7 @@ func (s *Store) ingestMessage(tx *sql.Tx, st *State, m Message, b []byte, receiv
 		d.Location = &copy
 		d.LocationReceived = first
 	}
-	refreshLive(st)
+	refreshLiveDevice(d, st.Policy)
 	if result == "stored" && m.Type == "sos" {
 		st.Alerts = append(st.Alerts, alertFrom(m, first))
 	}
@@ -853,15 +853,18 @@ func liveClockTolerance(p Policy) float64 {
 // Live source integrity is independent of historical movement/segment decisions.
 func refreshLive(st *State) {
 	for _, d := range st.Devices {
-		d.CurrentPosition = false
-		d.LiveX, d.LiveY = nil, nil
-		if d.Location == nil {
-			continue
-		}
-		d.LocationReason = Quality(*d.Location, st.Policy)
-		if st.Policy.on("clock_tolerance_s") && d.LocationReceived != "" && instant(d.Location.Captured).After(instant(d.LocationReceived).Add(time.Duration(st.Policy.Clock*float64(time.Second)))) {
-			d.LocationReason = "future_capture"
-		}
+		refreshLiveDevice(d, st.Policy)
+	}
+}
+func refreshLiveDevice(d *Device, policy Policy) {
+	d.CurrentPosition = false
+	d.LiveX, d.LiveY = nil, nil
+	if d.Location == nil {
+		return
+	}
+	d.LocationReason = Quality(*d.Location, policy)
+	if policy.on("clock_tolerance_s") && d.LocationReceived != "" && instant(d.Location.Captured).After(instant(d.LocationReceived).Add(time.Duration(policy.Clock*float64(time.Second)))) {
+		d.LocationReason = "future_capture"
 	}
 }
 

@@ -413,6 +413,11 @@ class MainActivity : Activity() {
         content = group("Advanced technical evidence", false)
         status = text("Loading saved settings…")
         content = pages.getValue("Tracking")
+        button("Sync All Now") { app.syncAllNow() }
+        button("Pause history sync") { app.pauseHistory() }
+        text(
+            "Saved history syncs while this app is open, including with Tracking OFF. Keep it visible; background delivery without tracking is not guaranteed. Pausing retains all saved data; an in-flight receipt may finish."
+        )
         button("Check setup / permissions") { navigate("Settings") }
         content = pages.getValue("Settings")
         val fieldSettings = group("Permissions and battery readiness", false)
@@ -733,7 +738,9 @@ class MainActivity : Activity() {
                                     .replace("GPS: ", "")
                         val connection =
                             when {
-                                !op.tracking -> "Offline · Tracking stopped"
+                                app.sender.commandReachable == true -> "Command Connected"
+                                !op.tracking && op.health.wifi_connected == true ->
+                                    "Reconnecting · Tracking stopped"
                                 op.link.contains("Command reachable") -> "Command Connected"
                                 op.health.wifi_connected == true ->
                                     "Reconnecting · Command unavailable"
@@ -742,14 +749,17 @@ class MainActivity : Activity() {
                         commandSummary.text =
                             "Command\n$connection\nLast successful communication: ${state.lastAck ?: "None"}"
                         historySummary.text =
-                            "History\n" +
+                            "History · ${queues.deliveredGnss} ACKed · ${queues.blocked} unresolved\n" +
                                 when {
                                     queues.blocked > 0 ||
                                         state.deliveryPaused ||
                                         state.knownCollectionLoss > 0 ||
                                         app.observationPersistence.state.awaitingCommit > 0 ->
                                         "Delivery problem · ${queues.gnss} GNSS pending"
-                                    queues.gnss == 0 -> "Fully synchronized"
+                                    queues.gnss == 0 ->
+                                        "All saved GNSS durably ACKed · Command reconstruction is separate"
+                                    op.historyPaused ->
+                                        "History paused · ${queues.gnss} GNSS pending"
                                     connection == "Command Connected" ->
                                         "Synchronizing · ${queues.gnss} GNSS pending"
                                     else -> "${queues.gnss} observations pending"
@@ -780,6 +790,14 @@ class MainActivity : Activity() {
                             appendLine(
                                 "Persistence: ${collection.awaitingCommit} awaiting commit · ${collection.writeFailures} failures"
                             )
+                            val transfer = app.sender.syncProgress
+                            appendLine(
+                                "This process: ${transfer.attemptedBytes} payload bytes attempted · ${transfer.ackedBytes} bytes durably ACKed · last batch ${transfer.lastBatchRecords} records"
+                            )
+                            transfer.lastError?.let { appendLine("Sync retry: $it") }
+                            appendLine(
+                                "History sync: ${if (op.historyPaused) "Paused" else "Automatic while running"}"
+                            )
                             app.diagnostics.value?.let { diagnostic ->
                                 appendLine("Network: ${diagnostic.network}")
                                 appendLine("Transport: ${diagnostic.sender}")
@@ -790,7 +808,7 @@ class MainActivity : Activity() {
                             appendLine(
                                 if (op.starting) "Starting…"
                                 else if (op.tracking) "Tracking active"
-                                else "Tracking stopped — start to collect and send"
+                                else "Tracking stopped — saved history can sync without collection"
                             )
                             appendLine(op.fixDescription())
                             appendLine("Command: ${state.endpoint.ifEmpty { "Not configured" }}")
@@ -839,7 +857,7 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("Stop tracking on this phone?")
             .setMessage(
-                "Location collection and sending will stop. Saved pending messages remain on this phone until tracking starts again."
+                "Location collection will stop. Saved pending messages remain on this phone and can synchronize while the app is open, without restarting GNSS."
             )
             .setNegativeButton("Keep tracking", null)
             .setPositiveButton("Stop Tracking") { _, _ ->

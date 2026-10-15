@@ -284,6 +284,11 @@ These extensions are optional; old queued v1 envelopes are not rewritten.
 
 `GET /api/v1/capabilities` advertises `historical_batch_versions:[1]`,
 `observation_identity_version:1` and `maximum_batch_bytes:65536`.
+Additive limits `maximum_batch_records:128` and
+`maximum_inflight_history_per_device:1` make the existing bounds explicit. Missing
+fields use the older 65,536-byte/128-record limits. Senders clamp advertised limits
+to their own safety caps and count encoded UTF-8 bytes, including the batch wrapper.
+Limits do not change immutable envelopes or individual v1/SOS support.
 Older receivers may return 404; Android then delivers original individual v1
 messages and reports the missing session/completeness capability. Original wire
 extensions retained by an older Command are validated/backfilled when upgraded.
@@ -295,7 +300,7 @@ The canonical complete request/ACK/error examples are in
 [`fixtures/history-batch-v1/`](fixtures/history-batch-v1/).
 The request root contains integer `batch_version:1` and `messages`, an array of
 1..128 complete observation envelopes from one device/session/recovery block, within
-64 KiB. Android targets one observation, 500 B, 1/2/4/8/16/20 KB; a complete
+64 KiB. Android targets one observation, 500 B, 1/2/4/8/16/20/32/64 KB; a complete
 observation may exceed a small target. Never split an observation or wait to fill
 an otherwise ready batch. Transport defaults are a 6-second call and 3-second
 connection timeout. Individual v1 and SOS endpoints remain available.
@@ -333,3 +338,12 @@ recovered. ACK certifies durable receipt only, never projection or drawing succe
 phone sessions or an offline phone's unknown present queue. Clock checks can detect
 UTC/capture-age mismatch and future capture, but cannot establish consistent
 past clock skew or invent corrected measurement times.
+
+### Issue #22 local foreground synchronization
+
+Tracking OFF disables collection, not retained-data eligibility. Android's visible
+application may use the existing Sender to drain retained envelopes without creating
+new fixes or restarting the tracking service. Local Sync All resets transient retry
+timing; local Pause retains data and allows in-flight durable ACK completion. OS
+background execution is not promised. ACK, reconstruction and inventory completeness
+remain separate; Command-originated control is reserved for Issue #25.

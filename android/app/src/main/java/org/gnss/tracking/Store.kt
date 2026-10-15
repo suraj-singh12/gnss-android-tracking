@@ -38,6 +38,10 @@ data class Installation(
             Index(value = ["deliveredAt", "quarantined", "sequence"]),
             Index(value = ["trackingSession", "measurementKey"], unique = true),
             Index(value = ["deliveredAt", "type", "observedMillis"]),
+            Index(
+                value =
+                    ["deliveredAt", "quarantined", "type", "trackingSession", "observationSequence"]
+            ),
         ],
 )
 data class Outbound(
@@ -187,12 +191,27 @@ interface TrackingDao {
     )
     suspend fun pendingLocations(limit: Int): List<Outbound>
 
+    @Query(
+        "SELECT * FROM outbox WHERE deliveredAt IS NULL AND quarantined=0 AND type='location' AND trackingSession IS NULL ORDER BY sequence LIMIT 1"
+    )
+    suspend fun legacyHistory(): Outbound?
+
+    @Query(
+        "SELECT id FROM tracking_sessions WHERE EXISTS(SELECT 1 FROM outbox WHERE deliveredAt IS NULL AND quarantined=0 AND type='location' AND trackingSession=tracking_sessions.id) ORDER BY rowid LIMIT 1"
+    )
+    suspend fun oldestPendingSession(): String?
+
+    @Query(
+        "SELECT * FROM outbox WHERE deliveredAt IS NULL AND quarantined=0 AND type='location' AND trackingSession=:session ORDER BY observationSequence LIMIT :limit"
+    )
+    suspend fun pendingSessionBlock(session: String, limit: Int): List<Outbound>
+
     @Query("SELECT * FROM outbox ORDER BY sequence") suspend fun all(): List<Outbound>
 }
 
 @Database(
     entities = [Installation::class, Outbound::class, SessionRecord::class],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class TrackingDatabase : RoomDatabase() {
@@ -201,8 +220,17 @@ abstract class TrackingDatabase : RoomDatabase() {
     companion object {
         fun open(context: Context) =
             Room.databaseBuilder(context, TrackingDatabase::class.java, "tracking.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
+
+        val MIGRATION_2_3 =
+            object : androidx.room.migration.Migration(2, 3) {
+                override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "CREATE INDEX index_outbox_deliveredAt_quarantined_type_trackingSession_observationSequence ON outbox(deliveredAt,quarantined,type,trackingSession,observationSequence)"
+                    )
+                }
+            }
 
         val MIGRATION_1_2 =
             object : androidx.room.migration.Migration(1, 2) {
@@ -558,7 +586,12 @@ class Repository(val db: TrackingDatabase, private val clock: Clock = SystemCloc
         dao.outstanding(now, 128).firstOrNull { it.type == "status" }
 
     override suspend fun historical(now: Long, target: Int): List<Outbound> {
-        val all = dao.pendingLocations(4096)
+        dao.legacyHistory()?.let {
+            return if (it.nextAttemptMillis <= now) listOf(it) else emptyList()
+        }
+        val session = dao.oldestPendingSession() ?: return emptyList()
+        // At most 128 complete rows, using the delivery/session ordering index.
+        val all = dao.pendingSessionBlock(session, if (target == 0) 1 else 128)
         val first = all.firstOrNull() ?: return emptyList()
         if (first.nextAttemptMillis > now) return emptyList()
         if (first.observationSequence == null) return listOf(first)
@@ -566,7 +599,11 @@ class Repository(val db: TrackingDatabase, private val clock: Clock = SystemCloc
         var bytes = 40
         var expected = first.observationSequence!!
         for (row in all) {
-            if (row.trackingSession != first.trackingSession || row.observationSequence != expected)
+            if (
+                row.nextAttemptMillis > now ||
+                    row.trackingSession != first.trackingSession ||
+                    row.observationSequence != expected
+            )
                 break
             val size = row.json.toByteArray(Charsets.UTF_8).size + 1
             if (result.isNotEmpty() && (target == 0 || bytes + size > target)) break
@@ -582,12 +619,47 @@ class Repository(val db: TrackingDatabase, private val clock: Clock = SystemCloc
         rows: List<Outbound>,
         receipts: List<Receipt>,
         generation: Long,
-    ) {
+    ) =
         db.withTransaction {
             require(rows.size == receipts.size)
-            rows.zip(receipts).forEach { (r, a) -> accept(r, a, generation) }
+            val initial = state()
+            if (initial.endpointGeneration != generation) return@withTransaction
+            var state = initial
+            for ((row, receipt) in rows.zip(receipts)) {
+                val current = dao.row(row.sequence) ?: error("Missing durable message")
+                require(
+                    receipt.message == current.messageId &&
+                        receipt.sequence == current.sequence &&
+                        receipt.device == state.deviceId
+                ) {
+                    "ACK identity mismatch"
+                }
+                if (current.deliveredAt != null) continue
+                var updated = state.copy(lastAck = utc(clock.wallMillis()), operationalError = null)
+                when (val decision = receipt.config?.let { applyConfig(state.config(), it) }) {
+                    is ConfigDecision.Applied ->
+                        updated =
+                            updated.copy(
+                                authority = decision.state.authority_id,
+                                version = decision.state.version,
+                                overrideSeconds = decision.state.reporting_interval_override_s,
+                                configError = null,
+                            )
+                    is ConfigDecision.Error -> updated = updated.copy(configError = decision.reason)
+                    ConfigDecision.NoChange ->
+                        if (receipt.config?.version == state.version)
+                            updated = updated.copy(configError = null)
+                    null ->
+                        updated =
+                            updated.copy(
+                                configError = receipt.configError ?: "Invalid Command configuration"
+                            )
+                }
+                dao.updateRow(current.copy(deliveredAt = receipt.receivedAt, error = null))
+                state = updated
+            }
+            if (state != initial) dao.update(state)
         }
-    }
 
     override suspend fun newest() = dao.newest()
 
@@ -596,44 +668,7 @@ class Repository(val db: TrackingDatabase, private val clock: Clock = SystemCloc
     override suspend fun sos(now: Long) = dao.sos(now)
 
     override suspend fun accept(row: Outbound, receipt: Receipt, generation: Long) =
-        db.withTransaction {
-            val current = dao.row(row.sequence) ?: error("Missing durable message")
-            require(
-                receipt.message == current.messageId &&
-                    receipt.sequence == current.sequence &&
-                    receipt.device == Protocol.decodeMessage(current.json).device_id
-            ) {
-                "ACK identity mismatch"
-            }
-            if (current.deliveredAt != null) return@withTransaction
-            val state = state()
-            // Ignore late replies from a receiver edited while the request was in flight.
-            if (state.endpointGeneration != generation) return@withTransaction
-            var updated = state.copy(lastAck = utc(clock.wallMillis()), operationalError = null)
-            when (val decision = receipt.config?.let { applyConfig(state.config(), it) }) {
-                is ConfigDecision.Applied ->
-                    updated =
-                        updated.copy(
-                            authority = decision.state.authority_id,
-                            version = decision.state.version,
-                            overrideSeconds = decision.state.reporting_interval_override_s,
-                            configError = null,
-                        )
-                is ConfigDecision.Error -> updated = updated.copy(configError = decision.reason)
-                ConfigDecision.NoChange -> {
-                    // Only an equal, matching snapshot resolves a previous visible error.
-                    if (receipt.config?.version == state.version)
-                        updated = updated.copy(configError = null)
-                }
-                null ->
-                    updated =
-                        updated.copy(
-                            configError = receipt.configError ?: "Invalid Command configuration"
-                        )
-            }
-            dao.update(updated)
-            dao.updateRow(current.copy(deliveredAt = receipt.receivedAt, error = null))
-        }
+        acceptBatch(listOf(row), listOf(receipt), generation)
 
     override suspend fun fail(
         row: Outbound,

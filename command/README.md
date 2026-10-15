@@ -660,3 +660,24 @@ relative to interval-only snapshots; no automatic raw-data deletion is enabled.
 ## Issue #6 operational interface
 
 See [UI setup and acceptance](../docs/ui-acceptance.md) and [shared design system](../docs/design-system.md) for the three-destination Android interface, Command workspace, recording/quality controls, protected SOS and exactly two offline canvas/map modes. The existing tracking and SOS engines remain authoritative.
+
+## Issue #22 bounded history receipt
+
+Capabilities now explicitly advertise the existing 65,536-byte / 128-record bounds
+and one historical request in flight per phone. Older v1 individual and batch
+clients remain valid. Android can grow to the measured 64 KB target; larger bodies
+remain rejected. Atomic SQLite `synchronous=FULL` receipt still precedes ACK. Batch
+entries reuse strict root decoding; duplicate keys, malformed records, conflicts,
+rollback, first receipt timestamps and complete ACK validation retain their rules.
+
+Identity lookups use each existing unique index independently. Ingest refreshes only
+the affected device's live quality. Incremental projection/dashboard cursors sort
+newly read groups once, preserving the canonical ordering while avoiding repeated
+middle-of-slice copies across concurrent phones. Projection remains separate from
+receipt; its pending/error/completed and eligible/qualified route counts remain
+visible. Missing/offline phone inventory cannot establish global completion.
+
+Use the existing Go build commands above on macOS or Windows; no platform-specific
+runtime or service was added. Exact-source matched acceptance assets are generated
+by the existing integrated workflow from the PR head, with embedded source revision,
+manifest and checksums. Cross-compilation is not native macOS/Windows acceptance.

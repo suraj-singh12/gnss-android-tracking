@@ -255,3 +255,58 @@ node test-tools/integration/history-dashboard.cjs
 
 Follow the genuine 24-hour offline procedure in the existing
 [device acceptance runbook](../../android/DEVICE-ACCEPTANCE.md) for hardware evidence.
+
+## Issue #22 measured synchronization
+
+`CommandIntegrationTest.trackingOffTwentyPhonesAndLateJoinResumeOriginalRowsAfterLostResponses`
+uses 21 independent real Room databases, production Sender, HTTP and SQLite. Twenty
+phones enter backlog delivery before the 21st joins. Responses are lost after
+Command commits; Room and Command reopen, then only original outstanding rows drain
+with Tracking OFF and zero capture calls. Every saved ID/JSON survives, and qualified
+points/decisions/segments/unrounded distance match the chronological reference.
+This is software lifecycle evidence, not Android process death, physical GNSS or
+screen-off acceptance. The ordinary unit invocation skips the bridge; separately
+run `run.sh` and require zero skipped bridge methods.
+
+The Command module also supplies an opt-in streaming **real protocol/HTTP/SQLite**
+benchmark (not a mocked receiver and not an Android performance measurement):
+
+```sh
+cd command
+GNSS_SYNC_BENCH=1 GNSS_SYNC_DEVICES=20 GNSS_SYNC_DAYS=7 \
+GNSS_SYNC_SAMPLES=4200 GNSS_SYNC_BATCH=64000 GNSS_SYNC_PRIORITY=1 \
+go test ./internal/core -run '^TestSyncFleetPerformance$' -count=1 -timeout=30m -v
+```
+
+`SAMPLES` is observations **per phone**, distributed over `DAYS`; 4,200 over seven
+days is a defined sparse corpus, not dense native capture or evidence for Issue #24's
+future adaptive policy. For 1/2/7-day dense 1 Hz use 86,400 / 172,800 / 604,800 samples
+per phone respectively. Repeat for 1/5/20 phones; no production device limit exists.
+The generator retains one batch per phone in memory; final production reconstruction
+and the independent one-pass oracle still need resources proportional to history.
+Do not run a corpus whose retained SQLite/evidence/geometry cannot fit the host.
+
+`BATCH=20000` reproduces the original target; 64000 exercises the existing 64 KiB
+ceiling. Every request uses original stable device/message/session identities and
+checks every returned ACK; exact raw count and chronological accepted IDs/decisions/
+segments/distance are verified. `PRIORITY=1` adds one actual fresh live fix and one
+SOS per phone during backlog, reporting their durable ACK latencies separately.
+It does not prove operator reaction time or physical speaker audibility.
+
+Output separates source/request/ACK payload bytes, request count/concurrency,
+transfer including durable receipt, receiver handler time (sum across requests,
+including queue/parse/SQLite commit), residual reconstruction flush after transfer,
+dashboard read-model time, full chronological reference time, ACK RTT percentiles
+and Go allocations/heap. Worker reconstruction overlaps transfer, so residual flush
+is **not** total reconstruction CPU time. Handler time is **not** isolated SQLite
+fsync time. HTTP headers, physical Wi-Fi, Android Room throughput and native laptop
+CPU must be measured separately; do not promote localhost numbers to a capacity SLA.
+Use `-cpuprofile=/outside/repository/sync.pprof -o /outside/repository/sync.test` and
+`go tool pprof` for CPU evidence; profiling and competing tests affect wall times.
+
+The matched-assets workflow checks out the exact PR head for all jobs, runs a
+20-phone sparse benchmark with live/SOS, and uploads its log with existing reports.
+It independently fails a skipped real bridge suite. SQLite disk-full regression
+uses `max_page_count` to produce real `SQLITE_FULL`: no ACK/partial raw commit, then
+successful immutable retry after the cap is removed. Native slow disks, radios,
+Android OS restrictions and the full dense fleet remain separate acceptance work.

@@ -104,7 +104,7 @@ One serialized sender serves eligible SOS first, fresh live work next, then the
 oldest historical block. A live attempt grants a historical opportunity even when
 new callbacks continue. Status has an independent cadence. Historical batches are
 negotiated separately from individual v1/SOS, and adapt from one complete observation
-to about 20 KB without waiting for fill. No unrelated current/status ACK gate exists.
+to about 64 KB without waiting for fill, bounded by negotiated bytes/counts and local safety caps. One in-flight request per phone limits SQLite contention; independent phones make progress concurrently. No unrelated current/status ACK gate exists.
 Recovery blocks are contiguous pending sequences separated by delivery outcomes,
 not movement segments. Original envelopes and permanently unresolved errors remain
 retained. Android/OEM owns physical Wi-Fi reassociation; code recovers when a network
@@ -346,3 +346,25 @@ Provider I/O never holds the Store mutex. No background download or new storage
 engine. Local HGT import remains available. Map
 import/display/preparation never feeds reconstruction, raw observations, Recording,
 live/SOS state or qualified distance. There is no parallel database or projection.
+
+## Issue #22 synchronization changes
+
+The existing Sender also drains retained data while the Android Activity is visible
+and Tracking is OFF. That path cannot invoke current capture or register GNSS.
+Sync All Now resets transient backoff; Pause stops new history selection and retains
+data. The tracking FGS remains the supported background lifetime when collection is
+intended. Backgrounding a stopped phone does not promise continued transfer.
+
+Room v3 indexes pending session order. Reads are limited to one bounded block;
+matching batch receipts update rows/config transactionally with one installation
+state write. Original envelopes, sessions, timestamps and retained ACKed rows remain
+authoritative. Command validates each strict-decoded batch entry without decoding
+its JSON twice. Identity conflict lookup uses independent existing unique indexes;
+only the affected device's live quality is refreshed during ingest. Projection and
+dashboard cursors append received groups and sort once instead of inserting each
+row into the middle of a retained slice. The accepted-anchor derivation, quality
+switches, recording windows, durable commit/ACK and SOS human acknowledgement are
+unchanged.
+
+Guidance synchronized from documentation-only branch `chore/codex-repo-instructions`
+at `ca7b091e9032ac54e3ddd8d89a6b9ec414fb9f91`; only `AGENTS.md` was transferred.

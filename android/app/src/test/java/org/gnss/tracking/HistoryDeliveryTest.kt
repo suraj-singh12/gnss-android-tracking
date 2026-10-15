@@ -366,4 +366,48 @@ class HistoryDeliveryTest {
             db.close()
         }
     }
+
+    @Test
+    fun negotiatedLimitsAndTrackingOffNeverCaptureOrRestartCollection() = runBlocking {
+        val db = Room.inMemoryDatabaseBuilder(context, TrackingDatabase::class.java).build()
+        try {
+            val r = Repository(db, clock)
+            r.settings("Alpha", "Field", "http://192.168.1.2", 30)
+            val session = r.beginTracking()
+            val saved = (1..180).map { r.saveObservation(value(it, session)) }
+            r.endTracking()
+            clock.now = 1000000
+            var requests = 0
+            val transport =
+                object : Transport {
+                    override suspend fun post(endpoint: String, immutableJson: String): Response =
+                        error("Expected history")
+
+                    override suspend fun capabilities(endpoint: String) =
+                        Response(
+                            200,
+                            """{"historical_batch_versions":[1],"maximum_batch_bytes":4096,"maximum_batch_records":2}""",
+                        )
+
+                    override suspend fun history(endpoint: String, json: String): Response {
+                        assertTrue(json.toByteArray(Charsets.UTF_8).size <= 4096)
+                        assertTrue(Protocol.parse(json).getAsJsonArray("messages").size() <= 2)
+                        requests++
+                        return batchACK(json)
+                    }
+                }
+            val sender = Sender(r, transport, clock) { error("Tracking OFF must not capture") }
+            sender.step(retainedOnly = true, pauseHistory = true)
+            assertEquals(0, requests)
+            repeat(190) { sender.step(retainedOnly = true) }
+            assertFalse(r.state().tracking)
+            assertEquals(saved.map { it.json }, db.dao().all().map { it.json })
+            assertTrue(db.dao().all().all { it.deliveredAt != null })
+            val completed = requests
+            repeat(5) { sender.step(retainedOnly = true) }
+            assertEquals(completed, requests)
+        } finally {
+            db.close()
+        }
+    }
 }

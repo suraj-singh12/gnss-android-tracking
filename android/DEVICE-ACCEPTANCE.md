@@ -520,3 +520,22 @@ Consistent clock skew into the past cannot be established by the wire protocol;
 report uncertain boundary attribution instead of substituting receipt time. This
 checklist validates reconstruction and diagnosis, not Issue #22 bulk-transfer speed
 or Issue #23 native Windows performance.
+
+## Issue #22 Tracking OFF and fleet acceptance — hardware pending
+
+Retain real observations, Stop Tracking and record provider/committed counts. With
+the app visible choose Sync All Now; verify queued/ACKed/unresolved facts against
+Command raw IDs and confirm **zero new GNSS fixes** and Tracking still OFF. Pause
+mid-transfer, retain the same IDs, resume and interrupt Wi-Fi three times. Kill/reopen
+the app and restart Command using the same databases; only rows lacking durable
+receipts should retry. Repeat with the screen locked/off and UI backgrounded,
+recording actual OS suspension rather than assuming foreground-only work continued.
+Reboot/force-stop require reopening; do not start GNSS merely to deliver old rows.
+
+Run 1/5/20 physical phones and join a 21st with retained history. Keep a disconnected
+phone explicitly unknown. During recovery trigger SOS, send real live fixes on
+tracking phones, change recording modes and quality policy. Compare exact retained
+IDs, route sections and unrounded distance with chronological reconstruction.
+Record request/byte density, Wi-Fi capacity, storage throughput and native OS/CPU;
+no universal 30-second guarantee is implied. Dense seven-day twenty-phone acceptance
+requires sufficient disk/RAM and cannot be inferred from sparse software fixtures.

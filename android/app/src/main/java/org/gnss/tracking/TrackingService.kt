@@ -400,7 +400,7 @@ class TrackingService : Service() {
     private suspend fun sendingLoop() {
         while (currentCoroutineContext().isActive) {
             try {
-                sender.step()
+                sender.step(pauseHistory = app.operational.value.historyPaused)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

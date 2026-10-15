@@ -1,18 +1,16 @@
 package org.gnss.tracking
 
-import com.google.gson.JsonArray
-import com.google.gson.JsonObject
-
 // Roles never mutate an observation's durable envelope. Batch identity is the
 // ordered set of original message identities, checked completely before Room ACK.
 object HistoryProtocol {
     fun batch(rows: List<Outbound>): String =
-        JsonObject()
-            .apply {
-                addProperty("batch_version", 1)
-                add("messages", JsonArray().apply { rows.forEach { add(Protocol.parse(it.json)) } })
-            }
-            .toString()
+        rows.joinToString(
+            separator = ",",
+            prefix = "{\"batch_version\":1,\"messages\":[",
+            postfix = "]}",
+        ) {
+            it.json
+        }
 
     fun receipts(json: String, rows: List<Outbound>): List<Receipt> {
         val body = Protocol.parse(json)
@@ -26,7 +24,7 @@ object HistoryProtocol {
 }
 
 class BatchAdaptation {
-    private val ladder = intArrayOf(0, 500, 1000, 2000, 4000, 8000, 16000, 20000)
+    private val ladder = intArrayOf(0, 500, 1000, 2000, 4000, 8000, 16000, 20000, 32000, 64000)
     var level = 0
         private set
 

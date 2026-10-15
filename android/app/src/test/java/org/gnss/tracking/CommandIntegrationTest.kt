@@ -1577,14 +1577,21 @@ class CommandIntegrationTest {
             device(interrupted)["history"].asJsonObject["condition"].asString,
         )
     }
-    @Test
-    fun completeOneDayOfflineRetainedSessionsAcrossFivePhones() = runBlocking { offlineRetainedHistory(1) }
 
     @Test
-    fun completeTwoDayOfflineRetainedSessionsAcrossFivePhones() = runBlocking { offlineRetainedHistory(2) }
+    fun completeOneDayOfflineRetainedSessionsAcrossFivePhones() = runBlocking {
+        offlineRetainedHistory(1)
+    }
 
     @Test
-    fun completeSevenDayOfflineRetainedSessionsAcrossFivePhones() = runBlocking { offlineRetainedHistory(7) }
+    fun completeTwoDayOfflineRetainedSessionsAcrossFivePhones() = runBlocking {
+        offlineRetainedHistory(2)
+    }
+
+    @Test
+    fun completeSevenDayOfflineRetainedSessionsAcrossFivePhones() = runBlocking {
+        offlineRetainedHistory(7)
+    }
 
     private suspend fun offlineRetainedHistory(days: Int) {
         val devices = (0..4).map { phone() }
@@ -1597,14 +1604,18 @@ class CommandIntegrationTest {
                 val session = p.repository.beginTracking(resumeExisting = false)
                 for (n in 0 until 12 + index * 3) {
                     clock.now += 1000
-                    val row = p.repository.saveObservation(
-                        CapturedObservation(
-                            Protocol.newId(), clock.now,
-                            fix(clock.now, n * 5.0, index * 100.0, if (n == 5) 100.0 else 1.0),
-                            Health(gnss_status = "fix"), null, clock.now * 1000000,
-                            kotlinx.coroutines.CompletableDeferred(session),
+                    val row =
+                        p.repository.saveObservation(
+                            CapturedObservation(
+                                Protocol.newId(),
+                                clock.now,
+                                fix(clock.now, n * 5.0, index * 100.0, if (n == 5) 100.0 else 1.0),
+                                Health(gnss_status = "fix"),
+                                null,
+                                clock.now * 1000000,
+                                kotlinx.coroutines.CompletableDeferred(session),
+                            )
                         )
-                    )
                     saved.getOrPut(p) { mutableListOf() }.add(row)
                 }
                 p.repository.endTracking()
@@ -1617,7 +1628,11 @@ class CommandIntegrationTest {
         control("recording", """{"action":"start","mode":"from_beginning"}""")
         assertEquals(0, state()["devices"].asJsonObject.size())
         // One late device initially reports no fix; queue inventory is not geometry.
-        devices.last().deliver(devices.last().repository.snapshot(clock.now, null, Health(gnss_status = "no_fix")))
+        devices
+            .last()
+            .deliver(
+                devices.last().repository.snapshot(clock.now, null, Health(gnss_status = "no_fix"))
+            )
         bridge.rpc("fail_projection")
         // Deliberately ACK newest observations before oldest blocks (same bytes/IDs).
         for (p in devices) p.deliver(saved.getValue(p).last())
@@ -1632,43 +1647,194 @@ class CommandIntegrationTest {
         control("quality", policy.toString())
         val began = System.nanoTime()
         for (p in devices) {
-            val adapter = object : Transport {
-                override suspend fun post(endpoint: String, immutableJson: String) = p.transport.post(endpoint, immutableJson)
-                override suspend fun capabilities(endpoint: String) = request(endpoint + "/api/v1/capabilities")
-                override suspend fun history(endpoint: String, json: String): Response {
-                    for (m in Protocol.parse(json).getAsJsonArray("messages")) {
-                        val parsed = Protocol.decodeMessage(m.toString())
-                        assertEquals(parsed, Protocol.decodeMessage(p.db.dao().row(parsed.sequence)!!.json))
+            val adapter =
+                object : Transport {
+                    override suspend fun post(endpoint: String, immutableJson: String) =
+                        p.transport.post(endpoint, immutableJson)
+
+                    override suspend fun capabilities(endpoint: String) =
+                        request(endpoint + "/api/v1/capabilities")
+
+                    override suspend fun history(endpoint: String, json: String): Response {
+                        for (m in Protocol.parse(json).getAsJsonArray("messages")) {
+                            val parsed = Protocol.decodeMessage(m.toString())
+                            assertEquals(
+                                parsed,
+                                Protocol.decodeMessage(p.db.dao().row(parsed.sequence)!!.json),
+                            )
+                        }
+                        return request(endpoint + "/api/v1/history", json)
                     }
-                    return request(endpoint + "/api/v1/history", json)
                 }
-            }
-            val sender = Sender(p.repository, adapter, clock, capture = { error("History needs no synthetic fix") })
+            val sender =
+                Sender(
+                    p.repository,
+                    adapter,
+                    clock,
+                    capture = { error("History needs no synthetic fix") },
+                )
             sender.connectivityRestored()
             repeat(saved.getValue(p).size + 5) { sender.step() }
             assertTrue(p.db.dao().all().all { it.deliveredAt != null })
-            for (row in saved.getValue(p)) assertEquals(row.json, p.db.dao().row(row.sequence)!!.json)
+            for (row in saved.getValue(p)) assertEquals(
+                row.json,
+                p.db.dao().row(row.sequence)!!.json,
+            )
             p.deliver(saved.getValue(p).first()) // Exact immutable duplicate; no extra edge.
         }
         val actual = state()
         val reference = bridge.rpc("reference")
-        fun logical(point: JsonObject) = point.deepCopy().apply { remove("x_m"); remove("y_m"); remove("dot") }
-        assertEquals(reference["points"].asJsonArray.map { logical(it.asJsonObject) }, actual["points"].asJsonArray.map { logical(it.asJsonObject) })
+        fun logical(point: JsonObject) =
+            point.deepCopy().apply {
+                remove("x_m")
+                remove("y_m")
+                remove("dot")
+            }
+        assertEquals(
+            reference["points"].asJsonArray.map { logical(it.asJsonObject) },
+            actual["points"].asJsonArray.map { logical(it.asJsonObject) },
+        )
         assertEquals(reference["decisions"], actual["decisions"])
         for (p in devices) {
-            val reconstruction = actual["devices"].asJsonObject[p.id].asJsonObject["reconstruction"].asJsonObject
+            val reconstruction =
+                actual["devices"].asJsonObject[p.id].asJsonObject["reconstruction"].asJsonObject
             assertEquals(saved.getValue(p).size, reconstruction["eligible"].asInt)
             assertEquals(saved.getValue(p).size, reconstruction["projected"].asInt)
-            assertEquals(2, actual["devices"].asJsonObject[p.id].asJsonObject["history_sessions"].asJsonObject.size())
+            assertEquals(
+                2,
+                actual["devices"]
+                    .asJsonObject[p.id]
+                    .asJsonObject["history_sessions"]
+                    .asJsonObject
+                    .size(),
+            )
             assertTrue(reconstruction["qualified_segments"].asInt >= 2)
             assertEquals("completed", reconstruction["projection"].asString)
         }
-        assertEquals(saved.values.flatten().map { it.messageId }.toSet(), raw().filter { it.asJsonObject["message"].asJsonObject["type"].asString == "location" }.map { it.asJsonObject["message"].asJsonObject["message_id"].asString }.toSet())
-        println("OFFLINE_HISTORY days=$days observations=${saved.values.sumOf { it.size }} devices=5 sessions=10 receipt_and_reconstruction_ms=${(System.nanoTime() - began) / 1000000}")
+        assertEquals(
+            saved.values.flatten().map { it.messageId }.toSet(),
+            raw()
+                .filter { it.asJsonObject["message"].asJsonObject["type"].asString == "location" }
+                .map { it.asJsonObject["message"].asJsonObject["message_id"].asString }
+                .toSet(),
+        )
+        println(
+            "OFFLINE_HISTORY days=$days observations=${saved.values.sumOf { it.size }} devices=5 sessions=10 receipt_and_reconstruction_ms=${(System.nanoTime() - began) / 1000000}"
+        )
         bridge.restart()
         val restarted = state()
         assertEquals(actual["points"], restarted["points"])
         assertEquals(actual["decisions"], restarted["decisions"])
     }
 
+    @Test
+    fun trackingOffTwentyPhonesAndLateJoinResumeOriginalRowsAfterLostResponses() = runBlocking {
+        control("recording", """{"action":"start","mode":"from_beginning"}""")
+        val fleet = (1..21).map { phone() }
+        val saved =
+            fleet.associateWith { p ->
+                val session = p.repository.beginTracking()
+                val rows =
+                    (1..96).map { n ->
+                        p.repository.saveObservation(
+                            CapturedObservation(
+                                Protocol.newId(),
+                                base + n * 1000L,
+                                fix(base + n * 1000L, n * 5.0),
+                                Health(gnss_status = "fix"),
+                                null,
+                                n * 1000000000L,
+                                kotlinx.coroutines.CompletableDeferred(session),
+                            )
+                        )
+                    }
+                p.repository.endTracking()
+                p.reopen()
+                rows
+            }
+        at(7 * 86400L)
+        val allStarted = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val lateJoined = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val started = java.util.concurrent.atomic.AtomicInteger()
+        val attempts = java.util.concurrent.atomic.AtomicInteger()
+        fun sender(p: Phone, firstWave: Boolean): Sender {
+            var first = true
+            val adapter =
+                object : Transport {
+                    override suspend fun capabilities(endpoint: String) =
+                        request(endpoint + "/api/v1/capabilities")
+
+                    override suspend fun post(endpoint: String, immutableJson: String) =
+                        p.transport.post(endpoint, immutableJson)
+
+                    override suspend fun history(endpoint: String, json: String): Response {
+                        val response = request(endpoint + "/api/v1/history", json)
+                        attempts.incrementAndGet()
+                        if (first && firstWave) {
+                            first = false
+                            if (started.incrementAndGet() == 20) allStarted.complete(Unit)
+                            kotlinx.coroutines.withTimeout(120000) { lateJoined.await() }
+                            // Response lost after production SQLite commit. No phone receipt can be
+                            // saved.
+                            throw java.io.IOException("Injected lost response after durable commit")
+                        }
+                        return response
+                    }
+                }
+            return Sender(p.repository, adapter, clock) {
+                error("Tracking OFF collected a new snapshot")
+            }
+        }
+        val first =
+            fleet.take(20).map { p ->
+                async(kotlinx.coroutines.Dispatchers.IO) {
+                    sender(p, true).step(retainedOnly = true)
+                }
+            }
+        kotlinx.coroutines.withTimeout(120000) { allStarted.await() }
+        sender(fleet.last(), false).step(retainedOnly = true)
+        lateJoined.complete(Unit)
+        first.forEach { it.await() }
+        bridge.restart()
+        for (p in fleet) {
+            p.reopen()
+            p.repository.settings("Field", "Saved history", bridge.phone, 30)
+        }
+        fleet
+            .map { p ->
+                async(kotlinx.coroutines.Dispatchers.IO) {
+                    val sender = sender(p, false)
+                    sender.connectivityRestored()
+                    repeat(110) { sender.step(retainedOnly = true) }
+                    assertFalse(p.repository.state().tracking)
+                    assertEquals(0, p.captures)
+                    assertEquals(
+                        saved.getValue(p).map { it.json },
+                        p.db.dao().all().map { it.json },
+                    )
+                    assertTrue(p.db.dao().all().all { it.deliveredAt != null })
+                }
+            }
+            .forEach { it.await() }
+        val actual = state()
+        val reference = bridge.rpc("reference")
+        fun logical(point: JsonObject) =
+            point.deepCopy().apply {
+                remove("x_m")
+                remove("y_m")
+                remove("dot")
+            }
+        assertEquals(
+            reference["points"].asJsonArray.map { logical(it.asJsonObject) },
+            actual["points"].asJsonArray.map { logical(it.asJsonObject) },
+        )
+        assertEquals(reference["decisions"], actual["decisions"])
+        assertEquals(
+            saved.values.flatten().map { it.messageId }.toSet(),
+            raw().map { it.asJsonObject["message"].asJsonObject["message_id"].asString }.toSet(),
+        )
+        println(
+            "SYNC_OFF devices=20+1 observations=${saved.values.sumOf { it.size }} requests=${attempts.get()} new_fixes=0"
+        )
+    }
 }

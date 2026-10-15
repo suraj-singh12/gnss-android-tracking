@@ -19,6 +19,7 @@ data class Operational(
     val warning: String? = null,
     val starting: Boolean = false,
     val stopping: Boolean = false,
+    val historyPaused: Boolean = false,
 )
 
 class TrackingApp : Application() {
@@ -140,9 +141,7 @@ class TrackingApp : Application() {
     }
     // Process-local opt-in. It defaults off on cold start and writes only to Diagnostics.
     val physicalButtonTest by lazy {
-        PhysicalButtonTestController(
-            record = recorder::physicalButton,
-        )
+        PhysicalButtonTestController(record = recorder::physicalButton)
     }
     val diagnostics = MutableStateFlow<GnssDiagnostic?>(null)
     val latest = LatestLocation(SystemClock)
@@ -216,6 +215,25 @@ class TrackingApp : Application() {
         }
     }
 
+    fun syncAllNow() {
+        operational.update { it.copy(historyPaused = false) }
+        workScope.launch {
+            try {
+                sender.connectivityRestored()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                operational.update {
+                    it.copy(error = "Cannot resume saved delivery — check storage")
+                }
+            }
+        }
+    }
+
+    fun pauseHistory() {
+        operational.update { it.copy(historyPaused = true) }
+    }
+
     override fun onCreate() {
         super.onCreate()
         workScope.launch {
@@ -238,14 +256,21 @@ class TrackingApp : Application() {
                     try {
                         val snapshot = health.snapshot()
                         operational.update { it.copy(health = snapshot) }
-                        sender.step(sosOnly = true)
+                        sender.step(
+                            retainedOnly = true,
+                            pauseHistory = operational.value.historyPaused,
+                        )
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
                         sosNotice.value = "Saved delivery unavailable — check storage and receiver"
                     }
                 }
-                delay(250)
+                delay(
+                    if (activityVisible && !operational.value.tracking && sender.attemptedLastStep)
+                        1
+                    else 250
+                )
             }
         }
     }

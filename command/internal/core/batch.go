@@ -49,7 +49,7 @@ func (s *Store) IngestBatch(b []byte) (out BatchAck, resultError error) {
 	device, session := "", ""
 	for i, x := range a {
 		wire, _ := json.Marshal(x)
-		m, err := Parse(wire)
+		m, err := parseObject(object(x))
 		if err != nil {
 			return out, &BatchError{i, str(object(object(x)["observation"])["observation_id"]), "invalid_observation", err.Error()}
 		}
@@ -104,7 +104,7 @@ func (s *Store) historyHandler(w http.ResponseWriter, r *http.Request) {
 			failure(w, 405, "method_not_allowed", fmt.Errorf("use GET"))
 			return
 		}
-		respond(w, 200, map[string]any{"protocol_version": 1, "historical_batch_versions": []int{1}, "maximum_batch_bytes": 65536, "observation_identity_version": 1})
+		respond(w, 200, map[string]any{"protocol_version": 1, "historical_batch_versions": []int{1}, "maximum_batch_bytes": 65536, "maximum_batch_records": 128, "maximum_inflight_history_per_device": 1, "observation_identity_version": 1})
 		return
 	}
 	if r.Method != "POST" {

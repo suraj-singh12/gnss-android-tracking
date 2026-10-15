@@ -110,7 +110,13 @@ func Parse(b []byte) (Message, error) {
 	if err != nil {
 		return m, err
 	}
-	if err = checkRequest(v); err != nil {
+	return parseObject(v)
+}
+
+// The batch root has already passed strict duplicate-key/UTF-8 decoding.
+func parseObject(v map[string]any) (Message, error) {
+	var m Message
+	if err := checkRequest(v); err != nil {
 		return m, err
 	}
 	known := selectFields(v, "protocol_version", "type", "device_id", "party", "message_id", "sequence", "captured_at", "config_state", "health", "fix")
@@ -128,7 +134,7 @@ func Parse(b []byte) (Message, error) {
 			known[key] = v[key]
 		}
 	}
-	if err = validateObservation(v); err != nil {
+	if err := validateObservation(v); err != nil {
 		return m, err
 	}
 	canonical, err := json.Marshal(known)

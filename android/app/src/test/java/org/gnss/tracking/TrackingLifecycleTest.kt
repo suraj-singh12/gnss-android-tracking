@@ -335,4 +335,51 @@ class TrackingLifecycleTest {
         assertEquals(2L, app.repository.dao.session(session.id)!!.knownCollectionLoss)
         assertEquals(0L, app.repository.state().knownCollectionLoss)
     }
+
+    @Test
+    fun localSyncControlsWhileStoppedNeverStartLocationOrAService() = runBlocking {
+        app.repository.state()
+        val session = app.repository.beginTracking()
+        val at = System.currentTimeMillis() - 86400000L
+        val row =
+            app.repository.saveObservation(
+                CapturedObservation(
+                    Protocol.newId(),
+                    at,
+                    Fix(utc(at), 0, 28.0, 77.0, 1.0, null, null, null, null),
+                    Health(gnss_status = "fix"),
+                    null,
+                    1000000000L,
+                    CompletableDeferred(session),
+                )
+            )
+        app.repository.endTracking()
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup()
+        fun descendants(view: android.view.View): List<android.view.View> =
+            listOf(view) +
+                if (view is android.view.ViewGroup)
+                    (0 until view.childCount).flatMap { descendants(view.getChildAt(it)) }
+                else emptyList()
+        try {
+            val buttons =
+                descendants(activity.get().findViewById(android.R.id.content))
+                    .filterIsInstance<android.widget.Button>()
+            buttons.single { it.text == "Pause history sync" }.performClick()
+            assertTrue(app.operational.value.historyPaused)
+            buttons.single { it.text == "Sync All Now" }.performClick()
+            assertFalse(app.operational.value.historyPaused)
+            repeat(20) {
+                shadowOf(Looper.getMainLooper()).idle()
+                delay(10)
+            }
+            assertFalse(app.repository.state().tracking)
+            assertFalse(app.operational.value.tracking)
+            assertTrue(shadowOf(manager).getLocationUpdateListeners().isEmpty())
+            assertNull(shadowOf(app).nextStartedService)
+            assertEquals(listOf(row.json), app.repository.dao.all().map { it.json })
+        } finally {
+            activity.pause().stop().destroy()
+            app.finishForTests()
+        }
+    }
 }

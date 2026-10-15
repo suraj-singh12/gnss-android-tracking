@@ -244,11 +244,11 @@ func (s *Store) projectionCandidates(tx *sql.Tx, device string) ([]Candidate, er
 			return nil, e
 		}
 		v := Candidate{m, r}
-		at := sort.Search(len(c.Candidates), func(i int) bool { return !less(c.Candidates[i].Message, m, true) })
-		c.Candidates = append(c.Candidates, Candidate{})
-		copy(c.Candidates[at+1:], c.Candidates[at:])
-		c.Candidates[at] = v
+		c.Candidates = append(c.Candidates, v)
 		c.Row = n
+	}
+	if !sort.SliceIsSorted(c.Candidates, func(i, j int) bool { return less(c.Candidates[i].Message, c.Candidates[j].Message, true) }) {
+		sort.Slice(c.Candidates, func(i, j int) bool { return less(c.Candidates[i].Message, c.Candidates[j].Message, true) })
 	}
 	return c.Candidates, rows.Err()
 }
@@ -887,12 +887,16 @@ func (s *Store) viewCandidates(tx *sql.Tx, p Policy) ([]Candidate, error) {
 		}
 		if m.Type == "location" {
 			v := Candidate{m, received}
-			at := sort.Search(len(s.viewRaw.Candidates), func(i int) bool { return !less(s.viewRaw.Candidates[i].Message, m, true) })
-			s.viewRaw.Candidates = append(s.viewRaw.Candidates, Candidate{})
-			copy(s.viewRaw.Candidates[at+1:], s.viewRaw.Candidates[at:])
-			s.viewRaw.Candidates[at] = v
+			s.viewRaw.Candidates = append(s.viewRaw.Candidates, v)
 		}
 		s.viewRaw.Row = row
+	}
+	if !sort.SliceIsSorted(s.viewRaw.Candidates, func(i, j int) bool {
+		return less(s.viewRaw.Candidates[i].Message, s.viewRaw.Candidates[j].Message, true)
+	}) {
+		sort.Slice(s.viewRaw.Candidates, func(i, j int) bool {
+			return less(s.viewRaw.Candidates[i].Message, s.viewRaw.Candidates[j].Message, true)
+		})
 	}
 	return s.viewRaw.Candidates, rows.Err()
 }

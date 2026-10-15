@@ -164,6 +164,14 @@ class LanTransport(private val network: () -> Network?) : Transport {
     }
 }
 
+data class SyncTransferProgress(
+    val attemptedBytes: Long = 0,
+    val ackedBytes: Long = 0,
+    val ackedRecords: Long = 0,
+    val lastBatchRecords: Int = 0,
+    val lastError: String? = null,
+)
+
 data class Retry(val delayMillis: Long, val quarantine: Boolean)
 
 fun classify(code: Int?, failures: Int, retryAfter: String? = null): Retry {
@@ -192,6 +200,10 @@ class Sender(
         runCatching { evidence(kind, value) }
     }
 
+    @Volatile
+    var syncProgress = SyncTransferProgress()
+        private set
+
     private val mutex = Mutex()
     private var recovering = true
     private var failures = 0
@@ -201,6 +213,8 @@ class Sender(
     private var historyNext = false
     private val adaptation = BatchAdaptation()
     private var batchSupported: Boolean? = null
+    private var maximumBatchBytes = 65536
+    private var maximumBatchRecords = 128
     @Volatile
     var compatibilityWarning: String? = null
         private set
@@ -254,13 +268,17 @@ class Sender(
             if (!endpointBlocked) waitUntil = 0
         }
 
-    suspend fun step(sosOnly: Boolean = false) =
+    suspend fun step(
+        sosOnly: Boolean = false,
+        retainedOnly: Boolean = false,
+        pauseHistory: Boolean = false,
+    ) =
         mutex.withLock {
             attemptedLastStep = false
-            stepNative(sosOnly)
+            stepNative(sosOnly, retainedOnly, pauseHistory)
         }
 
-    private suspend fun stepNative(sosOnly: Boolean) {
+    private suspend fun stepNative(sosOnly: Boolean, retainedOnly: Boolean, pauseHistory: Boolean) {
         val state = store.state()
         if (generation != state.endpointGeneration) {
             generation = state.endpointGeneration
@@ -287,7 +305,7 @@ class Sender(
         if (priority == null && (!transport.wifiAvailable() || clock.elapsedMillis() < waitUntil))
             return
         val now = clock.wallMillis()
-        if (priority == null && recovering && !store.hasNativeObservations()) {
+        if (!retainedOnly && priority == null && recovering && !store.hasNativeObservations()) {
             val current = store.newest()
             if (
                 current == null ||
@@ -298,7 +316,8 @@ class Sender(
         }
         val live =
             if (
-                priority == null &&
+                !retainedOnly &&
+                    priority == null &&
                     !historyNext &&
                     (recovering || clock.elapsedMillis() >= nextLiveElapsed)
             )
@@ -316,7 +335,12 @@ class Sender(
             lastLiveAttemptElapsed = clock.elapsedMillis()
             nextLiveElapsed = clock.elapsedMillis() + interval * 1000L
         } else {
-            val history = store.historical(now, adaptation.target).take(isolationLimit)
+            val history =
+                if (pauseHistory) emptyList()
+                else
+                    store
+                        .historical(now, minOf(adaptation.target, maximumBatchBytes))
+                        .take(minOf(isolationLimit, maximumBatchRecords))
             // Independently bounded status cadence gets an opportunity after history.
             val routine = store.routine(now)
             if (
@@ -329,7 +353,8 @@ class Sender(
                 role = "status"
             } else {
                 rows =
-                    if (history.isNotEmpty()) history else listOfNotNull(store.routineBacklog(now))
+                    if (history.isNotEmpty()) history
+                    else if (pauseHistory) emptyList() else listOfNotNull(store.routineBacklog(now))
                 if (history.isEmpty()) role = "status_backlog"
                 historyNext = false
             }
@@ -343,9 +368,33 @@ class Sender(
                     capability?.let {
                         it.code == 200 &&
                             it.json &&
-                            Protocol.parse(it.body)
-                                .getAsJsonArray("historical_batch_versions")
-                                ?.any { v -> v.asInt == 1 } == true
+                            Protocol.parse(it.body).let { capability ->
+                                maximumBatchBytes =
+                                    capability.get("maximum_batch_bytes")?.let {
+                                        Protocol.whole(
+                                                capability,
+                                                "maximum_batch_bytes",
+                                                1,
+                                                9007199254740991L,
+                                            )
+                                            .coerceAtMost(65536)
+                                            .toInt()
+                                    } ?: 65536
+                                maximumBatchRecords =
+                                    capability.get("maximum_batch_records")?.let {
+                                        Protocol.whole(
+                                                capability,
+                                                "maximum_batch_records",
+                                                1,
+                                                9007199254740991L,
+                                            )
+                                            .coerceAtMost(128)
+                                            .toInt()
+                                    } ?: 128
+                                capability.getAsJsonArray("historical_batch_versions")?.any { v ->
+                                    v.asInt == 1
+                                } == true
+                            }
                     } ?: false
                 compatibilityWarning =
                     if (batchSupported == true) null
@@ -363,7 +412,16 @@ class Sender(
         }
         // Capability discovery is itself a bounded request; newly raised SOS gets the next one.
         if (role != "sos" && store.sos(clock.wallMillis()) != null) return
-        val selected = if (batchEligible && batchSupported == true) rows else rows.take(1)
+        val selected =
+            if (batchEligible && batchSupported == true) {
+                val bounded = rows.take(maximumBatchRecords).toMutableList()
+                while (
+                    bounded.size > 1 &&
+                        HistoryProtocol.batch(bounded).toByteArray(Charsets.UTF_8).size >
+                            maximumBatchBytes
+                ) bounded.removeAt(bounded.lastIndex)
+                bounded
+            } else rows.take(1)
         if (role == "sos") {
             val row = selected.single()
             record(
@@ -381,10 +439,21 @@ class Sender(
         diagnostics = diagnostics.copy(lastAttemptElapsed = clock.elapsedMillis())
         var receivedResponse = false
         try {
-            val batch = batchEligible && batchSupported == true
+            val batch =
+                batchEligible &&
+                    batchSupported == true &&
+                    HistoryProtocol.batch(selected).toByteArray(Charsets.UTF_8).size <=
+                        maximumBatchBytes
+            val payload = if (batch) HistoryProtocol.batch(selected) else selected.single().json
+            val payloadBytes = payload.toByteArray(Charsets.UTF_8).size.toLong()
+            syncProgress =
+                syncProgress.copy(
+                    attemptedBytes = syncProgress.attemptedBytes + payloadBytes,
+                    lastBatchRecords = selected.size,
+                )
             val response =
-                if (batch) transport.history(state.endpoint, HistoryProtocol.batch(selected))
-                else transport.postRole(state.endpoint, selected.single().json, role)
+                if (batch) transport.history(state.endpoint, payload)
+                else transport.postRole(state.endpoint, payload, role)
             receivedResponse = true
             commandReachable = true
             diagnostics = diagnostics.copy(lastHttpCode = response.code)
@@ -401,6 +470,12 @@ class Sender(
                             )
                         )
                 store.acceptBatch(selected, receipts, state.endpointGeneration)
+                syncProgress =
+                    syncProgress.copy(
+                        ackedBytes = syncProgress.ackedBytes + payloadBytes,
+                        ackedRecords = syncProgress.ackedRecords + selected.size,
+                        lastError = null,
+                    )
                 selected.forEach { record(DiagnosticEvent.REPORT_ACK_ACCEPTED, it) }
                 if (role == "sos")
                     record(
@@ -498,6 +573,7 @@ class Sender(
         state: Installation,
         role: String,
     ) {
+        syncProgress = syncProgress.copy(lastError = error)
         val count =
             if (role == "sos") rows.first().attempts + 1 else (failures + 1).coerceAtMost(32)
         val retry = classify(code, count, after)
