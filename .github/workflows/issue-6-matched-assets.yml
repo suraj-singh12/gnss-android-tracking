@@ -3,7 +3,6 @@ on:
   push:
     branches:
       [
-        feature/issue-22-devX-sync-reliability,
         issue-6-integrated-ui,
         integration/issue6-physical-button,
         correction/issue6-operational-ux,
@@ -17,7 +16,7 @@ on:
     types: [opened, synchronize, reopened]
   workflow_dispatch:
 concurrency:
-  group: issue6-validation-${{ github.ref }}
+  group: gnss-integrated-v2-${{ github.ref }}
   cancel-in-progress: true
 permissions:
   contents: read
