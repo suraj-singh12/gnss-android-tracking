@@ -235,8 +235,18 @@ are retained in terrain metadata/export and shown in Layers. Retain these notice
 when redistributing. No EGM2008 conversion, mandatory credentials or paid dependency.
 
 Select a location/coordinate **centre**, default 500×500 m, choose optional terrain,
-Preview, then Download for Offline Use. Vectors commit first, independently of DEM
-success. A terrain failure warns and retains vectors and any previous terrain.
+Preview, then Download for Offline Use. Vector preview queries a public
+OpenStreetMap Overpass service online and transmits the selected geographic
+bounding box. If the primary public instance times out or is overloaded,
+Command reports the error and names a second independent public provider.
+The operator can explicitly retry **Preview** (after the 10-second provider
+cooldown) to request the same bounds from that alternative. No automatic
+unbounded retries, no fabricated map features, and no network requirement
+after the selected map has been saved for offline use. Neither external
+provider's uptime is under Command control.
+
+Vectors commit first, independently of DEM success. A terrain failure
+warns and retains vectors and any previous terrain.
 Select that saved map, open **Acquire or import terrain for this saved map**, select
 components and press **Download / retry selected terrain**; no duplicate vector map
 is created. No manual HGT is needed. Unchecked terrain makes no DEM request.
