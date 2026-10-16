@@ -370,8 +370,10 @@ examples; original queued envelopes are never rewritten. Upgrades backfill this
 validated extension from retained wire before duplicate comparison.
 
 
-An HTTP request whose body was interrupted or timed out is retryable HTTP 408,
-not evidence that its original GNSS/SOS envelope is malformed. Android retains it
-with bounded jittered retry. Only a proven size-limit error returns 413; only a
+An HTTP request whose body was interrupted or timed out returns retryable HTTP 503
+with request_interrupted, preserving retry behaviour in older v1 senders. An
+intermediary HTTP 408 is also retryable in the upgraded Android Sender. Neither is
+evidence that the original GNSS/SOS envelope is malformed. Android retains it with
+bounded jittered retry. Only a proven size-limit error returns 413; only a
 fully received but invalid envelope is a permanent validation failure. A response
 lost after durable storage still retries the same immutable identity.

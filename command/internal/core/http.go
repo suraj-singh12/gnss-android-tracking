@@ -278,6 +278,7 @@ func interruptedBody(w http.ResponseWriter, err error) {
 	if errors.As(err, &size) {
 		failure(w, 413, "message_too_large", err)
 	} else {
-		failure(w, 408, "request_interrupted", err)
+		// Legacy v1 senders already retry 5xx; do not require a phone upgrade.
+		failure(w, 503, "request_interrupted", err)
 	}
 }

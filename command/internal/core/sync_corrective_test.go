@@ -800,7 +800,7 @@ func TestInterruptedHTTPBodiesRemainRetryableWithOriginalIdentities(t *testing.T
 				}
 				failedBody, _ := io.ReadAll(response.Body)
 				response.Body.Close()
-				if response.StatusCode != 408 {
+				if response.StatusCode != 503 {
 					t.Fatal("interrupted original classified permanent/size", response.StatusCode, string(failedBody))
 				}
 				var count int

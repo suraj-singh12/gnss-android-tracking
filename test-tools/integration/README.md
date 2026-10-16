@@ -628,7 +628,7 @@ correction, not a new schema or a raw-history rewrite.
 
 
 Receiver fault regressions send real truncated and timed-out TCP bodies for SOS and
-history, require HTTP 408 with zero partial raw writes, then retry the same complete
+history, require legacy-compatible HTTP 503 with zero partial raw writes, then retry the same complete
 identities successfully. A real Room bridge test also injects an intermediary 408
 after Command durably saves SOS, proves no quarantine/false ACK, and verifies the
 original retry is deduplicated. Transport interruption is distinct from malformed
