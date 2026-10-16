@@ -64,7 +64,8 @@ function percentiles(a){if(!a.length)return null;const v=[...a].sort((a,b)=>a-b)
    if(phones>=20&&!lateStarted&&active>=10){lateStarted=true;report.late_join_active_http=active;report.late_join_acknowledged_history=completed;late=drain(phones+1);late.catch(()=>{});}
   }
  }
- const began=performance.now(),drains=Array.from({length:phones},(_,i)=>drain(i+1)),drainCompletion=Promise.all(drains);drainCompletion.catch(()=>{});
+ const began=performance.now(),drains=Array.from({length:phones},(_,i)=>drain(i+1));
+ const drainCompletion=Promise.all(drains).then(async()=>{if(late)await late;return performance.now()});drainCompletion.catch(()=>{});
  await wait(()=>active>=Math.min(phones,5));
  // New distinct events arrive while history HTTP requests are outstanding.
  for(let event=0;event<8;event++){
@@ -75,9 +76,10 @@ function percentiles(a){if(!a.length)return null;const v=[...a].sort((a,b)=>a-b)
   visible.push(performance.now()-receipt);
   await new Promise(r=>setTimeout(r,100));
  }
- await drainCompletion;if(late)await late;
- report.transfer_including_durable_receipt_ms=performance.now()-began;report.devices_including_late=expected.size;
+ const historyFinishedAt=await drainCompletion;
+ report.transfer_including_durable_receipt_ms=historyFinishedAt-began;report.devices_including_late=expected.size;
  if(phones>=20)assert(lateStarted&&report.late_join_active_http>=10,"21st must join with actual HTTP requests outstanding");
+ report.reconstruction_measurement="Residual wait after history and fresh-priority/browser probes; reconstruction also overlaps transfer";
  const projection=performance.now();await wait(async()=>{let r=await fetch(local+"/local/live");if(r.status===404)r=await fetch(local+"/local/state");const s=await r.json();if(s.projection_error)throw Error(s.projection_error);return !s.projection_pending},1200000);report.residual_reconstruction_ms=performance.now()-projection;
  const viewStart=performance.now(),response=await fetch(local+"/local/state"),body=await response.text();assert.equal(response.status,200,body);const view=JSON.parse(body);report.backend_http_and_body_ms=performance.now()-viewStart;report.dashboard_bytes=Buffer.byteLength(body);report.dashboard_points=view.points.length;if(process.env.GNSS_SYNC_EXPECT_BOUNDED!=="0")assert(view.points.length<=2048);
  const renderStart=performance.now();
