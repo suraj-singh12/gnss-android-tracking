@@ -51,6 +51,11 @@ func (s *Store) IngestBatch(b []byte) (out BatchAck, resultError error) {
 	device, session := "", ""
 	for i, x := range a {
 		wire, _ := json.Marshal(x)
+		// Negotiation enlarges the batch, not the immutable individual-v1 envelope.
+		// Keep paged reconstruction RAM bounded even for non-Android peers.
+		if len(wire) > 65536 {
+			return out, &BatchError{i, str(object(object(x)["observation"])["observation_id"]), "invalid_observation", "individual envelope exceeds 65536 bytes"}
+		}
 		m, err := parseObject(object(x))
 		if err != nil {
 			return out, &BatchError{i, str(object(object(x)["observation"])["observation_id"]), "invalid_observation", err.Error()}

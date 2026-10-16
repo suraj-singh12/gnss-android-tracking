@@ -290,7 +290,9 @@ requests for one device receive transient 429. Optional negotiated ceilings exte
 to 2 MiB / 4096 records without changing the v1 envelope or batch shape. Missing
 fields use the older 65,536-byte/128-record limits. Senders clamp advertised limits
 to their own safety caps and count encoded UTF-8 bytes, including the batch wrapper.
-Limits do not change immutable envelopes or individual v1/SOS support.
+Limits do not change immutable envelopes or individual v1/SOS support. Each individual
+envelope inside a larger batch still has the 65536-byte v1 ceiling; an oversized
+entry is rejected atomically with its indexed invalid_observation error.
 Older receivers may return 404; Android then delivers original individual v1
 messages and reports the missing session/completeness capability. Original wire
 extensions retained by an older Command are validated/backfilled when upgraded.

@@ -628,3 +628,22 @@ func TestLargeEnvelopeBudgetUsesSameStreamingDerivation(t *testing.T) {
 		t.Fatal("byte pressure changed authoritative geometry")
 	}
 }
+
+func TestLargerNegotiationPreservesIndividualEnvelopeCeiling(t *testing.T) {
+	s, _, _ := open(t)
+	s.historyBatchBytes = 131072
+	var m map[string]any
+	if err := json.Unmarshal(encode(t, observationMessage(t, 1, id())), &m); err != nil {
+		t.Fatal(err)
+	}
+	m["extension_padding"] = strings.Repeat("x", 65536)
+	_, err := s.IngestBatch(encode(t, map[string]any{"batch_version": 1, "messages": []any{m}}))
+	bad, ok := err.(*BatchError)
+	if !ok || bad.Index != 0 || bad.Code != "invalid_observation" {
+		t.Fatal("oversized individual accepted", err)
+	}
+	var count int
+	if err = s.db.QueryRow("SELECT COUNT(*) FROM raw").Scan(&count); err != nil || count != 0 {
+		t.Fatal("partial oversize commit", count, err)
+	}
+}
