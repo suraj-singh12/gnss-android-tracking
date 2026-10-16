@@ -17,7 +17,7 @@ const { randomUUID } = require("node:crypto");
 const work = fs.mkdtempSync(path.join(os.tmpdir(), "gnss-ui-")),
   out = process.env.GNSS_SCREENSHOT_DIR || path.join(work, "screenshots");
 fs.mkdirSync(out, { recursive: true });
-let command, browser;
+let command, browser, diagnosticPage;
 async function port() {
   const s = net.createServer();
   s.listen(0, "127.0.0.1");
@@ -88,6 +88,7 @@ async function wait(check) {
   });
   const page = await context.newPage(),
     errors = [];
+  diagnosticPage = page;
   page.on("pageerror", (e) => {
     errors.push(e.message);
     console.error("Browser:", e.message);
@@ -855,6 +856,9 @@ async function wait(check) {
       (await state()).devices[partyIds[2]].desired_config
         .reporting_interval_override_s === null,
   );
+  // Arrange the sidebar state after viewport changes and reload before using it.
+  if ((await page.locator("#toggle-parties").getAttribute("aria-expanded")) === "false")
+    await page.locator("#toggle-parties").click();
   await page
     .getByRole("checkbox", { name: "Show track for Alpha", exact: true })
     .uncheck();
@@ -1107,9 +1111,14 @@ async function wait(check) {
       out,
   );
 })()
-  .catch((e) => {
+  .catch(async (e) => {
     console.error(e);
     process.exitCode = 1;
+    if (diagnosticPage) try {
+      await diagnosticPage.screenshot({path:path.join(out,"command-failure.png"),fullPage:true});
+      fs.writeFileSync(path.join(out,"command-failure.html"),await diagnosticPage.content());
+      fs.writeFileSync(path.join(out,"command-failure-state.json"),JSON.stringify(await diagnosticPage.evaluate(()=>({main:document.querySelector("main")?.className,focus:document.activeElement?.outerHTML,labels:[...document.querySelectorAll("input[type=checkbox]")].map(e=>({label:e.getAttribute("aria-label"),visible:!!e.getClientRects().length})),devices:typeof state==="undefined"?null:Object.values(state.devices).map(d=>({id:d.device_id,party:d.snapshot.party}))})),null,2));
+    } catch (diagnosticError) { console.error("Diagnostic capture failed",diagnosticError); }
   })
   .finally(async () => {
     if (browser) await browser.close();
@@ -1117,5 +1126,6 @@ async function wait(check) {
       command.kill("SIGINT");
       await once(command, "exit");
     }
-    fs.rmSync(work, { recursive: true, force: true });
+    if (!process.exitCode) fs.rmSync(work, { recursive: true, force: true });
+    else console.error("Failed UI fixture retained:",work);
   });

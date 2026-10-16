@@ -377,3 +377,10 @@ evidence that the original GNSS/SOS envelope is malformed. Android retains it wi
 bounded jittered retry. Only a proven size-limit error returns 413; only a
 fully received but invalid envelope is a permanent validation failure. A response
 lost after durable storage still retries the same immutable identity.
+
+
+Historical batch entry limits apply to each original encoded JSON object, not a
+re-encoded map. Command retains those original entry bytes (including unknown fields
+and numeric/string spelling) after strict JSON/schema/identity validation. An unknown
+case-variant wrapper key cannot replace the exact `messages` array. Valid HTML/Unicode
+characters must not become an oversized/poison record through serializer expansion.

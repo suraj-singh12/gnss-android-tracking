@@ -649,3 +649,21 @@ the existing dataSync foreground lifetime remains for retryable emergency work e
 after history/manual drain ends, then stops after the SOS ACK. The test verifies zero
 location listeners and immutable Room data; its simulated ACK boundary is not claimed
 as physical networking. Real Room/HTTP receipt tests remain separate.
+
+
+A 21-device dense one-day attempt accounted for all 1814400 histories + 17 fresh
+identities, but **failed** its cold-reopen prerequisite before the final chronological
+oracle. It is not a fleet acceptance pass. Investigation found a harness bug: a
+non-success `/local/live` response could lack `projection_pending` and be mistaken for
+false/completed. Readiness now requires a successful HTTP response and an explicit
+boolean false, records polling error statuses and polls at 250 ms. Derived manifests
+are checked before and after shutdown; failed fixture databases are retained for
+inspection. The failed attempt and subsequent verification must remain distinct.
+A mixed cached→streamed 21-device restart regression independently passes; this does
+not replace the failed large-cell rerun.
+
+The UI suite now records failure DOM/state/screenshots, retains failed fixtures and
+explicitly opens the party sidebar before exercising its visibility control after
+resize/reload. The original visibility/geometry assertions remain unchanged. CI #75
+passed Android/Go/real Room checks but failed that browser locator; no matched assets
+were certified from that failed integrated job.

@@ -823,3 +823,94 @@ func TestInterruptedHTTPBodiesRemainRetryableWithOriginalIdentities(t *testing.T
 		}
 	}
 }
+
+func TestBatchPreservesOriginalWireAndBoundsOriginalBytes(t *testing.T) {
+	s, _, _ := open(t)
+	m := observationMessage(t, 1, id())
+	original := encode(t, m)
+	padding := strings.Repeat("<", 12000) + strings.Repeat("\u2028", 5000)
+	original = append(original[:len(original)-1], []byte(`,"extension_padding":"`+padding+`"}`)...)
+	if len(original) >= 65536 {
+		t.Fatal("invalid original fixture size")
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(original, &parsed); err != nil {
+		t.Fatal(err)
+	}
+	expanded, _ := json.Marshal(parsed)
+	if len(expanded) <= 65536 {
+		t.Fatal("fixture must reproduce escape expansion")
+	}
+	upper := encode(t, observationMessage(t, 2, id()))
+	body := []byte(`{"batch_version":1,"messages":[` + string(original) + `],"Messages":[` + string(upper) + `]}`)
+	ack, err := s.IngestBatch(body)
+	if err != nil || len(ack.Acks) != 1 || ack.Acks[0].ID != m.ID {
+		t.Fatal("valid original falsely rejected", err)
+	}
+	var wire []byte
+	if err = s.db.QueryRow("SELECT wire FROM raw WHERE device=? AND message=?", m.Device, m.ID).Scan(&wire); err != nil || !bytes.Equal(wire, original) {
+		t.Fatal("original wire changed or wrong-case field used", err)
+	}
+	again, err := s.IngestBatch(body)
+	if err != nil || again.Acks[0].Result != "duplicate" {
+		t.Fatal("original retry not idempotent", err)
+	}
+}
+
+func TestStreamedFleetCacheIsCompleteOnReopen(t *testing.T) {
+	s, now, path := open(t)
+	s.streamThreshold = 330
+	*now = base.Add(24 * time.Hour)
+	if err := s.ActionMode("start", "from_beginning"); err != nil {
+		t.Fatal(err)
+	}
+	for step := 0; step < 3; step++ {
+		for d := 1; d <= 21; d++ {
+			messages := []Message{}
+			for n := step*220 + 1; n <= (step+1)*220; n++ {
+				m := observationMessage(t, n, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+				m.Device = fmt.Sprintf("11111111-1111-4111-8111-%012d", d)
+				messages = append(messages, m)
+			}
+			for len(messages) > 0 {
+				count := min(50, len(messages))
+				if _, err := s.IngestBatch(batchBytes(t, messages[:count])); err != nil {
+					t.Fatal(err)
+				}
+				messages = messages[count:]
+			}
+		}
+	}
+	s.projectionMu.Lock()
+	if err := s.processProjectionLocked(); err != nil {
+		s.projectionMu.Unlock()
+		t.Fatal(err)
+	}
+	s.projectionMu.Unlock()
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	reopened.projectionMu.Lock()
+	defer reopened.projectionMu.Unlock()
+	tx, err := reopened.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	st, err := loadReceiptState(tx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var work int
+	if err = tx.QueryRow("SELECT COUNT(*) FROM projection_work").Scan(&work); err != nil {
+		t.Fatal(err)
+	}
+	if st.ProjectionPending || work != 0 {
+		t.Fatal("completed streamed cache requeued on restart", st.ProjectionError, work)
+	}
+}

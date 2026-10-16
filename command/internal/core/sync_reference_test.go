@@ -205,7 +205,14 @@ func TestSyncStoredColdReconstruction(t *testing.T) {
 			return e
 		}
 		if st.ProjectionPending || st.Recording == nil || len(st.Recording.Windows) != 1 || !st.Recording.Windows[0].AllHistory {
-			return fmt.Errorf("completed uniform fixture required")
+			var work int
+			tx.QueryRow("SELECT COUNT(*) FROM projection_work").Scan(&work)
+			return fmt.Errorf("completed uniform fixture required: pending=%v error=%q work=%d recording_nil=%v windows=%d", st.ProjectionPending, st.ProjectionError, work, st.Recording == nil, func() int {
+				if st.Recording == nil {
+					return 0
+				}
+				return len(st.Recording.Windows)
+			}())
 		}
 		if _, e = tx.Exec("DELETE FROM projection_device_chunks"); e != nil {
 			return e

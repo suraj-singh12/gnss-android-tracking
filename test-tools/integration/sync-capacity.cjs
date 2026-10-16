@@ -31,7 +31,7 @@ function observation(d,n,fresh=false){
  return m;
 }
 async function port(){const s=net.createServer();s.listen(0,"127.0.0.1");await once(s,"listening");const p=s.address().port;await new Promise(r=>s.close(r));return p;}
-async function wait(check,timeout=60000){const end=Date.now()+timeout;while(Date.now()<end){if(await check())return;await new Promise(r=>setTimeout(r,50));}throw Error("Timed out waiting for acceptance state");}
+async function wait(check,timeout=60000,interval=50){const end=Date.now()+timeout;while(Date.now()<end){if(await check())return;await new Promise(r=>setTimeout(r,interval));}throw Error("Timed out waiting for acceptance state");}
 function sample(){
  if (!command) return;
  try{const text=fs.readFileSync(`/proc/${command.pid}/status`,"utf8"),m=text.match(/^VmRSS:\s+(\d+)/m);if(m)report.peak_command_rss_bytes=Math.max(report.peak_command_rss_bytes,Number(m[1])*1024);}catch{}
@@ -41,6 +41,17 @@ function sample(){
  }
 }
 function percentiles(a){if(!a.length)return null;const v=[...a].sort((a,b)=>a-b);return {count:v.length,p50_ms:v[Math.floor(v.length*.5)],p95_ms:v[Math.min(v.length-1,Math.floor(v.length*.95))],p99_ms:v[Math.min(v.length-1,Math.floor(v.length*.99))],worst_ms:v.at(-1)};}
+function inspectDerivedCache(){
+ const inspected=spawnSync("python3",["-c",`import sqlite3,json,sys
+c=sqlite3.connect('file:'+sys.argv[1]+'?mode=ro',uri=True);c.execute('BEGIN')
+s=json.loads(c.execute('SELECT data FROM state WHERE id=1').fetchone()[0]);h=json.loads(c.execute('SELECT data FROM projection_state WHERE id=1').fetchone()[0]);parts=[]
+for d,g in h.get('generations',{}).items():
+ n,lo,hi=c.execute('SELECT COUNT(*),MIN(ordinal),MAX(ordinal) FROM projection_device_chunks WHERE device=? AND generation=? AND ordinal>=0',(d,g)).fetchone()
+ preview=c.execute('SELECT COUNT(*) FROM projection_device_chunks WHERE device=? AND generation=? AND ordinal=-1 AND json_valid(data)',(d,g)).fetchone()[0]
+ expected=h.get('chunks',{}).get(d,0);parts.append({'device':d,'expected_chunks':expected,'stored_chunks':n,'first':lo,'last':hi,'valid':preview==1 and n==expected and (n==0 or (lo==0 and hi==n-1))})
+print(json.dumps({'pending':s['projection_pending'],'error':s.get('projection_error',''),'work':c.execute('SELECT device,generation FROM projection_work').fetchall(),'partitions':parts,'windows':len(s['recording']['windows']) if s.get('recording') else None}))
+c.rollback();c.close()`,database],{encoding:"utf8"});assert.equal(inspected.status,0,inspected.stderr);return JSON.parse(inspected.stdout);
+}
 (async()=>{
  assert(!fs.existsSync(database),"Use a fresh work directory; never overwrite a retained database");
  const estimatedRecords=(phones+(phones>=20?1:0))*samples;
@@ -90,7 +101,7 @@ function percentiles(a){if(!a.length)return null;const v=[...a].sort((a,b)=>a-b)
  report.transfer_including_durable_receipt_ms=historyFinishedAt-began;report.devices_including_late=expected.size;
  if(phones>=20)assert(lateStarted&&report.late_join_active_http>=10,"21st must join with actual HTTP requests outstanding");
  report.reconstruction_measurement="Residual wait after history and fresh-priority/browser probes; reconstruction also overlaps transfer";
- const projection=performance.now();await wait(async()=>{let r=await fetch(local+"/local/live");if(r.status===404)r=await fetch(local+"/local/state");const s=await r.json();if(s.projection_error)throw Error(s.projection_error);return !s.projection_pending},1200000);report.residual_reconstruction_ms=performance.now()-projection;
+ const projection=performance.now();await wait(async()=>{let r=await fetch(local+"/local/live");if(r.status===404)r=await fetch(local+"/local/state");if(!r.ok){(report.projection_poll_errors||=[]).push(r.status);return false}const s=await r.json();assert.equal(typeof s.projection_pending,"boolean","Missing reconstruction state is not completion");if(s.projection_error)throw Error(s.projection_error);return s.projection_pending===false},1200000,250);report.projection_poll_interval_ms=250;report.residual_reconstruction_ms=performance.now()-projection;
  const viewStart=performance.now(),response=await fetch(local+"/local/state"),body=await response.text();assert.equal(response.status,200,body);const view=JSON.parse(body);report.backend_http_and_body_ms=performance.now()-viewStart;report.dashboard_bytes=Buffer.byteLength(body);report.dashboard_points=view.points.length;if(process.env.GNSS_SYNC_EXPECT_BOUNDED!=="0")assert(view.points.length<=2048);
  const renderStart=performance.now();
  let historyFinished=0;
@@ -106,7 +117,9 @@ function percentiles(a){if(!a.length)return null;const v=[...a].sort((a,b)=>a-b)
  await page.waitForFunction(()=>document.querySelectorAll("#tracks [data-device]").length>0);report.browser_cold_load_to_geometry_ms=performance.now()-renderStart;page.off("requestfinished",onFinished);
  report.browser_long_tasks=await page.evaluate(()=>window.syncLongTasks);assert.equal(errors.length,0,errors.join("\n"));
  report.history_ack=percentiles(historyRTT);report.fresh_live_ack=percentiles(liveRTT);report.fresh_sos_ack=percentiles(sosRTT);report.command_ack_to_visible_notification=percentiles(visible);report.command_first_received_to_visible_notification=percentiles(receiptVisible);report.receipt_clock_definition="Same-host wall clock from protocol first received_at (captured before durable commit) to visible notification; separately report ACK-received to visible, not an invented commit timestamp";report.android_activation_to_room_save="not measured by this process/browser test";
+ report.derived_cache_before_close=inspectDerivedCache();assert.equal(report.derived_cache_before_close.pending,false);assert.equal(report.derived_cache_before_close.work.length,0);assert(report.derived_cache_before_close.partitions.every(p=>p.valid),"Published cache manifest invalid before restart");
  sample();await browser.close();browser=null;if(process.platform==="linux") {const stat=fs.readFileSync(`/proc/${command.pid}/stat`,"utf8").split(") ").at(-1).split(" ");const tick=Number(spawnSync("getconf",["CLK_TCK"],{encoding:"utf8"}).stdout)||100;report.command_cpu_user_s=Number(stat[11])/tick;report.command_cpu_system_s=Number(stat[12])/tick;}command.kill("SIGINT");await once(command,"exit");command=null;
+ report.derived_cache_after_close=inspectDerivedCache();assert.equal(report.derived_cache_after_close.pending,false);assert.equal(report.derived_cache_after_close.work.length,0);assert(report.derived_cache_after_close.partitions.every(p=>p.valid),"Published cache manifest invalid after shutdown");
  // Independent streaming SQL checks every original retained history tuple. No
  // huge JS/Python expected-record arrays or geometry oracle in Command's RSS.
  const check=spawnSync("python3",["-c",`import sqlite3,json,sys\ndb=sqlite3.connect(sys.argv[1]);expected=json.loads(sys.argv[2]);extras=json.loads(sys.argv[3]);seen=set();counts={k:0 for k in expected}\nfor device,message,sequence in db.execute('SELECT device,message,sequence FROM raw ORDER BY device,sequence'):\n if device in expected and sequence<=expected[device]:\n  counts[device]+=1;assert sequence==counts[device] and message=='00000000-0000-4000-8000-%012d'%sequence,(device,message,sequence)\n else:\n  key=device+'/'+str(sequence);assert extras.get(key)==message,(key,message);seen.add(key)\nassert counts==expected and seen==set(extras),(counts,expected,seen)\nprint(json.dumps({'original_ids_accounted':sum(counts.values()),'fresh_ids_accounted':len(seen),'integrity_check':db.execute('PRAGMA integrity_check').fetchone()[0]}))`,database,JSON.stringify(Object.fromEntries(expected)),JSON.stringify(Object.fromEntries(extras))],{encoding:"utf8"});assert.equal(check.status,0,check.stderr);report.accounting=JSON.parse(check.stdout);assert.equal(report.accounting.integrity_check,"ok");
@@ -125,5 +138,5 @@ function percentiles(a){if(!a.length)return null;const v=[...a].sort((a,b)=>a-b)
  else throw Error("Required chronological reference is absent; set GNSS_SYNC_REFERENCE_BINARY. Not an acceptance PASS.");
  if(process.env.GNSS_SYNC_REFERENCE_BINARY)report.passed=true;
 })().catch(e=>{report.passed=false;report.error=e.stack;process.exitCode=1;}).finally(async()=>{clearInterval(timer);if(browser)await browser.close();if(command && command.exitCode===null){command.kill("SIGINT");await once(command,"exit");}fs.writeFileSync(process.env.GNSS_SYNC_REPORT||path.join(work,"report.json"),JSON.stringify(report,null,2));
- if(process.env.GNSS_SYNC_KEEP_DB!=="1") for(const suffix of ["","-wal","-shm"])try{fs.unlinkSync(database+suffix);}catch{}
+ if(process.env.GNSS_SYNC_KEEP_DB!=="1" && (report.passed || report.measurement_completed)) for(const suffix of ["","-wal","-shm"])try{fs.unlinkSync(database+suffix);}catch{}
  console.log(JSON.stringify(report,null,2));});

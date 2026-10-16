@@ -46,11 +46,25 @@ func (s *Store) IngestBatch(b []byte) (out BatchAck, resultError error) {
 	if !ok || len(a) == 0 || len(a) > s.historyBatchRecords {
 		return out, &BatchError{-1, "", "invalid_batch", "batch exceeds negotiated record limit"}
 	}
+	// Keep original entry bytes. Re-encoding maps can expand HTML/Unicode escapes,
+	// change unknown numeric literals, and falsely reject a valid <=64-KiB envelope.
+	// Exact-case map lookup avoids accepting an unrelated unknown "Messages" key.
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(b, &envelope); err != nil {
+		return out, err
+	}
+	var originals []json.RawMessage
+	if err := json.Unmarshal(envelope["messages"], &originals); err != nil {
+		return out, err
+	}
+	if len(originals) != len(a) {
+		return out, fmt.Errorf("inconsistent message envelope")
+	}
 	messages := []Message{}
 	wires := [][]byte{}
 	device, session := "", ""
 	for i, x := range a {
-		wire, _ := json.Marshal(x)
+		wire := originals[i]
 		// Negotiation enlarges the batch, not the immutable individual-v1 envelope.
 		// Keep paged reconstruction RAM bounded even for non-Android peers.
 		if len(wire) > 65536 {
