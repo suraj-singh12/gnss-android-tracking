@@ -587,3 +587,44 @@ func TestProjectionTurnsDoNotLetARequeuedPhoneStarveAnother(t *testing.T) {
 		t.Fatal("other phone starved", pending, err)
 	}
 }
+
+func TestLargeEnvelopeBudgetUsesSameStreamingDerivation(t *testing.T) {
+	s, _, _ := open(t)
+	s.projectionByteBudget = 2048 // exercise byte pressure below the record threshold
+	if err := s.ActionMode("start", "from_beginning"); err != nil {
+		t.Fatal(err)
+	}
+	s.projectionMu.Lock()
+	session := id()
+	for n := 1; n <= 20; n++ {
+		ingest(t, s, observationMessage(t, n, session))
+	}
+	if err := s.processProjectionLocked(); err != nil {
+		s.projectionMu.Unlock()
+		t.Fatal(err)
+	}
+	s.projectionMu.Unlock()
+	cursor := s.projectionRaw[device]
+	if cursor == nil || !cursor.Stream || len(cursor.Candidates) != 0 {
+		t.Fatal("large envelopes retained in candidate cache")
+	}
+	st := snapshot(t, s)
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	originals, err := candidates(tx, "")
+	tx.Rollback()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pp, dd := historyReference(originals, st)
+	for i := range st.Points {
+		st.Points[i].X = 0
+		st.Points[i].Y = 0
+		st.Points[i].Dot = false
+	}
+	if !reflect.DeepEqual(pp, st.Points) || !reflect.DeepEqual(dd, st.Decisions) {
+		t.Fatal("byte pressure changed authoritative geometry")
+	}
+}

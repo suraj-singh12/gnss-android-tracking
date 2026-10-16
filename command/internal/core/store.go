@@ -152,6 +152,7 @@ type Store struct {
 	closeError           error
 	projectionMu         sync.Mutex
 	projectionRaw        map[string]*rawCursor
+	projectionByteBudget int
 	projections          map[string]*ProjectionCache
 }
 
@@ -186,7 +187,7 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	s := &Store{path: path, historyDevices: map[string]bool{}, historySlots: make(chan struct{}, 2), streamThreshold: 20000, db: db, historyBatchBytes: 65536, historyBatchRecords: 128, Now: time.Now, wake: make(chan struct{}, 1), stop: make(chan struct{}), done: make(chan struct{}), projections: map[string]*ProjectionCache{}, projectionRaw: map[string]*rawCursor{}}
+	s := &Store{path: path, historyDevices: map[string]bool{}, historySlots: make(chan struct{}, 2), streamThreshold: 20000, projectionByteBudget: 64 * 1024 * 1024, db: db, historyBatchBytes: 65536, historyBatchRecords: 128, Now: time.Now, wake: make(chan struct{}, 1), stop: make(chan struct{}), done: make(chan struct{}), projections: map[string]*ProjectionCache{}, projectionRaw: map[string]*rawCursor{}}
 	fail := func(e error) (*Store, error) { db.Close(); return nil, e }
 	for _, q := range []string{"PRAGMA journal_mode=WAL", "PRAGMA synchronous=FULL", "PRAGMA journal_size_limit=67108864", "PRAGMA busy_timeout=5000", `CREATE TABLE IF NOT EXISTS raw (device TEXT NOT NULL, message TEXT NOT NULL, sequence INTEGER NOT NULL, known TEXT NOT NULL, wire BLOB NOT NULL, received TEXT NOT NULL, PRIMARY KEY(device,message), UNIQUE(device,sequence))`, `CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL)`, `CREATE TABLE IF NOT EXISTS retired (recording TEXT PRIMARY KEY, data TEXT NOT NULL)`, `CREATE TABLE IF NOT EXISTS field_evidence (ordinal INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT NOT NULL)`} {
 		if _, err = db.Exec(q); err != nil {

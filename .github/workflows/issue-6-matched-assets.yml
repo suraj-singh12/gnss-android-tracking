@@ -222,7 +222,7 @@ jobs:
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: GNSS-Acceptance-Evidence-${{ github.sha }}
+          name: GNSS-Acceptance-Evidence-${{ env.SOURCE_REVISION }}
           path: |
             ${{ runner.temp }}/gnss-assets/*.txt
             ${{ runner.temp }}/gnss-assets/*.json
@@ -234,7 +234,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: gnss-issue6-test-reports-${{ github.sha }}
+          name: gnss-issue6-test-reports-${{ env.SOURCE_REVISION }}
           path: |
             ${{ runner.temp }}/gnss-test-reports
             android/app/build/reports

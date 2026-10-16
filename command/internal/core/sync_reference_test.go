@@ -1,12 +1,15 @@
 package core
 
 import (
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"reflect"
 	"testing"
+	"time"
 )
 
 // Streaming acceptance oracle for sync-capacity.cjs's uniform one-window corpus.
@@ -146,4 +149,94 @@ func TestSyncStoredChronologicalReference(t *testing.T) {
 	}
 	finish()
 	fmt.Printf("REFERENCE VERIFIED original_observations=%d qualified_points=%d decisions=%d exact_distances=true\n", observations, points, decisions)
+}
+
+// Opt-in fixture-only cold-cache measurement. Raw receipts, recording windows and
+// policy stay unchanged. Run the independent chronological oracle afterwards.
+func TestSyncStoredColdReconstruction(t *testing.T) {
+	path := os.Getenv("GNSS_SYNC_REFERENCE_DB")
+	if path == "" {
+		t.Skip("explicit completed process-capacity fixture required")
+	}
+	opened := time.Now()
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	startup := time.Since(opened)
+	defer s.Close()
+	fingerprint := func() ([32]byte, error) {
+		h := sha256.New()
+		rows, e := s.projectionDB.Query("SELECT device,message,wire,known FROM raw ORDER BY device,sequence")
+		if e != nil {
+			return [32]byte{}, e
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var device, message, wire, known string
+			if e = rows.Scan(&device, &message, &wire, &known); e != nil {
+				return [32]byte{}, e
+			}
+			for _, value := range []string{device, message, wire, known} {
+				io.WriteString(h, value)
+				h.Write([]byte{0})
+			}
+		}
+		var out [32]byte
+		copy(out[:], h.Sum(nil))
+		return out, rows.Err()
+	}
+	before, err := fingerprint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.projectionMu.Lock()
+	defer s.projectionMu.Unlock()
+	err = func() error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		tx, e := s.db.Begin()
+		if e != nil {
+			return e
+		}
+		defer tx.Rollback()
+		st, e := loadReceiptState(tx)
+		if e != nil {
+			return e
+		}
+		if st.ProjectionPending || st.Recording == nil || len(st.Recording.Windows) != 1 || !st.Recording.Windows[0].AllHistory {
+			return fmt.Errorf("completed uniform fixture required")
+		}
+		if _, e = tx.Exec("DELETE FROM projection_device_chunks"); e != nil {
+			return e
+		}
+		if e = writeProjectionHeader(tx, newProjectionHeader()); e != nil {
+			return e
+		}
+		if _, e = tx.Exec(`INSERT INTO projection_work(device,earliest,generation,last_served) SELECT device,MIN(json_extract(known,'$.fix.observed_at')),0,0 FROM raw WHERE json_extract(known,'$.type')='location' GROUP BY device`); e != nil {
+			return e
+		}
+		st.ProjectionPending = true
+		if e = saveReceiptState(tx, st); e != nil {
+			return e
+		}
+		return tx.Commit()
+	}()
+	if err != nil {
+		t.Fatal(err)
+	}
+	began := time.Now()
+	if err = s.processProjectionLocked(); err != nil {
+		t.Fatal(err)
+	}
+	elapsed := time.Since(began)
+	var pending int
+	if err = s.db.QueryRow("SELECT COUNT(*) FROM projection_work").Scan(&pending); err != nil || pending != 0 {
+		t.Fatal("cold rebuild incomplete", pending, err)
+	}
+	after, err := fingerprint()
+	if err != nil || before != after {
+		t.Fatal("cold rebuild changed original raw bytes", err)
+	}
+	fmt.Printf("COLD RECONSTRUCTION VERIFIED startup_ms=%.3f full_reconstruction_ms=%.3f raw_unchanged=true\n", float64(startup)/float64(time.Millisecond), float64(elapsed)/float64(time.Millisecond))
 }

@@ -690,8 +690,12 @@ from raw with a supported version; binary downgrade is not certified.
 
 The accepted-anchor `Derivation.Feed`, canonical chronology, quality policies,
 recording windows and distances are unchanged. Small histories retain the existing
-incremental checkpoints with an aggregate candidate-cache budget. Above 20000 raw
-observations/device, reconstruction uses indexed keyset pages and the same derivation,
+incremental checkpoints with an aggregate limit of 100000 cached candidates or 128 MiB
+of encoded known envelopes. A device switches to streaming at 64 MiB of known
+envelopes, retaining that decision while the process lives. These source-byte budgets
+bound caching; decoded Go/SQLite overhead is additional and measured separately.
+Above 20000 raw observations/device (scaled down by recording-window count),
+reconstruction uses indexed keyset pages and the same derivation,
 not full-history arrays. Readers close between pages. Consistent captured prefixes
 can publish during continuous ingestion, while newer work remains explicitly pending.
 A durable logical last-served counter gives queued devices fair projection turns,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -221,7 +222,11 @@ func candidates(tx *sql.Tx, device string) ([]Candidate, error) {
 
 // Arrival cursor avoids re-reading/decoding every retained raw envelope for each
 // receipt. In-memory only: SQLite raw remains the restart-safe source of truth.
+var errProjectionByteBudget = errors.New("use streaming reconstruction for large envelopes")
+
 type rawCursor struct {
+	Bytes      int
+	Stream     bool
 	Row        int64
 	Candidates []Candidate
 }
@@ -231,6 +236,9 @@ func (s *Store) projectionCandidates(tx *sql.Tx, device string) ([]Candidate, er
 	if c == nil {
 		c = &rawCursor{}
 		s.projectionRaw[device] = c
+	}
+	if c.Stream {
+		return nil, errProjectionByteBudget
 	}
 	rows, e := tx.Query("SELECT rowid,known,received FROM raw WHERE device=? AND rowid>? AND json_extract(known,'$.type')='location' ORDER BY rowid", device, c.Row)
 	if e != nil {
@@ -244,10 +252,17 @@ func (s *Store) projectionCandidates(tx *sql.Tx, device string) ([]Candidate, er
 		if e = rows.Scan(&n, &b, &r); e != nil {
 			return nil, e
 		}
+		if c.Bytes+len(b) > s.projectionByteBudget {
+			c.Candidates = nil
+			c.Bytes = 0
+			c.Stream = true
+			return nil, errProjectionByteBudget
+		}
 		var m Message
 		if e = json.Unmarshal([]byte(b), &m); e != nil {
 			return nil, e
 		}
+		c.Bytes += len(b)
 		v := Candidate{m, r}
 		c.Candidates = append(c.Candidates, v)
 		c.Row = n
@@ -406,6 +421,7 @@ func (s *Store) processProjectionDevice() error {
 	var header savedProjection
 	var raw []Candidate
 	var rawCount int
+	var streamRequired bool
 	var ceiling int64
 	if err == nil {
 		header, err = readProjectionHeader(tx)
@@ -413,10 +429,19 @@ func (s *Store) processProjectionDevice() error {
 	if err == nil && header.Generations != nil {
 		st.Devices = map[string]*Device{device: st.Devices[device]}
 		err = tx.QueryRow("SELECT COUNT(*),COALESCE(MAX(rowid),0) FROM raw WHERE device=? AND json_extract(known,'$.type')='location'", device).Scan(&rawCount, &ceiling)
-		if err == nil && rawCount <= s.streamThreshold {
-			raw, err = s.projectionCandidates(tx, device)
+		windows := 1
+		if st.Recording != nil {
+			windows = max(1, len(st.Recording.Windows))
 		}
-		if err == nil && rawCount <= s.streamThreshold {
+		streamRequired = rawCount > s.streamThreshold/windows
+		if err == nil && !streamRequired {
+			raw, err = s.projectionCandidates(tx, device)
+			if errors.Is(err, errProjectionByteBudget) {
+				err = nil
+				streamRequired = true
+			}
+		}
+		if err == nil && !streamRequired {
 			err = populateHistoryFromRaw(tx, &st, instant(st.Devices[device].Contact), raw)
 		}
 	}
@@ -435,12 +460,14 @@ func (s *Store) processProjectionDevice() error {
 		return s.migrateProjectionCache()
 	}
 	var prepared preparedDeviceProjection
-	if rawCount > s.streamThreshold {
+	if streamRequired {
 		prepared, err = s.streamProjection(&st, device, ceiling)
 		if err != nil {
 			return err
 		}
-		delete(s.projectionRaw, device)
+		if c := s.projectionRaw[device]; c == nil || !c.Stream {
+			delete(s.projectionRaw, device)
+		}
 		for key := range s.projections {
 			if strings.HasSuffix(key, "/"+device) {
 				delete(s.projections, key)
@@ -566,11 +593,12 @@ func (s *Store) processProjectionDevice() error {
 	}()
 	// Keep an explicit candidate-cache budget across a variable fleet. A single
 	// larger reconstruction is allowed, but other devices are not retained too.
-	retained := 0
+	retained, retainedBytes := 0, 0
 	for _, cursor := range s.projectionRaw {
 		retained += len(cursor.Candidates)
+		retainedBytes += cursor.Bytes
 	}
-	if retained > 100000 {
+	if retained > 100000 || retainedBytes > 128*1024*1024 {
 		s.projectionRaw = map[string]*rawCursor{}
 		s.projections = map[string]*ProjectionCache{}
 	}

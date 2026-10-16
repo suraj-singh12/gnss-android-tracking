@@ -531,3 +531,70 @@ Corrective checklist against the 33-scenario audit:
 | 31 millions of rows | Bounded production reconstruction/view/queue counters; capacity requires measured fleet cells |
 | 32 replacement empty Command | Existing ACKs are destination history; explicit recovery/replay remains an operational limitation, not ordinary durable restart |
 | 33 OFF kill/reboot | Room retained; nonsticky transfer requires reopening; real Android/OEM execution unverified |
+
+
+#### Corrective measurements and acceptance boundary
+
+On the two-core, 8-GiB Linux runner, Command `15078bd` and archived audited
+`644cf04` were tested sequentially with the same external process/browser harness,
+64000-byte targets, 128-record ceilings and one outstanding history request/phone.
+Body bytes exclude TCP/HTTP headers and radio overhead. All nine corrective cells
+below passed original-ID accounting, SQLite integrity_check and the streaming
+full-resolution chronological oracle. The 20-phone cases include a late 21st at
+19 already-outstanding HTTP requests. This is loopback, not physical fleet acceptance.
+
+| Phones | Days | Observations/phone | Source bytes including late phone | History requests | Durable history receipt seconds | Command peak RSS MiB |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 1 | 600 | 590646 | 10 | 0.581 | 94.9 |
+| 1 | 2 | 1200 | 1182117 | 19 | 0.928 | 85.6 |
+| 1 | 7 | 4200 | 4142504 | 66 | 2.803 | 88.1 |
+| 5 | 1 | 600 | 2953230 | 50 | 1.777 | 87.1 |
+| 5 | 2 | 1200 | 5910585 | 95 | 3.251 | 92.7 |
+| 5 | 7 | 4200 | 20712520 | 330 | 11.710 | 126.5 |
+| 20+1 | 1 | 600 | 12410766 | 210 | 6.926 | 85.8 |
+| 20+1 | 2 | 1200 | 24838857 | 399 | 13.612 | 122.8 |
+| 20+1 | 7 | 4200 | 87042984 | 1386 | 50.311 | 320.0 |
+
+The largest cell transferred 87189189 request-body bytes and 27805302 ACK-body bytes,
+accounting for 88200 original histories plus 17 fresh priority identities. Command
+used 62.13 user + 5.20 system CPU seconds; peak SQLite/WAL were 640061440/7453112 bytes.
+Residual reconstruction after upload/priority probes was 5.252 s: this is **not total
+reconstruction time**, since reconstruction overlaps transfer.
+
+Same-workload audited comparison: history receipt 41.398 s → 50.311 s (slower);
+Command-only RSS 785.3 → 320.0 MiB; backend materialization/body 1550.7 → 39.0 ms;
+response 14313713 → 1018495 bytes; cold browser geometry 5541.2 → 1129.8 ms. Fresh
+LIVE ACK p99 715.3 → 51.1 ms, fresh SOS ACK p99 698.9 → 87.1 ms. Eight fresh events
+per type is a small sample; here p95/p99 equal the observed worst, not a fleet SLO.
+Cold-history new SOS ACK→visible 4055.1 → 1037.9 ms. Old browser long tasks reached
+1486 ms; none were observed in this corrective cell. The old comparison accounts
+for all IDs but is explicitly NOT an acceptance pass: its cache predates the new
+streaming oracle. Its full-array baseline correctness remains covered by the audited
+reference tests. These measurements demonstrate the responsiveness/memory tradeoff,
+not a universal bulk speedup or 30-second guarantee.
+
+Real Room/Sender→HTTP/SQLite A/B: 1200 original observations, 1196154 source bytes,
+zero new fixes. Automatic 31 requests / 1198346 body bytes / 2829 ms; manual 23 /
+1198090 / 2671 ms, including durable Room ACK application. Actual monotonic RTT was
+used, not the fixture's manually advanced wall clock. Manual saved 25.8% of requests
+but only 5.6% wall time in this run. During injected 250-ms in-flight history HTTP,
+eight distinct SOS/LIVE pairs measured activation→Room p50/95/99/worst 0/1/1/1 ms;
+Room→applied SOS ACK 266/281/281/281 ms; fresh fix→ACK 272/288/288/288 ms. This is
+Robolectric + real Room/network/SQLite, not phone scheduler/radio evidence.
+
+The process harness now additionally runs `TestSyncStoredColdReconstruction` in a
+separate engine process, deleting only fixture-derived cache, retaining raw bytes,
+recording and policy, then timing a full rebuild. Before/after raw SHA-256 fingerprints
+must match, and the independent full-resolution oracle runs afterwards. Linux GNU
+time reports that process's RSS/CPU separately; its CPU includes setup/fingerprinting,
+while the printed full_reconstruction_ms excludes them. This is distinct from the
+production Command RSS and upload-overlapped residual wait. Set GNSS_SYNC_COLD_REBUILD=0
+only for explicitly labelled measurements that omit isolated rebuild acceptance.
+
+Run #66 at `15078bd` passed the integrated GNSS job, including Android full tests
+(207 discovered: 176 executed, 31 bridge methods intentionally deferred), then the
+required real bridge separately (31 executed, zero skips), Go race/vet, browser and
+matched-source asset verification. Its independent external provider job failed;
+that failure is not a GNSS pass or permission to declare field stability. Later
+source changes require their own matched CI run. Physical Android/Doze/OEM, native
+macOS/Windows and blocked dense-fleet capacity cells remain acceptance blockers.
