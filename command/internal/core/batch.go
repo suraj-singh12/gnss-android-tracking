@@ -152,7 +152,7 @@ func (s *Store) historyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	b, e := io.ReadAll(http.MaxBytesReader(w, r.Body, int64(s.historyBatchBytes)))
 	if e != nil {
-		failure(w, 413, "message_too_large", e)
+		interruptedBody(w, e)
 		return
 	}
 	ack, e := s.IngestBatch(b)

@@ -659,6 +659,32 @@ class CommandIntegrationTest {
     }
 
     @Test
+    fun interruptedHttp408RetainsSavedSOSAndRetriesTheOriginalIdentity() = runBlocking {
+        val p = phone()
+        at(1)
+        val row =
+            SosEngine(p.repository, LatestLocation(clock), { Health() }, clock)
+                .activate(SosTrigger.SCREEN)
+                .row
+        // Actual Command stores the SOS; an intermediary returns a retryable 408.
+        p.fault = { it.copy(code = 408) }
+        p.sender.step()
+        val pending = p.db.dao().row(row.sequence)!!
+        assertNull(pending.deliveredAt)
+        assertFalse(pending.quarantined)
+        assertEquals(row.json, pending.json)
+        assertEquals(0L, p.sender.syncProgress.ackedRecords)
+        assertEquals(1, raw().size())
+        atMillis(pending.nextAttemptMillis)
+        p.fault = null
+        p.sender.step()
+        p.delivered(row)
+        assertEquals(listOf(row.json, row.json), p.sent)
+        assertEquals("duplicate", Protocol.parse(p.responses.last().body)["result"].asString)
+        assertEquals(1, raw().size())
+    }
+
+    @Test
     fun sosWrongAckDoesNotClaimReceiptAndDuplicateCannotResetHumanAck() = runBlocking {
         val p = phone()
         at(1)

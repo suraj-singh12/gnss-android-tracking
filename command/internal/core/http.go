@@ -44,12 +44,7 @@ func (s *Store) IngestHandler() http.Handler {
 		}
 		b, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 65536))
 		if err != nil {
-			var size *http.MaxBytesError
-			if errors.As(err, &size) {
-				failure(w, 413, "message_too_large", err)
-			} else {
-				failure(w, 400, "invalid_message", err)
-			}
+			interruptedBody(w, err)
 			return
 		}
 		v, err := decode(b)
@@ -274,4 +269,15 @@ func dashboardView(st State, now time.Time) map[string]any {
 		recording = map[string]any{"recording_id": st.Recording.ID, "active": st.Recording.Active, "mode": st.Recording.Mode, "duration_s": seconds}
 	}
 	return map[string]any{"receipt_version": st.ReceiptVersion, "recording_session_available": sessionAvailable, "sos_alerts": st.Alerts, "devices": devices, "recording": recording, "policy": st.Policy, "points": st.Points, "raw_points": st.RawPoints, "provisional_points": st.Provisional, "projection_pending": st.ProjectionPending, "projection_error": st.ProjectionError}
+}
+
+// Failure to receive a complete body is transport failure, not poisoned GNSS.
+// Only MaxBytesError proves the configured size ceiling was exceeded.
+func interruptedBody(w http.ResponseWriter, err error) {
+	var size *http.MaxBytesError
+	if errors.As(err, &size) {
+		failure(w, 413, "message_too_large", err)
+	} else {
+		failure(w, 408, "request_interrupted", err)
+	}
 }

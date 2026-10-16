@@ -208,7 +208,7 @@ fun classify(code: Int?, failures: Int, retryAfter: String? = null): Retry {
         else null
     return Retry(
         maxOf(exponential, delta ?: 0),
-        code != null && code != 200 && code != 429 && code !in 500..599,
+        code != null && code != 200 && code != 408 && code != 429 && code !in 500..599,
     )
 }
 

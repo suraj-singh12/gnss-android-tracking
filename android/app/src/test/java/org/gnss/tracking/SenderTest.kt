@@ -93,6 +93,13 @@ class MemoryStore : MessageStore {
 
 class SenderTest {
     @Test
+    fun interruptedRequestBodyIsTransientRatherThanQuarantined() {
+        assertFalse(classify(408, 1).quarantine)
+        assertEquals(1000L, classify(408, 1).delayMillis)
+        assertTrue(classify(400, 1).quarantine)
+    }
+
+    @Test
     fun fixAgeUsesElapsedTimeAcrossWallClockEdits() {
         var wall = 100000L
         var elapsed = 1000L

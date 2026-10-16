@@ -2,6 +2,7 @@ package core
 
 import (
 	"archive/zip"
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -9,6 +10,7 @@ import (
 	"github.com/ncruces/go-sqlite3"
 	"github.com/ncruces/go-sqlite3/driver"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -754,6 +756,70 @@ func TestExtensionBackfillSeeksMissingRowsAcrossDevicesAndPoison(t *testing.T) {
 		plan.Close()
 		if !strings.Contains(detail, "raw_extensions_missing") || strings.Contains(detail, "TEMP B-TREE") || strings.Contains(detail, "INTEGER PRIMARY KEY") {
 			t.Fatal("startup regressed to raw scan/sort", detail)
+		}
+	}
+}
+
+func TestInterruptedHTTPBodiesRemainRetryableWithOriginalIdentities(t *testing.T) {
+	for _, path := range []string{"/api/v1/messages", "/api/v1/history"} {
+		for _, slow := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/timeout=%v", path, slow), func(t *testing.T) {
+				s, _, _ := open(t)
+				m := emergency(t, 1, 0)
+				body := encode(t, m)
+				if path == "/api/v1/history" {
+					m = observationMessage(t, 1, id())
+					body = batchBytes(t, []Message{m})
+				}
+				server := httptest.NewUnstartedServer(s.IngestHandler())
+				if slow {
+					server.Config.ReadTimeout = 50 * time.Millisecond
+				}
+				server.Start()
+				defer server.Close()
+				conn, err := net.Dial("tcp", server.Listener.Addr().String())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer conn.Close()
+				conn.SetDeadline(time.Now().Add(3 * time.Second))
+				if _, err = fmt.Fprintf(conn, "POST %s HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n", path, len(body)+100); err != nil {
+					t.Fatal(err)
+				}
+				if _, err = conn.Write(body); err != nil {
+					t.Fatal(err)
+				}
+				if !slow {
+					if err = conn.(*net.TCPConn).CloseWrite(); err != nil {
+						t.Fatal(err)
+					}
+				}
+				response, err := http.ReadResponse(bufio.NewReader(conn), &http.Request{Method: "POST"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				failedBody, _ := io.ReadAll(response.Body)
+				response.Body.Close()
+				if response.StatusCode != 408 {
+					t.Fatal("interrupted original classified permanent/size", response.StatusCode, string(failedBody))
+				}
+				var count int
+				if err = s.db.QueryRow("SELECT COUNT(*) FROM raw").Scan(&count); err != nil || count != 0 {
+					t.Fatal("partial request committed", count, err)
+				}
+				response, err = http.Post(server.URL+path, "application/json", bytes.NewReader(body))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer response.Body.Close()
+				b, err := io.ReadAll(response.Body)
+				if err != nil || response.StatusCode != 200 {
+					t.Fatal("original retry rejected", response.StatusCode, string(b), err)
+				}
+				if err = s.db.QueryRow("SELECT COUNT(*) FROM raw WHERE device=? AND message=? AND sequence=?", m.Device, m.ID, m.Sequence).Scan(&count); err != nil || count != 1 {
+					t.Fatal("original identity changed", count, err)
+				}
+			})
 		}
 	}
 }

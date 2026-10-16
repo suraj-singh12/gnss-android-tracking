@@ -625,3 +625,11 @@ without sorting/rescanning completed prefixes. The regression seeds interleaved 
 more than one page each and a poisoned legacy extension, verifies all valid identities
 and immutable wire bytes, and asserts indexed range plans. This is an additive query
 correction, not a new schema or a raw-history rewrite.
+
+
+Receiver fault regressions send real truncated and timed-out TCP bodies for SOS and
+history, require HTTP 408 with zero partial raw writes, then retry the same complete
+identities successfully. A real Room bridge test also injects an intermediary 408
+after Command durably saves SOS, proves no quarantine/false ACK, and verifies the
+original retry is deduplicated. Transport interruption is distinct from malformed
+original data and from a proven 413 size error.
