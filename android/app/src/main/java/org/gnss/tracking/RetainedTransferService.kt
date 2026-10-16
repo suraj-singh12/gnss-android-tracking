@@ -23,7 +23,8 @@ class RetainedTransferService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == "pause") {
             app.pauseHistory()
-            stopSelf()
+            // Pause history, not the lifetime needed by a saved emergency retry.
+            if (work == null) stopSelf()
             return START_NOT_STICKY
         }
         val manager = getSystemService(NotificationManager::class.java)
@@ -66,39 +67,61 @@ class RetainedTransferService : Service() {
                 scope.launch {
                     val began = SystemClock.elapsedMillis()
                     // Below Android 15's six-hour dataSync budget. No restart/boot promise.
-                    while (isActive && SystemClock.elapsedMillis() - began < 5 * 60 * 60 * 1000L) {
-                        if (app.operational.value.historyPaused || app.operational.value.tracking)
-                            break
-                        if (!app.operational.value.drainStarting && !app.sender.aggressive) break
-                        if (wake?.isHeld != true) {
-                            wake =
-                                getSystemService(PowerManager::class.java)
-                                    .newWakeLock(
-                                        PowerManager.PARTIAL_WAKE_LOCK,
-                                        "gnss:history-transfer",
+                    try {
+                        while (
+                            isActive && SystemClock.elapsedMillis() - began < 5 * 60 * 60 * 1000L
+                        ) {
+                            val status = retainedWorkStatus() ?: break
+                            if (wake?.isHeld != true) {
+                                wake =
+                                    getSystemService(PowerManager::class.java)
+                                        .newWakeLock(
+                                            PowerManager.PARTIAL_WAKE_LOCK,
+                                            "gnss:history-transfer",
+                                        )
+                                wake?.acquire(60000)
+                            }
+                            manager.notify(
+                                22,
+                                Notification.Builder.recoverBuilder(
+                                        this@RetainedTransferService,
+                                        notification,
                                     )
-                            wake?.acquire(60000)
+                                    .setContentText(status)
+                                    .build(),
+                            )
+                            delay(15000)
                         }
-                        manager.notify(
-                            22,
-                            Notification.Builder.recoverBuilder(
-                                    this@RetainedTransferService,
-                                    notification,
-                                )
-                                .setContentText(app.sender.syncProgress.mode)
-                                .build(),
-                        )
-                        delay(15000)
-                    }
-                    if (SystemClock.elapsedMillis() - began >= 5 * 60 * 60 * 1000L) {
-                        app.pauseHistory()
+                        if (SystemClock.elapsedMillis() - began >= 5 * 60 * 60 * 1000L) {
+                            app.pauseHistory()
+                            app.operational.update {
+                                it.copy(error = "Transfer time budget reached; reopen to resume")
+                            }
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
                         app.operational.update {
-                            it.copy(error = "Transfer time budget reached; reopen to resume")
+                            it.copy(error = "Saved transfer state unavailable; reopen to resume")
                         }
+                    } finally {
+                        stopSelf()
                     }
-                    stopSelf()
                 }
         return START_NOT_STICKY
+    }
+
+    // Same Room queue and Sender; future SOS deadlines must keep execution eligible.
+    internal suspend fun retainedWorkStatus(): String? {
+        val op = app.operational.value
+        if (op.tracking) return null // Existing location service takes over delivery.
+        if (app.repository.dao.pendingSosExists()) {
+            val state = app.repository.state()
+            if (!state.deliveryPaused && state.endpoint.isNotEmpty())
+                return "Saved SOS awaiting receipt; ${if (op.historyPaused) "history paused" else "history transfer separate"}"
+        }
+        if (op.historyPaused || !op.drainStarting && !app.sender.aggressive) return null
+        return app.sender.syncProgress.mode
     }
 
     override fun onTimeout(startId: Int, fgsType: Int) {

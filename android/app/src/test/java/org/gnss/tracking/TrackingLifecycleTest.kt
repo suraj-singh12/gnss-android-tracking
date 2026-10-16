@@ -430,4 +430,53 @@ class TrackingLifecycleTest {
         }
         assertFalse(app.operational.value.transferActive)
     }
+
+    @Test
+    @Config(sdk = [35])
+    fun pausingHistoryKeepsExistingForegroundLifetimeForSavedSOS() = runBlocking {
+        app.repository.settings("Field", "SOS", "http://127.0.0.1:1", 30)
+        val row =
+            SosEngine(app.repository, LatestLocation(SystemClock), { Health() }, SystemClock)
+                .activate(SosTrigger.SCREEN)
+                .row
+        app.syncAllNow()
+        val controller = Robolectric.buildService(RetainedTransferService::class.java).create()
+        try {
+            val service = controller.get()
+            service.onStartCommand(Intent(app, RetainedTransferService::class.java), 0, 1)
+            repeat(20) {
+                shadowOf(Looper.getMainLooper()).idle()
+                delay(10)
+            }
+            service.onStartCommand(
+                Intent(app, RetainedTransferService::class.java).setAction("pause"),
+                0,
+                2,
+            )
+            assertTrue(app.operational.value.historyPaused)
+            assertFalse(shadowOf(service).isStoppedBySelf)
+            assertTrue(service.retainedWorkStatus()!!.contains("SOS"))
+            assertTrue(app.repository.dao.pendingSosExists())
+            assertNull(app.repository.dao.row(row.sequence)!!.deliveredAt)
+            assertFalse(app.repository.state().tracking)
+            assertTrue(shadowOf(manager).getLocationUpdateListeners().isEmpty())
+            assertEquals(row.json, app.repository.dao.row(row.sequence)!!.json)
+            // Simulate the durable ACK boundary; networking is covered by the real bridge.
+            app.repository.dao.updateRow(
+                app.repository.dao
+                    .row(row.sequence)!!
+                    .copy(deliveredAt = utc(System.currentTimeMillis()))
+            )
+            assertNull(service.retainedWorkStatus())
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(16))
+            repeat(20) {
+                shadowOf(Looper.getMainLooper()).idle()
+                delay(10)
+            }
+            assertTrue(shadowOf(service).isStoppedBySelf)
+        } finally {
+            controller.destroy()
+            app.finishForTests()
+        }
+    }
 }

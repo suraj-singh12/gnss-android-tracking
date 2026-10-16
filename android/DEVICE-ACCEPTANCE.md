@@ -544,3 +544,12 @@ IDs, route sections and unrounded distance with chronological reconstruction.
 Record request/byte density, Wi-Fi capacity, storage throughput and native OS/CPU;
 no universal 30-second guarantee is implied. Dense seven-day twenty-phone acceptance
 requires sufficient disk/RAM and cannot be inferred from sparse software fixtures.
+
+
+With Tracking OFF and a user-started saved-data foreground transfer, queue a new SOS,
+interrupt its ACK, then pause history from the notification and lock/background the
+phone. History selection must stop; the existing foreground lifetime must continue
+retrying the saved SOS (no location listener), within OS/app budgets. After its durable
+ACK, the paused transfer must stop. Repeat with GNSS history already drained but SOS
+waiting for its retry deadline. Robolectric covers lifecycle/Room policy only; actual
+screen-lock/radio/OEM execution still requires this handset acceptance step.

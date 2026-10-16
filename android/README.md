@@ -334,7 +334,11 @@ with a transfer notification/Pause action and bounded wakelock. The service owns
 provider, queue or second Sender. It can continue after backgrounding/screen lock,
 subject to Android/OEM/Doze restrictions, permission/start restrictions and Android
 15's aggregate six-hour dataSync budget. It stops on completion, unresolved setup,
-Pause, Tracking taking over, OS timeout, or its own five-hour budget. It is
+Pause after retryable saved SOS is settled, Tracking taking over, OS timeout, or
+its own five-hour budget. Pausing history or finishing GNSS drain does not abandon
+a saved SOS waiting for its own retry deadline: the same foreground lifetime and
+Sender remain active for that emergency, without location acquisition. Unresolved
+receiver setup, OS termination and the time budget still stop execution honestly. It is
 START_NOT_STICKY: process death, force-stop and reboot require reopening/resuming;
 data durability does not imply autonomous execution. Android 13 notification
 permission affects notification visibility; the OS can still expose foreground work

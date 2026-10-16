@@ -193,6 +193,11 @@ CASE WHEN EXISTS(SELECT 1 FROM outbox_summary WHERE `key`=1) THEN (SELECT delive
     suspend fun sos(now: Long): Outbound?
 
     @Query(
+        "SELECT EXISTS(SELECT 1 FROM outbox WHERE deliveredAt IS NULL AND quarantined=0 AND type='sos' LIMIT 1)"
+    )
+    suspend fun pendingSosExists(): Boolean
+
+    @Query(
         "SELECT * FROM outbox WHERE deliveredAt IS NULL AND quarantined=0 AND type!='sos' AND historical=0 ORDER BY sequence DESC LIMIT 1"
     )
     suspend fun newest(): Outbound?

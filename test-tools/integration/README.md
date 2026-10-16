@@ -642,3 +642,10 @@ time. ACK-received→visible remains a separate monotonic measurement. Together 
 the real Room save→applied durable ACK measurement, these distinguish receipt,
 durability and operator presentation. Each report's harness hash identifies which
 measurements were actually available; older reports are not retroactively relabelled.
+
+
+Tracking-OFF lifecycle regression also covers Pause while saved SOS is pending:
+the existing dataSync foreground lifetime remains for retryable emergency work even
+after history/manual drain ends, then stops after the SOS ACK. The test verifies zero
+location listeners and immutable Room data; its simulated ACK boundary is not claimed
+as physical networking. Real Room/HTTP receipt tests remain separate.
