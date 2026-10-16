@@ -42,7 +42,7 @@ and GPS enabled and Battery Saver off; notification refusal needs Settings befor
 that preserved Start intent can continue. Android itself allows an FGS without
 notification permission, but that is not healthy field setup.
 Start Tracking is a visible user action. Stop Tracking requires confirmation and
-stops collection. Saved messages automatically synchronize while the app is visible, without restarting GNSS. **Sync All Now** resets transient retry timing; **Pause history sync** stops selecting new history requests, retaining every row. An in-flight request may still finish. SOS and live tracking remain independently eligible. Reopening
+stops collection. Saved messages automatically synchronize while the app is visible, without restarting GNSS. **Sync All Now** preserves learned capacity and accelerates the payload ramp using the same Sender; **Pause history sync** stops selecting new history requests, retaining every row. An in-flight request may still finish. SOS and live tracking remain independently eligible. Reopening
 the Activity does not restart or stop tracking. Reboot and force-stop require
 another explicit Start Tracking. Sticky service recreation can recover tracking
 and outbox after process death when Android permits it; it is not a bypass of

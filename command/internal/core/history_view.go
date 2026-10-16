@@ -42,6 +42,10 @@ func (s *Store) boundedDashboard(ctx context.Context, dot int, liveOnly bool) (S
 		return st, false, err
 	}
 	total := 0
+	var received int64
+	for _, d := range st.Devices {
+		received += d.DurableObservations
+	}
 	for _, count := range header.Counts {
 		total += count
 	}
@@ -51,7 +55,7 @@ func (s *Store) boundedDashboard(ctx context.Context, dot int, liveOnly bool) (S
 	for _, count := range header.Chunks {
 		chunks += count
 	}
-	large := total > dashboardPointLimit || chunks > 4 || header.Chunked || header.LegacyLarge || len(header.Decisions) > dashboardPointLimit || len(header.Points) > dashboardPointLimit
+	large := received > dashboardPointLimit || total > dashboardPointLimit || chunks > 4 || header.Chunked || header.LegacyLarge || len(header.Decisions) > dashboardPointLimit || len(header.Points) > dashboardPointLimit
 	if !liveOnly && !large {
 		tx.Rollback()
 		if s.viewDB == nil {

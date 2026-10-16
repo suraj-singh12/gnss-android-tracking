@@ -193,6 +193,33 @@ func TestBoundedHistoryAndLiveAreIndependentOfColdReader(t *testing.T) {
 	}
 }
 
+// Receipt size must bound the view even before the first cache publication,
+// including histories that ultimately produce no qualified points.
+func TestPendingRawHistoryCannotEnterFullDashboardMaterialization(t *testing.T) {
+	s, _, _ := open(t)
+	if err := s.ActionMode("start", "from_beginning"); err != nil {
+		t.Fatal(err)
+	}
+	s.projectionMu.Lock()
+	defer s.projectionMu.Unlock()
+	session := id()
+	for n := 1; n <= dashboardPointLimit+1; n++ {
+		ingest(t, s, observationMessage(t, n, session))
+	}
+	st, sampled, err := s.boundedDashboard(context.Background(), 30, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sampled || !st.ProjectionPending || len(st.Points) != 0 || len(st.RawPoints) != 0 || st.Devices[device].DurableObservations != dashboardPointLimit+1 {
+		t.Fatal("pending raw history escaped bounded view", sampled, len(st.Points), len(st.RawPoints))
+	}
+	w := httptest.NewRecorder()
+	s.LocalHandler(nil).ServeHTTP(w, httptest.NewRequest("GET", "/local/state?include_raw=true", nil))
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"history_sampled":true`) {
+		t.Fatal(w.Code, w.Body.String())
+	}
+}
+
 func TestChronologicalIndexMatchesComparatorAndUsesRange(t *testing.T) {
 	s, _, _ := open(t)
 	var plan string
