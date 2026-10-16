@@ -25,6 +25,8 @@ data class Operational(
 )
 
 class TrackingApp : Application() {
+    private var drainWork: Job? = null
+    private val drainGeneration = java.util.concurrent.atomic.AtomicLong()
     private val durableWork =
         kotlinx.coroutines.CoroutineScope(
             kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO
@@ -218,24 +220,34 @@ class TrackingApp : Application() {
     }
 
     fun syncAllNow() {
+        if (
+            !operational.value.historyPaused &&
+                (sender.aggressive || operational.value.drainStarting)
+        )
+            return
+        val token = drainGeneration.incrementAndGet()
         operational.update { it.copy(historyPaused = false, drainStarting = true) }
-        workScope.launch {
-            try {
-                if (!operational.value.historyPaused) sender.requestDrain()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                operational.update {
-                    it.copy(error = "Cannot resume saved delivery — check storage")
+        drainWork =
+            workScope.launch {
+                try {
+                    if (!operational.value.historyPaused) sender.requestDrain()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    operational.update {
+                        it.copy(error = "Cannot resume saved delivery — check storage")
+                    }
+                } finally {
+                    if (drainGeneration.get() == token)
+                        operational.update { it.copy(drainStarting = false) }
                 }
-            } finally {
-                operational.update { it.copy(drainStarting = false) }
             }
-        }
     }
 
     fun pauseHistory() {
-        operational.update { it.copy(historyPaused = true) }
+        drainGeneration.incrementAndGet()
+        drainWork?.cancel()
+        operational.update { it.copy(historyPaused = true, drainStarting = false) }
         sender.pauseDrain()
     }
 
