@@ -633,3 +633,12 @@ identities successfully. A real Room bridge test also injects an intermediary 40
 after Command durably saves SOS, proves no quarantine/false ACK, and verifies the
 original retry is deduplicated. Transport interruption is distinct from malformed
 original data and from a proven 413 size error.
+
+
+Later process reports also measure Command's protocol first `received_at` → visible
+notification for each fresh SOS (same host wall clock, no cross-machine clock claim).
+That timestamp is captured before commit; it is not falsely labelled commit-completion
+time. ACK-received→visible remains a separate monotonic measurement. Together with
+the real Room save→applied durable ACK measurement, these distinguish receipt,
+durability and operator presentation. Each report's harness hash identifies which
+measurements were actually available; older reports are not retroactively relabelled.

@@ -18,7 +18,7 @@ const availableDiskBytes=Number(space.bavail)*Number(space.bsize);
 // A configured budget cannot grant storage the selected filesystem lacks.
 const diskBudget=Math.min(configuredDiskBudget,Math.floor(availableDiskBytes*0.8));
 const rssBudget=Number(process.env.GNSS_SYNC_MAX_RSS_BYTES || 2*1024**3);
-const expected = new Map(), extras = new Map(), historyRTT=[], liveRTT=[], sosRTT=[], visible=[];
+const expected = new Map(), extras = new Map(), historyRTT=[], liveRTT=[], sosRTT=[], visible=[], receiptVisible=[], receipts=new Map();
 const startedAt=Date.now(), sourceStart=startedAt-days*86400000;
 const device=d=>`11111111-1111-4111-8111-${String(d).padStart(12,"0")}`;
 const identity=n=>`00000000-0000-4000-8000-${String(n).padStart(12,"0")}`;
@@ -56,7 +56,7 @@ function percentiles(a){if(!a.length)return null;const v=[...a].sort((a,b)=>a-b)
  page.on("pageerror",e=>errors.push(e.message));
  await page.addInitScript(()=>{window.syncLongTasks=[];new PerformanceObserver(list=>{for(const e of list.getEntries())window.syncLongTasks.push(e.duration)}).observe({type:"longtask",buffered:true});});
  await page.goto(local);await page.waitForFunction(()=>document.querySelector("#connection").textContent.includes("Connected"));
- async function send(m){const body=JSON.stringify(m),began=performance.now();const response=await fetch(phone+"/api/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body});const text=await response.text();assert.equal(response.status,200,text);const ack=JSON.parse(text);assert.equal(ack.message_id,m.message_id);assert.equal(ack.sequence,m.sequence);assert.equal(ack.device_id,m.device_id);report.request_body_bytes+=Buffer.byteLength(body);report.ack_body_bytes+=Buffer.byteLength(text);extras.set(`${m.device_id}/${m.sequence}`,m.message_id);return performance.now()-began;}
+ async function send(m){const body=JSON.stringify(m),began=performance.now();const response=await fetch(phone+"/api/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body});const text=await response.text();assert.equal(response.status,200,text);const ack=JSON.parse(text);assert.equal(ack.message_id,m.message_id);assert.equal(ack.sequence,m.sequence);assert.equal(ack.device_id,m.device_id);report.request_body_bytes+=Buffer.byteLength(body);report.ack_body_bytes+=Buffer.byteLength(text);extras.set(`${m.device_id}/${m.sequence}`,m.message_id);const received=Date.parse(ack.received_at);assert(Number.isFinite(received));receipts.set(`${m.device_id}/${m.sequence}`,received);return performance.now()-began;}
  async function drain(d){
   expected.set(device(d),samples);
   for(let n=1;n<=samples;){
@@ -83,6 +83,7 @@ function percentiles(a){if(!a.length)return null;const v=[...a].sort((a,b)=>a-b)
   liveRTT.push(await send(live));const ack=await send(sos);sosRTT.push(ack);const receipt=performance.now();
   await page.waitForFunction(key=>[...document.querySelectorAll(".sos-alert")].some(e=>e.dataset.event===key)&&!document.querySelector("#sos-toast").hidden,`${sos.device_id}/${sos.message_id}`);
   visible.push(performance.now()-receipt);
+  const fromReceipt=Date.now()-receipts.get(`${sos.device_id}/${sos.sequence}`);assert(fromReceipt>=0,"Same-host receipt clock moved backwards");receiptVisible.push(fromReceipt);
   await new Promise(r=>setTimeout(r,100));
  }
  const historyFinishedAt=await drainCompletion;
@@ -100,10 +101,11 @@ function percentiles(a){if(!a.length)return null;const v=[...a].sort((a,b)=>a-b)
  const coldActivation=performance.now();report.cold_history_sos_ack_ms=await send(coldSOS);const coldReceipt=performance.now();
  await navigation;await page.waitForFunction(key=>[...document.querySelectorAll(".sos-alert")].some(e=>e.dataset.event===key)&&!document.querySelector("#sos-toast").hidden,`${coldSOS.device_id}/${coldSOS.message_id}`);
  report.cold_history_ack_to_visible_ms=performance.now()-coldReceipt;
+ report.cold_history_first_received_to_visible_ms=Date.now()-receipts.get(`${coldSOS.device_id}/${coldSOS.sequence}`);assert(report.cold_history_first_received_to_visible_ms>=0);
  report.cold_history_sos_started_before_history_response_finished=historyFinished===0||coldActivation<historyFinished;
  await page.waitForFunction(()=>document.querySelectorAll("#tracks [data-device]").length>0);report.browser_cold_load_to_geometry_ms=performance.now()-renderStart;page.off("requestfinished",onFinished);
  report.browser_long_tasks=await page.evaluate(()=>window.syncLongTasks);assert.equal(errors.length,0,errors.join("\n"));
- report.history_ack=percentiles(historyRTT);report.fresh_live_ack=percentiles(liveRTT);report.fresh_sos_ack=percentiles(sosRTT);report.command_ack_to_visible_notification=percentiles(visible);report.android_activation_to_room_save="not measured by this process/browser test";
+ report.history_ack=percentiles(historyRTT);report.fresh_live_ack=percentiles(liveRTT);report.fresh_sos_ack=percentiles(sosRTT);report.command_ack_to_visible_notification=percentiles(visible);report.command_first_received_to_visible_notification=percentiles(receiptVisible);report.receipt_clock_definition="Same-host wall clock from protocol first received_at (captured before durable commit) to visible notification; separately report ACK-received to visible, not an invented commit timestamp";report.android_activation_to_room_save="not measured by this process/browser test";
  sample();await browser.close();browser=null;if(process.platform==="linux") {const stat=fs.readFileSync(`/proc/${command.pid}/stat`,"utf8").split(") ").at(-1).split(" ");const tick=Number(spawnSync("getconf",["CLK_TCK"],{encoding:"utf8"}).stdout)||100;report.command_cpu_user_s=Number(stat[11])/tick;report.command_cpu_system_s=Number(stat[12])/tick;}command.kill("SIGINT");await once(command,"exit");command=null;
  // Independent streaming SQL checks every original retained history tuple. No
  // huge JS/Python expected-record arrays or geometry oracle in Command's RSS.
