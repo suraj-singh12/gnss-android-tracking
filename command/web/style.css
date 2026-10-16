@@ -987,3 +987,10 @@ fieldset {
     top: 218px;
   }
 }
+
+#inspection-data {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 55vh;
+  overflow: auto;
+}

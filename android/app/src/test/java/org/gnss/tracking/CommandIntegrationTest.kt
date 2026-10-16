@@ -163,7 +163,10 @@ class CommandIntegrationTest {
         }
 
         fun open() {
-            db = Room.databaseBuilder(context, TrackingDatabase::class.java, name).build()
+            db =
+                Room.databaseBuilder(context, TrackingDatabase::class.java, name)
+                    .addCallback(TrackingDatabase.SUMMARY_CALLBACK)
+                    .build()
             repository = Repository(db, clock)
             sender =
                 Sender(repository, transport, clock, ::recordSos) {
@@ -1836,5 +1839,172 @@ class CommandIntegrationTest {
         println(
             "SYNC_OFF devices=20+1 observations=${saved.values.sumOf { it.size }} requests=${attempts.get()} new_fixes=0"
         )
+    }
+
+    @Test
+    fun substantialTrackingOffNormalAndManualUseOriginalRowsAndMeasureRamp() = runBlocking {
+        val measurements = mutableListOf<Pair<Int, Long>>()
+        for (manual in listOf(false, true)) {
+            val p = phone()
+            at(0)
+            val session = p.repository.beginTracking()
+            val originals =
+                (1..1200).map { n ->
+                    at(n.toLong())
+                    p.repository.saveObservation(
+                        CapturedObservation(
+                            "00000000-0000-4000-8000-${n.toString().padStart(12, '0')}",
+                            clock.now,
+                            fix(clock.now, n * 5.0),
+                            Health(gnss_status = "fix"),
+                            null,
+                            n * 1000000000L,
+                            kotlinx.coroutines.CompletableDeferred(session),
+                        )
+                    )
+                }
+            p.repository.endTracking()
+            at(7 * 86400L)
+            var requests = 0
+            var bytes = 0L
+            val transport =
+                object : Transport {
+                    override suspend fun capabilities(endpoint: String) =
+                        request(endpoint + "/api/v1/capabilities")
+
+                    override suspend fun history(endpoint: String, json: String): Response {
+                        requests++
+                        bytes += json.toByteArray().size
+                        return request(endpoint + "/api/v1/history", json)
+                    }
+
+                    override suspend fun post(endpoint: String, immutableJson: String): Response {
+                        requests++
+                        bytes += immutableJson.toByteArray().size
+                        return request(endpoint + "/api/v1/messages", immutableJson)
+                    }
+                }
+            val sender =
+                Sender(p.repository, transport, clock) {
+                    error("Tracking OFF must acquire zero fixes")
+                }
+            if (manual) sender.requestDrain()
+            val began = System.nanoTime()
+            repeat(300) { if (p.repository.pendingHistory() > 0) sender.step(retainedOnly = true) }
+            sender.step(retainedOnly = true) // completion transition
+            val elapsed = (System.nanoTime() - began) / 1000000
+            assertEquals(0L, p.repository.pendingHistory())
+            assertEquals(1200L, sender.syncProgress.ackedRecords)
+            assertFalse(sender.aggressive)
+            assertFalse(p.repository.state().tracking)
+            assertEquals(0, p.captures)
+            val saved = p.repository.dao.all()
+            assertEquals(originals.map { it.json }, saved.map { it.json })
+            assertTrue(saved.all { it.deliveredAt != null })
+            val commandIds =
+                raw()
+                    .filter {
+                        it.asJsonObject["message"].asJsonObject["device_id"].asString == p.id
+                    }
+                    .map { it.asJsonObject["message"].asJsonObject["message_id"].asString }
+                    .toSet()
+            assertEquals(originals.map { it.messageId }.toSet(), commandIds)
+            println(
+                "ISSUE22_ROOM_AB manual=$manual observations=1200 sourceBytes=${originals.sumOf { it.json.toByteArray().size }} requests=$requests requestBytes=$bytes transferAndRoomACKMillis=$elapsed zeroNewFixes=true"
+            )
+            measurements.add(requests to elapsed)
+        }
+        // A distinct faster discovery policy, without adding artificial automatic delays.
+        assertTrue(measurements[1].first < measurements[0].first)
+    }
+
+    @Test
+    fun freshSosAndLiveArriveDuringRealHistoryHttpWithDurableRoomTimings() = runBlocking {
+        val p = phone()
+        at(0)
+        val session = p.repository.beginTracking()
+        repeat(320) { n ->
+            at(n.toLong())
+            p.repository.saveObservation(
+                CapturedObservation(
+                    Protocol.newId(),
+                    clock.now,
+                    fix(clock.now, n * 5.0),
+                    Health(gnss_status = "fix"),
+                    null,
+                    (n + 1) * 1000000000L,
+                    kotlinx.coroutines.CompletableDeferred(session),
+                )
+            )
+        }
+        val transport =
+            object : Transport {
+                override suspend fun capabilities(endpoint: String) =
+                    request(endpoint + "/api/v1/capabilities")
+
+                override suspend fun history(endpoint: String, json: String) =
+                    request(endpoint + "/api/v1/history", json)
+
+                override suspend fun post(endpoint: String, immutableJson: String) =
+                    request(endpoint + "/api/v1/messages", immutableJson)
+            }
+        val sender =
+            Sender(p.repository, transport, clock) { error("Must use original native fixes") }
+        val saved = mutableListOf<Long>()
+        val sosAck = mutableListOf<Long>()
+        val liveAck = mutableListOf<Long>()
+        repeat(8) { event ->
+            at(7 * 86400L + event * 10)
+            val arrivals = bridge.rpc("history_arrivals")["count"].asLong
+            bridge.rpc("delay_history", 250)
+            val history =
+                async(kotlinx.coroutines.Dispatchers.IO) { sender.step(retainedOnly = true) }
+            while (bridge.rpc("history_arrivals")["count"].asLong == arrivals) kotlinx.coroutines
+                .delay(1)
+            val activation = System.nanoTime()
+            val sos =
+                SosEngine(
+                        p.repository,
+                        LatestLocation(clock),
+                        { Health(gnss_status = "no_fix") },
+                        clock,
+                    )
+                    .activate(SosTrigger.SCREEN)
+                    .row
+            val durable = System.nanoTime()
+            saved.add((durable - activation) / 1000000)
+            val fresh =
+                p.repository.saveObservation(
+                    CapturedObservation(
+                        Protocol.newId(),
+                        clock.now,
+                        fix(clock.now, 1700.0 + event * 5),
+                        Health(gnss_status = "fix"),
+                        null,
+                        clock.now * 1000000,
+                        kotlinx.coroutines.CompletableDeferred(session),
+                    )
+                )
+            val liveSaved = System.nanoTime()
+            history.await()
+            sender.step()
+            p.delivered(sos)
+            sosAck.add((System.nanoTime() - durable) / 1000000)
+            sender.step()
+            p.delivered(fresh)
+            liveAck.add((System.nanoTime() - liveSaved) / 1000000)
+        }
+        fun stats(name: String, values: List<Long>) {
+            val v = values.sorted()
+            println(
+                "ISSUE22_ROOM_PRIORITY $name n=${v.size} p50ms=${v[v.size / 2]} p95ms=${v.last()} p99ms=${v.last()} worstms=${v.last()}"
+            )
+        }
+        stats("activation_to_Room", saved)
+        stats("Room_to_SOS_ACK_applied", sosAck)
+        stats("fresh_fix_Room_to_Command_ACK", liveAck)
+        assertEquals(8, state()["sos_alerts"].asJsonArray.size())
+        assertTrue(saved.all { it < 5000 } && sosAck.all { it < 5000 } && liveAck.all { it < 5000 })
+        assertEquals(0, p.captures)
     }
 }

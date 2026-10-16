@@ -18,7 +18,11 @@ var uuid = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-
 var integer = regexp.MustCompile(`^(0|[1-9][0-9]*|-[1-9][0-9]*)$`)
 
 // Decode recursively so duplicate keys are rejected rather than silently replaced.
-func value(d *json.Decoder) (any, error) {
+func value(d *json.Decoder) (any, error) { return valueDepth(d, 0) }
+func valueDepth(d *json.Decoder, depth int) (any, error) {
+	if depth > 32 {
+		return nil, fmt.Errorf("JSON nesting limit")
+	}
 	tok, err := d.Token()
 	if err != nil {
 		return nil, err
@@ -38,7 +42,7 @@ func value(d *json.Decoder) (any, error) {
 			if _, exists := m[key]; exists {
 				return nil, fmt.Errorf("duplicate key %s", key)
 			}
-			v, err := value(d)
+			v, err := valueDepth(d, depth+1)
 			if err != nil {
 				return nil, err
 			}
@@ -49,7 +53,7 @@ func value(d *json.Decoder) (any, error) {
 	case json.Delim('['):
 		a := []any{}
 		for d.More() {
-			v, err := value(d)
+			v, err := valueDepth(d, depth+1)
 			if err != nil {
 				return nil, err
 			}

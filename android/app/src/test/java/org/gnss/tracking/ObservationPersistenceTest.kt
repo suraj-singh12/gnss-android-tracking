@@ -7,6 +7,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.google.gson.Gson
 import java.io.File
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.first
 import org.junit.*
 import org.junit.Assert.*
 import org.junit.runner.RunWith
@@ -227,7 +228,11 @@ class ObservationPersistenceTest {
         }
         val db =
             Room.databaseBuilder(app, TrackingDatabase::class.java, name)
-                .addMigrations(TrackingDatabase.MIGRATION_1_2, TrackingDatabase.MIGRATION_2_3)
+                .addMigrations(
+                    TrackingDatabase.MIGRATION_1_2,
+                    TrackingDatabase.MIGRATION_2_3,
+                    TrackingDatabase.MIGRATION_3_4,
+                )
                 .build()
         try {
             val repo = Repository(db, clock)
@@ -315,5 +320,89 @@ class ObservationPersistenceTest {
         val writer = app.observationPersistence
         assertEquals(0L, writer.state.submitted)
         writer.finish()
+    }
+
+    @Test
+    fun versionThreeRetainedHistoryUpgradeSeedsExactConstantTimeCounters() = runBlocking {
+        val name = "summary-upgrade.db"
+        var db =
+            Room.databaseBuilder(app, TrackingDatabase::class.java, name)
+                .addCallback(TrackingDatabase.SUMMARY_CALLBACK)
+                .build()
+        val repo = Repository(db, clock)
+        val session = repo.beginTracking()
+        val original =
+            (1..300).map { n ->
+                repo.saveObservation(
+                    CapturedObservation(
+                        Protocol.newId(),
+                        clock.now + n,
+                        observation(clock.now + n).fix,
+                        Health(gnss_status = "fix"),
+                        null,
+                        n * 1000000L,
+                        CompletableDeferred(session),
+                    )
+                )
+            }
+        for (row in original.take(50)) db.dao().updateRow(row.copy(deliveredAt = utc(clock.now)))
+        for (row in original.drop(50).take(20)) db.dao()
+            .updateRow(row.copy(quarantined = true, error = "Retained validation evidence"))
+        val identity = repo.state().deviceId
+        db.close()
+        val schema =
+            Gson()
+                .fromJson(
+                    listOf(
+                            File("schemas/org.gnss.tracking.TrackingDatabase/3.json"),
+                            File("app/schemas/org.gnss.tracking.TrackingDatabase/3.json"),
+                        )
+                        .first { it.exists() }
+                        .readText(),
+                    com.google.gson.JsonObject::class.java,
+                )["database"]
+                .asJsonObject
+        android.database.sqlite.SQLiteDatabase.openDatabase(
+                app.getDatabasePath(name).path,
+                null,
+                android.database.sqlite.SQLiteDatabase.OPEN_READWRITE,
+            )
+            .use { old ->
+                for (operation in listOf("insert", "update", "delete")) old.execSQL(
+                    "DROP TRIGGER outbox_summary_$operation"
+                )
+                old.execSQL("DROP TABLE outbox_summary")
+                old.execSQL(
+                    "UPDATE room_master_table SET identity_hash=? WHERE id=42",
+                    arrayOf(schema["identityHash"].asString),
+                )
+                old.version = 3
+            }
+        db =
+            Room.databaseBuilder(app, TrackingDatabase::class.java, name)
+                .addMigrations(TrackingDatabase.MIGRATION_3_4)
+                .build()
+        try {
+            val upgraded = Repository(db, clock)
+            assertEquals(identity, upgraded.state().deviceId)
+            assertEquals(original.map { it.json }, db.dao().all().map { it.json })
+            var counts = db.dao().queueCounts().first()
+            assertEquals(250, counts.pending)
+            assertEquals(250, counts.gnss)
+            assertEquals(20, counts.blocked)
+            assertEquals(50, counts.deliveredGnss)
+            val row = db.dao().row(original[70].sequence)!!
+            db.dao().updateRow(row.copy(deliveredAt = utc(clock.now)))
+            counts = db.dao().queueCounts().first()
+            assertEquals(249, counts.pending)
+            assertEquals(51, counts.deliveredGnss)
+            val progress = upgraded.snapshot(clock.now, null, Health())
+            val q = Protocol.decodeMessage(progress.json).history_progress!!
+            assertEquals(20L, q.unresolved_sequence_count)
+            assertEquals(20, q.unresolved_sequences.size)
+        } finally {
+            db.close()
+            app.deleteDatabase(name)
+        }
     }
 }

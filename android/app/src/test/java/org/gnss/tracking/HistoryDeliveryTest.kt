@@ -154,75 +154,79 @@ class HistoryDeliveryTest {
 
     private fun batchACK(json: String): Response {
         val a =
-            Protocol.parse(json).getAsJsonArray("messages").joinToString(",") { ack(it.toString()) }
+            Protocol.parse(json, 2097152).getAsJsonArray("messages").joinToString(",") {
+                ack(it.toString())
+            }
         return Response(200, """{"batch_version":1,"acks":[$a]}""")
     }
 
     @Test
-    fun senderGrowsWithoutWaitingReducesReachableFailureAndResetsAfterWifiReturn() = runBlocking {
-        val db = Room.inMemoryDatabaseBuilder(context, TrackingDatabase::class.java).build()
-        try {
-            val r = Repository(db, clock)
-            r.settings("Alpha", "Field", "http://192.168.1.2", 30)
-            val session = r.beginTracking()
-            val rows = (1..80).map { r.saveObservation(value(it, session)) }
-            clock.now = 1000000 // Stale history is eligible even with no live fix or status ACK.
-            var wifi = false
-            var failure = false
-            val sizes = mutableListOf<Int>()
-            val counts = mutableListOf<Int>()
-            val transport =
-                object : Transport {
-                    override fun wifiAvailable() = wifi
+    fun senderGrowsWithoutWaitingReducesReachableFailureAndPreservesRampAfterWifiReturn() =
+        runBlocking {
+            val db = Room.inMemoryDatabaseBuilder(context, TrackingDatabase::class.java).build()
+            try {
+                val r = Repository(db, clock)
+                r.settings("Alpha", "Field", "http://192.168.1.2", 30)
+                val session = r.beginTracking()
+                val rows = (1..80).map { r.saveObservation(value(it, session)) }
+                clock.now =
+                    1000000 // Stale history is eligible even with no live fix or status ACK.
+                var wifi = false
+                var failure = false
+                val sizes = mutableListOf<Int>()
+                val counts = mutableListOf<Int>()
+                val transport =
+                    object : Transport {
+                        override fun wifiAvailable() = wifi
 
-                    override suspend fun capabilities(endpoint: String) =
-                        Response(200, """{"historical_batch_versions":[1]}""")
+                        override suspend fun capabilities(endpoint: String) =
+                            Response(200, """{"historical_batch_versions":[1]}""")
 
-                    override suspend fun post(endpoint: String, immutableJson: String) =
-                        error("Expected negotiated batch")
+                        override suspend fun post(endpoint: String, immutableJson: String) =
+                            error("Expected negotiated batch")
 
-                    override suspend fun history(endpoint: String, json: String): Response {
-                        sizes.add(json.toByteArray().size)
-                        counts.add(Protocol.parse(json).getAsJsonArray("messages").size())
-                        if (failure) {
-                            failure = false
-                            return Response(503, "{}")
+                        override suspend fun history(endpoint: String, json: String): Response {
+                            sizes.add(json.toByteArray().size)
+                            counts.add(Protocol.parse(json).getAsJsonArray("messages").size())
+                            if (failure) {
+                                failure = false
+                                return Response(503, "{}")
+                            }
+                            return batchACK(json)
                         }
-                        return batchACK(json)
                     }
-                }
-            val sender =
-                Sender(r, transport, clock) {
-                    error("Native history must not manufacture a current snapshot")
-                }
-            sender.step()
-            assertTrue(sizes.isEmpty())
-            wifi = true
-            sender.connectivityRestored()
-            repeat(6) { sender.step() }
-            assertEquals(1, counts.first())
-            assertTrue(counts.any { it > 1 })
-            failure = true
-            sender.step()
-            val failedSize = sizes.last()
-            assertTrue(db.dao().all().any { it.deliveredAt == null })
-            clock.now += 30000
-            sender.step()
-            assertTrue(sizes.last() <= failedSize)
-            assertTrue(db.dao().all().none { it.quarantined })
-            wifi = false
-            sender.step()
-            wifi = true
-            sender.connectivityRestored()
-            sender.step()
-            assertEquals(1, counts.last())
-            repeat(100) { sender.step() }
-            assertTrue(db.dao().all().all { it.deliveredAt != null })
-            assertEquals(rows.map { it.messageId }, db.dao().all().map { it.messageId })
-        } finally {
-            db.close()
+                val sender =
+                    Sender(r, transport, clock) {
+                        error("Native history must not manufacture a current snapshot")
+                    }
+                sender.step()
+                assertTrue(sizes.isEmpty())
+                wifi = true
+                sender.connectivityRestored()
+                repeat(6) { sender.step() }
+                assertEquals(1, counts.first())
+                assertTrue(counts.any { it > 1 })
+                failure = true
+                sender.step()
+                val failedSize = sizes.last()
+                assertTrue(db.dao().all().any { it.deliveredAt == null })
+                clock.now += 30000
+                sender.step()
+                assertTrue(sizes.last() <= failedSize)
+                assertTrue(db.dao().all().none { it.quarantined })
+                wifi = false
+                sender.step()
+                wifi = true
+                sender.connectivityRestored()
+                sender.step()
+                assertEquals(counts[counts.lastIndex - 1], counts.last())
+                repeat(100) { sender.step() }
+                assertTrue(db.dao().all().all { it.deliveredAt != null })
+                assertEquals(rows.map { it.messageId }, db.dao().all().map { it.messageId })
+            } finally {
+                db.close()
+            }
         }
-    }
 
     @Test
     fun indexedPermanentFailurePreservesBadRowAndSynchronizesOtherObservations() = runBlocking {
@@ -406,6 +410,218 @@ class HistoryDeliveryTest {
             val completed = requests
             repeat(5) { sender.step(retainedOnly = true) }
             assertEquals(completed, requests)
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun measuredRampManualCoalescingAndStaleReceiptNeverCountAsApplied() = runBlocking {
+        val automatic = BatchAdaptation()
+        val manual = BatchAdaptation()
+        repeat(5) {
+            automatic.acknowledged(1000, 40, false)
+            manual.acknowledged(1000, 40, true)
+        }
+        assertEquals(4000, automatic.target)
+        assertEquals(64000, manual.target)
+        manual.acknowledged(1000, 4000, true)
+        assertEquals(32000, manual.target) // falling goodput + RTT pressure
+        val db = Room.inMemoryDatabaseBuilder(context, TrackingDatabase::class.java).build()
+        try {
+            val r = Repository(db, clock)
+            r.settings("Alpha", "Field", "http://192.168.1.2", 30)
+            val session = r.beginTracking()
+            repeat(25) { r.saveObservation(value(it + 1, session)) }
+            clock.now = 1000000
+            var reject = false
+            val guarded =
+                object : MessageStore by r {
+                    override suspend fun applyBatch(
+                        rows: List<Outbound>,
+                        receipts: List<Receipt>,
+                        generation: Long,
+                    ): Boolean =
+                        if (reject) {
+                            r.settings("Alpha", "Field", "http://192.168.1.3", 30)
+                            r.applyBatch(rows, receipts, generation)
+                        } else r.applyBatch(rows, receipts, generation)
+                }
+            val sizes = mutableListOf<Int>()
+            val t =
+                object : Transport {
+                    override suspend fun capabilities(endpoint: String) =
+                        Response(200, """{"historical_batch_versions":[1]}""")
+
+                    override suspend fun post(endpoint: String, immutableJson: String) =
+                        Response(200, ack(immutableJson))
+
+                    override suspend fun history(endpoint: String, json: String): Response {
+                        sizes.add(Protocol.parse(json).getAsJsonArray("messages").size())
+                        return batchACK(json)
+                    }
+                }
+            val sender = Sender(guarded, t, clock) { error("No capture") }
+            sender.step(retainedOnly = true)
+            sender.requestDrain()
+            repeat(3) { sender.step(retainedOnly = true) }
+            val before = sender.syncProgress
+            repeat(20) { sender.requestDrain() }
+            reject = true
+            sender.step(retainedOnly = true)
+            assertTrue(sizes.last() > 1)
+            assertEquals(before.ackedRecords, sender.syncProgress.ackedRecords)
+            assertEquals(before.ackedBytes, sender.syncProgress.ackedBytes)
+            assertTrue(sender.syncProgress.validAckRecords > before.validAckRecords)
+            assertTrue(sender.syncProgress.lastError!!.contains("not applied"))
+            assertTrue(r.pendingHistory() > 0)
+            sender.pauseDrain()
+            assertFalse(sender.aggressive)
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun transientDiscoveryRenegotiatesAndHistoryBackoffAllowsFreshLive() = runBlocking {
+        val db = Room.inMemoryDatabaseBuilder(context, TrackingDatabase::class.java).build()
+        try {
+            val r = Repository(db, clock)
+            r.settings("Alpha", "Field", "http://192.168.1.2", 5)
+            val session = r.beginTracking()
+            repeat(20) { r.saveObservation(value(it + 1, session)) }
+            clock.now = 1000000
+            var capabilities = 0
+            var failHistory = false
+            var live = 0
+            val t =
+                object : Transport {
+                    override suspend fun capabilities(endpoint: String): Response {
+                        capabilities++
+                        return if (capabilities == 1) Response(503, "{}")
+                        else Response(200, """{"historical_batch_versions":[1]}""")
+                    }
+
+                    override suspend fun post(endpoint: String, immutableJson: String): Response {
+                        live++
+                        return Response(200, ack(immutableJson))
+                    }
+
+                    override suspend fun history(endpoint: String, json: String): Response =
+                        if (failHistory) Response(503, "{}") else batchACK(json)
+                }
+            val sender = Sender(r, t, clock) { error("No synthetic capture") }
+            sender.step(retainedOnly = true)
+            assertEquals(1, capabilities)
+            clock.now += 16000
+            sender.step(retainedOnly = true)
+            assertEquals(2, capabilities)
+            failHistory = true
+            sender.step(retainedOnly = true)
+            val fresh =
+                value(100, session)
+                    .copy(
+                        capturedMillis = clock.now,
+                        fix = Fix(utc(clock.now), 0, 28.0, 77.0, 1.0, null, null, null, null),
+                    )
+            r.saveObservation(fresh)
+            val before = live
+            sender.step()
+            assertEquals(before + 1, live)
+            assertEquals(
+                0L,
+                r.dao.newestNative(clock.now, clock.now - 30000, clock.now + 5000)?.sequence ?: 0L,
+            )
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun intermediary413AndLargeValidSingletonNeverQuarantineOriginal() = runBlocking {
+        val db = Room.inMemoryDatabaseBuilder(context, TrackingDatabase::class.java).build()
+        try {
+            val r = Repository(db, clock)
+            r.settings("Alpha", "Field", "http://192.168.1.2", 30)
+            val session = r.beginTracking()
+            val row = r.saveObservation(value(1, session))
+            val larger =
+                row.copy(
+                    json = row.json.dropLast(1) + ",\"extension\":\"" + "x".repeat(6000) + "\"}"
+                )
+            r.dao.updateRow(larger)
+            clock.now = 1000000
+            var rejected = false
+            val t =
+                object : Transport {
+                    override suspend fun capabilities(endpoint: String) =
+                        Response(
+                            200,
+                            """{"historical_batch_versions":[1],"maximum_batch_bytes":4096}""",
+                        )
+
+                    override suspend fun post(endpoint: String, immutableJson: String): Response {
+                        assertEquals(larger.json, immutableJson)
+                        if (!rejected) {
+                            rejected = true
+                            return Response(413, "intermediary body ceiling")
+                        }
+                        return Response(200, ack(immutableJson))
+                    }
+                }
+            val sender = Sender(r, t, clock) { error("No collection") }
+            sender.step(retainedOnly = true)
+            assertFalse(r.dao.row(row.sequence)!!.quarantined)
+            assertNull(r.dao.row(row.sequence)!!.deliveredAt)
+            clock.now += 30000
+            sender.step(retainedOnly = true)
+            assertNotNull(r.dao.row(row.sequence)!!.deliveredAt)
+            assertEquals(larger.json, r.dao.row(row.sequence)!!.json)
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun largerNegotiatedBatchAndAckStayBoundedAndApplyEveryOriginal() = runBlocking {
+        val db = Room.inMemoryDatabaseBuilder(context, TrackingDatabase::class.java).build()
+        try {
+            val r = Repository(db, clock)
+            r.settings("Alpha", "Field", "http://192.168.1.2", 30)
+            val session = r.beginTracking()
+            val originals = (1..600).map { r.saveObservation(value(it, session)) }
+            clock.now = 1000000
+            var largest = 0
+            var largestAck = 0
+            val t =
+                object : Transport {
+                    override suspend fun capabilities(endpoint: String) =
+                        Response(
+                            200,
+                            """{"historical_batch_versions":[1],"maximum_batch_bytes":262144,"maximum_batch_records":512}""",
+                        )
+
+                    override suspend fun post(endpoint: String, immutableJson: String) =
+                        error("Expected batch")
+
+                    override suspend fun history(endpoint: String, json: String): Response {
+                        assertTrue(json.toByteArray().size <= 262144)
+                        val count = Protocol.parse(json, 2097152).getAsJsonArray("messages").size()
+                        assertTrue(count <= 512)
+                        largest = maxOf(largest, count)
+                        return batchACK(json).also {
+                            largestAck = maxOf(largestAck, it.body.toByteArray().size)
+                        }
+                    }
+                }
+            val sender = Sender(r, t, clock) { error("No new fixes") }
+            sender.requestDrain()
+            repeat(60) { sender.step(retainedOnly = true) }
+            assertTrue(largest > 128)
+            assertTrue(largestAck > 65536)
+            assertEquals(600L, sender.syncProgress.ackedRecords)
+            assertEquals(0L, r.pendingHistory())
+            assertEquals(originals.map { it.json }, r.dao.all().map { it.json })
         } finally {
             db.close()
         }

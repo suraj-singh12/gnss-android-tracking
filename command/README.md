@@ -582,24 +582,11 @@ timestamped phone queue state. A permanent protocol rejection is unresolved, not
 a GNSS quality rejection is stored history. Exports include these distinctions and projection
 state without copying coordinates, raw envelopes, databases or secrets.
 
-Derived arrays live in the existing SQLite projection cache (`projection_state`,
-with ordered `projection_chunks` for larger routes),
-separate from the frequently updated device/receipt state. This is an additive
-migration of the old state JSON; raw/wire, configuration, lifecycle and evidence are
-retained. ACK commits update only lightweight receipt state and durable projection
-work. Ordinary worker updates read new arrival rows for affected devices and resume
-accepted-anchor checkpoints; late history reprocesses the dependent suffix. Work
-has per-device generations so one busy phone cannot invalidate every other phone.
-Caches regenerate from raw after restart. Dashboard live snapshots never wait for
-an in-flight reconstruction; pending/error remains visible.
-Large projections are replaced atomically in chunks of at most 512 points and
-512 decisions per SQLite value. Legacy single-value projections remain readable.
-This avoids exhausting embedded SQLite's 256 MiB memory allowance while binding
-one dense route JSON value; it does not make the in-memory route model constant-size.
-Dashboard materialization uses one separately serialized, query-only WAL connection
-to the same SQLite file. Its consistent read transaction cannot hold the ingestion
-mutex or writer connection while decoding a cold history. Private `:memory:` stores
-retain their single-connection path. Large dashboard payloads can still be expensive.
+Derived arrays remain cached in the same authoritative SQLite database. Issue #22's
+versioned per-device chunks, bounded streaming reconstruction and independent LIVE/SOS
+presentation are detailed below. Raw identities, recording/quality policy and durable
+receipt remain independent of cache publication. Pending/error cannot certify
+completion, and unknown phone inventory stays unknown.
 
 History exports contain each identified Android session. `received_through` is an
 actual contiguous identity prefix. `processed_through` additionally admits explicit
@@ -670,26 +657,71 @@ relative to interval-only snapshots; no automatic raw-data deletion is enabled.
 
 See [UI setup and acceptance](../docs/ui-acceptance.md) and [shared design system](../docs/design-system.md) for the three-destination Android interface, Command workspace, recording/quality controls, protected SOS and exactly two offline canvas/map modes. The existing tracking and SOS engines remain authoritative.
 
-## Issue #22 bounded history receipt
+## Issue #22 bounded history receipt and presentation
 
-Capabilities now explicitly advertise the existing 65,536-byte / 128-record bounds
-and one historical request in flight per phone. Older v1 individual and batch
-clients remain valid. Android can grow to the measured 64 KB target; larger bodies
-remain rejected. Atomic SQLite `synchronous=FULL` receipt still precedes ACK. Batch
-entries reuse strict root decoding; duplicate keys, malformed records, conflicts,
-rollback, first receipt timestamps and complete ACK validation retain their rules.
+The default capability remains 65536 bytes/128 historical records. The bounded
+`-history-batch-bytes` option permits the measured candidates 65536, 131072, 262144,
+524288, 1048576 or 2097152; the record ceiling is max(128, bytes/512), capped at 4096.
+The default was retained because larger requests did not establish a sustained fleet
+throughput benefit and increased urgent-request exposure. Do not select the largest
+candidate merely because it reduces request count. Older v1 clients remain valid.
 
-Identity lookups use each existing unique index independently. Ingest refreshes only
-the affected device's live quality. Incremental projection/dashboard cursors sort
-newly read groups once, preserving the canonical ordering while avoiding repeated
-middle-of-slice copies across concurrent phones. The existing wake channel coalesces
-notifications for at most 250 ms before a worker pass; a computation invalidated by
-new raw data retains its durable queue without rewriting identical geometry.
-Projection remains separate from
-receipt; its pending/error/completed and eligible/qualified route counts remain
-visible. Missing/offline phone inventory cannot establish global completion.
+Two HTTP history admission slots bound decoded request RAM independently of device
+count. One historical waiter reaches the SQLite writer, allowing LIVE/SOS to contend
+with one bounded history transaction instead of an entire fleet. Concurrent requests
+for the same device are rejected with transient 429; there is no 20-device maximum.
+Raw/identity/receipt/work still commit atomically under SQLite FULL before ACK.
+Disk-full never earns an ACK. Long-reader WAL pressure above a 128 MiB budget attempts
+a nonwaiting checkpoint; history-only 429 backpressure leaves urgent envelopes
+eligible. `journal_size_limit=64 MiB` controls reuse after reset, not a hard bound
+against external readers or a guarantee of available disk space.
 
-Use the existing Go build commands above on macOS or Windows; no platform-specific
-runtime or service was added. Exact-source matched acceptance assets are generated
-by the existing integrated workflow from the PR head, with embedded source revision,
-manifest and checksums. Cross-compilation is not native macOS/Windows acceptance.
+`projection_state` now publishes generation pointers into the existing derived
+cache's `projection_device_chunks`. Each value contains at most 512 points and
+512 decisions; ordinal -1 is its bounded presentation preview. Ordinary updates
+replace only the affected device, stage chunks in short transactions, then atomically
+publish the pointer and metadata. Interrupted staging cannot replace the prior good
+snapshot. Cleanup uses the *current* published pointers and bounded deletions.
+Missing chunk manifests queue reconstruction from unchanged raw history on reopen.
+Legacy monolithic/ordered-chunk caches migrate by streaming values before pointer
+publication; the old cache stays published until that boundary. Older Command
+binaries cannot interpret the new derived format: back up while stopped and rebuild
+from raw with a supported version; binary downgrade is not certified.
+
+The accepted-anchor `Derivation.Feed`, canonical chronology, quality policies,
+recording windows and distances are unchanged. Small histories retain the existing
+incremental checkpoints with an aggregate candidate-cache budget. Above 20000 raw
+observations/device, reconstruction uses indexed keyset pages and the same derivation,
+not full-history arrays. Readers close between pages. Consistent captured prefixes
+can publish during continuous ingestion, while newer work remains explicitly pending.
+A durable logical last-served counter gives queued devices fair projection turns,
+independent of source/receiver clock jumps. A background turn handles one device; explicit inspection boundaries drain a finite
+captured inventory. The expression index is checked against the canonical comparator.
+
+Production dashboard reads use bounded query-only connections and deadlines.
+`GET /local/live` independently refreshes contact, LIVE and SOS without history arrays.
+`GET /local/state` preserves exact small views; large maps receive at most 2048
+presentation points, fairly sampled across received devices. This is **presentation
+only**, not the complete qualified route. Full distances remain derived from every
+qualified original. The browser labels previews, bounds SVG work, independently polls
+LIVE/SOS and rejects older receipt-state responses. Quality/recording transitions
+clear stale presentation. No ACK or preview proves all history complete.
+
+`GET /local/history?device_id=<uuid>&cursor=...` returns up to 512 full-resolution
+points and decisions, pinned to a published generation. A generation or policy/window
+change returns 409; restart inspection. `layer=raw` returns up to 16 original retained
+envelopes with capture/measurement/receipt times, in original transport-sequence order.
+The Inspect history dialog exposes both layers and pagination. Raw diagnostic map
+mode is bounded too; authoritative geometry and raw originals are never decimated
+in SQLite. Queue reports retain freshness and unresolved-count distinctions.
+
+Explicit diagnostic inspection can still materialize complete arrays in internal
+`Snapshot`/`FieldReport` calls used by the oracle/tests; ordinary browser endpoints
+never request those for large histories. Production ZIP export above 50000 raw rows
+uses schema 3: bounded streamed receipts/events/qualified-decision NDJSON and a small
+manifest/report. It explicitly leaves whole-corpus automated assessments INCONCLUSIVE;
+it does not claim a PASS from a sample. Existing schema-2 small reports are preserved.
+Export readers close between pages, maintain SOS redaction, and abort on cancellation,
+cache-generation loss or write failure rather than return a valid truncated archive.
+Clients consuming schema 3 must process its NDJSON files. Native platform runtime,
+physical Android and dense-fleet capacity remain separate acceptance evidence.

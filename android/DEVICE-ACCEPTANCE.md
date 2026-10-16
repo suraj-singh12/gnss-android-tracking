@@ -529,7 +529,12 @@ Command raw IDs and confirm **zero new GNSS fixes** and Tracking still OFF. Paus
 mid-transfer, retain the same IDs, resume and interrupt Wi-Fi three times. Kill/reopen
 the app and restart Command using the same databases; only rows lacking durable
 receipts should retry. Repeat with the screen locked/off and UI backgrounded,
-recording actual OS suspension rather than assuming foreground-only work continued.
+checking the dataSync notification/Pause action, five-hour app budget and Android
+15 aggregate budget. Record actual OS suspension rather than assuming execution.
+Automatic OFF transfer alone remains visible-app work; manual drain explicitly
+starts its permitted transfer lifetime. Validate notification-denied and FGS-start-
+denied paths, zero location-provider listeners, process kill, timeout and battery/OEM
+restrictions. Software service simulations do not certify those physical states.
 Reboot/force-stop require reopening; do not start GNSS merely to deliver old rows.
 
 Run 1/5/20 physical phones and join a 21st with retained history. Keep a disconnected

@@ -336,19 +336,23 @@ Follow [Generic Android Physical Button Acceptance](../android/DEVICE-ACCEPTANCE
 on actual hardware. Keep PRs #11, #12, #14 and #15 unmerged pending review and do
 not infer a physical-device pass from the rendered or JVM evidence.
 
-## Issue #22 foreground synchronization controls
+## Issue #22 synchronization controls and bounded history
 
-On Tracking, **Sync All Now** resumes retained history and clears transient retry
-timing; **Pause history sync** preserves pending data and permits an in-flight
-receipt to finish. Both work independently of Start/Stop. Stop's confirmation now
-explains that visible-app synchronization remains available without GNSS collection.
-History shows queued, durable ACK and unresolved facts, with Command reconstruction
-separate. Diagnostics payload-byte counters cover only this process lifetime.
+Sync All Now activates a distinct, coalesced manual drain on the existing Sender;
+Pause affects future history selection without erasing data or cancelling a durable
+in-flight ACK. Tracking OFF remains zero collection. A user-started dataSync service
+provides a visible notification/Pause action and a bounded execution lifetime after
+screen lock/backgrounding, subject to Android/OEM restrictions. Reboot/process death
+requires reopening. Automatic visible OFF delivery needs no tracking service.
+History separates pending, Room ACK and unresolved records from Command reconstruction.
 
-For acceptance, retain history, Stop, select Sync All Now and confirm the provider
-is not registered, no service starts, zero observations are newly captured and the
-same saved IDs reach Command. Pause/resume, reopen and reconnect should retain
-progress. With Tracking OFF keep the application visible: this implementation does
-not promise screen-off/background transfer. Use the Android device-acceptance
-runbook for actual OEM/radio/OS results. Command's existing receiver/reconstruction
-stage displays remain unchanged; remote Sync All remains Issue #25.
+Command independently polls LIVE/SOS while bounded previews load. Large previews
+are labelled and capped at 2048 points; full qualified distance is unchanged. Inspect
+history pages original full-resolution geometry/decisions or retained envelopes with
+capture and receipt times. Quality/recording changes invalidate obsolete inspection
+cursors. Preserve party filtering, time boundaries, keyboard focus, SOS notification,
+separate human acknowledgement and raw-diagnostic qualification labels.
+
+Acceptance includes real Room/Sender→HTTP/SQLite tests and Chromium under backlog.
+These do not certify native Android screen-off/Doze/radio or desktop hardware; use
+android/DEVICE-ACCEPTANCE.md. Remote Sync All remains Issue #25.

@@ -68,15 +68,24 @@ type ObservationIdentity struct {
 	ElapsedMillis int64  `json:"measurement_elapsed_ms"`
 }
 type QueueProgress struct {
-	Session       string  `json:"tracking_session_id"`
-	SessionStart  string  `json:"session_started_at"`
-	Latest        int64   `json:"latest_committed_sequence"`
-	OldestPending *int64  `json:"oldest_pending_sequence"`
-	Pending       int64   `json:"pending_observations"`
-	Unresolved    []int64 `json:"unresolved_sequences"`
-	KnownLoss     int64   `json:"known_collection_loss"`
-	Measured      string  `json:"measured_at"`
+	Session         string  `json:"tracking_session_id"`
+	SessionStart    string  `json:"session_started_at"`
+	Latest          int64   `json:"latest_committed_sequence"`
+	OldestPending   *int64  `json:"oldest_pending_sequence"`
+	Pending         int64   `json:"pending_observations"`
+	Unresolved      []int64 `json:"unresolved_sequences"`
+	UnresolvedCount *int64  `json:"unresolved_sequence_count,omitempty"`
+	KnownLoss       int64   `json:"known_collection_loss"`
+	Measured        string  `json:"measured_at"`
 }
+
+func (q *QueueProgress) unresolvedCount() int {
+	if q.UnresolvedCount != nil {
+		return int(*q.UnresolvedCount)
+	}
+	return len(q.Unresolved)
+}
+
 type Message struct {
 	Observation *ObservationIdentity `json:"observation,omitempty"`
 	Progress    *QueueProgress       `json:"history_progress,omitempty"`

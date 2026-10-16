@@ -1,7 +1,6 @@
 package core
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -107,15 +106,40 @@ func (s *Store) LocalHandler(assets http.Handler) http.Handler {
 			return
 		}
 		if r.URL.Path == "/local/field-report" && r.Method == "GET" {
-			var b bytes.Buffer
-			if err := s.ExportFieldReport(&b); err != nil {
-				failure(w, 503, "storage_unavailable", err)
-				return
-			}
+			// ZIP output is streamed; a failed/cancelled export aborts the HTTP
+			// response rather than presenting a truncated archive as completed.
 			w.Header().Set("Content-Type", "application/zip")
 			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=gnss-field-report-%s.zip", s.Now().UTC().Format("20060102T150405Z")))
 			w.Header().Set("Cache-Control", "no-store")
-			_, _ = w.Write(b.Bytes())
+			_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(10 * time.Minute))
+			if err := s.exportFieldReportContext(r.Context(), w); err != nil {
+				panic(http.ErrAbortHandler)
+			}
+			return
+		}
+		if r.URL.Path == "/local/live" && r.Method == "GET" {
+			st, _, err := s.boundedDashboard(r.Context(), 30, true)
+			if err != nil {
+				failure(w, 503, "storage_unavailable", err)
+				return
+			}
+			respond(w, 200, dashboardView(st, s.Now()))
+			return
+		}
+		if r.URL.Path == "/local/history" && r.Method == "GET" {
+			page, err := s.historyPage(r.Context(), r.URL.Query().Get("device_id"), r.URL.Query().Get("cursor"))
+			if r.URL.Query().Get("layer") == "raw" {
+				page, err = s.rawHistoryPage(r.Context(), r.URL.Query().Get("device_id"), r.URL.Query().Get("cursor"))
+			}
+			if err != nil {
+				status := 400
+				if errors.Is(err, errHistoryChanged) {
+					status = 409
+				}
+				failure(w, status, "history_unavailable", err)
+				return
+			}
+			respond(w, 200, page)
 			return
 		}
 		if r.URL.Path == "/local/state" && r.Method == "GET" {
@@ -128,12 +152,19 @@ func (s *Store) LocalHandler(assets http.Handler) http.Handler {
 				}
 				dot = n
 			}
-			st, err := s.snapshot(dot, false, r.URL.Query().Get("include_raw") == "true")
+			st, sampled, err := s.boundedDashboard(r.Context(), dot, false)
+			if err == nil && !sampled && r.URL.Query().Get("include_raw") == "true" {
+				st, err = s.snapshot(dot, false, true)
+			}
 			if err != nil {
 				failure(w, 503, "storage_unavailable", err)
 				return
 			}
-			respond(w, 200, dashboardView(st, s.Now()))
+			view := dashboardView(st, s.Now())
+			view["history_sampled"] = sampled
+			view["history_point_limit"] = dashboardPointLimit
+			view["history_inspection_endpoint"] = "/local/history"
+			respond(w, 200, view)
 			return
 		}
 		if r.Method != "POST" {
@@ -225,7 +256,7 @@ func dashboardView(st State, now time.Time) map[string]any {
 		if d.Location != nil {
 			location = map[string]any{"fix": d.Location.Fix}
 		}
-		devices[id] = map[string]any{"device_id": id, "track_color": d.Color, "track_dash": d.Dash, "snapshot": map[string]any{"party": d.Snapshot.Party, "health": d.Snapshot.Health, "config_state": d.Snapshot.Config}, "location": location, "current_position": d.CurrentPosition, "live_x_m": d.LiveX, "live_y_m": d.LiveY, "location_reason": d.LocationReason, "last_contact": d.Contact, "desired_config": d.Desired, "config_converged": d.Converged, "contact_condition": d.ContactCondition, "gnss_condition": d.GNSSCondition, "location_age_s": d.LocationAge, "total_m": d.Total, "field_evidence": d.Evidence, "history": d.History, "history_sessions": d.HistorySessions, "reconstruction": d.Reconstruction}
+		devices[id] = map[string]any{"device_id": id, "track_color": d.Color, "track_dash": d.Dash, "snapshot": map[string]any{"party": d.Snapshot.Party, "health": d.Snapshot.Health, "config_state": d.Snapshot.Config}, "location": location, "current_position": d.CurrentPosition, "live_x_m": d.LiveX, "live_y_m": d.LiveY, "location_reason": d.LocationReason, "last_contact": d.Contact, "desired_config": d.Desired, "config_converged": d.Converged, "contact_condition": d.ContactCondition, "gnss_condition": d.GNSSCondition, "location_age_s": d.LocationAge, "total_m": d.Total, "durably_received_observations": d.DurableObservations, "field_evidence": d.Evidence, "history": d.History, "history_sessions": d.HistorySessions, "reconstruction": d.Reconstruction}
 	}
 	var recording any
 	if st.Recording != nil {
@@ -242,5 +273,5 @@ func dashboardView(st State, now time.Time) map[string]any {
 		}
 		recording = map[string]any{"recording_id": st.Recording.ID, "active": st.Recording.Active, "mode": st.Recording.Mode, "duration_s": seconds}
 	}
-	return map[string]any{"recording_session_available": sessionAvailable, "sos_alerts": st.Alerts, "devices": devices, "recording": recording, "policy": st.Policy, "points": st.Points, "raw_points": st.RawPoints, "provisional_points": st.Provisional, "projection_pending": st.ProjectionPending, "projection_error": st.ProjectionError}
+	return map[string]any{"receipt_version": st.ReceiptVersion, "recording_session_available": sessionAvailable, "sos_alerts": st.Alerts, "devices": devices, "recording": recording, "policy": st.Policy, "points": st.Points, "raw_points": st.RawPoints, "provisional_points": st.Provisional, "projection_pending": st.ProjectionPending, "projection_error": st.ProjectionError}
 }

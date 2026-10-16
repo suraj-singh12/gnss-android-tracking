@@ -337,7 +337,7 @@ class TrackingLifecycleTest {
     }
 
     @Test
-    fun localSyncControlsWhileStoppedNeverStartLocationOrAService() = runBlocking {
+    fun localSyncControlsWhileStoppedStartOnlyDataTransferNeverLocation() = runBlocking {
         app.repository.state()
         val session = app.repository.beginTracking()
         val at = System.currentTimeMillis() - 86400000L
@@ -375,11 +375,59 @@ class TrackingLifecycleTest {
             assertFalse(app.repository.state().tracking)
             assertFalse(app.operational.value.tracking)
             assertTrue(shadowOf(manager).getLocationUpdateListeners().isEmpty())
-            assertNull(shadowOf(app).nextStartedService)
+            assertEquals(
+                RetainedTransferService::class.java.name,
+                shadowOf(app).nextStartedService.component!!.className,
+            )
+            assertTrue(shadowOf(manager).getLocationUpdateListeners().isEmpty())
             assertEquals(listOf(row.json), app.repository.dao.all().map { it.json })
         } finally {
             activity.pause().stop().destroy()
             app.finishForTests()
         }
+    }
+
+    @Test
+    @Config(sdk = [35])
+    fun userTransferLifetimePromotesWithoutLocationAndPausePreservesData() = runBlocking {
+        val session = app.repository.beginTracking()
+        val at = System.currentTimeMillis() - 86400000
+        val row =
+            app.repository.saveObservation(
+                CapturedObservation(
+                    Protocol.newId(),
+                    at,
+                    Fix(utc(at), 0, 28.0, 77.0, 1.0, null, null, null, null),
+                    Health(gnss_status = "fix"),
+                    null,
+                    1000000,
+                    CompletableDeferred(session),
+                )
+            )
+        app.repository.endTracking()
+        app.syncAllNow()
+        val controller = Robolectric.buildService(RetainedTransferService::class.java).create()
+        try {
+            val service = controller.get()
+            assertEquals(
+                android.app.Service.START_NOT_STICKY,
+                service.onStartCommand(Intent(app, RetainedTransferService::class.java), 0, 1),
+            )
+            assertEquals(22, shadowOf(service).lastForegroundNotificationId)
+            assertNotNull(shadowOf(service).lastForegroundNotification)
+            assertTrue(shadowOf(manager).getLocationUpdateListeners().isEmpty())
+            assertFalse(app.repository.state().tracking)
+            service.onStartCommand(
+                Intent(app, RetainedTransferService::class.java).setAction("pause"),
+                0,
+                2,
+            )
+            assertTrue(app.operational.value.historyPaused)
+            assertEquals(listOf(row.json), app.repository.dao.all().map { it.json })
+        } finally {
+            controller.destroy()
+            app.finishForTests()
+        }
+        assertFalse(app.operational.value.transferActive)
     }
 }

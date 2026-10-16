@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -34,6 +35,8 @@ func TestSyncFleetPerformance(t *testing.T) {
 	}
 	devices, samples, days, limit := integer("GNSS_SYNC_DEVICES", 5), integer("GNSS_SYNC_SAMPLES", 600), integer("GNSS_SYNC_DAYS", 7), integer("GNSS_SYNC_BATCH", 20000)
 	s, now, _ := open(t)
+	s.historyBatchBytes = max(65536, min(limit, 2097152))
+	s.historyBatchRecords = max(128, min(4096, s.historyBatchBytes/512))
 	*now = base.Add(time.Duration(days)*24*time.Hour + time.Hour)
 	if err := s.ActionMode("start", "from_beginning"); err != nil {
 		t.Fatal(err)
@@ -71,7 +74,7 @@ func TestSyncFleetPerformance(t *testing.T) {
 			for n := 1; n <= samples; {
 				messages := []Message{}
 				size := 32
-				for n <= samples && len(messages) < 128 {
+				for n <= samples && len(messages) < s.historyBatchRecords {
 					m := template
 					m.Device = fmt.Sprintf("11111111-1111-4111-8111-%012d", d)
 					m.ID = fmt.Sprintf("00000000-0000-4000-8000-%012d", n)
@@ -275,6 +278,13 @@ func TestSyncFleetPerformance(t *testing.T) {
 	}
 	projection := time.Since(projectionStart)
 	viewStart := time.Now()
+	preview, sampled, viewErr := s.boundedDashboard(context.Background(), 30, false)
+	if viewErr != nil {
+		t.Fatal(viewErr)
+	}
+	encoded, _ := json.Marshal(dashboardView(preview, s.Now()))
+	t.Logf("bounded_dashboard=%s payload_bytes=%d points=%d sampled=%v", time.Since(viewStart), len(encoded), len(preview.Points), sampled)
+	viewStart = time.Now()
 	st, err := s.snapshot(30, false, false)
 	if err != nil {
 		t.Fatal(err)

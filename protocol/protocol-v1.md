@@ -285,7 +285,9 @@ These extensions are optional; old queued v1 envelopes are not rewritten.
 `GET /api/v1/capabilities` advertises `historical_batch_versions:[1]`,
 `observation_identity_version:1` and `maximum_batch_bytes:65536`.
 Additive limits `maximum_batch_records:128` and
-`maximum_inflight_history_per_device:1` make the existing bounds explicit. Missing
+`maximum_inflight_history_per_device:1` make the default bounds explicit; concurrent
+requests for one device receive transient 429. Optional negotiated ceilings extend
+to 2 MiB / 4096 records without changing the v1 envelope or batch shape. Missing
 fields use the older 65,536-byte/128-record limits. Senders clamp advertised limits
 to their own safety caps and count encoded UTF-8 bytes, including the batch wrapper.
 Limits do not change immutable envelopes or individual v1/SOS support.
@@ -299,11 +301,14 @@ There is no assumption that an older Command understands a batch.
 The canonical complete request/ACK/error examples are in
 [`fixtures/history-batch-v1/`](fixtures/history-batch-v1/).
 The request root contains integer `batch_version:1` and `messages`, an array of
-1..128 complete observation envelopes from one device/session/recovery block, within
-64 KiB. Android targets one observation, 500 B, 1/2/4/8/16/20/32/64 KB; a complete
+1..maximum_batch_records complete observation envelopes from one device/session/recovery block, within
+maximum_batch_bytes (default 128 records / 64 KiB). Android targets one observation, 500 B, 1/2/4/8/16/20/32/64 KB; a complete
 observation may exceed a small target. Never split an observation or wait to fill
 an otherwise ready batch. Transport defaults are a 6-second call and 3-second
-connection timeout. Individual v1 and SOS endpoints remain available.
+connection timeout. Negotiated history deadlines scale to 14 seconds; history ACK
+bodies are bounded separately at 2 MiB. Individual v1 and SOS endpoints remain at
+64 KiB and six seconds. A receiver ceiling is a maximum, not an instruction to
+always use it. Individual v1 and SOS endpoints remain available.
 
 Success: `{"batch_version":1,"acks":[...]}`, with an ordinary exact-identity v1
 ACK for each entry, in request order. All entries commit atomically before ACK;
@@ -316,6 +321,10 @@ observation_id and message. No entries of that failed batch commit. Android
 retains the offending original row/error as unresolved and retries the others.
 Unidentified validation failures isolate batches deterministically down to one
 entry. Timeouts, malformed ACKs, 429 and 5xx are temporary, never permanent loss.
+413 is a transport-limit outcome, not proof of an invalid original observation.
+Reduce the transport bound or use individual v1 when it fits; retain unresolved data
+without poison quarantine when neither fits. `X-GNSS-Throttle-Scope: history` scopes
+429 to historical work; absent scope preserves ordinary receiver-wide throttling.
 The LAN ingestion listener does not expose dashboard/control/export endpoints.
 
 `X-GNSS-Delivery-Role: live|history` labels an individual transfer without changing
@@ -343,7 +352,17 @@ past clock skew or invent corrected measurement times.
 
 Tracking OFF disables collection, not retained-data eligibility. Android's visible
 application may use the existing Sender to drain retained envelopes without creating
-new fixes or restarting the tracking service. Local Sync All resets transient retry
-timing; local Pause retains data and allows in-flight durable ACK completion. OS
-background execution is not promised. ACK, reconstruction and inventory completeness
+new fixes or restarting the tracking service. Local Sync All uses the same Sender with a distinct bounded aggressive discovery
+policy, coalesces presses and preserves healthy adaptation. Local Pause retains data
+and allows in-flight durable ACK completion. A user-started dataSync foreground
+lifetime supports permitted background work; OS limits and process death/reboot
+still apply. Unrestricted background execution is not promised. ACK, reconstruction and inventory completeness
 remain separate; Command-originated control is reserved for Issue #25.
+
+Optional `history_progress.unresolved_sequence_count` is an exact nonnegative
+safe integer at least the length of `unresolved_sequences`. New Android progress
+messages include at most 256 sequence examples, plus the exact total. Missing count
+means the legacy list is complete. Nonzero total forbids synchronized status even
+when the example list is incomplete. Old receivers still see nonempty unresolved
+examples; original queued envelopes are never rewritten. Upgrades backfill this
+validated extension from retained wire before duplicate comparison.

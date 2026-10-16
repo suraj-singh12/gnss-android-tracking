@@ -9,6 +9,8 @@ import (
 	"net/http"
 )
 
+var errHistoryBusy = errors.New("one historical request per device is already in flight")
+
 type BatchError struct {
 	Index                     int
 	Observation, Code, Detail string
@@ -30,8 +32,8 @@ func (s *Store) IngestBatch(b []byte) (out BatchAck, resultError error) {
 		}
 	}()
 	out = BatchAck{Version: 1, Acks: []Ack{}}
-	if len(b) > 65536 {
-		return out, &BatchError{-1, "", "invalid_batch", "batch exceeds 64 KiB"}
+	if len(b) > s.historyBatchBytes {
+		return out, &BatchError{-1, "", "invalid_batch", "batch exceeds negotiated receiver limit"}
 	}
 	v, e := decode(b)
 	if e != nil {
@@ -41,8 +43,8 @@ func (s *Store) IngestBatch(b []byte) (out BatchAck, resultError error) {
 		return out, &BatchError{-1, "", "unsupported_batch", "unsupported batch version"}
 	}
 	a, ok := v["messages"].([]any)
-	if !ok || len(a) == 0 || len(a) > 128 {
-		return out, &BatchError{-1, "", "invalid_batch", "batch requires 1..128 observations"}
+	if !ok || len(a) == 0 || len(a) > s.historyBatchRecords {
+		return out, &BatchError{-1, "", "invalid_batch", "batch exceeds negotiated record limit"}
 	}
 	messages := []Message{}
 	wires := [][]byte{}
@@ -65,6 +67,19 @@ func (s *Store) IngestBatch(b []byte) (out BatchAck, resultError error) {
 		messages = append(messages, m)
 		wires = append(wires, wire)
 	}
+	// At most one history waiter reaches the SQLite writer. Fresh LIVE/SOS do
+	// not queue behind the entire fleet. The gate is variable-fleet admission,
+	// not a device-count limit or a second delivery queue.
+	s.historyAdmission.Lock()
+	if s.historyDevices[device] {
+		s.historyAdmission.Unlock()
+		return out, errHistoryBusy
+	}
+	s.historyDevices[device] = true
+	s.historyAdmission.Unlock()
+	defer func() { s.historyAdmission.Lock(); delete(s.historyDevices, device); s.historyAdmission.Unlock() }()
+	s.historyGate.Lock()
+	defer s.historyGate.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, e := s.db.Begin()
@@ -104,7 +119,7 @@ func (s *Store) historyHandler(w http.ResponseWriter, r *http.Request) {
 			failure(w, 405, "method_not_allowed", fmt.Errorf("use GET"))
 			return
 		}
-		respond(w, 200, map[string]any{"protocol_version": 1, "historical_batch_versions": []int{1}, "maximum_batch_bytes": 65536, "maximum_batch_records": 128, "maximum_inflight_history_per_device": 1, "observation_identity_version": 1})
+		respond(w, 200, map[string]any{"protocol_version": 1, "historical_batch_versions": []int{1}, "maximum_batch_bytes": s.historyBatchBytes, "maximum_batch_records": s.historyBatchRecords, "maximum_inflight_history_per_device": 1, "observation_identity_version": 1})
 		return
 	}
 	if r.Method != "POST" {
@@ -116,13 +131,33 @@ func (s *Store) historyHandler(w http.ResponseWriter, r *http.Request) {
 		failure(w, 415, "unsupported_media_type", fmt.Errorf("use JSON"))
 		return
 	}
-	b, e := io.ReadAll(http.MaxBytesReader(w, r.Body, 65536))
+	if s.historyStoragePressure(r.Context()) {
+		w.Header().Set("Retry-After", "2")
+		w.Header().Set("X-GNSS-Throttle-Scope", "history")
+		failure(w, 429, "history_storage_pressure", fmt.Errorf("WAL reader pressure; urgent traffic remains eligible"))
+		return
+	}
+	// Bound decoded request RAM independently of the number of phones. Queued
+	// sockets exert backpressure; urgent individual envelopes bypass these slots.
+	select {
+	case s.historySlots <- struct{}{}:
+		defer func() { <-s.historySlots }()
+	case <-r.Context().Done():
+		return
+	}
+	b, e := io.ReadAll(http.MaxBytesReader(w, r.Body, int64(s.historyBatchBytes)))
 	if e != nil {
 		failure(w, 413, "message_too_large", e)
 		return
 	}
 	ack, e := s.IngestBatch(b)
 	if e != nil {
+		if errors.Is(e, errHistoryBusy) {
+			w.Header().Set("Retry-After", "1")
+			w.Header().Set("X-GNSS-Throttle-Scope", "history")
+			failure(w, 429, "history_busy", e)
+			return
+		}
 		var bad *BatchError
 		if errors.As(e, &bad) {
 			respond(w, 422, map[string]any{"batch_version": 1, "error": bad.Code, "entry_index": bad.Index, "observation_id": bad.Observation, "message": bad.Detail})
@@ -143,7 +178,7 @@ func (s *Store) recordBatchRejection(b []byte, bad *BatchError, at string) {
 	if uuid.MatchString(bad.Observation) {
 		event.Message = bad.Observation
 	}
-	if len(b) <= 65536 {
+	if len(b) <= s.historyBatchBytes {
 		if v, e := decode(b); e == nil {
 			if messages, ok := v["messages"].([]any); ok && len(messages) > 0 {
 				device := str(object(messages[0])["device_id"])

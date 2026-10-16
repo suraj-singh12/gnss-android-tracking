@@ -93,7 +93,7 @@ jobs:
           node-version: "22"
       - name: Validate ancestry and source cleanliness
         run: |
-          git merge-base --is-ancestor b23b5f58845c896e7fb2c5800e577202667c1e3f HEAD
+          git merge-base --is-ancestor d78ef85e689ca43281127599e814b04cb99aefc8 HEAD
           test -z "$(git status --porcelain)"
       - name: Android tests, lint and debug APK
         working-directory: android
@@ -136,12 +136,15 @@ jobs:
         run: |
           python3 - <<'PY'
           import pathlib,xml.etree.ElementTree as E
+          found=False
           for p in pathlib.Path('android/app/build/test-results/testDebugUnitTest').glob('TEST-*.xml'):
               r=E.parse(p).getroot()
               if r.get('name','').endswith('CommandIntegrationTest'):
+                  found=True
                   print('Real Android-to-Command:',{k:r.get(k) for k in ['tests','failures','errors','skipped']})
                   assert int(r.get('tests',0)) > 0
                   assert all(int(r.get(k,0)) == 0 for k in ['failures','errors','skipped'])
+          assert found, 'Real bridge result is required, not silently absent'
           PY
       - name: Build matched portable Command applications
         working-directory: command
@@ -167,6 +170,10 @@ jobs:
           node test-tools/integration/ui-dashboard.cjs
           node test-tools/integration/history-dashboard.cjs
           node test-tools/integration/map-download-ui.cjs
+          export GNSS_SYNC_REPORT="$RUNNER_TEMP/gnss-test-reports/sync-process-browser.json"
+          (cd command && go test -c -o "$RUNNER_TEMP/gnss-sync-reference" ./internal/core)
+          export GNSS_SYNC_REFERENCE_BINARY="$RUNNER_TEMP/gnss-sync-reference"
+          node test-tools/integration/sync-capacity.cjs
       - name: Verify exact revisions and generate checksum manifest
         env:
           ASSET_DIR: ${{ runner.temp }}/gnss-assets

@@ -115,7 +115,7 @@ Issue #22 adds Android-local **Sync All Now / Pause history sync** to Tracking,
 using the existing app Sender and Room outbox. Start/Stop and protected SOS retain
 their independent authorities. History's queued/ACKed/unresolved facts and
 Diagnostics payload-byte/retry details do not claim Command route completion.
-Tracking OFF remains zero collection; visible-app delivery has no unrestricted
-background guarantee. Coverage: HistoryDeliveryTest, TrackingLifecycleTest local
+Tracking OFF remains zero collection; user-started dataSync work has a visible,
+bounded lifetime and no unrestricted execution guarantee. Coverage: HistoryDeliveryTest, TrackingLifecycleTest local
 control assertion, real CommandIntegrationTest twenty-phone/late-join recovery,
 and existing rendered navigation/large-font checks.

@@ -175,7 +175,7 @@ class SenderTest {
         sender.step()
         assertEquals(1, payloads.size)
         assertTrue(store.delivered.isEmpty())
-        clock.now += 1000
+        clock.now = store.rows.first { it.sequence == row.sequence }.nextAttemptMillis
         sender.step()
         assertEquals(listOf(row.json, row.json), payloads)
         assertEquals(listOf(1L), store.delivered)
@@ -228,7 +228,7 @@ class SenderTest {
             ) {
                 store.snapshot(clock.now, null, Health())
             }
-        clock.now += 1000
+        clock.now = store.rows.first().nextAttemptMillis
         blocked.step()
         clock.now += 60000
         store.snapshot(clock.now, null, Health())
@@ -297,7 +297,12 @@ class SenderTest {
         store.snapshot(clock.now, null, Health())
         sender.step()
         assertEquals(1, attempts)
-        clock.now += 30000
+        val deadline = store.rows.first().nextAttemptMillis
+        assertTrue(deadline - 100000 in 60000..74999)
+        clock.now = deadline - 1
+        sender.step()
+        assertEquals(1, attempts)
+        clock.now = deadline
         sender.step()
         assertEquals(2, attempts)
         store.pauseReceiver("Incompatible receiver")

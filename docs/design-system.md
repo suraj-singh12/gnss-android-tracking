@@ -54,7 +54,7 @@ Backend contact grace periods follow each device's effective reporting interval.
 
 Three persistent destinations: **Tracking · Settings · Diagnostics**. Tracking shows
 large lifecycle state, one Start/Stop control, GNSS accuracy/age, application contact
-and last ACK, concise GNSS queue state, battery and a protected hold-to-activate SOS dock that stays visible above navigation. Tracking also exposes local Sync All Now and Pause history sync. Saved-history delivery is available while visible with Tracking OFF; neither action starts collection. The History card separates pending, durable ACK and unresolved counts, with reconstruction explicitly Command-owned.
+and last ACK, concise GNSS queue state, battery and a protected hold-to-activate SOS dock that stays visible above navigation. Tracking also exposes local Sync All Now and Pause history sync. Saved-history automatic delivery is available while visible with Tracking OFF. User-started manual drain also has a bounded dataSync foreground lifetime; neither action starts collection. The History card separates pending, durable ACK and unresolved counts, with reconstruction explicitly Command-owned.
 Check setup opens Settings in one interaction. Settings starts with the Party and
 Command form, then expandable emergency and permissions/battery sections. It contains field readiness
 and permission/system-setting actions, identity labels, receiver address, reporting

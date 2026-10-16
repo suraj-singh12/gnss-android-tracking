@@ -20,6 +20,8 @@ data class Operational(
     val starting: Boolean = false,
     val stopping: Boolean = false,
     val historyPaused: Boolean = false,
+    val transferActive: Boolean = false,
+    val drainStarting: Boolean = false,
 )
 
 class TrackingApp : Application() {
@@ -216,22 +218,25 @@ class TrackingApp : Application() {
     }
 
     fun syncAllNow() {
-        operational.update { it.copy(historyPaused = false) }
+        operational.update { it.copy(historyPaused = false, drainStarting = true) }
         workScope.launch {
             try {
-                sender.connectivityRestored()
+                if (!operational.value.historyPaused) sender.requestDrain()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 operational.update {
                     it.copy(error = "Cannot resume saved delivery — check storage")
                 }
+            } finally {
+                operational.update { it.copy(drainStarting = false) }
             }
         }
     }
 
     fun pauseHistory() {
         operational.update { it.copy(historyPaused = true) }
+        sender.pauseDrain()
     }
 
     override fun onCreate() {
@@ -253,7 +258,10 @@ class TrackingApp : Application() {
         workScope.launch {
             var visibleWifi: android.net.Network? = null
             while (isActive) {
-                if (activityVisible && !operational.value.tracking) {
+                if (
+                    (activityVisible || operational.value.transferActive) &&
+                        !operational.value.tracking
+                ) {
                     try {
                         val wifi = health.wifiNetwork()
                         if (wifi != visibleWifi) {
@@ -273,9 +281,17 @@ class TrackingApp : Application() {
                         sosNotice.value = "Saved delivery unavailable — check storage and receiver"
                     }
                 }
-                if (!activityVisible || operational.value.tracking) visibleWifi = null
+                if (
+                    (!activityVisible && !operational.value.transferActive) ||
+                        operational.value.tracking
+                )
+                    visibleWifi = null
                 delay(
-                    if (activityVisible && !operational.value.tracking && sender.attemptedLastStep)
+                    if (
+                        (activityVisible || operational.value.transferActive) &&
+                            !operational.value.tracking &&
+                            sender.attemptedLastStep
+                    )
                         1
                     else 250
                 )

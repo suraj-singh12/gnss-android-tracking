@@ -200,7 +200,7 @@
             <button id="zoom-in" aria-label="Zoom in">+</button
             ><button id="zoom-out" aria-label="Zoom out">−</button
             ><button id="fit">Fit parties</button
-            ><button id="focus-party">Focus selected</button>
+            ><button id="focus-party">Focus selected</button><button id="inspect-history">Inspect history</button>
             <button
               id="open-layers"
               title="Show or hide locally prepared terrain layers"
@@ -212,6 +212,15 @@
           </div>
         </div>
         <div id="projection-status" role="status"></div>
+
+        <dialog id="history-inspection" aria-labelledby="history-inspection-title">
+          <form method="dialog"><button aria-label="Close history inspection">Close</button></form>
+          <h2 id="history-inspection-title">Original history inspection</h2>
+          <label>Layer <select id="inspection-layer"><option value="qualified">Full qualified geometry and decisions</option><option value="raw">Original observations</option></select></label>
+          <p id="inspection-status" role="status"></p>
+          <button id="inspection-restart">First page</button><button id="inspection-next">Next page</button>
+          <pre id="inspection-data"></pre>
+        </dialog>
         <svg
           id="tracks"
           tabindex="0"

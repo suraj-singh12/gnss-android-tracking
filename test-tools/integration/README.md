@@ -402,3 +402,132 @@ retries. Live ACK p50/p95/p99: 340.823 / 707.911 / 787.319 ms; SOS: 150.794 /
 is reported separately from the controlled comparison. SQLite-only fsync duration
 was not isolated; receiver timings include queue/parse/transaction costs. Actual
 Android radios, OEM screen-off behavior and native macOS/Windows remain untested.
+
+### Issue #22 corrective acceptance (2026-10-16)
+
+The preceding dated measurements describe the audited implementation, not the
+corrective head. Updated policy/storage contracts live in android/README.md,
+command/README.md and protocol/protocol-v1.md. Keep physical/native acceptance and
+unrun fleet cells explicitly incomplete; PR #35 remains draft pending acceptance.
+
+New deterministic regressions cover endpoint changes *inside* ACK application,
+RTT/goodput pressure, manual coalescing/ramp, capability retry, history backoff versus
+fresh LIVE, oversized valid originals/413, negotiated requests/ACKs above 64 KiB,
+Room v3→v4 retained-data counters, and dataSync lifetime with no location listener.
+Jitter tests assert the saved deadline and no early retry instead of assuming an
+exact unjittered second. No identity or safety assertion was removed.
+
+`CommandIntegrationTest.substantialTrackingOffNormalAndManualUseOriginalRowsAndMeasureRamp`
+uses 1200 original observations/mode, real Room/Sender, HTTP and SQLite. It reports
+source/request bytes, request count and transfer including Room ACK application;
+seeding is excluded. Manual must use fewer discovery requests, without imposing
+an artificial automatic delay. `freshSosAndLiveArriveDuringRealHistoryHttpWithDurableRoomTimings`
+creates eight distinct SOS/LIVE pairs while real history HTTP is outstanding,
+and reports p50/p95/p99/worst for activation→Room save, Room→applied SOS ACK, and
+fresh retained fix→ACK. Its server delay is injected, not a physical Wi-Fi measurement.
+
+`sync_corrective_test.go` checks streaming reconstruction against the chronological
+reference, exact paged geometry/decisions, source-order index range seeks, staged-cache
+restart and missing-chunk repair, both legacy cache formats, pinned-WAL history-only
+backpressure, evidence streaming/privacy, and durable projection turns. The slow-writer
+fleet test waits until twenty actual HTTP requests reach an occupied SQLite writer,
+then admits phone 21 and fresh urgent events **before** releasing it. This is stronger
+than delaying delivery of an already successful response.
+
+The new process/browser harness measures production Command separately from its
+source generator and oracle:
+
+```sh
+(cd command && go build -o /outside/gnss-command ./cmd/party-tracker)
+(cd command && go test -c -o /outside/sync-reference ./internal/core)
+GNSS_COMMAND_BINARY=/outside/gnss-command \
+GNSS_SYNC_REFERENCE_BINARY=/outside/sync-reference \
+GNSS_PLAYWRIGHT_MODULE=/outside/browser/node_modules/playwright \
+GNSS_CHROMIUM=/path/to/chromium \
+GNSS_SYNC_DEVICES=20 GNSS_SYNC_SAMPLES=4200 GNSS_SYNC_DAYS=7 \
+SOURCE_REVISION=$(git rev-parse HEAD) GNSS_SYNC_REPORT=/outside/report.json \
+node test-tools/integration/sync-capacity.cjs
+```
+
+Generation is streaming: one bounded batch/phone, original immutable tuples,
+new priority identities, late join while HTTP requests are outstanding, then an
+additional new SOS during cold history loading. Reported stages include request/ACK
+body bytes/counts, receipt wall time, residual reconstruction, bounded backend HTTP
+body, browser load, fresh LIVE/SOS ACK and ACK→visible notification percentiles/worst.
+Activation→Room is deliberately **not** fabricated by this Node harness; use the real
+bridge measurement. `/proc` RSS/CPU are Command-only; browser and oracle are separate
+processes. RSS/DB/WAL sampling is every 100 ms and can miss shorter peaks. Body bytes
+exclude HTTP/TCP/Wi-Fi overhead. Residual reconstruction excludes work overlapping
+transfer. Browser automation adds polling/IPC overhead to visible-alert timings.
+
+An independent streaming SQL pass accounts for every original history and fresh
+priority tuple and runs SQLite integrity_check. The supplied reference binary is
+required by CI: it orders this uniform one-window fixture independently by original
+source sequence, feeds the existing authoritative derivation, and compares **every**
+full-resolution point, decision, section and unrounded total against published chunks.
+It does not load full history arrays. It rejects an incompatible fixture or absent/
+skipped oracle rather than report PASS. General reordered/multi-session/window/policy
+cases use the existing independent selection/order reference suites; both reuse the
+same quality mathematics, not an invented second tracking engine.
+
+For dense 1 Hz choose SAMPLES=86400/172800/604800 with DAYS=1/2/7. Repeat for 1/5/20
+phones on suitable infrastructure. Default explicit budgets: two million source rows,
+16 GiB SQLite+WAL, 2 GiB Command RSS and GOMEMLIMIT=768MiB. Preflight uses a conservative
+~7400 SQLite bytes/observation from measured smoke storage; the active sampler also
+stops at the budget. A blocked/failed run is **not** verified. Raise
+GNSS_SYNC_MAX_RECORDS / GNSS_SYNC_MAX_DB_BYTES / GNSS_SYNC_MAX_RSS_BYTES deliberately
+on suitable hardware; retain free-space margin for staging/checkpoints. Twenty
+seven-day dense phones may require substantially more than 100 GB storage including
+indexes/evidence/staging; do not exhaust a shared runner to claim an attempted pass.
+Databases are removed after successful accounting unless GNSS_SYNC_KEEP_DB=1;
+JSON/log evidence remains. Always use a fresh work directory.
+
+Transport comparison uses the existing TestSyncFleetPerformance harness with
+GNSS_SYNC_BATCH=65536/131072/262144/524288/1048576/2097152 and bounded record ceilings.
+Its periodic duplicate priority probes remain explicitly different from the fresh
+process/browser and real Room measurements. Keep workload, source revision, competing
+processes, CPU quota and repeat count with results; exploratory overlapping runs do
+not establish a controlled speed claim. The full-array oracle in this older harness
+still affects whole-test RSS; use process/browser Command RSS for application capacity.
+
+The existing matched-assets workflow adds the fresh process/browser/reference run,
+requires an actually present zero-skip Room bridge report, and checks the approved
+baseline ancestry. Independent Overpass/provider failures remain failures, separately
+reported from GNSS checks; no terrain implementation or provider assertion is relaxed.
+
+Corrective checklist against the 33-scenario audit:
+
+| Audit scenario | Software evidence / remaining boundary |
+| --- | --- |
+| 1–2 ACK crash boundaries | Lost-response, Room reopen/restart and atomic transaction tests; physical power cuts remain hardware acceptance |
+| 3 Wi-Fi roaming | Existing network invalidation/fault tests; actual router/OS roaming unverified |
+| 4 endpoint overlap | Generation change inside real Room ACK transaction; no applied counters |
+| 5 device identity overlap | Device-scoped identity/conflict/session tests; cloned installation identity remains an enrollment risk |
+| 6 reordered batches | Chronological reference/permutation suites and forced streaming comparison |
+| 7 poison record | Indexed isolation plus atomic receiver rejection tests |
+| 8 oversize valid record | Individual fallback/413-retention test; larger negotiated ACK test |
+| 9 invalid/duplicate ACK | Strict identity/order/duplicate-key validation and atomic bad-receipt tests |
+| 10 full disk | Actual SQLite FULL rollback/recovery; physical disks/fsync slowdown unverified |
+| 11 projection stalled | Durable raw and pending/error tests, independent receipt/source counts |
+| 12 unstable retry | Preserved ramp, measured pressure, positive jitter, capability retry; physical fleet flapping unverified |
+| 13 manual during waiting/unresolved | Coalescing/resume/rate-limit/retention controls and UI states |
+| 14 repeated Sync/Pause | Idempotent manual mode, latest pause observed after mutex acquisition; in-flight ACK preserved |
+| 15 flood/fairness | Bounded admission, one writer waiter, per-device active limit and durable projection-turn test |
+| 16 late 21st | Actual occupied-writer test plus process/browser outstanding-request join |
+| 17 very slow phone | Bounded calls/admission; actual AP airtime and slow-radio fairness unverified |
+| 18 reconnect storms | Jitter and reconnect regressions; physical simultaneous fleet reconnection unverified |
+| 19 SOS during storage | Fresh identities during occupied writer and real Room history HTTP |
+| 20 SOS during browser history | Independent LIVE/SOS polling plus fresh cold-load notification measurement |
+| 21 restart under backlog | Existing Room/Command reopen tests and staged cache recovery; dense restart capacity must be measured |
+| 22 seven dense fleet days | Explicit resource-budget cells; no extrapolated PASS |
+| 23 legacy upgrades | v1/v3 Room data, both SQLite cache formats, original-wire backfill; field-database corpus/native upgrades unverified |
+| 24 interrupted chunk publication | Unpublished generation/reopen and rollback tests; hardware power-cut still unverified |
+| 25 old/new formats | Versioned forward conversion; downgrade limitation documented |
+| 26 corrupt/missing cache | Manifest validation/rebuild and missing-chunk test; arbitrary raw SQLite corruption is not promised recoverable |
+| 27 repeated invalidation | Consistent captured prefix publishes with newer work pending; policy versions still reject obsolete geometry |
+| 28 quality/recording late history | Existing real bridge and chronological boundary suites, cursor invalidation |
+| 29 gaps/session restarts/clocks | Existing ordering/segmentation and forced streaming tests |
+| 30 conflicting identities | Immutable observation/message validation and canonical duplicate/conflict suites |
+| 31 millions of rows | Bounded production reconstruction/view/queue counters; capacity requires measured fleet cells |
+| 32 replacement empty Command | Existing ACKs are destination history; explicit recovery/replay remains an operational limitation, not ordinary durable restart |
+| 33 OFF kill/reboot | Room retained; nonsticky transfer requires reopening; real Android/OEM execution unverified |

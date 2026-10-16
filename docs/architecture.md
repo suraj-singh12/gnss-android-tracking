@@ -349,35 +349,30 @@ live/SOS state or qualified distance. There is no parallel database or projectio
 
 ## Issue #22 synchronization changes
 
-Dense-history stress exposed the embedded SQLite runtime's 256 MiB limit when
-binding the whole derived geometry as one JSON value. The existing projection
-cache now stores larger arrays in ordered `projection_chunks`, each with at most
-512 points and 512 decisions. The small `projection_state` header, chunks and
-receipt metadata change in one transaction; legacy single-value caches remain
-readable. Raw receipt/identities and chronological reconstruction are unchanged.
-This bounds SQLite values, not the total retained in-memory geometry.
-Cold dashboard reads also use one query-only connection to that same WAL file,
-serialized by the view mutex rather than the ingestion mutex. A blocked-read
-regression requires a concurrent SOS to commit before the read is released.
+Android retains one Room/outbox/Sender authority. Room v4 adds transactional derived
+queue counters; session progress uses bounded examples plus exact counts. Normal
+sync grows progressively with ACK RTT/goodput feedback. Local manual drain coalesces
+requests and accelerates discovery without resetting a healthy ramp or adding
+another engine. History-specific backoff does not suppress fresh LIVE. Endpoint
+receipt applicability and durable Room ACK writes return one atomic outcome.
+A user-started dataSync foreground lifetime can drain retained history with Tracking
+OFF and no GNSS acquisition. Process death/reboot still require operator reopening;
+OS/OEM budgets are not durability guarantees. See android/README.md for exact policy.
 
-The existing Sender also drains retained data while the Android Activity is visible
-and Tracking is OFF. That path cannot invoke current capture or register GNSS.
-Sync All Now resets transient backoff; Pause stops new history selection and retains
-data. The tracking FGS remains the supported background lifetime when collection is
-intended. Backgrounding a stopped phone does not promise continued transfer.
+Command still ACKs only committed SQLite raw/identity/receipt/work. Bounded history
+admission prevents an entire fleet queuing directly ahead of urgent traffic. The
+existing derived cache now stages per-device generation chunks and publishes pointers
+atomically. Large devices feed the same chronological Derivation in indexed keyset
+pages, closing readers between pages. Interrupted staging preserves the prior cache;
+legacy caches migrate without loading full geometry, and missing manifests rebuild
+from raw. Metadata distinguishes latest raw receipt from the projection's source set.
 
-Room v3 indexes pending session order. Reads are limited to one bounded block;
-matching batch receipts update rows/config transactionally with one installation
-state write. Original envelopes, sessions, timestamps and retained ACKed rows remain
-authoritative. Command validates each strict-decoded batch entry without decoding
-its JSON twice. Identity conflict lookup uses independent existing unique indexes;
-only the affected device's live quality is refreshed during ingest. Projection and
-dashboard cursors append received groups and sort once instead of inserting each
-row into the middle of a retained slice. The existing bounded projection wake
-channel coalesces for at most 250 ms, and fully invalidated passes keep durable work
-without saving identical geometry. The accepted-anchor derivation, quality
-switches, recording windows, durable commit/ACK and SOS human acknowledgement are
-unchanged.
+Independent lightweight LIVE/SOS and bounded history-preview endpoints replace full
+history polling in the production dashboard. Full-resolution geometry/decisions and
+original envelopes remain inspectable through generation-pinned pages. Display LOD
+never changes qualified distance or raw authority. Large diagnostic ZIPs stream
+separate evidence files with explicit INCONCLUSIVE whole-corpus assessments. See
+command/README.md and protocol/protocol-v1.md for bounds and compatibility.
 
-Guidance synchronized from documentation-only branch `chore/codex-repo-instructions`
-at `ca7b091e9032ac54e3ddd8d89a6b9ec414fb9f91`; only `AGENTS.md` was transferred.
+Guidance remains identical to documentation-only branch chore/codex-repo-instructions
+at ca7b091e9032ac54e3ddd8d89a6b9ec414fb9f91; only AGENTS.md was transferred.

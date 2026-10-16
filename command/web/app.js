@@ -360,6 +360,8 @@ function render() {
       : "";
   $("connection").textContent = "● Command Connected";
   $("connection").classList.remove("unavailable");
+  if (state.history_sampled)
+    $("projection-status").textContent += " · Map preview only (bounded points); use Inspect selected history for every full-resolution point and original observation. Distance remains full resolution.";
   const recording = state.recording;
   $("recording").textContent = recording
     ? recording.active
@@ -2016,6 +2018,46 @@ function draw() {
       ?.focus();
 }
 let polling = false;
+let inspectionCursor = "";
+async function inspectHistory(cursor = "") {
+  const device = selectedParty;
+  if (!device) return;
+  $("inspection-status").textContent = "Loading a bounded page…";
+  try {
+    const layer = $("inspection-layer").value;
+    const response = await fetch(`/local/history?device_id=${encodeURIComponent(device)}&layer=${layer}&cursor=${encodeURIComponent(cursor)}`, {signal: AbortSignal.timeout(4000)});
+    const page = await response.json();
+    if (!response.ok) throw Error(page.message || "History unavailable");
+    inspectionCursor = page.next_cursor || "";
+    $("inspection-next").disabled = !inspectionCursor;
+    $("inspection-data").textContent = JSON.stringify(page, null, 2);
+    $("inspection-status").textContent = layer === "raw" ? "Original capture/envelope and Command receipt times; transport sequence order. No distance derived here." : "Full-resolution qualified points and decisions; cumulative distances remain authoritative. Generation changes require First page.";
+  } catch (e) { $("inspection-status").textContent = e.message; }
+}
+$("inspect-history").onclick = () => { $("history-inspection").showModal(); inspectHistory(); };
+$("inspection-restart").onclick = () => inspectHistory();
+$("inspection-next").onclick = () => inspectHistory(inspectionCursor);
+$("inspection-layer").onchange = () => inspectHistory();
+let livePolling = false;
+let latestLive;
+async function pollLive() {
+  if (livePolling) return;
+  livePolling = true;
+  try {
+    const response = await fetch("/local/live", {signal: AbortSignal.timeout(4000)});
+    if (!response.ok) throw Error("LIVE/SOS status unavailable");
+    const b = await response.json();
+    if (state && b.receipt_version < state.receipt_version) return;
+    latestLive = b;
+    const changed = state && (state.policy.revision !== b.policy.revision ||
+      state.recording?.recording_id !== b.recording?.recording_id || state.recording?.active !== b.recording?.active);
+    state = {...state, ...b, points: changed ? [] : state?.points ?? [], raw_points: changed ? [] : state?.raw_points ?? [], history_sampled: state?.history_sampled};
+    renderSOS(); // emergency notification precedes map work
+    render();
+  } catch (e) {
+    if (!state) showError(e);
+  } finally { livePolling = false; }
+}
 async function poll() {
   if (polling) return;
   polling = true;
@@ -2025,7 +2067,17 @@ async function poll() {
     );
     const b = await response.json();
     if (!response.ok) throw Error(b.message || "Command unavailable");
+    if (b.history_sampled && $("all-observations").checked) {
+      const device = selectedParty || Object.keys(b.devices)[0];
+      if (device) {
+        const raw = await fetch(`/local/history?device_id=${encodeURIComponent(device)}&layer=raw`, {signal: AbortSignal.timeout(4000)});
+        if (!raw.ok) throw Error("Raw history page unavailable");
+        b.raw_points = (await raw.json()).points;
+      }
+    }
     state = b;
+    if (latestLive && latestLive.receipt_version > b.receipt_version)
+      state = {...b, ...latestLive, points: b.policy.revision === latestLive.policy.revision && b.recording?.recording_id === latestLive.recording?.recording_id && b.recording?.active === latestLive.recording?.active ? b.points : [], raw_points: b.raw_points, history_sampled: b.history_sampled};
     render();
     if ($("event-history").open) loadEvents().catch(showError);
     showError(null);
@@ -2039,4 +2091,6 @@ async function poll() {
 }
 new ResizeObserver(draw).observe($("tracks"));
 poll();
+pollLive();
+setInterval(pollLive, 1000);
 setInterval(poll, 2000);

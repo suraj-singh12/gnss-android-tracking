@@ -4,6 +4,7 @@ package core
 // No coordinates, Party metadata, network addresses or raw payloads are copied.
 import (
 	"archive/zip"
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
@@ -302,13 +303,22 @@ func receiptClass(m Message, at string, p Policy) (string, float64) {
 func (s *Store) FieldReport() (FieldReport, error) {
 	_ = s.processProjection()
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	tx, err := s.db.Begin()
+	now := s.Now()
+	db := s.viewDB
+	if db == nil {
+		db = s.db
+		defer s.mu.Unlock()
+	} else {
+		s.mu.Unlock()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return FieldReport{}, err
 	}
 	defer tx.Rollback()
-	return s.fieldReport(tx)
+	return s.fieldReportAt(tx, now)
 }
 func (s *Store) fieldReport(tx *sql.Tx) (FieldReport, error) {
 	return s.fieldReportAt(tx, s.Now())
@@ -812,6 +822,24 @@ func analyzeField(r *FieldReport, p Policy) {
 	}
 }
 func (s *Store) ExportFieldReport(w io.Writer) error {
+	return s.exportFieldReportContext(context.Background(), w)
+}
+func (s *Store) exportFieldReportContext(ctx context.Context, w io.Writer) error {
+	db := s.liveDB
+	if db == nil {
+		db = s.db
+	}
+	var count int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM (SELECT 1 FROM raw LIMIT 50001)").Scan(&count); err != nil {
+		return err
+	}
+	var events int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM (SELECT 1 FROM field_evidence LIMIT 50001)").Scan(&events); err != nil {
+		return err
+	}
+	if count > 50000 || events > 50000 {
+		return s.exportStreamingFieldReport(ctx, w)
+	}
 	r, err := s.FieldReport()
 	if err != nil {
 		return err

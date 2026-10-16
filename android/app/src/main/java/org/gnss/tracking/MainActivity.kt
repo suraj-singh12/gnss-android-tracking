@@ -413,10 +413,21 @@ class MainActivity : Activity() {
         content = group("Advanced technical evidence", false)
         status = text("Loading saved settings…")
         content = pages.getValue("Tracking")
-        button("Sync All Now") { app.syncAllNow() }
+        button("Sync All Now") {
+            app.syncAllNow()
+            if (!app.operational.value.tracking) {
+                try {
+                    startForegroundService(Intent(this, RetainedTransferService::class.java))
+                } catch (e: RuntimeException) {
+                    app.operational.update {
+                        it.copy(error = "Background transfer unavailable; keep this app visible")
+                    }
+                }
+            }
+        }
         button("Pause history sync") { app.pauseHistory() }
         text(
-            "Saved history syncs while this app is open, including with Tracking OFF. Keep it visible; background delivery without tracking is not guaranteed. Pausing retains all saved data; an in-flight receipt may finish."
+            "Sync All Now uses a visible transfer notification, including with Tracking OFF, without collecting GNSS. Android may stop it; reopen after process death or reboot. Pause retains data; an in-flight receipt may finish."
         )
         button("Check setup / permissions") { navigate("Settings") }
         content = pages.getValue("Settings")
@@ -749,7 +760,7 @@ class MainActivity : Activity() {
                         commandSummary.text =
                             "Command\n$connection\nLast successful communication: ${state.lastAck ?: "None"}"
                         historySummary.text =
-                            "History · ${queues.deliveredGnss} ACKed · ${queues.blocked} unresolved\n" +
+                            "History · ${queues.deliveredGnss} ACKed · ${queues.blocked} unresolved\n${if (op.historyPaused) "Paused" else app.sender.syncProgress.mode}\n" +
                                 when {
                                     queues.blocked > 0 ||
                                         state.deliveryPaused ||
@@ -796,7 +807,7 @@ class MainActivity : Activity() {
                             )
                             transfer.lastError?.let { appendLine("Sync retry: $it") }
                             appendLine(
-                                "History sync: ${if (op.historyPaused) "Paused" else "Automatic while running"}"
+                                "History sync: ${if (op.historyPaused) "Paused" else app.sender.syncProgress.mode}"
                             )
                             app.diagnostics.value?.let { diagnostic ->
                                 appendLine("Network: ${diagnostic.network}")

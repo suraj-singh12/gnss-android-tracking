@@ -212,7 +212,7 @@ class SosEngineTest {
         sender.step()
         assertEquals(listOf("status", "sos"), sent)
         assertNull(db.dao().row(sos.sequence)!!.deliveredAt)
-        clock.now += 1000
+        clock.now = db.dao().all().filter { it.deliveredAt == null }.maxOf { it.nextAttemptMillis }
         failing = false
         sender.step()
         sender.step()
