@@ -856,6 +856,10 @@ async function wait(check) {
       (await state()).devices[partyIds[2]].desired_config
         .reporting_interval_override_s === null,
   );
+  // Clear retains focus in the detail editor. Independent device inventory must
+  // still refresh after pending reconstruction; do not blur to conceal a stall.
+  await page.waitForFunction(() => document.querySelectorAll('#devices input[type=checkbox]').length === Object.keys(state.devices).length);
+  assert.equal(await page.locator('#selected-detail .override button').last().evaluate(e => e === document.activeElement), true);
   // Arrange the sidebar state after viewport changes and reload before using it.
   if ((await page.locator("#toggle-parties").getAttribute("aria-expanded")) === "false")
     await page.locator("#toggle-parties").click();

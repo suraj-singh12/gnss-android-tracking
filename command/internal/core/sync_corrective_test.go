@@ -212,6 +212,9 @@ func TestPendingRawHistoryCannotEnterFullDashboardMaterialization(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
+	if st.Devices[device].Reconstruction == nil || st.Devices[device].Reconstruction.Reasons == nil {
+		t.Fatal("Pending reconstruction must expose an empty reasons object, not null")
+	}
 	if !sampled || !st.ProjectionPending || len(st.Points) != 0 || len(st.RawPoints) != 0 || st.Devices[device].DurableObservations != dashboardPointLimit+1 {
 		t.Fatal("pending raw history escaped bounded view", sampled, len(st.Points), len(st.RawPoints))
 	}

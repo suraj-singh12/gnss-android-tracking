@@ -102,7 +102,7 @@ func (s *Store) boundedDashboard(ctx context.Context, dot int, liveOnly bool) (S
 		}
 		if pending[device] {
 			if d.Reconstruction == nil {
-				d.Reconstruction = &ReconstructionState{Received: int(d.DurableObservations), Inventory: "Only received devices known; offline/unreported backlog unknown"}
+				d.Reconstruction = &ReconstructionState{Reasons: map[string]int{}, Received: int(d.DurableObservations), Inventory: "Only received devices known; offline/unreported backlog unknown"}
 			}
 			d.Reconstruction.Projection = "pending"
 			d.Reconstruction.Route = "projection_pending"

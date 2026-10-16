@@ -382,13 +382,13 @@ function render() {
   $("no-parties").hidden = devices.length > 0;
   if (!state.devices[selectedParty]) selectedParty = devices[0]?.device_id;
   // Preserve focused edits while polling; all content is created as text nodes.
-  if (
-    !$("devices").contains(document.activeElement) &&
-    !$("selected-detail").contains(document.activeElement)
-  ) {
-    $("devices").replaceChildren();
-    $("selected-detail").replaceChildren();
-    if (!devices.length)
+  // Editing one panel must not freeze the other panel's device inventory.
+  const preserveDevices = $("devices").contains(document.activeElement);
+  const preserveDetail = $("selected-detail").contains(document.activeElement);
+  if (!preserveDevices || !preserveDetail) {
+    if (!preserveDevices) $("devices").replaceChildren();
+    if (!preserveDetail) $("selected-detail").replaceChildren();
+    if (!devices.length && !preserveDetail)
       $("selected-detail").append(
         el(
           "p",
@@ -497,7 +497,7 @@ function render() {
         status.append(drawing);
         if (r.projection_error) status.append(el("div", r.projection_error));
         if (r.clock_uncertain) status.append(el("div", `${r.clock_uncertain} observations have clock uncertainty; original times are unchanged.`));
-        for (const [reason, count] of Object.entries(r.rejection_reasons))
+        for (const [reason, count] of Object.entries(r.rejection_reasons ?? {}))
           status.append(el("div", `${reason.replaceAll("_", " ")}: ${count}`));
       }
       if (d.history)
@@ -594,8 +594,8 @@ function render() {
         )
       )
         overview.append(el("strong", "SOS Received · needs acknowledgement"));
-      $("devices").append(overview);
-      if (selectedParty === d.device_id) {
+      if (!preserveDevices) $("devices").append(overview);
+      if (selectedParty === d.device_id && !preserveDetail) {
         card.className = "selected-content";
         title.replaceChildren(swatch, el("h2", d.snapshot.party.id));
         const f = d.location?.fix;

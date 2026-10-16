@@ -667,3 +667,11 @@ explicitly opens the party sidebar before exercising its visibility control afte
 resize/reload. The original visibility/geometry assertions remain unchanged. CI #75
 passed Android/Go/real Room checks but failed that browser locator; no matched assets
 were certified from that failed integrated job.
+
+A later full-browser regression exposed partial device lists after quality rebuilds:
+pending-only reconstruction summaries could serialize a null rejection-reasons map,
+and focus in the selected detail editor prevented inventory repair on later polls.
+Pending summaries now expose an empty object; the renderer tolerates older null maps
+and preserves focus independently for the device list and detail editor. The existing
+five-device UI test requires the complete list while Clear retains focus, rather
+than blurring the editor or relaxing its checkbox assertion.
