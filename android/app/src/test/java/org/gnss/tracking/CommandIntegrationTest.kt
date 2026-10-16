@@ -1884,8 +1884,15 @@ class CommandIntegrationTest {
                         return request(endpoint + "/api/v1/messages", immutableJson)
                     }
                 }
+            val elapsedOrigin = System.nanoTime()
+            val measuredClock =
+                object : Clock {
+                    override fun wallMillis() = clock.wallMillis()
+
+                    override fun elapsedMillis() = (System.nanoTime() - elapsedOrigin) / 1000000
+                }
             val sender =
-                Sender(p.repository, transport, clock) {
+                Sender(p.repository, transport, measuredClock) {
                     error("Tracking OFF must acquire zero fixes")
                 }
             if (manual) sender.requestDrain()
@@ -1910,7 +1917,7 @@ class CommandIntegrationTest {
                     .toSet()
             assertEquals(originals.map { it.messageId }.toSet(), commandIds)
             println(
-                "ISSUE22_ROOM_AB manual=$manual observations=1200 sourceBytes=${originals.sumOf { it.json.toByteArray().size }} requests=$requests requestBytes=$bytes transferAndRoomACKMillis=$elapsed zeroNewFixes=true"
+                "ISSUE22_ROOM_AB manual=$manual observations=1200 sourceBytes=${originals.sumOf { it.json.toByteArray().size }} requests=$requests requestBytes=$bytes transferAndRoomACKMillis=$elapsed zeroNewFixes=true measuredSenderRTT=true"
             )
             measurements.add(requests to elapsed)
         }
