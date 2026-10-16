@@ -405,4 +405,31 @@ class ObservationPersistenceTest {
             app.deleteDatabase(name)
         }
     }
+
+    @Test
+    fun manualAndReconnectResetPreservesDurable429DeadlineAfterReopen() = runBlocking {
+        val name = "rate-deadline.db"
+        var db = Room.databaseBuilder(app, TrackingDatabase::class.java, name).build()
+        try {
+            var repo = Repository(db, clock)
+            repo.settings("Field", "Rate", "http://192.168.1.2", 30)
+            val rate = repo.saveSos(Protocol.newId(), clock.now, clock.now, null, Health()).row
+            val io = repo.snapshot(clock.now, null, Health())
+            val until = clock.now + 60000
+            repo.fail(rate, RATE_LIMIT_RETRY_ERROR, until, false, repo.state().endpointGeneration)
+            repo.fail(io, "Wi-Fi unavailable", until, false, repo.state().endpointGeneration)
+            db.close()
+            db = Room.databaseBuilder(app, TrackingDatabase::class.java, name).build()
+            repo = Repository(db, clock)
+            repo.resetTransientRetryTiming()
+            assertEquals(until, db.dao().row(rate.sequence)!!.nextAttemptMillis)
+            assertEquals(0L, db.dao().row(io.sequence)!!.nextAttemptMillis)
+            assertNull(repo.sos(clock.now))
+            assertEquals(rate.messageId, repo.sos(until)!!.messageId)
+            assertEquals(rate.json, db.dao().row(rate.sequence)!!.json)
+        } finally {
+            db.close()
+            app.deleteDatabase(name)
+        }
+    }
 }

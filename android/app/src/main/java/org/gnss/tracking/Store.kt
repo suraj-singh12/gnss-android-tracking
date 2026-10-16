@@ -4,6 +4,9 @@ import android.content.Context
 import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 
+// Stable persisted retry reason used by existing outboxes; never localize this value.
+internal const val RATE_LIMIT_RETRY_ERROR = "Command HTTP 429"
+
 @Entity(tableName = "installation")
 data class Installation(
     @PrimaryKey val key: Int = 1,
@@ -207,7 +210,11 @@ CASE WHEN EXISTS(SELECT 1 FROM outbox_summary WHERE `key`=1) THEN (SELECT delive
     )
     suspend fun releasePending()
 
-    @Query("UPDATE outbox SET nextAttemptMillis=0 WHERE deliveredAt IS NULL AND quarantined=0")
+    @Query(
+        "UPDATE outbox SET nextAttemptMillis=0 WHERE deliveredAt IS NULL AND quarantined=0 AND (error IS NULL OR error!='" +
+            RATE_LIMIT_RETRY_ERROR +
+            "')"
+    )
     suspend fun resetTransientRetryTiming()
 
     @Query("SELECT * FROM outbox WHERE type='sos' ORDER BY sequence DESC LIMIT 1")

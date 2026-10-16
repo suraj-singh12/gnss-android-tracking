@@ -318,7 +318,9 @@ History/routine backoff does not block eligible fresh LIVE. Genuine receiver-wid
 eligible. SOS bypasses ordinary waiting and gets the next request after an in-flight
 call, while respecting its own saved retry deadline. Retry delays add 0..25%
 positive jitter to the 1/2/4/8/16/30-second base, never advancing numeric Retry-After.
-Manual resume cannot bypass a retained rate-limit deadline. Pause controls future
+Manual/reconnect resume cannot bypass a retained HTTP 429 deadline, including SOS
+and process recreation. The existing persisted retry-reason value is kept stable;
+ordinary I/O retry deadlines can still be cleared without altering originals. Pause controls future
 selection, including queued steps, and preserves an in-flight receipt.
 
 Request attempts, received responses, validated ACK identities and ACKs actually

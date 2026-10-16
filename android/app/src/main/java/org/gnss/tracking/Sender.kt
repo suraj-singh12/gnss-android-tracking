@@ -693,7 +693,8 @@ class Sender(
                 selected,
                 response.code,
                 response.retryAfter,
-                "Command HTTP ${response.code}",
+                if (response.code == 429) RATE_LIMIT_RETRY_ERROR
+                else "Command HTTP ${response.code}",
                 state,
                 role,
                 response.historyOnlyThrottle,

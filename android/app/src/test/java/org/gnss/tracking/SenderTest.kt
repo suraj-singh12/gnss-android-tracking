@@ -64,7 +64,7 @@ class MemoryStore : MessageStore {
     override suspend fun resetTransientRetryTiming() {
         for (index in rows.indices) {
             val row = rows[index]
-            if (row.deliveredAt == null && !row.quarantined)
+            if (row.deliveredAt == null && !row.quarantined && row.error != RATE_LIMIT_RETRY_ERROR)
                 rows[index] = row.copy(nextAttemptMillis = 0)
         }
     }
