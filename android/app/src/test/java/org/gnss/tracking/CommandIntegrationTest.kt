@@ -88,6 +88,11 @@ class CommandIntegrationTest {
         bridge.rpc("clock", clock.now)
     }
 
+    private fun atMillis(value: Long) {
+        clock.now = value
+        bridge.rpc("clock", value)
+    }
+
     private fun inspect() = bridge.rpc("inspect")
 
     private fun state() = inspect()["state"].asJsonObject
@@ -152,11 +157,13 @@ class CommandIntegrationTest {
         var captures = 0
         var fault: ((Response) -> Response)? = null
         var adapterFailure: Response? = null
+        var adapterOffline: Boolean = false
         val transport = Transport { endpoint, json ->
             // Prove save-before-send with the real durable row, on every attempt.
             val m = Protocol.decodeMessage(json)
             assertEquals(json, db.dao().row(m.sequence)!!.json)
             sent.add(json)
+            if (adapterOffline) throw java.io.IOException("Injected Wi-Fi interruption")
             val response = adapterFailure ?: request(Endpoint.messages(endpoint).toString(), json)
             responses.add(response)
             fault?.invoke(response) ?: response
@@ -463,7 +470,7 @@ class CommandIntegrationTest {
         val first = raw().last().asJsonObject["received_at"].asString
         val geometry = points()
         assertEquals(10.0, distance(p), 1e-5)
-        at(12)
+        atMillis(p.db.dao().row(row.sequence)!!.nextAttemptMillis)
         p.sender.step()
         p.delivered(row)
         assertEquals(listOf(row.json, row.json), p.sent.takeLast(2))
@@ -486,9 +493,9 @@ class CommandIntegrationTest {
                 p.snapshot((it - 1) * 10.0)
             }
         // A disconnect fails D before Command sees it; restore before retry deadline.
-        p.adapterFailure = Response(503, "")
+        p.adapterOffline = true
         p.sender.step()
-        p.adapterFailure = null
+        p.adapterOffline = false
         p.sender.connectivityRestored()
         p.sender.step()
         assertEquals(
@@ -580,8 +587,8 @@ class CommandIntegrationTest {
         // Remote interval does not change event identity or pending SOS delivery.
         override(p, 5)
         // The offline failure was attempt 1; lost ACK was attempt 2. Persisted
-        // SOS backoff is now 2 seconds, including after Room/Sender recreation.
-        at(102)
+        // SOS backoff is now 2 seconds plus bounded jitter, including after Room/Sender recreation.
+        atMillis(p.db.dao().row(sos.sequence)!!.nextAttemptMillis)
         p.sender.step()
         p.delivered(sos)
         assertEquals("duplicate", Protocol.parse(p.responses.last().body)["result"].asString)
@@ -667,7 +674,7 @@ class CommandIntegrationTest {
         control("sos/acknowledge", """{"device_id":"${p.id}","event_id":"${sos.messageId}"}""")
         val acknowledged =
             state()["sos_alerts"].asJsonArray[0].asJsonObject["operator_acknowledged_at"].asString
-        at(2)
+        atMillis(p.db.dao().row(sos.sequence)!!.nextAttemptMillis)
         p.fault = null
         p.sender.step()
         p.delivered(sos)
@@ -927,7 +934,7 @@ class CommandIntegrationTest {
         assertEquals(p.id, p.repository.state().deviceId)
         assertEquals(20, p.repository.state().localInterval)
         assertEquals(30, p.repository.state().overrideSeconds)
-        at(4)
+        atMillis(durable!!.nextAttemptMillis)
         p.sender.step()
         p.delivered(pending)
         assertEquals(listOf(pending.json, pending.json), p.sent.takeLast(2))
@@ -950,7 +957,7 @@ class CommandIntegrationTest {
         assertNull(p.db.dao().row(row.sequence)!!.deliveredAt)
         assertEquals(0, raw().size())
         bridge.rpc("restore_storage")
-        at(2)
+        atMillis(p.db.dao().row(row.sequence)!!.nextAttemptMillis)
         p.fault = { response ->
             val ack = Protocol.parse(response.body)
             ack.addProperty("sequence", 999)
@@ -960,7 +967,7 @@ class CommandIntegrationTest {
         assertEquals(1, raw().size())
         assertNull(p.db.dao().row(row.sequence)!!.deliveredAt)
         p.fault = null
-        at(4)
+        atMillis(p.db.dao().row(row.sequence)!!.nextAttemptMillis)
         p.sender.step()
         p.delivered(row)
         assertEquals("duplicate", Protocol.parse(p.responses.last().body)["result"].asString)
@@ -979,7 +986,7 @@ class CommandIntegrationTest {
         p.sender.step()
         assertNull(p.db.dao().row(busy.sequence)!!.deliveredAt)
         assertEquals(4, p.sent.size)
-        at(65)
+        atMillis(p.db.dao().row(busy.sequence)!!.nextAttemptMillis)
         p.sender.step()
         // Busy packet has become backlog; real Sender saves current first.
         assertEquals(1, p.captures)
@@ -1014,7 +1021,8 @@ class CommandIntegrationTest {
                 response.copy(body = ack.toString())
             }
             p.sender.connectivityRestored()
-            p.sender.step()
+            atMillis(maxOf(clock.now, p.db.dao().row(row.sequence)!!.nextAttemptMillis))
+            p.sender.step(retainedOnly = true)
             assertNull(p.db.dao().row(row.sequence)!!.deliveredAt)
             assertNull(p.repository.state().authority)
             assertEquals(1, p.db.dao().all().size)
@@ -1022,11 +1030,13 @@ class CommandIntegrationTest {
         }
         p.fault = { it.copy(json = false) }
         p.sender.connectivityRestored()
-        p.sender.step()
+        atMillis(maxOf(clock.now, p.db.dao().row(row.sequence)!!.nextAttemptMillis))
+        p.sender.step(retainedOnly = true)
         assertNull(p.db.dao().row(row.sequence)!!.deliveredAt)
         p.fault = null
         p.sender.connectivityRestored()
-        p.sender.step()
+        atMillis(maxOf(clock.now, p.db.dao().row(row.sequence)!!.nextAttemptMillis))
+        p.sender.step(retainedOnly = true)
         p.delivered(row)
         assertEquals("duplicate", Protocol.parse(p.responses.last().body)["result"].asString)
         assertEquals(1, p.sent.toSet().size)
@@ -1345,7 +1355,7 @@ class CommandIntegrationTest {
         bridge.rpc("drop")
         sender.step() // Real atomic store, lost physical-adapter response.
         assertNull(p.db.dao().row(rows.first().sequence)!!.deliveredAt)
-        at(31)
+        atMillis(p.db.dao().row(rows.first().sequence)!!.nextAttemptMillis)
         sender.step()
         assertEquals(attempts[0], attempts[1])
         repeat(30) { sender.step() }

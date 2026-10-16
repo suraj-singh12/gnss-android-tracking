@@ -7,7 +7,7 @@ const {chromium} = require(process.env.GNSS_PLAYWRIGHT_MODULE || "playwright");
 const fixture = JSON.parse(fs.readFileSync(path.join(__dirname,"../../protocol/fixtures/history-batch-v1/request.json"))).messages[0];
 const phones = Number(process.env.GNSS_SYNC_DEVICES || 20), samples = Number(process.env.GNSS_SYNC_SAMPLES || 600), days = Number(process.env.GNSS_SYNC_DAYS || 7);
 const budget = Number(process.env.GNSS_SYNC_MAX_RECORDS || 2000000);
-assert(phones > 0 && samples > 0 && Number.isSafeInteger(phones*samples) && phones*samples <= budget, "Set a deliberate GNSS_SYNC_MAX_RECORDS resource budget");
+assert(phones > 0 && samples > 0 && Number.isSafeInteger(phones*samples) && (phones+(phones>=20?1:0))*samples <= budget, "Set a deliberate GNSS_SYNC_MAX_RECORDS resource budget");
 const work = process.env.GNSS_SYNC_WORK || fs.mkdtempSync(path.join(os.tmpdir(),"gnss-sync-capacity-"));
 fs.mkdirSync(work,{recursive:true});
 const database=path.join(work,"command.sqlite"), report={source_revision:process.env.SOURCE_REVISION||"working-tree",phones,samples_per_phone:samples,days,android_room:false,physical_network:false,source_bytes:0,request_body_bytes:0,ack_body_bytes:0,history_requests:0,peak_command_rss_bytes:0,peak_db_bytes:0,peak_wal_bytes:0};
@@ -76,7 +76,7 @@ function percentiles(a){if(!a.length)return null;const v=[...a].sort((a,b)=>a-b)
   await new Promise(r=>setTimeout(r,100));
  }
  await drainCompletion;if(late)await late;
- report.transfer_including_durable_receipt_ms=performance.now()-began;
+ report.transfer_including_durable_receipt_ms=performance.now()-began;report.devices_including_late=expected.size;
  if(phones>=20)assert(lateStarted&&report.late_join_active_http>=10,"21st must join with actual HTTP requests outstanding");
  const projection=performance.now();await wait(async()=>{let r=await fetch(local+"/local/live");if(r.status===404)r=await fetch(local+"/local/state");const s=await r.json();if(s.projection_error)throw Error(s.projection_error);return !s.projection_pending},1200000);report.residual_reconstruction_ms=performance.now()-projection;
  const viewStart=performance.now(),response=await fetch(local+"/local/state"),body=await response.text();assert.equal(response.status,200,body);const view=JSON.parse(body);report.backend_http_and_body_ms=performance.now()-viewStart;report.dashboard_bytes=Buffer.byteLength(body);report.dashboard_points=view.points.length;if(process.env.GNSS_SYNC_EXPECT_BOUNDED!=="0")assert(view.points.length<=2048);
@@ -98,8 +98,12 @@ function percentiles(a){if(!a.length)return null;const v=[...a].sort((a,b)=>a-b)
  // huge JS/Python expected-record arrays or geometry oracle in Command's RSS.
  const check=spawnSync("python3",["-c",`import sqlite3,json,sys\ndb=sqlite3.connect(sys.argv[1]);expected=json.loads(sys.argv[2]);extras=json.loads(sys.argv[3]);seen=set();counts={k:0 for k in expected}\nfor device,message,sequence in db.execute('SELECT device,message,sequence FROM raw ORDER BY device,sequence'):\n if device in expected and sequence<=expected[device]:\n  counts[device]+=1;assert sequence==counts[device] and message=='00000000-0000-4000-8000-%012d'%sequence,(device,message,sequence)\n else:\n  key=device+'/'+str(sequence);assert extras.get(key)==message,(key,message);seen.add(key)\nassert counts==expected and seen==set(extras),(counts,expected,seen)\nprint(json.dumps({'original_ids_accounted':sum(counts.values()),'fresh_ids_accounted':len(seen),'integrity_check':db.execute('PRAGMA integrity_check').fetchone()[0]}))`,database,JSON.stringify(Object.fromEntries(expected)),JSON.stringify(Object.fromEntries(extras))],{encoding:"utf8"});assert.equal(check.status,0,check.stderr);report.accounting=JSON.parse(check.stdout);assert.equal(report.accounting.integrity_check,"ok");
  if(process.env.GNSS_SYNC_REFERENCE_BINARY){const oracle=spawnSync(process.env.GNSS_SYNC_REFERENCE_BINARY,["-test.run=^TestSyncStoredChronologicalReference$","-test.timeout=30m","-test.v"],{encoding:"utf8",env:{...process.env,GNSS_SYNC_REFERENCE_DB:database,GOMAXPROCS:"2",GOMEMLIMIT:"768MiB"},timeout:1800000});assert.equal(oracle.status,0,oracle.stdout+oracle.stderr);assert(oracle.stdout.includes("REFERENCE VERIFIED"),"Required oracle was absent/skipped");report.chronological_reference=oracle.stdout;}
- else report.chronological_reference="NOT RUN: supply GNSS_SYNC_REFERENCE_BINARY";
- report.passed=true;
+ else if(process.env.GNSS_SYNC_LEGACY_BASELINE==="1") {
+   report.chronological_reference="NOT RUN: explicit legacy comparison; cached format predates this oracle";
+   report.measurement_completed=true;report.acceptance_status="NOT ASSESSED: legacy comparison only";
+ }
+ else throw Error("Required chronological reference is absent; set GNSS_SYNC_REFERENCE_BINARY. Not an acceptance PASS.");
+ if(process.env.GNSS_SYNC_REFERENCE_BINARY)report.passed=true;
 })().catch(e=>{report.passed=false;report.error=e.stack;process.exitCode=1;}).finally(async()=>{clearInterval(timer);if(browser)await browser.close();if(command && command.exitCode===null){command.kill("SIGINT");await once(command,"exit");}fs.writeFileSync(process.env.GNSS_SYNC_REPORT||path.join(work,"report.json"),JSON.stringify(report,null,2));
  if(process.env.GNSS_SYNC_KEEP_DB!=="1") for(const suffix of ["","-wal","-shm"])try{fs.unlinkSync(database+suffix);}catch{}
  console.log(JSON.stringify(report,null,2));});
