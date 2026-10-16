@@ -12,7 +12,11 @@ const work = process.env.GNSS_SYNC_WORK || fs.mkdtempSync(path.join(os.tmpdir(),
 fs.mkdirSync(work,{recursive:true});
 const database=path.join(work,"command.sqlite"), report={source_revision:process.env.SOURCE_REVISION||"working-tree",phones,samples_per_phone:samples,days,android_room:false,physical_network:false,harness_sha256:require("node:crypto").createHash("sha256").update(fs.readFileSync(__filename)).digest("hex"),source_bytes:0,request_body_bytes:0,ack_body_bytes:0,history_requests:0,peak_command_rss_bytes:0,peak_db_bytes:0,peak_wal_bytes:0};
 let command,browser,timer,active=0,late,lateStarted=false,completed=0;
-const diskBudget=Number(process.env.GNSS_SYNC_MAX_DB_BYTES || 16*1024**3);
+const configuredDiskBudget=Number(process.env.GNSS_SYNC_MAX_DB_BYTES || 16*1024**3);
+const space=fs.statfsSync(work);
+const availableDiskBytes=Number(space.bavail)*Number(space.bsize);
+// A configured budget cannot grant storage the selected filesystem lacks.
+const diskBudget=Math.min(configuredDiskBudget,Math.floor(availableDiskBytes*0.8));
 const rssBudget=Number(process.env.GNSS_SYNC_MAX_RSS_BYTES || 2*1024**3);
 const expected = new Map(), extras = new Map(), historyRTT=[], liveRTT=[], sosRTT=[], visible=[];
 const startedAt=Date.now(), sourceStart=startedAt-days*86400000;
@@ -40,7 +44,7 @@ function percentiles(a){if(!a.length)return null;const v=[...a].sort((a,b)=>a-b)
 (async()=>{
  assert(!fs.existsSync(database),"Use a fresh work directory; never overwrite a retained database");
  const estimatedRecords=(phones+(phones>=20?1:0))*samples;
- report.db_wal_budget_bytes=diskBudget;report.command_rss_budget_bytes=rssBudget;
+ report.configured_db_wal_budget_bytes=configuredDiskBudget;report.available_disk_bytes=availableDiskBytes;report.minimum_free_space_fraction=0.2;report.db_wal_budget_bytes=diskBudget;report.command_rss_budget_bytes=rssBudget;
  if(estimatedRecords*7400>diskBudget){report.blocked=true;throw Error("Preflight resource budget: measured smoke cost ~7400 SQLite bytes/observation exceeds selected DB budget. Use suitable storage and raise explicit budgets; this case is NOT verified.");}
  const phone=`http://127.0.0.1:${await port()}`,local=`http://127.0.0.1:${await port()}`;
  command=spawn(process.env.GNSS_COMMAND_BINARY,["-db",database,"-ingest-listen",phone.slice(7),"-dashboard-listen",local.slice(7)],{stdio:["ignore","ignore",fs.openSync(path.join(work,"command.log"),"w")],env:{...process.env,GOMAXPROCS:"2",GOMEMLIMIT:process.env.GNSS_COMMAND_MEMLIMIT||"768MiB"}});

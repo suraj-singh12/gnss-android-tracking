@@ -333,7 +333,7 @@ func Open(path string) (*Store, error) {
 	if _, err = db.Exec(`CREATE INDEX IF NOT EXISTS raw_chronological_key ON raw(device,` + chronologicalKey + `) WHERE json_extract(known,'$.type')='location'`); err != nil {
 		return fail(err)
 	}
-	if _, err = db.Exec(`CREATE INDEX IF NOT EXISTS raw_extensions_missing ON raw(device) WHERE (json_extract(wire,'$.observation') IS NOT NULL AND json_extract(known,'$.observation') IS NULL) OR (json_extract(wire,'$.history_progress') IS NOT NULL AND json_extract(known,'$.history_progress') IS NULL) OR (json_extract(wire,'$.history_progress.unresolved_sequence_count') IS NOT NULL AND json_extract(known,'$.history_progress.unresolved_sequence_count') IS NULL)`); err != nil {
+	if _, err = db.Exec(`CREATE INDEX IF NOT EXISTS raw_extensions_missing ON raw(device) WHERE ` + missingHistoryExtensions); err != nil {
 		return fail(err)
 	}
 	if err = s.backfillObservationIdentity(); err != nil {

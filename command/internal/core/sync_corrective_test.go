@@ -647,3 +647,113 @@ func TestLargerNegotiationPreservesIndividualEnvelopeCeiling(t *testing.T) {
 		t.Fatal("partial oversize commit", count, err)
 	}
 }
+
+func TestExtensionBackfillSeeksMissingRowsAcrossDevicesAndPoison(t *testing.T) {
+	s, _, path := open(t)
+	s.projectionMu.Lock()
+	other := "22222222-2222-4222-8222-222222222222"
+	sessions := []string{id(), id()}
+	for n := 1; n <= 300; n++ {
+		for i, d := range []string{device, other} {
+			m := observationMessage(t, n, sessions[i])
+			m.Device = d
+			ingest(t, s, m)
+		}
+	}
+	s.mu.Lock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec("UPDATE raw SET known=json_remove(known,'$.observation')"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec("DELETE FROM observation_identity"); err != nil {
+		t.Fatal(err)
+	}
+	// A legacy receiver retained an invalid extension. Skip only that original;
+	// it must not trap the page cursor ahead of later valid records/devices.
+	if _, err = tx.Exec("UPDATE raw SET wire=json_set(wire,'$.observation.observation_sequence',0) WHERE device=? AND sequence=1", device); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	s.mu.Unlock()
+	originals := map[string]string{}
+	rows, err := s.db.Query("SELECT device,message,wire FROM raw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var d, m, b string
+		if err = rows.Scan(&d, &m, &b); err != nil {
+			t.Fatal(err)
+		}
+		originals[d+"/"+m] = b
+	}
+	if err = rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	rows.Close()
+	s.projectionMu.Unlock()
+	if err = s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	upgraded, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer upgraded.Close()
+	var count int
+	if err = upgraded.db.QueryRow("SELECT COUNT(*) FROM observation_identity").Scan(&count); err != nil || count != 599 {
+		t.Fatal("valid backfill blocked", count, err)
+	}
+	rows, err = upgraded.db.Query("SELECT device,message,wire FROM raw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var d, m, b string
+		if err = rows.Scan(&d, &m, &b); err != nil {
+			t.Fatal(err)
+		}
+		if originals[d+"/"+m] != b {
+			t.Fatal("backfill rewrote original wire")
+		}
+		delete(originals, d+"/"+m)
+	}
+	if err = rows.Err(); err != nil || len(originals) != 0 {
+		t.Fatal("raw identity loss", len(originals), err)
+	}
+	rows.Close()
+	for _, query := range []struct {
+		sql  string
+		args []any
+	}{
+		{`SELECT device FROM raw INDEXED BY raw_extensions_missing WHERE device>? AND (` + missingHistoryExtensions + `) ORDER BY device LIMIT 1`, []any{""}},
+		{`SELECT rowid,wire,known FROM raw INDEXED BY raw_extensions_missing WHERE device=? AND rowid>? AND (` + missingHistoryExtensions + `) ORDER BY rowid LIMIT 256`, []any{device, 0}},
+	} {
+		plan, err := upgraded.db.Query("EXPLAIN QUERY PLAN "+query.sql, query.args...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		detail := ""
+		for plan.Next() {
+			var a, b, c int
+			var d string
+			if err = plan.Scan(&a, &b, &c, &d); err != nil {
+				t.Fatal(err)
+			}
+			detail += d
+		}
+		if err = plan.Err(); err != nil {
+			t.Fatal(err)
+		}
+		plan.Close()
+		if !strings.Contains(detail, "raw_extensions_missing") || strings.Contains(detail, "TEMP B-TREE") || strings.Contains(detail, "INTEGER PRIMARY KEY") {
+			t.Fatal("startup regressed to raw scan/sort", detail)
+		}
+	}
+}

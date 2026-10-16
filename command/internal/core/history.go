@@ -838,20 +838,34 @@ func (s *Store) recordProjectionFailure(err error) {
 
 // An older v1 receiver retained extension fields in wire even when its canonical
 // model ignored them. Recover only validated additive metadata, never rewrite wire.
+const missingHistoryExtensions = `(json_extract(wire,'$.observation') IS NOT NULL AND json_extract(known,'$.observation') IS NULL) OR (json_extract(wire,'$.history_progress') IS NOT NULL AND json_extract(known,'$.history_progress') IS NULL) OR (json_extract(wire,'$.history_progress.unresolved_sequence_count') IS NOT NULL AND json_extract(known,'$.history_progress.unresolved_sequence_count') IS NULL)`
+
 func (s *Store) backfillObservationIdentity() error {
-	var after int64
+	afterDevice := ""
 	for {
-		last, scanned, err := s.backfillObservationPage(after)
+		var device string
+		err := s.db.QueryRow(`SELECT device FROM raw INDEXED BY raw_extensions_missing WHERE device>? AND (`+missingHistoryExtensions+`) ORDER BY device LIMIT 1`, afterDevice).Scan(&device)
+		if err == sql.ErrNoRows {
+			return nil
+		}
 		if err != nil {
 			return err
 		}
-		if scanned == 0 {
-			return nil
+		var after int64
+		for {
+			last, scanned, err := s.backfillObservationPage(device, after)
+			if err != nil {
+				return err
+			}
+			if scanned == 0 {
+				break
+			}
+			after = last
 		}
-		after = last
+		afterDevice = device
 	}
 }
-func (s *Store) backfillObservationPage(after int64) (last int64, scanned int, result error) {
+func (s *Store) backfillObservationPage(device string, after int64) (last int64, scanned int, result error) {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return 0, 0, err
@@ -861,10 +875,7 @@ func (s *Store) backfillObservationPage(after int64) (last int64, scanned int, r
 	if err != nil {
 		return 0, 0, err
 	}
-	rows, err := tx.Query(`SELECT rowid,wire,known FROM raw WHERE rowid>? AND (
-      (json_extract(wire,'$.observation') IS NOT NULL AND json_extract(known,'$.observation') IS NULL)
-      OR (json_extract(wire,'$.history_progress') IS NOT NULL AND json_extract(known,'$.history_progress') IS NULL)
-      OR (json_extract(wire,'$.history_progress.unresolved_sequence_count') IS NOT NULL AND json_extract(known,'$.history_progress.unresolved_sequence_count') IS NULL)) ORDER BY rowid LIMIT 256`, after)
+	rows, err := tx.Query(`SELECT rowid,wire,known FROM raw INDEXED BY raw_extensions_missing WHERE device=? AND rowid>? AND (`+missingHistoryExtensions+`) ORDER BY rowid LIMIT 256`, device, after)
 	if err != nil {
 		return 0, 0, err
 	}

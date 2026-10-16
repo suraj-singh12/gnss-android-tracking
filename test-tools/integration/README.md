@@ -610,3 +610,18 @@ production source revision so an earlier timing run is never silently relabelled
 as using this stronger schedule. Same-workload before/after numbers above used the
 same earlier schedule on both versions. The barrier-based real Room/occupied-writer
 regressions independently prove injection during an actual in-flight request.
+
+
+Capacity preflight also caps the configured DB/WAL budget at 80% of the selected
+work filesystem's available bytes. A 16-GiB setting does not grant 16 GiB on a small
+/tmp mount. Select GNSS_SYNC_WORK on suitable storage and keep the reserve. During
+this execution /tmp was only 4.9 GiB, so subsequent larger cells moved to workspace
+storage; scratch-space exhaustion is not disguised as a Command correctness result.
+
+The startup backfill query was found by EXPLAIN QUERY PLAN to choose the raw rowid
+range, rescanning all original envelopes even when the partial missing-extension
+index was empty. Backfill now seeks the existing partial index by device then rowid,
+without sorting/rescanning completed prefixes. The regression seeds interleaved devices,
+more than one page each and a poisoned legacy extension, verifies all valid identities
+and immutable wire bytes, and asserts indexed range plans. This is an additive query
+correction, not a new schema or a raw-history rewrite.
