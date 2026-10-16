@@ -450,7 +450,8 @@ node test-tools/integration/sync-capacity.cjs
 ```
 
 Generation is streaming: one bounded batch/phone, original immutable tuples,
-new priority identities, late join while HTTP requests are outstanding, then an
+new priority identities spread across drain progress (each records acknowledged history
+and outstanding HTTP counts), late join while HTTP requests are outstanding, then an
 additional new SOS during cold history loading. Reported stages include request/ACK
 body bytes/counts, receipt wall time, residual reconstruction, bounded backend HTTP
 body, browser load, fresh LIVE/SOS ACK and ACK→visible notification percentiles/worst.
@@ -598,3 +599,14 @@ matched-source asset verification. Its independent external provider job failed;
 that failure is not a GNSS pass or permission to declare field stability. Later
 source changes require their own matched CI run. Physical Android/Doze/OEM, native
 macOS/Windows and blocked dense-fleet capacity cells remain acceptance blockers.
+
+
+The later fleet harness spaces eight unique priority probes over 0..87.5% of history
+receipt progress and records each probe's actual outstanding requests. Small drains
+can finish before eight browser polling cycles; those probes are not claimed to have
+arrived during saturation. Dense cases therefore exercise late streamed projection
+work as well as early ingestion. Reports include a harness SHA-256 alongside the
+production source revision so an earlier timing run is never silently relabelled
+as using this stronger schedule. Same-workload before/after numbers above used the
+same earlier schedule on both versions. The barrier-based real Room/occupied-writer
+regressions independently prove injection during an actual in-flight request.

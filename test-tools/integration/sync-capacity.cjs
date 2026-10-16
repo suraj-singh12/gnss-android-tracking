@@ -10,7 +10,7 @@ const budget = Number(process.env.GNSS_SYNC_MAX_RECORDS || 2000000);
 assert(phones > 0 && samples > 0 && Number.isSafeInteger(phones*samples) && (phones+(phones>=20?1:0))*samples <= budget, "Set a deliberate GNSS_SYNC_MAX_RECORDS resource budget");
 const work = process.env.GNSS_SYNC_WORK || fs.mkdtempSync(path.join(os.tmpdir(),"gnss-sync-capacity-"));
 fs.mkdirSync(work,{recursive:true});
-const database=path.join(work,"command.sqlite"), report={source_revision:process.env.SOURCE_REVISION||"working-tree",phones,samples_per_phone:samples,days,android_room:false,physical_network:false,source_bytes:0,request_body_bytes:0,ack_body_bytes:0,history_requests:0,peak_command_rss_bytes:0,peak_db_bytes:0,peak_wal_bytes:0};
+const database=path.join(work,"command.sqlite"), report={source_revision:process.env.SOURCE_REVISION||"working-tree",phones,samples_per_phone:samples,days,android_room:false,physical_network:false,harness_sha256:require("node:crypto").createHash("sha256").update(fs.readFileSync(__filename)).digest("hex"),source_bytes:0,request_body_bytes:0,ack_body_bytes:0,history_requests:0,peak_command_rss_bytes:0,peak_db_bytes:0,peak_wal_bytes:0};
 let command,browser,timer,active=0,late,lateStarted=false,completed=0;
 const diskBudget=Number(process.env.GNSS_SYNC_MAX_DB_BYTES || 16*1024**3);
 const rssBudget=Number(process.env.GNSS_SYNC_MAX_RSS_BYTES || 2*1024**3);
@@ -69,6 +69,11 @@ function percentiles(a){if(!a.length)return null;const v=[...a].sort((a,b)=>a-b)
  await wait(()=>active>=Math.min(phones,5));
  // New distinct events arrive while history HTTP requests are outstanding.
  for(let event=0;event<8;event++){
+  // Probe throughout the retained drain, including late streamed projections.
+  // Small transfers may finish before eight UI polling cycles: disclose that.
+  const fraction=Math.floor((phones+(phones>=20?1:0))*samples*event/8);
+  await wait(()=>completed>=fraction,1800000);
+  (report.priority_probe_progress||=[]).push({event,history_durably_acked:completed,outstanding_history_http:active});
   const live=observation(1,samples+1+event*2,true);live.observation.observation_sequence=samples+1+event;live.fix.longitude=(samples+1+event)*5/6371008.8*180/Math.PI;const sos=structuredClone(live);sos.type="sos";sos.sequence++;sos.message_id=identity(sos.sequence);delete sos.observation;sos.fix=null;sos.health.gnss_status="no_fix";sos.sos={event_id:sos.message_id,triggered_at:sos.captured_at};
   report.priority_inflight_history_max=Math.max(report.priority_inflight_history_max||0,active);
   liveRTT.push(await send(live));const ack=await send(sos);sosRTT.push(ack);const receipt=performance.now();
