@@ -734,3 +734,84 @@ Projection failure status is conditional on durable queued work. An idle reader
 timeout cannot invent pending history. Startup detects older pending-without-work
 state and enqueues the existing reconstruction worker; it does not claim completion
 from an ACK or structurally valid cache alone. Original raw envelopes stay unchanged.
+
+## Issue #23 responsiveness and Windows acceptance
+
+Browser health is separate from phone contact. Successful `/local/live` polling
+shows **Command Connected**; a failed LIVE request shows **Command LIVE/SOS
+unavailable**, without modifying any phone's last contact or GNSS state. A history
+read failure appears as a history-refresh error and cannot disconnect healthy
+phones. Both polling paths have a four-second browser deadline and remain
+independent. A history reply started before a newer LIVE read cannot replace its
+contact/age metadata, including at equal receipt versions. Later history reads
+still refresh age/contact if LIVE polling fails. Receipt ordering and the additive
+`projection_version` prevent old recording geometry (including raw previews) from
+crossing a recording/policy change.
+
+Unchanged history/offline-map/terrain SVG nodes survive polling. Their cache key
+includes bounded geometry, viewport/dimensions, party styles/labels, selection,
+appearance and layer controls. Pan/zoom, selection and changed geometry invalidate
+the key; LIVE and located-SOS markers refresh independently. This is a browser
+presentation cache, not another projection or storage authority. Original data,
+qualified distance and full-resolution inspection remain unchanged.
+
+**Events → Export responsiveness timings** downloads a small JSON containing
+backend and browser timings, even while SQLite is busy. Existing **Export
+diagnostics** ZIPs retain their deterministic durable-evidence contract. The local-only
+`GET /local/runtime-diagnostics` needs neither the ingestion mutex nor a SQLite
+read. It includes build/OS/architecture, Go heap/system memory (not process RSS),
+goroutines, writer connection-pool wait counters, active HTTP counts and the latest
+observed projection-device backlog/time. Fixed stages cover HTTP duration/bytes/
+failures, history admission/gate wait, application writer-mutex wait, receipt
+transaction, commit and projection-device processing. Counts/totals/maxima cover
+this process lifetime; p50/p95/p99 cover only the last 128 completed samples per
+stage. Browser draw/render/fetch timings likewise retain at most 128 samples.
+Nothing is persisted per request; counters reset on restart. No request content,
+coordinates, identifiers, addresses, filenames, browser URL or error text is copied.
+
+Stage durations overlap: receipt includes writer wait and transaction, transaction
+includes SQLite execution/lock waiting and commit, and commit includes driver/OS
+work. They do not isolate physical fsync, TCP/firewall time or Android ACK
+application. `receipt_live` includes individual v1 requests (including legacy
+history/status/SOS); the batch path is `receipt_history`. Backlog is the last
+successful dashboard observation, not a guaranteed current queue depth. Use the
+existing durable receipt/projection/SOS journal for identity/accounting evidence;
+use Android diagnostics to distinguish sender/network delay. A slow stage alone
+does not establish that the SQLite driver or Windows networking is defective.
+
+Native acceptance is **BLOCKED / NOT TESTED** in the Linux implementation session.
+Cross-compilation/Chromium is software evidence only. On a genuine Windows AMD64
+laptop, use the exact PR-head workflow executable and checksum manifest:
+
+1. Back up the existing SQLite database while Command is stopped. Keep the tested
+   baseline executable. Run the candidate on a writable local disk, recording its
+   exact SHA, Windows/browser versions, storage type and actual launch/database
+   configuration privately. Retain defaults for source-run development too.
+2. Start `.\GNSS-Command-windows-x64.exe` in PowerShell, open
+   `http://127.0.0.1:8081`, and configure trusted-LAN phone ingestion on port 8080.
+   Inspect normal Windows firewall permission/profile and LAN reachability; record
+   any permission failure separately from application-contact failure. Do not
+   infer phone contact from Wi-Fi presence. Use Task Manager/Resource Monitor or
+   `Get-Process GNSS-Command-windows-x64 | Select CPU,WorkingSet64,PrivateMemorySize64,Handles`
+   to record process CPU/RAM/handles alongside exported timings.
+3. Run for **at least two hours**. Begin with a short 1/5-phone diagnostic interval,
+   then sustain 20 real phones sending fresh data with a bounded retained backlog.
+   Add phone 21 while history is outstanding; there is no configured fleet cap.
+   Reuse #22's corpus/fixtures rather than generating multi-day dense history.
+4. During backlog, exercise pan/zoom, party selection, history inspection, Stop/
+   Resume and SOS plus operator ACK. Record Android activation/save/ACK evidence,
+   Command first receipt and visible-alert times separately. Export timings at
+   idle, backlog, any symptom and recovery; record observation counts and API
+   bytes/latencies. Watch CPU/RAM, disk response and browser long tasks separately.
+5. Take one phone offline, verify only its actual contact ages into loss, then
+   rejoin and verify automatic fresh LIVE/SOS and immutable history recovery.
+   Pause/resume history, retry duplicates, deliver delayed observations and restart
+   Command. Compare retained identities, recording chronology, rejection reasons,
+   gap-safe distance and SQLite integrity after shutdown. Refresh/disconnect only
+   the browser and confirm it never changes phone contact authority.
+6. Preserve two-hour start/end times, exports, any browser performance capture,
+   counts/checksums, actual SOS latency and unexplained loss/freeze events. Mark
+   failed/incomplete steps explicitly. Filesystem/antivirus interference, socket
+   failures, firewall/profile changes and Wi-Fi/repeater handoff require native
+   evidence; no such cause was established by the Linux tests. Repeat native
+   launch/restart, offline maps, LIVE/SOS and controls on macOS ARM64 separately.

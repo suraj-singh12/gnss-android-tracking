@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"time"
 )
 
 var errHistoryBusy = errors.New("one historical request per device is already in flight")
@@ -73,6 +74,8 @@ type BatchAck struct {
 }
 
 func (s *Store) IngestBatch(b []byte) (out BatchAck, resultError error) {
+	started := time.Now()
+	defer func() { s.recordRuntime("receipt_history", started, resultError != nil, 0) }()
 	at := s.Now().UTC().Format(wireTime)
 	defer func() {
 		var bad *BatchError
@@ -146,10 +149,16 @@ func (s *Store) IngestBatch(b []byte) (out BatchAck, resultError error) {
 	s.historyDevices[device] = true
 	s.historyAdmission.Unlock()
 	defer func() { s.historyAdmission.Lock(); delete(s.historyDevices, device); s.historyAdmission.Unlock() }()
+	gate := time.Now()
 	s.historyGate.Lock()
+	s.recordRuntime("history_gate_wait", gate, false, 0)
 	defer s.historyGate.Unlock()
+	wait := time.Now()
 	s.mu.Lock()
+	s.recordRuntime("writer_wait_history", wait, false, 0)
 	defer s.mu.Unlock()
+	transaction := time.Now()
+	defer func() { s.recordRuntime("transaction_history", transaction, resultError != nil, 0) }()
 	tx, e := s.db.Begin()
 	if e != nil {
 		return out, e
@@ -177,7 +186,7 @@ func (s *Store) IngestBatch(b []byte) (out BatchAck, resultError error) {
 	if e = saveReceiptState(tx, st); e != nil {
 		return out, e
 	}
-	if e = tx.Commit(); e != nil {
+	if e = s.commitReceipt(tx, "commit_history"); e != nil {
 		return out, e
 	}
 	s.notifyProjection()
@@ -209,12 +218,15 @@ func (s *Store) historyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	// Bound decoded request RAM independently of the number of phones. Queued
 	// sockets exert backpressure; urgent individual envelopes bypass these slots.
+	admission := time.Now()
 	select {
 	case s.historySlots <- struct{}{}:
 		defer func() { <-s.historySlots }()
 	case <-r.Context().Done():
+		s.recordRuntime("history_admission_wait", admission, true, 0)
 		return
 	}
+	s.recordRuntime("history_admission_wait", admission, false, 0)
 	b, e := io.ReadAll(http.MaxBytesReader(w, r.Body, int64(s.historyBatchBytes)))
 	if e != nil {
 		interruptedBody(w, e)

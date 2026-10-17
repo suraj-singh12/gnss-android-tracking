@@ -397,7 +397,8 @@ func (s *Store) processProjectionLocked() error {
 	}
 	return nil
 }
-func (s *Store) processProjectionDevice() error {
+func (s *Store) processProjectionDevice() (resultError error) {
+	started := time.Now()
 	// Reading/decoding raw history is independent of the writer connection.
 	db := s.projectionDB
 	if db == nil {
@@ -457,6 +458,7 @@ func (s *Store) processProjectionDevice() error {
 	if err != nil {
 		return err
 	}
+	defer func() { s.recordRuntime("projection_device", started, resultError != nil, 0) }()
 	if header.Generations == nil {
 		return s.migrateProjectionCache()
 	}

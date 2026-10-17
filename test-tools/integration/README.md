@@ -749,3 +749,125 @@ installing its SQLite abort trigger. Ready records are intentionally no longer
 updated by reconnect reset. The error must remain visible while the original row
 and deadline survive and tracking resources remain active. A timeout caused by an
 empty fault target is not treated as a successful fault-injection test.
+
+## Issue #23 focused Command stability verification
+
+`windows-stability.cjs` runs production Command HTTP/SQLite with five phones and
+420 original observations each. Its browser fault injection affects history/LIVE
+fetches only. It checks separate availability states, delayed equal-receipt history,
+age refresh after LIVE failure, bounded history timeout/recovery, unchanged map-node
+retention, viewport/geometry invalidation and private runtime export. It makes no
+physical-device/native Windows claim. Run with the same `GNSS_COMMAND_BINARY`,
+`GNSS_PLAYWRIGHT_MODULE` and optional `GNSS_CHROMIUM` as the other browser suites:
+
+```sh
+GNSS_COMMAND_BINARY=/path/to/command GNSS_CHROMIUM=/path/to/chromium \
+GNSS_STABILITY_REPORT=/outside/repository/browser-stability.json \
+node test-tools/integration/windows-stability.cjs
+```
+
+`GNSS_STABILITY_BASELINE=1` reports known pre-fix defects without asserting they
+are fixed; its `passed:false` is deliberately not acceptance. Ten explicit unchanged
+draw calls measure production SVG work, not whole-browser frame latency. Timings
+are a small sample affected by concurrent host work; node retention is the
+structural regression assertion. The existing exact-source matched-assets workflow
+runs the new check alongside full UI/history/SOS regressions. Native two-hour
+20+1 acceptance and diagnostic interpretation are in `command/README.md`.
+
+### Bounded Issue #23 evidence — 2026-10-17
+
+Baseline application source `a7c4c1a15d606d905ea0c053954e1475d1bf3326`;
+corrected application source `032528d6eb494cb98e56ced1e7b17b9cf2017ac0` (clean
+embedded VCS metadata). Later evidence-only documentation commits do not relabel
+these binaries. Guidance matches canonical `ca7b091e`; the initial `work` checkout
+had older guidance, while the authorized integration parent already matched.
+No native Windows/macOS runtime or physical fleet was attached.
+
+The traced path remains Android Room/Sender → HTTP admission → existing SQLite
+FULL raw/identity/receipt/work commit → ACK → fair chunked projection → independent
+contact/LIVE read model → browser polling → SVG. No measured evidence justified a
+driver, sender, WAL, authority or admission redesign. Reproduced software defects
+were history failures overwriting Command availability, LIVE failures hidden by
+successful history polls, late equal-receipt history reverting newer contact ages,
+and unconditional replacement of unchanged history/map geometry. An unbounded
+browser history fetch could also leave its polling flag occupied indefinitely.
+
+Linux x86_64, Go 1.24.7, Node 24.19.0, Chromium 151.0.7922.173; process harness
+uses `GOMAXPROCS=2`. Exactly one before/after fleet pair used the existing
+`sync-capacity.cjs` generator: 20 phones plus late 21st, 600 original observations
+per phone spread over seven days (explicitly sparse, not multi-day dense capture).
+Each run sent 12,422,673 original source bytes, 12,455,628 request-body bytes and
+210 history requests. Phone 21 joined with 19 history HTTP requests outstanding.
+Five of eight distinct LIVE/SOS probe pairs arrived during actual outstanding
+history; the final three arrived after its short drain. Both runs accounted for
+12,600 originals +17 fresh identities, SQLite integrity `ok`, complete cache
+manifests before/after shutdown, unchanged raw fingerprints after cold rebuilding,
+and exact chronological qualified-point/decision/distance reference agreement.
+The optional runtime-export read was added after the timed sections of the harness;
+its changed harness hash is not a claim of a changed workload.
+
+| Same workload metric | Before | After |
+|---|---:|---:|
+| Transfer including durable receipt (s) | 4.79 | 4.93 |
+| History ACK RTT p50/p95/p99 (ms) | 468.8 / 579.5 / 622.2 | 462.5 / 634.9 / 672.0 |
+| Fresh LIVE ACK RTT p50/p95/p99 (ms; n=8) | 32.2 / 98.6 / 98.6 | 26.0 / 110.6 / 110.6 |
+| Fresh SOS ACK RTT p50/p95/p99 (ms; n=8) | 21.2 / 42.4 / 42.4 | 25.0 / 60.4 / 60.4 |
+| Worst SOS first receipt→visible alert (ms; n=8) | 908 | 956 |
+| One bounded history API + body (ms) | 50.4 | 80.9 |
+| History response bytes | 832367 | 832389 |
+| Command peak RSS (MiB) | 86.5 | 88.6 |
+| Command CPU user + system (s) | 7.96 | 8.61 |
+| Residual projection wait (ms) | 1798.6 | 1797.7 |
+| Cold browser load→geometry (ms) | 1254.8 | 1153.4 |
+
+These single samples establish neither a universal speedup nor an endurance SLA.
+Bulk receipt, some tail ACKs, CPU/RAM and the sampled history API were slightly
+worse; no hidden receiver throughput improvement is claimed. Existing budgets are
+Android overall/connection 6/3 s, backend dashboard reader 3 s, browser fetch 4 s,
+LIVE/history poll periods 1/2 s, and this harness's 1 GiB DB/WAL +512 MiB Command
+RSS limits. The short workload respected those resource limits; polling periods
+are not SOS visibility guarantees. Native two-hour acceptance remains outstanding.
+
+New post-fix diagnostics (no pre-fix stage instrumentation exists): latest-128
+history writer-wait p50/p95/p99 0.000/10.744/15.807 ms, transaction
+18.511/31.359/47.234 ms and commit 2.296/11.849/16.554 ms. History HTTP admission
+wait was 407.465/606.603/625.992 ms: admission, rather than SQLite commit alone,
+explains much of fleet RTT in this bounded sample. Individual LIVE/status/SOS writer
+wait (17 completions) was 9.277/33.489/33.489 ms; commit
+3.128/25.782/25.782 ms. LIVE API (21 responses) was 3.159/19.387/40.973 ms,
+997,369 aggregate response bytes, zero errors. Observed pending projection devices
+peaked at 21 and finished at zero. These overlapping stages do not isolate physical
+SQLite lock/fsync time. The history API counter included **one response/write
+error** during browser polling/reload; its specific cause was not captured. It is
+not labelled corruption, a proven server 503, or a clean zero-error run.
+
+Five-phone diagnostic fixture: 2,100 original observations, 1,055 displayed preview
+points. One uncontented before/after pair of ten unchanged draws measured p50
+4.2→4.2 ms and p95 24.6→5.5 ms; history-node replacement fell 10/10→0/10. Other
+regression runs under concurrent race/compiler work varied (p95 up to 38.4 ms), so
+node retention is the reliable structural result, not a general tail-latency claim.
+One injected history failure falsely displayed Command disconnected before, zero
+after. LIVE failure is now visible, delayed equal-receipt metadata cannot regress
+contact age, later history still ages contact, old recording/raw previews clear,
+and a stalled history fetch releases polling after 4019.8 ms. No browser page errors
+were reported by the corrected check. These are browser/loopback observations,
+not physical Windows disconnect counts.
+
+Final local software verification: complete Command `go test -race ./...` and
+`go vet ./...` PASS; test-tools race/vet PASS; map/terrain/shared SOS Node tests PASS;
+real-server Chromium UI/axe, history, SOS and the focused stability check PASS.
+Existing opt-in Android bridge/performance methods remain skipped by ordinary Go
+invocation. Local real Room/Sender bridge and Android build/lint were NOT RUN
+(no configured Android SDK); they remain mandatory in the reused exact-source CI.
+An initial complete race run caught a missing SVG test-double method and loss of
+ZIP determinism from adding volatile runtime data. Both were corrected; existing
+field ZIPs remain deterministic, runtime export is separate, and the final complete
+race run passed. Windows AMD64/macOS ARM64 portable cross-builds PASS with clean
+source metadata; native runtime, two-hour physical LAN/20+1 and target-OS audio/
+firewall/filesystem/handoff acceptance remain **BLOCKED / NOT TESTED**. Follow the
+Command README procedure rather than treating these short tests as field acceptance.
+
+Compact JSON reports/logs are retained in the implementation workspace under
+`/workspace/issue23-evidence/` (`fleet-before/report.json`, `fleet-after/report.json`,
+`browser-before.json`, `browser-measured-after.json`, `go-race-final.log`). The PR
+publishes this comparison; CI publishes independently measured exact-head evidence.
