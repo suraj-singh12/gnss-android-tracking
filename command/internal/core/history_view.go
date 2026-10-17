@@ -88,6 +88,7 @@ func (s *Store) boundedDashboard(ctx context.Context, dot int, liveOnly bool) (S
 	if err != nil {
 		return st, large, err
 	}
+	s.runtimeBacklog(len(pending))
 	ids := make([]string, 0, len(st.Devices))
 	for device := range st.Devices {
 		ids = append(ids, device)

@@ -170,6 +170,7 @@ jobs:
           node test-tools/integration/sos-dashboard.cjs
           node test-tools/integration/ui-dashboard.cjs
           node test-tools/integration/history-dashboard.cjs
+          GNSS_STABILITY_REPORT="$RUNNER_TEMP/gnss-assets/windows-stability.json" node test-tools/integration/windows-stability.cjs
           node test-tools/integration/map-download-ui.cjs
           export GNSS_SYNC_REPORT="$RUNNER_TEMP/gnss-test-reports/sync-process-browser.json"
           (cd command && go test -c -o "$RUNNER_TEMP/gnss-sync-reference" ./internal/core)

@@ -24,6 +24,12 @@ func failure(w http.ResponseWriter, status int, code string, err error) {
 func (s *Store) IngestHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ingress := s.Now().UTC()
+		switch r.URL.Path {
+		case "/api/v1/messages", "/api/v1/history":
+			var done func()
+			w, done = s.timeHTTP(w, "http_ingest_"+strings.TrimPrefix(r.URL.Path, "/api/v1/"))
+			defer done()
+		}
 		if r.URL.Path == "/api/v1/history" || r.URL.Path == "/api/v1/capabilities" {
 			s.historyHandler(w, r)
 			return
@@ -87,6 +93,17 @@ func (s *Store) LocalHandler(assets http.Handler) http.Handler {
 		if !strings.HasPrefix(r.URL.Path, "/local/") {
 			assets.ServeHTTP(w, r)
 			return
+		}
+
+		if r.URL.Path == "/local/runtime-diagnostics" && r.Method == "GET" {
+			respond(w, 200, s.runtimeReport())
+			return
+		}
+		switch r.URL.Path {
+		case "/local/live", "/local/state", "/local/history":
+			var done func()
+			w, done = s.timeHTTP(w, "http_local_"+strings.TrimPrefix(r.URL.Path, "/local/"))
+			defer done()
 		}
 		if s.mapRequest(w, r, maps) {
 			return
@@ -268,7 +285,7 @@ func dashboardView(st State, now time.Time) map[string]any {
 		}
 		recording = map[string]any{"recording_id": st.Recording.ID, "active": st.Recording.Active, "mode": st.Recording.Mode, "duration_s": seconds}
 	}
-	return map[string]any{"receipt_version": st.ReceiptVersion, "recording_session_available": sessionAvailable, "sos_alerts": st.Alerts, "devices": devices, "recording": recording, "policy": st.Policy, "points": st.Points, "raw_points": st.RawPoints, "provisional_points": st.Provisional, "projection_pending": st.ProjectionPending, "projection_error": st.ProjectionError}
+	return map[string]any{"receipt_version": st.ReceiptVersion, "projection_version": st.ProjectionVersion, "recording_session_available": sessionAvailable, "sos_alerts": st.Alerts, "devices": devices, "recording": recording, "policy": st.Policy, "points": st.Points, "raw_points": st.RawPoints, "provisional_points": st.Provisional, "projection_pending": st.ProjectionPending, "projection_error": st.ProjectionError}
 }
 
 // Failure to receive a complete body is transport failure, not poisoned GNSS.

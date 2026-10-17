@@ -728,7 +728,7 @@ async function wait(check) {
   await page.waitForFunction(() =>
     document
       .querySelector("#connection")
-      .textContent.includes("Command Disconnected"),
+      .textContent.includes("Command LIVE/SOS unavailable"),
   );
   assert.equal(
     await page

@@ -3,6 +3,16 @@ const $ = (id) => document.getElementById(id),
   hidden = new Set(),
   svgNS = "http://www.w3.org/2000/svg";
 let state, policyRevision;
+let liveConnection = "Connecting to Command…";
+const uiTimings = {};
+function uiTiming(stage, started, failed = false) {
+  const t = uiTimings[stage] ??= {count: 0, errors: 0, recent_ms: []};
+  t.count++; t.errors += Number(failed);
+  t.recent_ms.push(performance.now() - started);
+  if (t.recent_ms.length > 128) t.recent_ms.shift();
+}
+let historyDrawKey, historyDrawMap, historyDrawTerrain;
+
 let selectedParty = localStorage.getItem("gnss-selected-party");
 function selectParty(id) {
   selectedParty = id;
@@ -351,6 +361,10 @@ function renderSOS() {
   alarm.update(pending > 0, audio?.state === "running");
 }
 function render() {
+  const started = performance.now();
+  try { renderDashboard(); } finally { uiTiming("render", started); }
+}
+function renderDashboard() {
   renderSOS();
   if ($("event-history").open) renderEvents();
   $("projection-status").textContent = state.projection_error
@@ -358,8 +372,8 @@ function render() {
     : state.projection_pending
       ? "Projection catching up — displayed history is not fully synchronized"
       : "";
-  $("connection").textContent = "● Command Connected";
-  $("connection").classList.remove("unavailable");
+  $("connection").textContent = liveConnection;
+  $("connection").classList.toggle("unavailable", liveConnection.includes("unavailable"));
   if (state.history_sampled)
     $("projection-status").textContent += " · Map preview only (bounded points); use Inspect selected history for every full-resolution point and original observation. Distance remains full resolution.";
   const recording = state.recording;
@@ -1608,6 +1622,10 @@ function terrainReadout(lon, lat) {
 }
 function draw() {
   if (!state) return;
+  const started = performance.now();
+  try { drawMap(); } finally { uiTiming("draw", started); }
+}
+function drawMap() {
   const root = $("tracks"),
     raw = $("all-observations").checked;
   const points = (
@@ -1627,7 +1645,6 @@ function draw() {
     ? "┄ Unfiltered / Diagnostic · distance remains qualified"
     : "— Qualified history";
   const focusedPoint = document.activeElement?.getAttribute?.("data-point-key");
-  root.replaceChildren();
   $("empty").hidden = all.length > 0;
   const w = root.clientWidth,
     h = root.clientHeight;
@@ -1697,6 +1714,24 @@ function draw() {
         road: "#a29076",
         other: "#81958c",
       };
+  // Retain immutable history/map nodes across LIVE and unchanged history polls.
+  // Explicit pan/zoom, selection, style, layer and geometry changes invalidate it.
+  const key = JSON.stringify([points, raw, selectedParty, viewport, w, h, night,
+    $("map-mode").value, $("map-opacity").value,
+    ["hillshade", "contours", "elevation"].map(k => $("layer-" + k).checked),
+    Object.values(state.devices).map(d => [d.device_id, d.snapshot.party.id, d.track_color, d.track_dash])]);
+  const reuseHistory = key === historyDrawKey && offlineMap === historyDrawMap && terrain === historyDrawTerrain;
+  if (reuseHistory) {
+    root.querySelectorAll('[data-layer="live"], [data-layer="located-sos"]').forEach(n => n.remove());
+  } else root.replaceChildren();
+  function inspect(p) {
+    inspectedPoint = p;
+    $("hover").textContent =
+      `${state.devices[p.device_id].snapshot.party.id} · ${p.fix.latitude.toFixed(6)}, ${p.fix.longitude.toFixed(6)} · ${time(p.fix.observed_at)} · accuracy ±${p.fix.horizontal_accuracy_m ?? "unknown"} m · ${raw ? "Unfiltered diagnostic; distance remains qualified" : p.segment_reason === "provisional" ? "Provisional movement" : "Qualified distance " + distance(p.cumulative_m ?? state.devices[p.device_id].total_m)}`;
+    if (layerOn("elevation"))
+      $("hover").textContent += terrainReadout(p.fix.longitude, p.fix.latitude);
+  }
+  if (!reuseHistory) {
   if (layerOn("hillshade") && terrain.shades) {
     if (!terrain.image) {
       const c = document.createElement("canvas");
@@ -1871,13 +1906,6 @@ function draw() {
     if (!segments.has(k)) segments.set(k, []);
     segments.get(k).push(p);
   }
-  function inspect(p) {
-    inspectedPoint = p;
-    $("hover").textContent =
-      `${state.devices[p.device_id].snapshot.party.id} · ${p.fix.latitude.toFixed(6)}, ${p.fix.longitude.toFixed(6)} · ${time(p.fix.observed_at)} · accuracy ±${p.fix.horizontal_accuracy_m ?? "unknown"} m · ${raw ? "Unfiltered diagnostic; distance remains qualified" : p.segment_reason === "provisional" ? "Provisional movement" : "Qualified distance " + distance(p.cumulative_m ?? state.devices[p.device_id].total_m)}`;
-    if (layerOn("elevation"))
-      $("hover").textContent += terrainReadout(p.fix.longitude, p.fix.latitude);
-  }
   for (const group of segments.values()) {
     const first = group[0],
       stroke = color(first.device_id),
@@ -1923,6 +1951,10 @@ function draw() {
       };
       overlay.append(circle);
     }
+  }
+  historyDrawKey = key;
+  historyDrawMap = offlineMap;
+  historyDrawTerrain = terrain;
   }
   for (const label of document.querySelectorAll("[data-drawing-device]")) {
     const device = label.getAttribute("data-drawing-device");
@@ -2040,30 +2072,46 @@ $("inspection-next").onclick = () => inspectHistory(inspectionCursor);
 $("inspection-layer").onchange = () => inspectHistory();
 let livePolling = false;
 let latestLive;
+let latestLiveStarted = -Infinity;
 async function pollLive() {
   if (livePolling) return;
   livePolling = true;
+  const started = performance.now();
+  let failed = false;
   try {
     const response = await fetch("/local/live", {signal: AbortSignal.timeout(4000)});
     if (!response.ok) throw Error("LIVE/SOS status unavailable");
     const b = await response.json();
-    if (state && b.receipt_version < state.receipt_version) return;
+    liveConnection = "● Command Connected";
+    if (state && b.receipt_version < state.receipt_version) {
+      $("connection").textContent = liveConnection;
+      $("connection").classList.remove("unavailable");
+      return;
+    }
     latestLive = b;
+    latestLiveStarted = started;
     const changed = state && (state.policy.revision !== b.policy.revision ||
-      state.recording?.recording_id !== b.recording?.recording_id || state.recording?.active !== b.recording?.active);
+      state.projection_version !== b.projection_version || state.recording?.recording_id !== b.recording?.recording_id || state.recording?.active !== b.recording?.active);
     state = {...state, ...b, points: changed ? [] : state?.points ?? [], raw_points: changed ? [] : state?.raw_points ?? [], history_sampled: state?.history_sampled};
     renderSOS(); // emergency notification precedes map work
     render();
   } catch (e) {
+    failed = true;
+    liveConnection = "● Command LIVE/SOS unavailable";
+    $("connection").textContent = liveConnection;
+    $("connection").classList.add("unavailable");
     if (!state) showError(e);
-  } finally { livePolling = false; }
+  } finally { livePolling = false; uiTiming("live_fetch", started, failed); }
 }
 async function poll() {
   if (polling) return;
   polling = true;
+  const started = performance.now();
+  let failed = false;
   try {
     const response = await fetch(
       "/local/state?dot_interval_s=" + encodeURIComponent($("dots").value) + ($("all-observations").checked ? "&include_raw=true" : ""),
+      {signal: AbortSignal.timeout(4000)},
     );
     const b = await response.json();
     if (!response.ok) throw Error(b.message || "Command unavailable");
@@ -2076,17 +2124,29 @@ async function poll() {
       }
     }
     state = b;
-    if (latestLive && latestLive.receipt_version > b.receipt_version)
-      state = {...b, ...latestLive, points: b.policy.revision === latestLive.policy.revision && b.recording?.recording_id === latestLive.recording?.recording_id && b.recording?.active === latestLive.recording?.active ? b.points : [], raw_points: b.raw_points, history_sampled: b.history_sampled};
+    if (latestLive && (latestLive.receipt_version > b.receipt_version || (latestLive.receipt_version === b.receipt_version && latestLiveStarted >= started))) {
+      const compatible = b.policy.revision === latestLive.policy.revision && b.projection_version === latestLive.projection_version && b.recording?.recording_id === latestLive.recording?.recording_id && b.recording?.active === latestLive.recording?.active;
+      state = {...b, ...latestLive, points: compatible ? b.points : [], raw_points: compatible ? b.raw_points : [], provisional_points: compatible ? b.provisional_points : [], history_sampled: b.history_sampled};
+      if (compatible && latestLive.receipt_version === b.receipt_version) {
+        // A history reader may finish later while holding an older read snapshot.
+        // Its projection can advance without replacing fresher LIVE/contact fields.
+        state.devices = Object.fromEntries(Object.entries(latestLive.devices).map(([id, live]) => {
+          const history = b.devices[id];
+          return [id, history ? {...live, total_m: history.total_m, reconstruction: history.reconstruction, history: history.history, history_sessions: history.history_sessions} : live];
+        }));
+        state.projection_pending = b.projection_pending;
+        state.projection_error = b.projection_error;
+      }
+    }
     render();
     if ($("event-history").open) loadEvents().catch(showError);
     showError(null);
   } catch (e) {
-    $("connection").textContent = "● Command Disconnected";
-    $("connection").classList.add("unavailable");
-    showError(e);
+    failed = true;
+    showError(new Error("History refresh unavailable: " + e.message));
   } finally {
     polling = false;
+    uiTiming("history_fetch", started, failed);
   }
 }
 new ResizeObserver(draw).observe($("tracks"));
@@ -2094,3 +2154,14 @@ poll();
 pollLive();
 setInterval(pollLive, 1000);
 setInterval(poll, 2000);
+
+$("export-runtime").onclick = async () => {
+  try {
+    const response = await fetch("/local/runtime-diagnostics", {signal: AbortSignal.timeout(4000)});
+    if (!response.ok) throw Error("Runtime diagnostics unavailable");
+    const report = {command: await response.json(), browser: {timings: uiTimings, live_connection: liveConnection, history_pending: state?.projection_pending, displayed_points: state?.points?.length ?? 0}};
+    const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], {type: "application/json"}));
+    const a = document.createElement("a"); a.href = url; a.download = "gnss-runtime-diagnostics.json"; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch(e) { showError(e); }
+};

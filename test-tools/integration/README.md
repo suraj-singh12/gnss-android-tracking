@@ -749,3 +749,27 @@ installing its SQLite abort trigger. Ready records are intentionally no longer
 updated by reconnect reset. The error must remain visible while the original row
 and deadline survive and tracking resources remain active. A timeout caused by an
 empty fault target is not treated as a successful fault-injection test.
+
+## Issue #23 focused Command stability verification
+
+`windows-stability.cjs` runs production Command HTTP/SQLite with five phones and
+420 original observations each. Its browser fault injection affects history/LIVE
+fetches only. It checks separate availability states, delayed equal-receipt history,
+age refresh after LIVE failure, bounded history timeout/recovery, unchanged map-node
+retention, viewport/geometry invalidation and private runtime export. It makes no
+physical-device/native Windows claim. Run with the same `GNSS_COMMAND_BINARY`,
+`GNSS_PLAYWRIGHT_MODULE` and optional `GNSS_CHROMIUM` as the other browser suites:
+
+```sh
+GNSS_COMMAND_BINARY=/path/to/command GNSS_CHROMIUM=/path/to/chromium \
+GNSS_STABILITY_REPORT=/outside/repository/browser-stability.json \
+node test-tools/integration/windows-stability.cjs
+```
+
+`GNSS_STABILITY_BASELINE=1` reports known pre-fix defects without asserting they
+are fixed; its `passed:false` is deliberately not acceptance. Ten explicit unchanged
+draw calls measure production SVG work, not whole-browser frame latency. Timings
+are a small sample affected by concurrent host work; node retention is the
+structural regression assertion. The existing exact-source matched-assets workflow
+runs the new check alongside full UI/history/SOS regressions. Native two-hour
+20+1 acceptance and diagnostic interpretation are in `command/README.md`.

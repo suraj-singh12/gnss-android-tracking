@@ -143,6 +143,7 @@ type Store struct {
 	db                   *sql.DB
 	historyBatchBytes    int
 	historyBatchRecords  int
+	runtime              runtimeDiagnostics
 	mu                   sync.Mutex
 	Now                  func() time.Time
 	wake                 chan struct{}
@@ -590,13 +591,19 @@ func (s *Store) Ingest(b []byte) (Ack, error) { return s.ingestAt(b, s.Now().UTC
 func (s *Store) ingestAt(b []byte, ingress time.Time) (Ack, error) {
 	return s.ingestRole(b, ingress, "live")
 }
-func (s *Store) ingestRole(b []byte, ingress time.Time, role string) (Ack, error) {
+func (s *Store) ingestRole(b []byte, ingress time.Time, role string) (out Ack, resultError error) {
+	started := time.Now()
+	defer func() { s.recordRuntime("receipt_live", started, resultError != nil, 0) }()
 	m, err := Parse(b)
 	if err != nil {
 		return Ack{}, err
 	}
+	wait := time.Now()
 	s.mu.Lock()
+	s.recordRuntime("writer_wait_live", wait, false, 0)
 	defer s.mu.Unlock()
+	transaction := time.Now()
+	defer func() { s.recordRuntime("transaction_live", transaction, resultError != nil, 0) }()
 	received := ingress.UTC().Format(wireTime)
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -617,7 +624,7 @@ func (s *Store) ingestRole(b []byte, ingress time.Time, role string) (Ack, error
 	if e := saveReceiptState(tx, st); e != nil {
 		return Ack{}, e
 	}
-	if e := tx.Commit(); e != nil {
+	if e := s.commitReceipt(tx, "commit_live"); e != nil {
 		return Ack{}, e
 	}
 	s.notifyProjection()
