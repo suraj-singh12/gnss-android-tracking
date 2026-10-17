@@ -623,7 +623,7 @@ func (s *Store) ingestRole(b []byte, ingress time.Time, role string) (Ack, error
 	s.notifyProjection()
 	return ack, err
 }
-func (s *Store) ingestMessage(tx *sql.Tx, st *State, m Message, b []byte, received string, role string) (Ack, error) {
+func (s *Store) ingestMessage(tx receiptSQL, st *State, m Message, b []byte, received string, role string) (Ack, error) {
 	known, _ := json.Marshal(m)
 	var old, first string
 	err := tx.QueryRow("SELECT known,received FROM raw WHERE device=? AND message=? UNION ALL SELECT known,received FROM raw WHERE device=? AND sequence=? LIMIT 1", m.Device, m.ID, m.Device, m.Sequence).Scan(&old, &first)
@@ -1137,7 +1137,7 @@ func refreshLiveDevice(d *Device, policy Policy) {
 	}
 }
 
-func writeObservationConflict(tx *sql.Tx, st *State, m Message, received, role, code, existing string) error {
+func writeObservationConflict(tx receiptSQL, st *State, m Message, received, role, code, existing string) error {
 	e := receiptEvidence(m, received, "", "conflict", st.Devices[m.Device])
 	e.DeliveryRole = role
 	e.FailureCode = code

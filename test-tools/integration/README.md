@@ -583,6 +583,38 @@ eight distinct SOS/LIVE pairs measured activation→Room p50/95/99/worst 0/1/1/1
 Room→applied SOS ACK 266/281/281/281 ms; fresh fix→ACK 272/288/288/288 ms. This is
 Robolectric + real Room/network/SQLite, not phone scheduler/radio evidence.
 
+Focused Sync All Now follow-up (2026-10-17): one comparable baseline at
+`94d1b299` and one final run with transaction-local prepared receipt statements,
+using the same existing 1200-observation A/B test above. Test-only timing probes
+measure HTTP (including capabilities), Command handler (including durable commit
+and ACK generation), history selection, and Room ACK application. Linux loopback,
+Go race-enabled bridge, JDK 21 / Robolectric API 28; seeding/build time excluded.
+
+| Mode | Requests | HTTP body bytes | Before ms | After ms | Before → after observations/s |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Automatic | 31 | 1198346 | 3591 | 3316 | 334.2 → 361.9 |
+| Sync All Now | 23 | 1198090 | 2856 | 2306 | 420.2 → 520.4 |
+
+Manual elapsed time fell 19.3%, with unchanged bytes/requests; automatic also
+improved (7.7%). Manual Command handler time fell 2284.0 → 1730.4 ms, HTTP
+2329.9 → 1770.3 ms; Room ACK 175.7 → 174.0 ms, selection 54.8 → 59.2 ms.
+The driver prepares parameterized SQL on every direct transaction call; the batch
+now reuses its fixed receipt statements only inside the existing transaction.
+There is no new sender delay, concurrency, payload limit, durability policy or
+cross-transaction cache. Raw identities/bytes and all Room-applied ACKs were checked
+in both runs, with Tracking OFF and zero new fixes. One run per variant establishes
+a local improvement, not statistical or physical Wi-Fi performance acceptance.
+Command processing remains the main cost (75% of final manual wall time).
+Focused verification: five Go race-enabled tests passed (batch negotiation,
+immutable session start, rejection rollback, original wire limits and disk-full
+no-ACK/recovery); two real Room/HTTP/SQLite integration tests passed, zero skips
+(lost-response retry and fresh SOS/LIVE during an in-flight history request).
+With the existing injected 250-ms history delay, eight distinct events measured
+activation→Room p50/p95/p99/worst 1/6/6/6 ms, Room→applied SOS ACK
+269/282/282/282 ms and fresh fix→ACK 281/290/290/290 ms. These are small-sample,
+injected-delay regression results, not physical-device latency percentiles.
+No fleet matrix, full CI or acceptance assets were initiated.
+
 The process harness now additionally runs `TestSyncStoredColdReconstruction` in a
 separate engine process, deleting only fixture-derived cache, retaining raw bytes,
 recording and policy, then timing a full rebuild. Before/after raw SHA-256 fingerprints

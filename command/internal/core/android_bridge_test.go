@@ -35,6 +35,7 @@ func TestAndroidBridge(t *testing.T) {
 	drop := false
 	var historyDelay atomic.Int64
 	var historyArrivals atomic.Int64
+	var receiptNanos atomic.Int64
 	phone := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/history" {
 			historyArrivals.Add(1)
@@ -45,7 +46,9 @@ func TestAndroidBridge(t *testing.T) {
 		gate.Lock()
 		defer gate.Unlock()
 		if !drop {
+			began := time.Now()
 			s.IngestHandler().ServeHTTP(w, r)
+			receiptNanos.Add(time.Since(began).Nanoseconds())
 			return
 		}
 		drop = false
@@ -89,6 +92,8 @@ func TestAndroidBridge(t *testing.T) {
 		gate.Lock()
 		result := map[string]any{}
 		switch input.Action {
+		case "receipt_timing":
+			result["nanos"] = receiptNanos.Load()
 		case "delay_history":
 			historyDelay.Store(input.Now)
 		case "history_arrivals":

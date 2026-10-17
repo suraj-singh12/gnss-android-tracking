@@ -1,6 +1,7 @@
 package core
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,54 @@ import (
 )
 
 var errHistoryBusy = errors.New("one historical request per device is already in flight")
+
+// receiptSQL keeps the existing transaction authority while allowing one batch
+// to reuse its small, fixed set of receipt statements. Single-message ingestion
+// still uses *sql.Tx directly. No statements or rows survive the transaction.
+type receiptSQL interface {
+	Exec(string, ...any) (sql.Result, error)
+	QueryRow(string, ...any) *sql.Row
+}
+
+type batchReceiptSQL struct {
+	tx         *sql.Tx
+	statements map[string]*sql.Stmt
+}
+
+func (b *batchReceiptSQL) statement(query string) (*sql.Stmt, error) {
+	if stmt := b.statements[query]; stmt != nil {
+		return stmt, nil
+	}
+	stmt, err := b.tx.Prepare(query)
+	if err == nil {
+		b.statements[query] = stmt
+	}
+	return stmt, err
+}
+
+func (b *batchReceiptSQL) Exec(query string, args ...any) (sql.Result, error) {
+	stmt, err := b.statement(query)
+	if err != nil {
+		return nil, err
+	}
+	return stmt.Exec(args...)
+}
+
+func (b *batchReceiptSQL) QueryRow(query string, args ...any) *sql.Row {
+	stmt, err := b.statement(query)
+	if err != nil {
+		// sql.Row carries errors through Scan. Retain that existing contract
+		// by executing the identical query through the transaction on failure.
+		return b.tx.QueryRow(query, args...)
+	}
+	return stmt.QueryRow(args...)
+}
+
+func (b *batchReceiptSQL) close() {
+	for _, stmt := range b.statements {
+		_ = stmt.Close()
+	}
+}
 
 type BatchError struct {
 	Index                     int
@@ -110,11 +159,13 @@ func (s *Store) IngestBatch(b []byte) (out BatchAck, resultError error) {
 	if e != nil {
 		return out, e
 	}
+	receipts := &batchReceiptSQL{tx: tx, statements: make(map[string]*sql.Stmt)}
+	defer receipts.close()
 	for i, m := range messages {
-		if _, e = tx.Exec("INSERT OR IGNORE INTO receipt_roles VALUES(?,?,?)", m.Device, m.ID, "history"); e != nil {
+		if _, e = receipts.Exec("INSERT OR IGNORE INTO receipt_roles VALUES(?,?,?)", m.Device, m.ID, "history"); e != nil {
 			return out, e
 		}
-		ack, err := s.ingestMessage(tx, &st, m, wires[i], at, "history")
+		ack, err := s.ingestMessage(receipts, &st, m, wires[i], at, "history")
 		if err != nil {
 			if errors.Is(err, ErrConflict) {
 				return out, &BatchError{i, m.ID, "identity_conflict", err.Error()}

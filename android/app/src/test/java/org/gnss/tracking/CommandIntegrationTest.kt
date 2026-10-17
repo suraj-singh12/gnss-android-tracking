@@ -1903,21 +1903,61 @@ class CommandIntegrationTest {
             at(7 * 86400L)
             var requests = 0
             var bytes = 0L
+            var httpNanos = 0L
+            var selectionNanos = 0L
+            var roomAckNanos = 0L
+            val receiptBefore = bridge.rpc("receipt_timing")["nanos"].asLong
+            fun timedRequest(url: String, body: String? = null): Response {
+                val began = System.nanoTime()
+                try {
+                    return request(url, body)
+                } finally {
+                    httpNanos += System.nanoTime() - began
+                }
+            }
+            val measuredStore =
+                object : MessageStore by p.repository {
+                    override suspend fun historicalBounded(
+                        now: Long,
+                        target: Int,
+                        maximumRecords: Int,
+                    ): List<Outbound> {
+                        val began = System.nanoTime()
+                        try {
+                            return p.repository.historicalBounded(now, target, maximumRecords)
+                        } finally {
+                            selectionNanos += System.nanoTime() - began
+                        }
+                    }
+
+                    override suspend fun applyBatch(
+                        rows: List<Outbound>,
+                        receipts: List<Receipt>,
+                        generation: Long,
+                    ): Boolean {
+                        val began = System.nanoTime()
+                        try {
+                            return p.repository.applyBatch(rows, receipts, generation)
+                        } finally {
+                            roomAckNanos += System.nanoTime() - began
+                        }
+                    }
+                }
             val transport =
                 object : Transport {
                     override suspend fun capabilities(endpoint: String) =
-                        request(endpoint + "/api/v1/capabilities")
+                        timedRequest(endpoint + "/api/v1/capabilities")
 
                     override suspend fun history(endpoint: String, json: String): Response {
                         requests++
                         bytes += json.toByteArray().size
-                        return request(endpoint + "/api/v1/history", json)
+                        return timedRequest(endpoint + "/api/v1/history", json)
                     }
 
                     override suspend fun post(endpoint: String, immutableJson: String): Response {
                         requests++
                         bytes += immutableJson.toByteArray().size
-                        return request(endpoint + "/api/v1/messages", immutableJson)
+                        return timedRequest(endpoint + "/api/v1/messages", immutableJson)
                     }
                 }
             val elapsedOrigin = System.nanoTime()
@@ -1928,7 +1968,7 @@ class CommandIntegrationTest {
                     override fun elapsedMillis() = (System.nanoTime() - elapsedOrigin) / 1000000
                 }
             val sender =
-                Sender(p.repository, transport, measuredClock) {
+                Sender(measuredStore, transport, measuredClock) {
                     error("Tracking OFF must acquire zero fixes")
                 }
             if (manual) sender.requestDrain()
@@ -1938,6 +1978,7 @@ class CommandIntegrationTest {
             }
             sender.step(retainedOnly = true) // completion transition
             val elapsed = (System.nanoTime() - began) / 1000000
+            val receiptNanos = bridge.rpc("receipt_timing")["nanos"].asLong - receiptBefore
             assertEquals(false, p.repository.hasPendingHistory())
             assertEquals(1200L, sender.syncProgress.ackedRecords)
             assertFalse(sender.aggressive)
@@ -1955,7 +1996,7 @@ class CommandIntegrationTest {
                     .toSet()
             assertEquals(originals.map { it.messageId }.toSet(), commandIds)
             println(
-                "ISSUE22_ROOM_AB manual=$manual observations=1200 sourceBytes=${originals.sumOf { it.json.toByteArray().size }} requests=$requests requestBytes=$bytes transferAndRoomACKMillis=$elapsed zeroNewFixes=true measuredSenderRTT=true"
+                "ISSUE22_ROOM_AB manual=$manual observations=1200 sourceBytes=${originals.sumOf { it.json.toByteArray().size }} requests=$requests requestBytes=$bytes transferAndRoomACKMillis=$elapsed zeroNewFixes=true measuredSenderRTT=true httpMillis=${httpNanos / 1000000.0} commandHandlerMillis=${receiptNanos / 1000000.0} selectionMillis=${selectionNanos / 1000000.0} roomAckMillis=${roomAckNanos / 1000000.0}"
             )
             measurements.add(requests to elapsed)
         }

@@ -152,7 +152,7 @@ func recordingEvidence(st State) *RecordingEvidence {
 	}
 	return e
 }
-func writeEvidence(tx *sql.Tx, e Evidence) error {
+func writeEvidence(tx receiptSQL, e Evidence) error {
 	b, err := json.Marshal(e)
 	if err != nil {
 		return err
