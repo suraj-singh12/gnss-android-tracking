@@ -711,3 +711,9 @@ recording requires queued work; startup requeues older orphan pending state thro
 the existing worker. Regression distinguishes idle errors from real queued failures
 and verifies repair reconstructs before completion without changing raw envelopes.
 Earlier failed dense reports remain failures; they are not retroactively made green.
+
+The connectivity-storage-failure regression seeds a real delayed IO retry before
+installing its SQLite abort trigger. Ready records are intentionally no longer
+updated by reconnect reset. The error must remain visible while the original row
+and deadline survive and tracking resources remain active. A timeout caused by an
+empty fault target is not treated as a successful fault-injection test.

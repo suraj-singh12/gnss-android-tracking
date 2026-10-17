@@ -161,6 +161,18 @@ class TrackingLifecycleTest {
                     delay(10)
                 }
             }
+            // Recovery now touches delayed rows only. Seed a genuine pending IO
+            // retry rather than depending on no-op writes of ready observations.
+            val at = System.currentTimeMillis()
+            val delayed = app.repository.snapshot(at, null, Health())
+            val deadline = at + 60000
+            app.repository.fail(
+                delayed,
+                "Wi-Fi unavailable",
+                deadline,
+                false,
+                app.repository.state().endpointGeneration,
+            )
             app.repository.db.openHelper.writableDatabase.execSQL(
                 "CREATE TRIGGER injected_failure BEFORE UPDATE ON outbox BEGIN SELECT RAISE(ABORT, 'injected disk failure'); END"
             )
@@ -176,6 +188,8 @@ class TrackingLifecycleTest {
                 }
             }
             shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
+            assertEquals(deadline, app.repository.dao.row(delayed.sequence)!!.nextAttemptMillis)
+            assertEquals(delayed.json, app.repository.dao.row(delayed.sequence)!!.json)
             assertTrue(app.diagnostics.value!!.loopError!!.contains("Connectivity recovery failed"))
             assertTrue(app.diagnostics.value!!.source.registered)
             assertTrue(ShadowPowerManager.getLatestWakeLock().isHeld)
