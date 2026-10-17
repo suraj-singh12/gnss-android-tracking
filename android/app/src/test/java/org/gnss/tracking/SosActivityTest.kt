@@ -128,11 +128,17 @@ class SosActivityTest {
                     .apply { isAccessible = true }
                     .get(activity.get()) as android.widget.TextView
             withTimeout(10000) {
-                while (!status.text.contains("SOS NOT SAVED")) {
+                // Notice and Room's retained-SOS flow update independently. Require
+                // the complete UI state rather than racing the second emission.
+                while (
+                    !status.text.contains("SOS NOT SAVED") ||
+                        !status.text.contains("awaiting Command receipt")
+                ) {
                     shadowOf(Looper.getMainLooper()).idle()
                     delay(10)
                 }
             }
+            assertTrue(status.text.contains("SOS NOT SAVED"))
             assertTrue(status.text.contains("awaiting Command receipt"))
             assertEquals(1, app.repository.dao.sosHistory().size)
         } finally {

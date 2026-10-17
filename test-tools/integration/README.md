@@ -684,3 +684,8 @@ is not silently called corruption or success. Network/other HTTP errors still fa
 this healthy-link capacity run; separate Room/fault regressions cover recovery.
 The Activity visual regression awaits the persisted interrupted diagnostic and
 debounced render within ten seconds; it retains the required state assertion.
+
+The SOS Activity regression likewise waits for both independent notice and Room
+flow emissions: the storage-failure notice must coexist with the earlier retained
+SOS awaiting Command receipt. Both assertions and the single durable SOS assertion
+remain required; observing only the notice is not a completed UI state.
