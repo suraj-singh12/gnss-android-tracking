@@ -11,7 +11,7 @@ const { spawn } = require("node:child_process"),
 const work = fs.mkdtempSync(path.join(os.tmpdir(), "gnss-online-map-"));
 const result = {
   checked_at: new Date().toISOString(),
-  source_revision: process.env.GITHUB_SHA || "local",
+  source_revision: process.env.SOURCE_REVISION || process.env.GITHUB_SHA || "local",
   real_providers: true,
   passed: false,
 };

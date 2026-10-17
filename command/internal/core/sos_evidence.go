@@ -84,26 +84,7 @@ func redactSOSReport(r *FieldReport) {
 			r.Devices[opaque] = counters
 		}
 	}
-	redactRecording := func(recording *RecordingEvidence) {
-		if recording == nil {
-			return
-		}
-		for device, opaque := range sosDevices {
-			if recording.Recording != nil {
-				for i := range recording.Recording.Windows {
-					sessions := recording.Recording.Windows[i].Sessions
-					if session, ok := sessions[device]; ok {
-						delete(sessions, device)
-						sessions[opaque] = session
-					}
-				}
-			}
-			if distance, ok := recording.Distances[device]; ok {
-				delete(recording.Distances, device)
-				recording.Distances[opaque] = distance
-			}
-		}
-	}
+	redactRecording := func(recording *RecordingEvidence) { redactSOSRecording(recording, sosDevices) }
 	redactRecording(r.Recording)
 	for i := range r.Events {
 		redactRecording(r.Events[i].Before)
@@ -127,6 +108,27 @@ func redactSOSReport(r *FieldReport) {
 				}
 				v["events"] = events
 			}
+		}
+	}
+}
+
+func redactSOSRecording(recording *RecordingEvidence, sosDevices map[string]string) {
+	if recording == nil {
+		return
+	}
+	for device, opaque := range sosDevices {
+		if recording.Recording != nil {
+			for i := range recording.Recording.Windows {
+				sessions := recording.Recording.Windows[i].Sessions
+				if session, ok := sessions[device]; ok {
+					delete(sessions, device)
+					sessions[opaque] = session
+				}
+			}
+		}
+		if distance, ok := recording.Distances[device]; ok {
+			delete(recording.Distances, device)
+			recording.Distances[opaque] = distance
 		}
 	}
 }

@@ -4,6 +4,14 @@ import android.content.Context
 import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 
+// Stable persisted retry reason used by existing outboxes; never localize this value.
+internal const val RATE_LIMIT_RETRY_ERROR = "Command HTTP 429"
+// Seek delayed rows only: ready records must not be rewritten on every resume.
+internal const val RESET_TRANSIENT_RETRY_SQL =
+    "UPDATE outbox SET nextAttemptMillis=0 WHERE deliveredAt IS NULL AND quarantined=0 AND nextAttemptMillis>0 AND (error IS NULL OR error!='" +
+        RATE_LIMIT_RETRY_ERROR +
+        "')"
+
 @Entity(tableName = "installation")
 data class Installation(
     @PrimaryKey val key: Int = 1,
@@ -36,8 +44,14 @@ data class Installation(
         [
             Index(value = ["messageId"], unique = true),
             Index(value = ["deliveredAt", "quarantined", "sequence"]),
+            Index(value = ["deliveredAt", "quarantined", "nextAttemptMillis"]),
+            Index(value = ["observedMillis", "sequence"]),
             Index(value = ["trackingSession", "measurementKey"], unique = true),
             Index(value = ["deliveredAt", "type", "observedMillis"]),
+            Index(
+                value =
+                    ["deliveredAt", "quarantined", "type", "trackingSession", "observationSequence"]
+            ),
         ],
 )
 data class Outbound(
@@ -78,6 +92,9 @@ data class QueueCounts(
     val deliveredSos: Int,
     val deliveredRoutine: Int,
 )
+
+@Entity(tableName = "outbox_summary")
+data class OutboxSummary(@PrimaryKey val key: Int = 1, @Embedded val counts: QueueCounts)
 
 @Dao
 interface TrackingDao {
@@ -129,6 +146,31 @@ interface TrackingDao {
     suspend fun sessionPending(session: String): List<Outbound>
 
     @Query(
+        "SELECT EXISTS(SELECT 1 FROM outbox WHERE deliveredAt IS NULL AND type='location' AND quarantined=0 LIMIT 1)"
+    )
+    suspend fun hasPendingHistory(): Boolean
+
+    @Query(
+        "SELECT COUNT(*) FROM outbox WHERE trackingSession=:session AND deliveredAt IS NULL AND quarantined=0"
+    )
+    suspend fun sessionPendingCount(session: String): Long
+
+    @Query(
+        "SELECT MIN(observationSequence) FROM outbox WHERE trackingSession=:session AND deliveredAt IS NULL AND quarantined=0"
+    )
+    suspend fun firstPendingSequence(session: String): Long?
+
+    @Query(
+        "SELECT observationSequence FROM outbox WHERE trackingSession=:session AND deliveredAt IS NULL AND quarantined=1 AND observationSequence IS NOT NULL ORDER BY observationSequence LIMIT 256"
+    )
+    suspend fun unresolvedSequences(session: String): List<Long>
+
+    @Query(
+        "SELECT COUNT(*) FROM outbox WHERE trackingSession=:session AND deliveredAt IS NULL AND quarantined=1"
+    )
+    suspend fun unresolvedCount(session: String): Long
+
+    @Query(
         "SELECT * FROM outbox WHERE observationSequence IS NOT NULL AND deliveredAt IS NOT NULL ORDER BY sequence"
     )
     suspend fun deliveredObservations(): List<Outbound>
@@ -136,14 +178,14 @@ interface TrackingDao {
     @Query("SELECT COUNT(*) FROM outbox WHERE deliveredAt IS NULL") fun pendingCount(): Flow<Int>
 
     @Query(
-        """SELECT COUNT(CASE WHEN deliveredAt IS NULL THEN 1 END) AS pending,
-        COUNT(CASE WHEN deliveredAt IS NULL AND type='location' THEN 1 END) AS gnss,
-        COUNT(CASE WHEN deliveredAt IS NULL AND type='sos' THEN 1 END) AS sos,
-        COUNT(CASE WHEN deliveredAt IS NULL AND type='status' THEN 1 END) AS routine,
-        COUNT(CASE WHEN deliveredAt IS NULL AND quarantined=1 THEN 1 END) AS blocked,
-        COUNT(CASE WHEN deliveredAt IS NOT NULL AND type='location' THEN 1 END) AS deliveredGnss,
-        COUNT(CASE WHEN deliveredAt IS NOT NULL AND type='sos' THEN 1 END) AS deliveredSos,
-        COUNT(CASE WHEN deliveredAt IS NOT NULL AND type='status' THEN 1 END) AS deliveredRoutine FROM outbox"""
+        """SELECT CASE WHEN EXISTS(SELECT 1 FROM outbox_summary WHERE `key`=1) THEN (SELECT pending FROM outbox_summary WHERE `key`=1) ELSE (SELECT COUNT(*) FROM outbox WHERE deliveredAt IS NULL) END AS pending,
+CASE WHEN EXISTS(SELECT 1 FROM outbox_summary WHERE `key`=1) THEN (SELECT gnss FROM outbox_summary WHERE `key`=1) ELSE (SELECT COUNT(*) FROM outbox WHERE deliveredAt IS NULL AND type='location') END AS gnss,
+CASE WHEN EXISTS(SELECT 1 FROM outbox_summary WHERE `key`=1) THEN (SELECT sos FROM outbox_summary WHERE `key`=1) ELSE (SELECT COUNT(*) FROM outbox WHERE deliveredAt IS NULL AND type='sos') END AS sos,
+CASE WHEN EXISTS(SELECT 1 FROM outbox_summary WHERE `key`=1) THEN (SELECT routine FROM outbox_summary WHERE `key`=1) ELSE (SELECT COUNT(*) FROM outbox WHERE deliveredAt IS NULL AND type='status') END AS routine,
+CASE WHEN EXISTS(SELECT 1 FROM outbox_summary WHERE `key`=1) THEN (SELECT blocked FROM outbox_summary WHERE `key`=1) ELSE (SELECT COUNT(*) FROM outbox WHERE deliveredAt IS NULL AND quarantined=1) END AS blocked,
+CASE WHEN EXISTS(SELECT 1 FROM outbox_summary WHERE `key`=1) THEN (SELECT deliveredGnss FROM outbox_summary WHERE `key`=1) ELSE (SELECT COUNT(*) FROM outbox WHERE deliveredAt IS NOT NULL AND type='location') END AS deliveredGnss,
+CASE WHEN EXISTS(SELECT 1 FROM outbox_summary WHERE `key`=1) THEN (SELECT deliveredSos FROM outbox_summary WHERE `key`=1) ELSE (SELECT COUNT(*) FROM outbox WHERE deliveredAt IS NOT NULL AND type='sos') END AS deliveredSos,
+CASE WHEN EXISTS(SELECT 1 FROM outbox_summary WHERE `key`=1) THEN (SELECT deliveredRoutine FROM outbox_summary WHERE `key`=1) ELSE (SELECT COUNT(*) FROM outbox WHERE deliveredAt IS NOT NULL AND type='status') END AS deliveredRoutine"""
     )
     fun queueCounts(): Flow<QueueCounts>
 
@@ -161,6 +203,11 @@ interface TrackingDao {
     suspend fun sos(now: Long): Outbound?
 
     @Query(
+        "SELECT EXISTS(SELECT 1 FROM outbox WHERE deliveredAt IS NULL AND quarantined=0 AND type='sos' LIMIT 1)"
+    )
+    suspend fun pendingSosExists(): Boolean
+
+    @Query(
         "SELECT * FROM outbox WHERE deliveredAt IS NULL AND quarantined=0 AND type!='sos' AND historical=0 ORDER BY sequence DESC LIMIT 1"
     )
     suspend fun newest(): Outbound?
@@ -170,8 +217,7 @@ interface TrackingDao {
     )
     suspend fun releasePending()
 
-    @Query("UPDATE outbox SET nextAttemptMillis=0 WHERE deliveredAt IS NULL AND quarantined=0")
-    suspend fun resetTransientRetryTiming()
+    @Query(RESET_TRANSIENT_RETRY_SQL) suspend fun resetTransientRetryTiming()
 
     @Query("SELECT * FROM outbox WHERE type='sos' ORDER BY sequence DESC LIMIT 1")
     suspend fun latestSos(): Outbound?
@@ -187,12 +233,32 @@ interface TrackingDao {
     )
     suspend fun pendingLocations(limit: Int): List<Outbound>
 
+    @Query(
+        "SELECT * FROM outbox WHERE deliveredAt IS NULL AND quarantined=0 AND type='location' AND trackingSession IS NULL ORDER BY sequence LIMIT 1"
+    )
+    suspend fun legacyHistory(): Outbound?
+
+    @Query(
+        "SELECT id FROM tracking_sessions WHERE EXISTS(SELECT 1 FROM outbox WHERE deliveredAt IS NULL AND quarantined=0 AND type='location' AND trackingSession=tracking_sessions.id) ORDER BY rowid LIMIT 1"
+    )
+    suspend fun oldestPendingSession(): String?
+
+    @Query(
+        "SELECT * FROM outbox WHERE deliveredAt IS NULL AND quarantined=0 AND type='location' AND trackingSession=:session ORDER BY observationSequence LIMIT :limit"
+    )
+    suspend fun pendingSessionBlock(session: String, limit: Int): List<Outbound>
+
+    @Query(
+        "SELECT * FROM outbox WHERE deliveredAt IS NULL AND quarantined=0 AND type='location' AND trackingSession=:session AND observationSequence>:after ORDER BY observationSequence LIMIT :limit"
+    )
+    suspend fun pendingSessionPage(session: String, after: Long, limit: Int): List<Outbound>
+
     @Query("SELECT * FROM outbox ORDER BY sequence") suspend fun all(): List<Outbound>
 }
 
 @Database(
-    entities = [Installation::class, Outbound::class, SessionRecord::class],
-    version = 2,
+    entities = [Installation::class, Outbound::class, SessionRecord::class, OutboxSummary::class],
+    version = 5,
     exportSchema = true,
 )
 abstract class TrackingDatabase : RoomDatabase() {
@@ -201,8 +267,61 @@ abstract class TrackingDatabase : RoomDatabase() {
     companion object {
         fun open(context: Context) =
             Room.databaseBuilder(context, TrackingDatabase::class.java, "tracking.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addCallback(SUMMARY_CALLBACK)
                 .build()
+
+        private fun initializeSummary(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS outbox_summary (`key` INTEGER NOT NULL PRIMARY KEY,pending INTEGER NOT NULL,gnss INTEGER NOT NULL,sos INTEGER NOT NULL,routine INTEGER NOT NULL,blocked INTEGER NOT NULL,deliveredGnss INTEGER NOT NULL,deliveredSos INTEGER NOT NULL,deliveredRoutine INTEGER NOT NULL)"
+            )
+            db.execSQL(
+                "INSERT OR IGNORE INTO outbox_summary (`key`,pending,gnss,sos,routine,blocked,deliveredGnss,deliveredSos,deliveredRoutine) SELECT 1,COUNT(CASE WHEN deliveredAt IS NULL THEN 1 END),COUNT(CASE WHEN deliveredAt IS NULL AND type='location' THEN 1 END),COUNT(CASE WHEN deliveredAt IS NULL AND type='sos' THEN 1 END),COUNT(CASE WHEN deliveredAt IS NULL AND type='status' THEN 1 END),COUNT(CASE WHEN deliveredAt IS NULL AND quarantined=1 THEN 1 END),COUNT(CASE WHEN deliveredAt IS NOT NULL AND type='location' THEN 1 END),COUNT(CASE WHEN deliveredAt IS NOT NULL AND type='sos' THEN 1 END),COUNT(CASE WHEN deliveredAt IS NOT NULL AND type='status' THEN 1 END) FROM outbox"
+            )
+            db.execSQL(
+                "CREATE TRIGGER IF NOT EXISTS outbox_summary_insert AFTER INSERT ON outbox BEGIN UPDATE outbox_summary SET pending=pending + CASE WHEN NEW.deliveredAt IS NULL THEN 1 ELSE 0 END,gnss=gnss + CASE WHEN NEW.deliveredAt IS NULL AND NEW.type='location' THEN 1 ELSE 0 END,sos=sos + CASE WHEN NEW.deliveredAt IS NULL AND NEW.type='sos' THEN 1 ELSE 0 END,routine=routine + CASE WHEN NEW.deliveredAt IS NULL AND NEW.type='status' THEN 1 ELSE 0 END,blocked=blocked + CASE WHEN NEW.deliveredAt IS NULL AND NEW.quarantined=1 THEN 1 ELSE 0 END,deliveredGnss=deliveredGnss + CASE WHEN NEW.deliveredAt IS NOT NULL AND NEW.type='location' THEN 1 ELSE 0 END,deliveredSos=deliveredSos + CASE WHEN NEW.deliveredAt IS NOT NULL AND NEW.type='sos' THEN 1 ELSE 0 END,deliveredRoutine=deliveredRoutine + CASE WHEN NEW.deliveredAt IS NOT NULL AND NEW.type='status' THEN 1 ELSE 0 END WHERE `key`=1; END"
+            )
+            db.execSQL(
+                "CREATE TRIGGER IF NOT EXISTS outbox_summary_update AFTER UPDATE ON outbox BEGIN UPDATE outbox_summary SET pending=pending + CASE WHEN NEW.deliveredAt IS NULL THEN 1 ELSE 0 END - CASE WHEN OLD.deliveredAt IS NULL THEN 1 ELSE 0 END,gnss=gnss + CASE WHEN NEW.deliveredAt IS NULL AND NEW.type='location' THEN 1 ELSE 0 END - CASE WHEN OLD.deliveredAt IS NULL AND OLD.type='location' THEN 1 ELSE 0 END,sos=sos + CASE WHEN NEW.deliveredAt IS NULL AND NEW.type='sos' THEN 1 ELSE 0 END - CASE WHEN OLD.deliveredAt IS NULL AND OLD.type='sos' THEN 1 ELSE 0 END,routine=routine + CASE WHEN NEW.deliveredAt IS NULL AND NEW.type='status' THEN 1 ELSE 0 END - CASE WHEN OLD.deliveredAt IS NULL AND OLD.type='status' THEN 1 ELSE 0 END,blocked=blocked + CASE WHEN NEW.deliveredAt IS NULL AND NEW.quarantined=1 THEN 1 ELSE 0 END - CASE WHEN OLD.deliveredAt IS NULL AND OLD.quarantined=1 THEN 1 ELSE 0 END,deliveredGnss=deliveredGnss + CASE WHEN NEW.deliveredAt IS NOT NULL AND NEW.type='location' THEN 1 ELSE 0 END - CASE WHEN OLD.deliveredAt IS NOT NULL AND OLD.type='location' THEN 1 ELSE 0 END,deliveredSos=deliveredSos + CASE WHEN NEW.deliveredAt IS NOT NULL AND NEW.type='sos' THEN 1 ELSE 0 END - CASE WHEN OLD.deliveredAt IS NOT NULL AND OLD.type='sos' THEN 1 ELSE 0 END,deliveredRoutine=deliveredRoutine + CASE WHEN NEW.deliveredAt IS NOT NULL AND NEW.type='status' THEN 1 ELSE 0 END - CASE WHEN OLD.deliveredAt IS NOT NULL AND OLD.type='status' THEN 1 ELSE 0 END WHERE `key`=1; END"
+            )
+            db.execSQL(
+                "CREATE TRIGGER IF NOT EXISTS outbox_summary_delete AFTER DELETE ON outbox BEGIN UPDATE outbox_summary SET pending=pending - CASE WHEN OLD.deliveredAt IS NULL THEN 1 ELSE 0 END,gnss=gnss - CASE WHEN OLD.deliveredAt IS NULL AND OLD.type='location' THEN 1 ELSE 0 END,sos=sos - CASE WHEN OLD.deliveredAt IS NULL AND OLD.type='sos' THEN 1 ELSE 0 END,routine=routine - CASE WHEN OLD.deliveredAt IS NULL AND OLD.type='status' THEN 1 ELSE 0 END,blocked=blocked - CASE WHEN OLD.deliveredAt IS NULL AND OLD.quarantined=1 THEN 1 ELSE 0 END,deliveredGnss=deliveredGnss - CASE WHEN OLD.deliveredAt IS NOT NULL AND OLD.type='location' THEN 1 ELSE 0 END,deliveredSos=deliveredSos - CASE WHEN OLD.deliveredAt IS NOT NULL AND OLD.type='sos' THEN 1 ELSE 0 END,deliveredRoutine=deliveredRoutine - CASE WHEN OLD.deliveredAt IS NOT NULL AND OLD.type='status' THEN 1 ELSE 0 END WHERE `key`=1; END"
+            )
+        }
+
+        val SUMMARY_CALLBACK =
+            object : Callback() {
+                override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    initializeSummary(db)
+                }
+            }
+        val MIGRATION_4_5 =
+            object : androidx.room.migration.Migration(4, 5) {
+                override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "CREATE INDEX index_outbox_deliveredAt_quarantined_nextAttemptMillis ON outbox(deliveredAt,quarantined,nextAttemptMillis)"
+                    )
+                    db.execSQL(
+                        "CREATE INDEX index_outbox_observedMillis_sequence ON outbox(observedMillis,sequence)"
+                    )
+                }
+            }
+
+        val MIGRATION_3_4 =
+            object : androidx.room.migration.Migration(3, 4) {
+                override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    initializeSummary(db)
+                }
+            }
+
+        val MIGRATION_2_3 =
+            object : androidx.room.migration.Migration(2, 3) {
+                override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "CREATE INDEX index_outbox_deliveredAt_quarantined_type_trackingSession_observationSequence ON outbox(deliveredAt,quarantined,type,trackingSession,observationSequence)"
+                    )
+                }
+            }
 
         val MIGRATION_1_2 =
             object : androidx.room.migration.Migration(1, 2) {
@@ -273,6 +392,9 @@ interface MessageStore {
 
     suspend fun historical(now: Long, target: Int): List<Outbound>
 
+    suspend fun historicalBounded(now: Long, target: Int, maximumRecords: Int): List<Outbound> =
+        historical(now, target).take(maximumRecords)
+
     suspend fun routine(now: Long): Outbound? = null
 
     suspend fun routineBacklog(now: Long): Outbound? = routine(now)
@@ -282,6 +404,19 @@ interface MessageStore {
     suspend fun acceptBatch(rows: List<Outbound>, receipts: List<Receipt>, generation: Long) {
         rows.zip(receipts).forEach { (r, a) -> accept(r, a, generation) }
     }
+
+    // Production overrides this inside the same Room transaction as the ACK writes.
+    suspend fun applyBatch(
+        rows: List<Outbound>,
+        receipts: List<Receipt>,
+        generation: Long,
+    ): Boolean {
+        if (state().endpointGeneration != generation) return false
+        acceptBatch(rows, receipts, generation)
+        return state().endpointGeneration == generation
+    }
+
+    suspend fun hasPendingHistory(): Boolean? = null
 
     suspend fun resetTransientRetryTiming()
 
@@ -533,17 +668,16 @@ class Repository(val db: TrackingDatabase, private val clock: Clock = SystemCloc
 
     private suspend fun historyProgress(state: Installation): HistoryProgress? {
         val session = state.trackingSession ?: return null
-        val all = dao.sessionPending(session)
-        val pending = all.filter { !it.quarantined }
         return HistoryProgress(
             session,
             utc(state.sessionStartedMillis!!),
             state.observationSequence,
-            pending.firstOrNull()?.observationSequence,
-            pending.size.toLong(),
-            all.filter { it.quarantined }.mapNotNull { it.observationSequence },
+            dao.firstPendingSequence(session),
+            dao.sessionPendingCount(session),
+            dao.unresolvedSequences(session),
             state.knownCollectionLoss,
             utc(clock.wallMillis()),
+            dao.unresolvedCount(session),
         )
     }
 
@@ -557,23 +691,46 @@ class Repository(val db: TrackingDatabase, private val clock: Clock = SystemCloc
     override suspend fun routineBacklog(now: Long) =
         dao.outstanding(now, 128).firstOrNull { it.type == "status" }
 
-    override suspend fun historical(now: Long, target: Int): List<Outbound> {
-        val all = dao.pendingLocations(4096)
-        val first = all.firstOrNull() ?: return emptyList()
-        if (first.nextAttemptMillis > now) return emptyList()
-        if (first.observationSequence == null) return listOf(first)
+    override suspend fun historical(now: Long, target: Int): List<Outbound> =
+        historicalBounded(now, target, 128)
+
+    override suspend fun historicalBounded(
+        now: Long,
+        target: Int,
+        maximumRecords: Int,
+    ): List<Outbound> {
+        dao.legacyHistory()?.let {
+            return if (it.nextAttemptMillis <= now) listOf(it) else emptyList()
+        }
+        val session = dao.oldestPendingSession() ?: return emptyList()
         val result = mutableListOf<Outbound>()
         var bytes = 40
-        var expected = first.observationSequence!!
-        for (row in all) {
-            if (row.trackingSession != first.trackingSession || row.observationSequence != expected)
-                break
-            val size = row.json.toByteArray(Charsets.UTF_8).size + 1
-            if (result.isNotEmpty() && (target == 0 || bytes + size > target)) break
-            result.add(row)
-            bytes += size
-            expected++
-            if (result.size >= 128) break
+        var expected: Long? = null
+        var after = 0L
+        val count = maximumRecords.coerceIn(1, 4096)
+        while (result.size < count) {
+            // Never fetch thousands of large envelopes just to select a small
+            // encoded payload: at most 64 individual-v1-sized rows per page.
+            val page =
+                dao.pendingSessionPage(
+                    session,
+                    after,
+                    if (target == 0) 1 else minOf(64, count - result.size),
+                )
+            if (page.isEmpty()) break
+            for (row in page) {
+                val sequence =
+                    row.observationSequence ?: return if (result.isEmpty()) listOf(row) else result
+                if (row.nextAttemptMillis > now || expected != null && sequence != expected)
+                    return result
+                val size = row.json.toByteArray(Charsets.UTF_8).size + 1
+                if (result.isNotEmpty() && (target == 0 || bytes + size > target)) return result
+                result.add(row)
+                bytes += size
+                expected = sequence + 1
+                after = sequence
+                if (target == 0 || result.size >= count) return result
+            }
         }
         return result
     }
@@ -583,11 +740,57 @@ class Repository(val db: TrackingDatabase, private val clock: Clock = SystemCloc
         receipts: List<Receipt>,
         generation: Long,
     ) {
+        applyBatch(rows, receipts, generation)
+    }
+
+    override suspend fun hasPendingHistory() = dao.hasPendingHistory()
+
+    override suspend fun applyBatch(
+        rows: List<Outbound>,
+        receipts: List<Receipt>,
+        generation: Long,
+    ): Boolean =
         db.withTransaction {
             require(rows.size == receipts.size)
-            rows.zip(receipts).forEach { (r, a) -> accept(r, a, generation) }
+            val initial = state()
+            if (initial.endpointGeneration != generation) return@withTransaction false
+            var state = initial
+            for ((row, receipt) in rows.zip(receipts)) {
+                val current = dao.row(row.sequence) ?: error("Missing durable message")
+                require(
+                    receipt.message == current.messageId &&
+                        receipt.sequence == current.sequence &&
+                        receipt.device == state.deviceId
+                ) {
+                    "ACK identity mismatch"
+                }
+                if (current.deliveredAt != null) continue
+                var updated = state.copy(lastAck = utc(clock.wallMillis()), operationalError = null)
+                when (val decision = receipt.config?.let { applyConfig(state.config(), it) }) {
+                    is ConfigDecision.Applied ->
+                        updated =
+                            updated.copy(
+                                authority = decision.state.authority_id,
+                                version = decision.state.version,
+                                overrideSeconds = decision.state.reporting_interval_override_s,
+                                configError = null,
+                            )
+                    is ConfigDecision.Error -> updated = updated.copy(configError = decision.reason)
+                    ConfigDecision.NoChange ->
+                        if (receipt.config?.version == state.version)
+                            updated = updated.copy(configError = null)
+                    null ->
+                        updated =
+                            updated.copy(
+                                configError = receipt.configError ?: "Invalid Command configuration"
+                            )
+                }
+                dao.updateRow(current.copy(deliveredAt = receipt.receivedAt, error = null))
+                state = updated
+            }
+            if (state != initial) dao.update(state)
+            true
         }
-    }
 
     override suspend fun newest() = dao.newest()
 
@@ -595,45 +798,9 @@ class Repository(val db: TrackingDatabase, private val clock: Clock = SystemCloc
 
     override suspend fun sos(now: Long) = dao.sos(now)
 
-    override suspend fun accept(row: Outbound, receipt: Receipt, generation: Long) =
-        db.withTransaction {
-            val current = dao.row(row.sequence) ?: error("Missing durable message")
-            require(
-                receipt.message == current.messageId &&
-                    receipt.sequence == current.sequence &&
-                    receipt.device == Protocol.decodeMessage(current.json).device_id
-            ) {
-                "ACK identity mismatch"
-            }
-            if (current.deliveredAt != null) return@withTransaction
-            val state = state()
-            // Ignore late replies from a receiver edited while the request was in flight.
-            if (state.endpointGeneration != generation) return@withTransaction
-            var updated = state.copy(lastAck = utc(clock.wallMillis()), operationalError = null)
-            when (val decision = receipt.config?.let { applyConfig(state.config(), it) }) {
-                is ConfigDecision.Applied ->
-                    updated =
-                        updated.copy(
-                            authority = decision.state.authority_id,
-                            version = decision.state.version,
-                            overrideSeconds = decision.state.reporting_interval_override_s,
-                            configError = null,
-                        )
-                is ConfigDecision.Error -> updated = updated.copy(configError = decision.reason)
-                ConfigDecision.NoChange -> {
-                    // Only an equal, matching snapshot resolves a previous visible error.
-                    if (receipt.config?.version == state.version)
-                        updated = updated.copy(configError = null)
-                }
-                null ->
-                    updated =
-                        updated.copy(
-                            configError = receipt.configError ?: "Invalid Command configuration"
-                        )
-            }
-            dao.update(updated)
-            dao.updateRow(current.copy(deliveredAt = receipt.receivedAt, error = null))
-        }
+    override suspend fun accept(row: Outbound, receipt: Receipt, generation: Long) {
+        acceptBatch(listOf(row), listOf(receipt), generation)
+    }
 
     override suspend fun fail(
         row: Outbound,

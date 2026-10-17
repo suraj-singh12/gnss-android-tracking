@@ -1,10 +1,13 @@
 package core
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -26,6 +29,9 @@ func validateObservation(v map[string]any) error {
 		a, ok := q["unresolved_sequences"].([]any)
 		if !ok {
 			return fmt.Errorf("unresolved sequences required")
+		}
+		if q["unresolved_sequence_count"] != nil && !num(q["unresolved_sequence_count"], float64(len(a)), maxInteger, true) {
+			return fmt.Errorf("invalid unresolved sequence count")
 		}
 		for _, v := range a {
 			if !num(v, 1, number(q["latest_committed_sequence"]), true) {
@@ -118,7 +124,7 @@ func populateHistoryFromRaw(tx *sql.Tx, st *State, now time.Time, raw []Candidat
 				if h.PhoneStateCurrent {
 					h.Condition = "catching_up"
 				}
-				if len(unresolved) > 0 {
+				if q.unresolvedCount() > 0 {
 					h.Condition = "unresolved"
 				} else if q.KnownLoss > 0 {
 					h.Condition = "incomplete"
@@ -216,7 +222,11 @@ func candidates(tx *sql.Tx, device string) ([]Candidate, error) {
 
 // Arrival cursor avoids re-reading/decoding every retained raw envelope for each
 // receipt. In-memory only: SQLite raw remains the restart-safe source of truth.
+var errProjectionByteBudget = errors.New("use streaming reconstruction for large envelopes")
+
 type rawCursor struct {
+	Bytes      int
+	Stream     bool
 	Row        int64
 	Candidates []Candidate
 }
@@ -226,6 +236,9 @@ func (s *Store) projectionCandidates(tx *sql.Tx, device string) ([]Candidate, er
 	if c == nil {
 		c = &rawCursor{}
 		s.projectionRaw[device] = c
+	}
+	if c.Stream {
+		return nil, errProjectionByteBudget
 	}
 	rows, e := tx.Query("SELECT rowid,known,received FROM raw WHERE device=? AND rowid>? AND json_extract(known,'$.type')='location' ORDER BY rowid", device, c.Row)
 	if e != nil {
@@ -239,16 +252,23 @@ func (s *Store) projectionCandidates(tx *sql.Tx, device string) ([]Candidate, er
 		if e = rows.Scan(&n, &b, &r); e != nil {
 			return nil, e
 		}
+		if c.Bytes+len(b) > s.projectionByteBudget {
+			c.Candidates = nil
+			c.Bytes = 0
+			c.Stream = true
+			return nil, errProjectionByteBudget
+		}
 		var m Message
 		if e = json.Unmarshal([]byte(b), &m); e != nil {
 			return nil, e
 		}
+		c.Bytes += len(b)
 		v := Candidate{m, r}
-		at := sort.Search(len(c.Candidates), func(i int) bool { return !less(c.Candidates[i].Message, m, true) })
-		c.Candidates = append(c.Candidates, Candidate{})
-		copy(c.Candidates[at+1:], c.Candidates[at:])
-		c.Candidates[at] = v
+		c.Candidates = append(c.Candidates, v)
 		c.Row = n
+	}
+	if !sort.SliceIsSorted(c.Candidates, func(i, j int) bool { return less(c.Candidates[i].Message, c.Candidates[j].Message, true) }) {
+		sort.Slice(c.Candidates, func(i, j int) bool { return less(c.Candidates[i].Message, c.Candidates[j].Message, true) })
 	}
 	return c.Candidates, rows.Err()
 }
@@ -331,6 +351,15 @@ func (s *Store) projectionLoop() {
 		case <-s.stop:
 			return
 		case <-s.wake:
+			// Coalesce the existing bounded wake channel. Raw ACK/live/SOS do not
+			// wait for geometry; coalescing adds at most 250 ms before a pass.
+			timer := time.NewTimer(250 * time.Millisecond)
+			select {
+			case <-timer.C:
+			case <-s.stop:
+				timer.Stop()
+				return
+			}
 			if err := s.processProjection(); err != nil {
 				s.recordProjectionFailure(err)
 			}
@@ -338,193 +367,253 @@ func (s *Store) projectionLoop() {
 	}
 }
 
-// Read and compute outside the ingestion mutex. Apply only an unchanged raw/policy
-// generation; raw commits and SOS ACKs never wait for movement reconstruction.
+// Read and compute outside the ingestion mutex. Publish a captured raw prefix
+// only under unchanged policy; newer durable work stays queued. Raw/SOS receipts
+// never wait for movement reconstruction.
 func (s *Store) processProjection() error {
 	if !s.projectionMu.TryLock() {
 		return nil
 	}
 	defer s.projectionMu.Unlock()
-	return s.processProjectionLocked()
+	return s.processProjectionDevice()
 }
 
 // Test inspection/export boundaries may explicitly wait; ordinary live snapshots
 // never wait on an in-flight history reconstruction.
 func (s *Store) processProjectionLocked() error {
+	// Explicit inspection/recording boundaries drain the captured finite inventory.
+	// The ordinary worker still publishes one device per fair scheduling turn.
 	s.mu.Lock()
-	tx, e := s.db.Begin()
-	if e != nil {
-		s.mu.Unlock()
-		return e
-	}
-	work := map[string]int64{}
-	rows, e := tx.Query("SELECT device,generation FROM projection_work")
-	if e != nil {
-		tx.Rollback()
-		s.mu.Unlock()
-		return e
-	}
-	for rows.Next() {
-		var device string
-		var generation int64
-		if e = rows.Scan(&device, &generation); e != nil {
-			break
-		}
-		work[device] = generation
-	}
-	if e == nil {
-		e = rows.Err()
-	}
-	rows.Close()
-	if e != nil || len(work) == 0 {
-		tx.Rollback()
-		s.mu.Unlock()
-		return e
-	}
-	st, e := loadState(tx)
-	var raw []Candidate
-	if e == nil {
-		for device := range work {
-			var rr []Candidate
-			rr, e = s.projectionCandidates(tx, device)
-			if e != nil {
-				break
-			}
-			raw = append(raw, rr...)
-		}
-	}
-	// Keep unaffected projections; compute only devices with durable pending work.
-	if e != nil {
-		tx.Rollback()
-		s.mu.Unlock()
-		return e
-	}
-	previousPoints, previousDecisions := st.Points, st.Decisions
-	allDevices := st.Devices
-	affected := map[string]*Device{}
-	for device := range work {
-		if allDevices[device] != nil {
-			affected[device] = allDevices[device]
-		}
-	}
-	st.Devices = affected
-	tx.Rollback()
+	var pending int
+	err := s.db.QueryRow("SELECT COUNT(*) FROM projection_work").Scan(&pending)
 	s.mu.Unlock()
-	if e == nil {
-		e = reconstructCandidates(raw, &st, s.projections, false)
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
-	latest, err := loadState(tx)
+	for i := 0; i < pending+1; i++ {
+		if err = s.processProjectionDevice(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+func (s *Store) processProjectionDevice() error {
+	// Reading/decoding raw history is independent of the writer connection.
+	db := s.projectionDB
+	if db == nil {
+		db = s.db
+		s.mu.Lock()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
+		if s.projectionDB == nil {
+			s.mu.Unlock()
+		}
+		cancel()
 		return err
 	}
-	if e != nil {
-		latest.ProjectionPending = true
-		latest.ProjectionError = e.Error()
-		if err = saveState(tx, latest); err != nil {
-			return err
-		}
-		if err = tx.Commit(); err != nil {
-			return err
-		}
-		return e
+	st, err := loadReceiptState(tx)
+	var device string
+	var generation int64
+	if err == nil {
+		err = tx.QueryRow("SELECT device,generation FROM projection_work ORDER BY last_served,rowid LIMIT 1").Scan(&device, &generation)
 	}
-	if latest.ProjectionVersion != st.ProjectionVersion {
-		s.notifyProjection()
+	var header savedProjection
+	var raw []Candidate
+	var rawCount int
+	var streamRequired bool
+	var ceiling int64
+	if err == nil {
+		header, err = readProjectionHeader(tx)
+	}
+	if err == nil && header.Generations != nil {
+		st.Devices = map[string]*Device{device: st.Devices[device]}
+		err = tx.QueryRow("SELECT COUNT(*),COALESCE(MAX(rowid),0) FROM raw WHERE device=? AND json_extract(known,'$.type')='location'", device).Scan(&rawCount, &ceiling)
+		windows := 1
+		if st.Recording != nil {
+			windows = max(1, len(st.Recording.Windows))
+		}
+		streamRequired = rawCount > s.streamThreshold/windows
+		if err == nil && !streamRequired {
+			raw, err = s.projectionCandidates(tx, device)
+			if errors.Is(err, errProjectionByteBudget) {
+				err = nil
+				streamRequired = true
+			}
+		}
+		if err == nil && !streamRequired {
+			err = populateHistoryFromRaw(tx, &st, instant(st.Devices[device].Contact), raw)
+		}
+	}
+	tx.Rollback()
+	cancel()
+	if s.projectionDB == nil {
+		s.mu.Unlock()
+	}
+	if err == sql.ErrNoRows {
 		return nil
 	}
-	accepted := map[string]bool{}
-	for device, generation := range work {
-		var current int64
-		if err = tx.QueryRow("SELECT generation FROM projection_work WHERE device=?", device).Scan(&current); err != nil {
+	if err != nil {
+		return err
+	}
+	if header.Generations == nil {
+		return s.migrateProjectionCache()
+	}
+	var prepared preparedDeviceProjection
+	if streamRequired {
+		prepared, err = s.streamProjection(&st, device, ceiling)
+		if err != nil {
 			return err
 		}
-		if generation != current {
-			continue
+		if c := s.projectionRaw[device]; c == nil || !c.Stream {
+			delete(s.projectionRaw, device)
 		}
-		accepted[device] = true
-		if d := st.Devices[device]; d != nil && latest.Devices[device] != nil {
-			latest.Devices[device].Total = d.Total
+		for key := range s.projections {
+			if strings.HasSuffix(key, "/"+device) {
+				delete(s.projections, key)
+			}
+		}
+	} else {
+		if err = reconstructCandidates(raw, &st, s.projections, false); err != nil {
+			return err
+		}
+		// Build summaries against exactly the reconstructed raw snapshot, not against
+		// a truncated presentation. Pending is re-evaluated at publication below.
+		db = s.projectionDB
+		if db == nil {
+			db = s.db
+			s.mu.Lock()
+		}
+		ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+		tx, err = db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+		if err == nil {
+			err = populateViewsFromRaw(tx, &st, raw, false)
+			tx.Rollback()
+		}
+		cancel()
+		if s.projectionDB == nil {
+			s.mu.Unlock()
+		}
+		if err != nil {
+			return err
+		}
+		prepared, err = prepareDeviceProjection(st)
+		if err != nil {
+			return err
+		}
+		if err = s.stageDeviceProjection(device, prepared); err != nil {
+			return err
+		}
+	}
+	err = func() error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		tx, err := s.db.Begin()
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		latest, err := loadReceiptState(tx)
+		if err != nil {
+			return err
+		}
+		if latest.ProjectionVersion != st.ProjectionVersion {
+			s.notifyProjection()
+			return nil
+		}
+		header, err := readProjectionHeader(tx)
+		if err != nil {
+			return err
+		}
+		if header.Generations == nil {
+			s.notifyProjection()
+			return nil
+		}
+		// Publish a consistent captured generation even if ingestion advanced.
+		// Leave newer durable work pending; never label the prefix complete.
+		if _, err = tx.Exec("UPDATE projection_work SET last_served=(SELECT COALESCE(MAX(last_served),0)+1 FROM projection_work) WHERE device=?", device); err != nil {
+			return err
 		}
 		if _, err = tx.Exec("DELETE FROM projection_work WHERE device=? AND generation=?", device, generation); err != nil {
 			return err
 		}
-	}
-	latest.Points = []Point{}
-	latest.Decisions = []Decision{}
-	for _, point := range previousPoints {
-		if !accepted[point.Device] {
-			latest.Points = append(latest.Points, point)
-		}
-	}
-	for _, decision := range previousDecisions {
-		if !accepted[decision.Device] {
-			latest.Decisions = append(latest.Decisions, decision)
-		}
-	}
-	for _, point := range st.Points {
-		if accepted[point.Device] {
-			latest.Points = append(latest.Points, point)
-		}
-	}
-	for _, decision := range st.Decisions {
-		if accepted[decision.Device] {
-			latest.Decisions = append(latest.Decisions, decision)
-		}
-	}
-	// Stable presentation order is recording-window order then device, as the oracle.
-	order := map[string]int{}
-	if latest.Recording != nil {
-		for i, w := range latest.Recording.Windows {
-			order[w.ID] = i
-		}
-	}
-	sort.SliceStable(latest.Points, func(i, j int) bool {
-		a, b := latest.Points[i], latest.Points[j]
-		if order[a.Window] != order[b.Window] {
-			return order[a.Window] < order[b.Window]
-		}
-		return a.Device < b.Device
-	})
-	sort.SliceStable(latest.Decisions, func(i, j int) bool {
-		a, b := latest.Decisions[i], latest.Decisions[j]
-		if order[a.Window] != order[b.Window] {
-			return order[a.Window] < order[b.Window]
-		}
-		return a.Device < b.Device
-	})
-	var pending int
-	if err = tx.QueryRow("SELECT COUNT(*) FROM projection_work").Scan(&pending); err != nil {
-		return err
-	}
-	latest.ProjectionPending = pending > 0
-	latest.ProjectionError = ""
-	for device := range accepted {
-		count, total := trackEffect(latest, device)
-		event := Evidence{At: time.Now().UTC().Format(wireTime), Kind: "projection_updated", Device: device, UsefulAfter: count, DistanceAfter: total, ProjectionPending: latest.ProjectionPending, ProjectionRawVersion: latest.RawVersion}
-		if err = writeEvidence(tx, event); err != nil {
+		var pending int
+		if err = tx.QueryRow("SELECT COUNT(*) FROM projection_work").Scan(&pending); err != nil {
 			return err
 		}
+		var devicePending int
+		if err = tx.QueryRow("SELECT COUNT(*) FROM projection_work WHERE device=?", device).Scan(&devicePending); err != nil {
+			return err
+		}
+		if d := latest.Devices[device]; d != nil {
+			computed := st.Devices[device]
+			d.Total, d.UsefulPoints, d.History, d.HistorySessions, d.Reconstruction = computed.Total, computed.UsefulPoints, computed.History, computed.HistorySessions, computed.Reconstruction
+			if r := d.Reconstruction; r != nil {
+				r.SourceReceived = r.Received
+				r.Received = int(d.DurableObservations)
+				r.Projection = "completed"
+				r.Route = "qualified_geometry"
+				switch {
+				case latest.Recording == nil:
+					r.Route = "no_recording"
+				case devicePending > 0:
+					r.Projection = "pending"
+					r.Route = "projection_pending"
+				case r.Received == 0:
+					r.Route = "no_observations_received"
+				case r.Eligible == 0:
+					r.Route = "excluded_by_recording_boundaries"
+				case r.Processed != r.Eligible:
+					r.Route = "projection_inconsistent"
+				case r.Accepted == 0:
+					r.Route = "quality_filtered"
+				}
+				if devicePending > 0 {
+					r.Projection = "pending"
+				}
+			}
+		}
+		latest.ProjectionPending, latest.ProjectionError = pending > 0, ""
+		latest.ReceiptVersion++
+		header.set(device, prepared)
+		if err = writeProjectionHeader(tx, header); err != nil {
+			return err
+		}
+		if err = saveReceiptState(tx, latest); err != nil {
+			return err
+		}
+		count, total := trackEffect(latest, device)
+		if err = writeEvidence(tx, Evidence{At: time.Now().UTC().Format(wireTime), Kind: "projection_updated", Device: device, UsefulAfter: count, DistanceAfter: total, ProjectionPending: latest.ProjectionPending, ProjectionRawVersion: latest.RawVersion}); err != nil {
+			return err
+		}
+		if pending > 0 {
+			s.notifyProjection()
+		}
+		return tx.Commit()
+	}()
+	// Keep an explicit candidate-cache budget across a variable fleet. A single
+	// larger reconstruction is allowed, but other devices are not retained too.
+	retained, retainedBytes := 0, 0
+	for _, cursor := range s.projectionRaw {
+		retained += len(cursor.Candidates)
+		retainedBytes += cursor.Bytes
 	}
-	if pending > 0 {
-		s.notifyProjection()
+	if retained > 100000 || retainedBytes > 128*1024*1024 {
+		s.projectionRaw = map[string]*rawCursor{}
+		s.projections = map[string]*ProjectionCache{}
 	}
-	if err = saveState(tx, latest); err != nil {
-		return err
+	if err == nil {
+		s.cleanProjectionChunks(device, prepared.generation)
 	}
-	return tx.Commit()
+	return err
 }
 
 // Render the authoritative projection, including independent qualified sections
 // after sequence gaps. Transport prefixes must never gate successful derivation.
 type ReconstructionState struct {
 	Received       int            `json:"durably_received"`
+	SourceReceived int            `json:"projection_source_observations"`
 	Eligible       int            `json:"eligible"`
 	Excluded       int            `json:"excluded_by_boundaries"`
 	Processed      int            `json:"projected"`
@@ -596,7 +685,7 @@ func populateViewsFromRaw(tx *sql.Tx, st *State, raw []Candidate, diagnosticRaw 
 				if q.Latest > latest {
 					latest = q.Latest
 				}
-				r.Unresolved += len(q.Unresolved)
+				r.Unresolved += q.unresolvedCount()
 				r.KnownLoss += q.KnownLoss
 			}
 			if latest > int64(h.Received) {
@@ -670,6 +759,7 @@ func populateViewsFromRaw(tx *sql.Tx, st *State, raw []Candidate, diagnosticRaw 
 	st.Points = qualified
 	for device, d := range st.Devices {
 		r := d.Reconstruction
+		r.SourceReceived = r.Received
 		r.Segments = len(segments[device])
 		r.Route = "qualified_geometry"
 		switch {
@@ -700,7 +790,7 @@ func (s *Store) upgradeHistoryReconstruction() error {
 		return err
 	}
 	defer tx.Rollback()
-	st, err := loadState(tx)
+	st, err := loadReceiptState(tx)
 	if err != nil {
 		return err
 	}
@@ -722,7 +812,7 @@ func (s *Store) upgradeHistoryReconstruction() error {
 		}
 	}
 	st.ProjectionPending = len(st.Devices) > 0
-	if err = saveState(tx, st); err != nil {
+	if err = saveReceiptState(tx, st); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -736,74 +826,111 @@ func (s *Store) recordProjectionFailure(err error) {
 		return
 	}
 	defer tx.Rollback()
-	st, e := loadState(tx)
+	var pending bool
+	if e = tx.QueryRow("SELECT EXISTS(SELECT 1 FROM projection_work LIMIT 1)").Scan(&pending); e != nil || !pending {
+		// An idle reader timeout, or work completed before this error was recorded,
+		// must not invent pending geometry without durable work to process.
+		return
+	}
+	st, e := loadReceiptState(tx)
 	if e != nil {
 		return
 	}
 	st.ProjectionPending = true
 	st.ProjectionError = err.Error()
-	if saveState(tx, st) == nil {
+	if saveReceiptState(tx, st) == nil {
 		_ = tx.Commit()
 	}
 }
 
 // An older v1 receiver retained extension fields in wire even when its canonical
 // model ignored them. Recover only validated additive metadata, never rewrite wire.
+const missingHistoryExtensions = `(json_extract(wire,'$.observation') IS NOT NULL AND json_extract(known,'$.observation') IS NULL) OR (json_extract(wire,'$.history_progress') IS NOT NULL AND json_extract(known,'$.history_progress') IS NULL) OR (json_extract(wire,'$.history_progress.unresolved_sequence_count') IS NOT NULL AND json_extract(known,'$.history_progress.unresolved_sequence_count') IS NULL)`
+
 func (s *Store) backfillObservationIdentity() error {
-	tx, e := s.db.Begin()
-	if e != nil {
-		return e
+	afterDevice := ""
+	for {
+		var device string
+		err := s.db.QueryRow(`SELECT device FROM raw INDEXED BY raw_extensions_missing WHERE device>? AND (`+missingHistoryExtensions+`) ORDER BY device LIMIT 1`, afterDevice).Scan(&device)
+		if err == sql.ErrNoRows {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		var after int64
+		for {
+			last, scanned, err := s.backfillObservationPage(device, after)
+			if err != nil {
+				return err
+			}
+			if scanned == 0 {
+				break
+			}
+			after = last
+		}
+		afterDevice = device
+	}
+}
+func (s *Store) backfillObservationPage(device string, after int64) (last int64, scanned int, result error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, 0, err
 	}
 	defer tx.Rollback()
-	st, e := loadState(tx)
-	if e != nil {
-		return e
+	st, err := loadReceiptState(tx)
+	if err != nil {
+		return 0, 0, err
 	}
-	rows, e := tx.Query("SELECT wire,known FROM raw")
-	if e != nil {
-		return e
+	rows, err := tx.Query(`SELECT rowid,wire,known FROM raw INDEXED BY raw_extensions_missing WHERE device=? AND rowid>? AND (`+missingHistoryExtensions+`) ORDER BY rowid LIMIT 256`, device, after)
+	if err != nil {
+		return 0, 0, err
 	}
 	type update struct {
-		message Message
-		known   []byte
+		message        Message
+		known          []byte
+		observationNew bool
 	}
 	updates := []update{}
 	for rows.Next() {
 		var wire []byte
 		var known string
-		if e = rows.Scan(&wire, &known); e != nil {
-			rows.Close()
-			return e
+		if err = rows.Scan(&last, &wire, &known); err != nil {
+			break
 		}
-		m, err := Parse(wire)
-		if err != nil || (m.Observation == nil && m.Progress == nil) {
+		scanned++
+		m, e := Parse(wire)
+		if e != nil || (m.Observation == nil && m.Progress == nil) {
 			continue
 		}
 		var old Message
-		if e = json.Unmarshal([]byte(known), &old); e != nil {
-			rows.Close()
-			return e
+		if err = json.Unmarshal([]byte(known), &old); err != nil {
+			break
 		}
-		if (m.Observation != nil && old.Observation == nil) || (m.Progress != nil && old.Progress == nil) {
+		observationNew := m.Observation != nil && old.Observation == nil
+		progressNew := m.Progress != nil && (old.Progress == nil || (m.Progress.UnresolvedCount != nil && old.Progress.UnresolvedCount == nil))
+		if observationNew || progressNew {
 			canonical, _ := json.Marshal(m)
-			updates = append(updates, update{m, canonical})
+			updates = append(updates, update{m, canonical, observationNew})
 		}
 	}
-	e = rows.Err()
+	if err == nil {
+		err = rows.Err()
+	}
 	rows.Close()
-	if e != nil {
-		return e
+	if err != nil {
+		return last, scanned, err
 	}
 	for _, v := range updates {
 		m := v.message
-		o := m.Observation
-		if o != nil {
-			if _, e = tx.Exec("INSERT INTO observation_identity VALUES(?,?,?,?,?)", m.Device, o.Session, o.Sequence, o.ID, m.ID); e != nil {
-				return e
+		if v.observationNew {
+			o := m.Observation
+			if _, err = tx.Exec("INSERT INTO observation_identity VALUES(?,?,?,?,?)", m.Device, o.Session, o.Sequence, o.ID, m.ID); err != nil {
+				return last, scanned, err
 			}
 		}
-		if _, e = tx.Exec("UPDATE raw SET known=? WHERE device=? AND message=?", string(v.known), m.Device, m.ID); e != nil {
-			return e
+		if _, err = tx.Exec("UPDATE raw SET known=? WHERE device=? AND message=?", string(v.known), m.Device, m.ID); err != nil {
+			return last, scanned, err
 		}
 		if d := st.Devices[m.Device]; d != nil {
 			if d.Location != nil && d.Location.ID == m.ID {
@@ -813,22 +940,26 @@ func (s *Store) backfillObservationIdentity() error {
 			if d.Snapshot.ID == m.ID {
 				d.Snapshot = m
 			}
-			if m.Progress != nil && (d.PhoneQueue == nil || m.Progress.Measured > d.PhoneQueue.Measured) {
-				d.PhoneQueue = m.Progress
+			if m.Progress != nil && (d.PhoneQueue == nil || m.Progress.Measured >= d.PhoneQueue.Measured) {
+				q := *m.Progress
+				d.PhoneQueue = &q
 			}
 		}
-		if m.Observation != nil {
-			if _, e = tx.Exec(`INSERT INTO projection_work(device,earliest) VALUES(?,?) ON CONFLICT(device) DO UPDATE SET earliest=MIN(earliest,excluded.earliest),generation=generation+1`, m.Device, m.Fix.Observed); e != nil {
-				return e
-			}
+		if _, err = tx.Exec(`INSERT INTO projection_work(device,earliest) VALUES(?,'') ON CONFLICT(device) DO UPDATE SET earliest='',generation=generation+1`, m.Device); err != nil {
+			return last, scanned, err
+		}
+		if v.observationNew {
 			st.RawVersion++
-			st.ProjectionPending = true
 		}
+		st.ProjectionPending = true
 	}
-	if e = saveState(tx, st); e != nil {
-		return e
+	if len(updates) == 0 {
+		return last, scanned, nil
 	}
-	return tx.Commit()
+	if err = saveReceiptState(tx, st); err != nil {
+		return last, scanned, err
+	}
+	return last, scanned, tx.Commit()
 }
 
 func sourceSession(m Message) string {
@@ -887,12 +1018,16 @@ func (s *Store) viewCandidates(tx *sql.Tx, p Policy) ([]Candidate, error) {
 		}
 		if m.Type == "location" {
 			v := Candidate{m, received}
-			at := sort.Search(len(s.viewRaw.Candidates), func(i int) bool { return !less(s.viewRaw.Candidates[i].Message, m, true) })
-			s.viewRaw.Candidates = append(s.viewRaw.Candidates, Candidate{})
-			copy(s.viewRaw.Candidates[at+1:], s.viewRaw.Candidates[at:])
-			s.viewRaw.Candidates[at] = v
+			s.viewRaw.Candidates = append(s.viewRaw.Candidates, v)
 		}
 		s.viewRaw.Row = row
+	}
+	if !sort.SliceIsSorted(s.viewRaw.Candidates, func(i, j int) bool {
+		return less(s.viewRaw.Candidates[i].Message, s.viewRaw.Candidates[j].Message, true)
+	}) {
+		sort.Slice(s.viewRaw.Candidates, func(i, j int) bool {
+			return less(s.viewRaw.Candidates[i].Message, s.viewRaw.Candidates[j].Message, true)
+		})
 	}
 	return s.viewRaw.Candidates, rows.Err()
 }

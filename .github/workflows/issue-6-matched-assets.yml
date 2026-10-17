@@ -1,4 +1,4 @@
-name: Issue 6 physical-button integration and matched assets
+name: Integrated validation and matched acceptance assets
 on:
   push:
     branches:
@@ -17,15 +17,19 @@ on:
     types: [opened, synchronize, reopened]
   workflow_dispatch:
 concurrency:
-  group: issue6-validation-${{ github.ref }}
+  group: gnss-integrated-v2-${{ github.ref }}
   cancel-in-progress: true
 permissions:
   contents: read
+env:
+  SOURCE_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
 jobs:
   dem-provider:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REVISION }}
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -60,15 +64,15 @@ jobs:
           path: ${{ runner.temp }}/dem-evidence
           if-no-files-found: error
   integrated:
-    needs: dem-provider
-    # A blocked real DEM provider must not skip independent Android/history tests.
-    if: always()
+    # External provider evidence has its own job/artifact; GNSS validation is independent.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Define visual evidence directory
         run: echo "GNSS_SCREENSHOT_DIR=$RUNNER_TEMP/gnss-assets/visual-evidence" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         with:
+          ref: ${{ env.SOURCE_REVISION }}
           fetch-depth: 0
       - uses: actions/setup-java@v4
         with:
@@ -90,7 +94,7 @@ jobs:
           node-version: "22"
       - name: Validate ancestry and source cleanliness
         run: |
-          git merge-base --is-ancestor b23b5f58845c896e7fb2c5800e577202667c1e3f HEAD
+          git merge-base --is-ancestor d78ef85e689ca43281127599e814b04cb99aefc8 HEAD
           test -z "$(git status --porcelain)"
       - name: Android tests, lint and debug APK
         working-directory: android
@@ -114,16 +118,34 @@ jobs:
           node test-tools/integration/map-test.cjs
           node test-tools/integration/sos-alarm-test.cjs
           node test-tools/integration/terrain-test.cjs
+      - name: Measured simultaneous durable synchronization
+        env:
+          GNSS_SYNC_BENCH: "1"
+          GNSS_SYNC_PRIORITY: "1"
+          GNSS_SYNC_PATTERN: "bursts"
+          GNSS_SYNC_BATCH: "64000"
+          GNSS_SYNC_DEVICES: "20"
+          GNSS_SYNC_SAMPLES: "600"
+          GNSS_SYNC_DAYS: "7"
+        working-directory: command
+        run: |
+          mkdir -p "$RUNNER_TEMP/gnss-test-reports"
+          go test ./internal/core -run '^TestSyncFleetPerformance$' -count=1 -v | tee "$RUNNER_TEMP/gnss-test-reports/sync-benchmark.txt"
       - name: Real Android to Command integration
         run: test-tools/integration/run.sh --console=plain
       - name: Record cross-language test counts
         run: |
           python3 - <<'PY'
           import pathlib,xml.etree.ElementTree as E
+          found=False
           for p in pathlib.Path('android/app/build/test-results/testDebugUnitTest').glob('TEST-*.xml'):
               r=E.parse(p).getroot()
               if r.get('name','').endswith('CommandIntegrationTest'):
+                  found=True
                   print('Real Android-to-Command:',{k:r.get(k) for k in ['tests','failures','errors','skipped']})
+                  assert int(r.get('tests',0)) > 0
+                  assert all(int(r.get(k,0)) == 0 for k in ['failures','errors','skipped'])
+          assert found, 'Real bridge result is required, not silently absent'
           PY
       - name: Build matched portable Command applications
         working-directory: command
@@ -149,11 +171,10 @@ jobs:
           node test-tools/integration/ui-dashboard.cjs
           node test-tools/integration/history-dashboard.cjs
           node test-tools/integration/map-download-ui.cjs
-      - uses: actions/download-artifact@v4
-        if: needs.dem-provider.result == 'success'
-        with:
-          name: DEM-provider-acquisition
-          path: ${{ runner.temp }}/gnss-assets
+          export GNSS_SYNC_REPORT="$RUNNER_TEMP/gnss-test-reports/sync-process-browser.json"
+          (cd command && go test -c -o "$RUNNER_TEMP/gnss-sync-reference" ./internal/core)
+          export GNSS_SYNC_REFERENCE_BINARY="$RUNNER_TEMP/gnss-sync-reference"
+          node test-tools/integration/sync-capacity.cjs
       - name: Verify exact revisions and generate checksum manifest
         env:
           ASSET_DIR: ${{ runner.temp }}/gnss-assets
@@ -161,7 +182,7 @@ jobs:
           test -z "$(git status --porcelain)"
           for binary in "$ASSET_DIR/GNSS-Command-macos-arm64" "$ASSET_DIR/GNSS-Command-windows-x64.exe"; do
             go version -m "$binary" | tee "$binary.build-info.txt"
-            go version -m "$binary" | grep -F "vcs.revision=$GITHUB_SHA"
+            go version -m "$binary" | grep -F "vcs.revision=$SOURCE_REVISION"
             go version -m "$binary" | grep -F 'vcs.modified=false'
           done
           cp android/app/build/outputs/apk/debug/app-debug.apk "$ASSET_DIR/GNSS-Tracker-debug.apk"
@@ -171,7 +192,7 @@ jobs:
           cp docs/ui-acceptance.md "$ASSET_DIR/SETUP.md"
           python3 - <<'PY'
           import hashlib,json,os,pathlib,zipfile
-          root=pathlib.Path(os.environ['ASSET_DIR']); sha=os.environ['GITHUB_SHA']
+          root=pathlib.Path(os.environ['ASSET_DIR']); sha=os.environ['SOURCE_REVISION']
           names=['GNSS-Tracker-debug.apk','GNSS-Command-macos-arm64','GNSS-Command-windows-x64.exe']
           with zipfile.ZipFile(root/names[0]) as z:
               assert any(sha.encode() in z.read(n) for n in z.namelist() if n.endswith('.dex'))
@@ -202,7 +223,7 @@ jobs:
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: GNSS-Acceptance-Evidence-${{ github.sha }}
+          name: GNSS-Acceptance-Evidence-${{ env.SOURCE_REVISION }}
           path: |
             ${{ runner.temp }}/gnss-assets/*.txt
             ${{ runner.temp }}/gnss-assets/*.json
@@ -214,7 +235,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: gnss-issue6-test-reports-${{ github.sha }}
+          name: gnss-issue6-test-reports-${{ env.SOURCE_REVISION }}
           path: |
             ${{ runner.temp }}/gnss-test-reports
             android/app/build/reports

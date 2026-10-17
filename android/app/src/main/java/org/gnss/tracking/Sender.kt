@@ -49,6 +49,7 @@ data class Response(
     val body: String,
     val retryAfter: String? = null,
     val json: Boolean = true,
+    val historyOnlyThrottle: Boolean = false,
 )
 
 fun interface Transport {
@@ -131,17 +132,38 @@ class LanTransport(private val network: () -> Network?) : Transport {
             else builder.post(immutableJson.toRequestBody("application/json".toMediaType())).build()
 
         try {
-            client!!.newCall(request).execute().use { response ->
+            val deadlineSeconds =
+                if (role == "history")
+                    (6L + (immutableJson?.toByteArray(Charsets.UTF_8)?.size ?: 0) / 262144)
+                        .coerceAtMost(14)
+                else 6L
+            val boundedClient =
+                if (deadlineSeconds > 6)
+                    client!!
+                        .newBuilder()
+                        .readTimeout(deadlineSeconds, TimeUnit.SECONDS)
+                        .writeTimeout(deadlineSeconds, TimeUnit.SECONDS)
+                        .build()
+                else client!!
+            val call = boundedClient.newCall(request)
+            call.timeout().timeout(deadlineSeconds, TimeUnit.SECONDS)
+            call.execute().use { response ->
                 val body =
                     response.body?.byteStream()?.use {
                         val buffer = java.io.ByteArrayOutputStream()
                         val chunk = ByteArray(4096)
-                        while (buffer.size() <= 65536) {
-                            val count = it.read(chunk, 0, minOf(chunk.size, 65537 - buffer.size()))
+                        val responseLimit = if (role == "history") 2097152 else 65536
+                        while (buffer.size() <= if (role == "history") 2097152 else 65536) {
+                            val count =
+                                it.read(
+                                    chunk,
+                                    0,
+                                    minOf(chunk.size, responseLimit + 1 - buffer.size()),
+                                )
                             if (count < 0) break
                             buffer.write(chunk, 0, count)
                         }
-                        require(buffer.size() <= 65536) { "Response exceeds limit" }
+                        require(buffer.size() <= responseLimit) { "Response exceeds limit" }
                         buffer.toString("UTF-8")
                     } ?: ""
                 return Response(
@@ -153,6 +175,7 @@ class LanTransport(private val network: () -> Network?) : Transport {
                         ?.substringBefore(';')
                         ?.trim()
                         ?.equals("application/json", true) == true,
+                    response.header("X-GNSS-Throttle-Scope") == "history",
                 )
             }
         } catch (e: java.io.IOException) {
@@ -164,6 +187,17 @@ class LanTransport(private val network: () -> Network?) : Transport {
     }
 }
 
+data class SyncTransferProgress(
+    val attemptedBytes: Long = 0,
+    val responses: Long = 0,
+    val validAckRecords: Long = 0,
+    val mode: String = "Automatic",
+    val ackedBytes: Long = 0,
+    val ackedRecords: Long = 0,
+    val lastBatchRecords: Int = 0,
+    val lastError: String? = null,
+)
+
 data class Retry(val delayMillis: Long, val quarantine: Boolean)
 
 fun classify(code: Int?, failures: Int, retryAfter: String? = null): Retry {
@@ -174,7 +208,7 @@ fun classify(code: Int?, failures: Int, retryAfter: String? = null): Retry {
         else null
     return Retry(
         maxOf(exponential, delta ?: 0),
-        code != null && code != 200 && code != 429 && code !in 500..599,
+        code != null && code != 200 && code != 408 && code != 429 && code !in 500..599,
     )
 }
 
@@ -192,20 +226,36 @@ class Sender(
         runCatching { evidence(kind, value) }
     }
 
+    @Volatile
+    var syncProgress = SyncTransferProgress()
+        private set
+
     private val mutex = Mutex()
     private var recovering = true
     private var failures = 0
-    private var waitUntil = 0L
+    private var waitUntil = 0L // history/routine-only backoff
+    private var receiverWaitUntil = 0L
+    private var historyRateUntil = 0L
+    private var negotiateAfter = 0L
+    private var lastHistoryAck: Long? = null
+    private val drainEpoch = java.util.concurrent.atomic.AtomicLong()
+    @Volatile private var drainPaused = false
+    @Volatile
+    var aggressive = false
+        private set
+
     private var generation: Long? = null
     private var endpointBlocked = false
     private var historyNext = false
     private val adaptation = BatchAdaptation()
     private var batchSupported: Boolean? = null
+    private var maximumBatchBytes = 65536
+    private var maximumBatchRecords = 128
     @Volatile
     var compatibilityWarning: String? = null
         private set
 
-    private var isolationLimit = 128
+    private var isolationLimit = 4096
     private var nextLiveElapsed = 0L
     private var lastLiveAttemptElapsed: Long? = null
     private var appliedInterval: Int? = null
@@ -238,29 +288,64 @@ class Sender(
         }
     }
 
+    suspend fun requestDrain() {
+        val epoch = drainEpoch.get()
+        mutex.withLock {
+            if (epoch != drainEpoch.get() || aggressive) return@withLock
+            aggressive = true
+            drainPaused = false
+            if (clock.elapsedMillis() >= maxOf(receiverWaitUntil, historyRateUntil))
+                store.resetTransientRetryTiming()
+            if (!endpointBlocked && clock.elapsedMillis() >= historyRateUntil) waitUntil = 0
+            syncProgress = syncProgress.copy(mode = "Manual drain active")
+        }
+    }
+
+    fun pauseDrain() {
+        drainPaused = true
+        drainEpoch.incrementAndGet()
+        aggressive = false
+    }
+
     suspend fun connectivityRestored() =
         mutex.withLock {
+            // LinkProperties can repeat while the receiver is healthy. Do not
+            // defeat genuine server backpressure or repeatedly rediscover it.
+            if (commandReachable == true) return@withLock
+            if (lastHistoryAck?.let { clock.elapsedMillis() - it > 120000 } == true)
+                adaptation.resumeAfterLongGap()
             // Clear durable transient deadlines before selecting recovery work. Otherwise
             // an eligible backlog row can jump ahead of a delayed SOS/current row.
-            store.resetTransientRetryTiming()
-            adaptation.reset()
+            if (clock.elapsedMillis() >= maxOf(receiverWaitUntil, historyRateUntil))
+                store.resetTransientRetryTiming()
+            // The same receiver/link returning does not invalidate measured safe capacity.
             batchSupported = null
+            negotiateAfter = 0
             nextLiveElapsed = 0
             lastLiveAttemptElapsed = null
             lastRoutineElapsed = Long.MIN_VALUE / 2
             commandReachable = null
             recovering = true
             historyNext = false
-            if (!endpointBlocked) waitUntil = 0
+            if (
+                !endpointBlocked &&
+                    clock.elapsedMillis() >= maxOf(receiverWaitUntil, historyRateUntil)
+            )
+                waitUntil = 0
         }
 
-    suspend fun step(sosOnly: Boolean = false) =
+    suspend fun step(
+        sosOnly: Boolean = false,
+        retainedOnly: Boolean = false,
+        pauseHistory: Boolean = false,
+    ) =
         mutex.withLock {
             attemptedLastStep = false
-            stepNative(sosOnly)
+            stepNative(sosOnly, retainedOnly, pauseHistory)
         }
 
-    private suspend fun stepNative(sosOnly: Boolean) {
+    private suspend fun stepNative(sosOnly: Boolean, retainedOnly: Boolean, pauseHistory: Boolean) {
+        val historyPaused = pauseHistory || drainPaused
         val state = store.state()
         if (generation != state.endpointGeneration) {
             generation = state.endpointGeneration
@@ -273,6 +358,9 @@ class Sender(
             lastRoutineElapsed = Long.MIN_VALUE / 2
             waitUntil = 0
             endpointBlocked = false
+            receiverWaitUntil = 0
+            historyRateUntil = 0
+            negotiateAfter = 0
             commandReachable = null
         }
         val interval = state.config().effective_reporting_interval_s
@@ -280,14 +368,28 @@ class Sender(
             appliedInterval = interval
             nextLiveElapsed = lastLiveAttemptElapsed?.let { it + interval * 1000L } ?: 0
         }
-        if (state.endpoint.isEmpty() || state.deliveryPaused || endpointBlocked) return
+        if (state.endpoint.isEmpty() || state.deliveryPaused || endpointBlocked) {
+            aggressive = false
+            syncProgress = syncProgress.copy(mode = "Unresolved receiver setup; originals retained")
+            return
+        }
         // SOS bypasses ordinary retry backoff, but respects its own durable deadline.
         val priority = store.sos(clock.wallMillis())
         if (sosOnly && priority == null) return
-        if (priority == null && (!transport.wifiAvailable() || clock.elapsedMillis() < waitUntil))
+        if (
+            priority == null &&
+                (!transport.wifiAvailable() || clock.elapsedMillis() < receiverWaitUntil)
+        ) {
+            if (!transport.wifiAvailable()) commandReachable = false
+            if (aggressive)
+                syncProgress =
+                    syncProgress.copy(
+                        mode = "Manual drain waiting for Wi-Fi or receiver Retry-After"
+                    )
             return
+        }
         val now = clock.wallMillis()
-        if (priority == null && recovering && !store.hasNativeObservations()) {
+        if (!retainedOnly && priority == null && recovering && !store.hasNativeObservations()) {
             val current = store.newest()
             if (
                 current == null ||
@@ -298,8 +400,9 @@ class Sender(
         }
         val live =
             if (
-                priority == null &&
-                    !historyNext &&
+                !retainedOnly &&
+                    priority == null &&
+                    (!historyNext || clock.elapsedMillis() < waitUntil) &&
                     (recovering || clock.elapsedMillis() >= nextLiveElapsed)
             )
                 store.live(now)
@@ -316,12 +419,20 @@ class Sender(
             lastLiveAttemptElapsed = clock.elapsedMillis()
             nextLiveElapsed = clock.elapsedMillis() + interval * 1000L
         } else {
-            val history = store.historical(now, adaptation.target).take(isolationLimit)
+            val history =
+                if (historyPaused || clock.elapsedMillis() < waitUntil) emptyList()
+                else
+                    store.historicalBounded(
+                        now,
+                        if (batchSupported == false && clock.elapsedMillis() < negotiateAfter) 0
+                        else minOf(adaptation.target, maximumBatchBytes),
+                        minOf(isolationLimit, maximumBatchRecords),
+                    )
             // Independently bounded status cadence gets an opportunity after history.
             val routine = store.routine(now)
             if (
                 routine != null &&
-                    (history.isEmpty() || (!recovering && !historyNext)) &&
+                    (history.isEmpty() || (!aggressive && !recovering && !historyNext)) &&
                     clock.elapsedMillis() - lastRoutineElapsed >=
                         state.config().effective_reporting_interval_s * 1000L
             ) {
@@ -329,23 +440,79 @@ class Sender(
                 role = "status"
             } else {
                 rows =
-                    if (history.isNotEmpty()) history else listOfNotNull(store.routineBacklog(now))
+                    if (history.isNotEmpty()) history
+                    else if (historyPaused || clock.elapsedMillis() < waitUntil) emptyList()
+                    else listOfNotNull(store.routineBacklog(now))
                 if (history.isEmpty()) role = "status_backlog"
                 historyNext = false
             }
         }
-        if (rows.isEmpty()) return
+        if (rows.isEmpty()) {
+            if (aggressive && store.hasPendingHistory() == false) {
+                aggressive = false
+                syncProgress =
+                    syncProgress.copy(
+                        mode =
+                            "Eligible history ACKed; inspect unresolved records; reconstruction separate"
+                    )
+            } else if (!aggressive && !drainPaused && store.hasPendingHistory() == false) {
+                syncProgress =
+                    syncProgress.copy(
+                        mode = "Eligible history ACKed; inspect unresolved; reconstruction separate"
+                    )
+            } else if (aggressive)
+                syncProgress =
+                    syncProgress.copy(mode = "Manual drain waiting for Wi-Fi, receiver or retry")
+            return
+        }
+        if (role == "history")
+            syncProgress =
+                syncProgress.copy(
+                    mode = if (aggressive) "Manual drain active" else "Automatic active"
+                )
         val batchEligible = role == "history" && rows.all { it.observationSequence != null }
-        if (batchEligible && batchSupported == null) {
+        if (batchEligible && (batchSupported == null || clock.elapsedMillis() >= negotiateAfter)) {
             try {
                 val capability = transport.capabilities(state.endpoint)
+                negotiateAfter =
+                    clock.elapsedMillis() + if (capability?.code == 200) 300000 else 15000
+                if (capability?.code == 429) {
+                    receiverWaitUntil =
+                        clock.elapsedMillis() + classify(429, 1, capability.retryAfter).delayMillis
+                    return
+                }
                 batchSupported =
                     capability?.let {
                         it.code == 200 &&
                             it.json &&
-                            Protocol.parse(it.body)
-                                .getAsJsonArray("historical_batch_versions")
-                                ?.any { v -> v.asInt == 1 } == true
+                            Protocol.parse(it.body).let { capability ->
+                                maximumBatchBytes =
+                                    capability.get("maximum_batch_bytes")?.let {
+                                        Protocol.whole(
+                                                capability,
+                                                "maximum_batch_bytes",
+                                                1,
+                                                9007199254740991L,
+                                            )
+                                            .coerceAtMost(2097152)
+                                            .toInt()
+                                    } ?: 65536
+                                maximumBatchRecords =
+                                    capability.get("maximum_batch_records")?.let {
+                                        Protocol.whole(
+                                                capability,
+                                                "maximum_batch_records",
+                                                1,
+                                                9007199254740991L,
+                                            )
+                                            .coerceAtMost(4096)
+                                            .toInt()
+                                    } ?: 128
+                                adaptation.maximum = maximumBatchBytes
+                                capability.getAsJsonArray("historical_batch_versions")?.any { v ->
+                                    v.asInt == 1
+                                } == true
+                            }
                     } ?: false
                 compatibilityWarning =
                     if (batchSupported == true) null
@@ -356,14 +523,18 @@ class Sender(
             } catch (_: Exception) {
                 commandReachable = false
                 failures = (failures + 1).coerceAtMost(32)
-                adaptation.reset()
-                waitUntil = clock.elapsedMillis() + classify(null, failures).delayMillis
+                adaptation.reachableFailure()
+                negotiateAfter = clock.elapsedMillis() + classify(null, failures).delayMillis
+                waitUntil = negotiateAfter
                 return
             }
         }
         // Capability discovery is itself a bounded request; newly raised SOS gets the next one.
         if (role != "sos" && store.sos(clock.wallMillis()) != null) return
-        val selected = if (batchEligible && batchSupported == true) rows else rows.take(1)
+        val (selected, batchPayload) =
+            if (batchEligible && batchSupported == true)
+                HistoryProtocol.bounded(rows, maximumBatchBytes, maximumBatchRecords)
+            else rows.take(1) to null
         if (role == "sos") {
             val row = selected.single()
             record(
@@ -381,11 +552,20 @@ class Sender(
         diagnostics = diagnostics.copy(lastAttemptElapsed = clock.elapsedMillis())
         var receivedResponse = false
         try {
-            val batch = batchEligible && batchSupported == true
+            val batch = batchPayload != null
+            val payload = batchPayload ?: selected.single().json
+            val started = clock.elapsedMillis()
+            val payloadBytes = payload.toByteArray(Charsets.UTF_8).size.toLong()
+            syncProgress =
+                syncProgress.copy(
+                    attemptedBytes = syncProgress.attemptedBytes + payloadBytes,
+                    lastBatchRecords = selected.size,
+                )
             val response =
-                if (batch) transport.history(state.endpoint, HistoryProtocol.batch(selected))
-                else transport.postRole(state.endpoint, selected.single().json, role)
+                if (batch) transport.history(state.endpoint, payload)
+                else transport.postRole(state.endpoint, payload, role)
             receivedResponse = true
+            syncProgress = syncProgress.copy(responses = syncProgress.responses + 1)
             commandReachable = true
             diagnostics = diagnostics.copy(lastHttpCode = response.code)
             if (store.state().endpointGeneration != state.endpointGeneration) return
@@ -400,7 +580,24 @@ class Sender(
                                 Protocol.decodeMessage(selected.single().json),
                             )
                         )
-                store.acceptBatch(selected, receipts, state.endpointGeneration)
+                syncProgress =
+                    syncProgress.copy(
+                        validAckRecords = syncProgress.validAckRecords + selected.size
+                    )
+                if (!store.applyBatch(selected, receipts, state.endpointGeneration)) {
+                    syncProgress =
+                        syncProgress.copy(
+                            lastError =
+                                "Stale endpoint receipt not applied; originals remain pending"
+                        )
+                    return
+                }
+                syncProgress =
+                    syncProgress.copy(
+                        ackedBytes = syncProgress.ackedBytes + payloadBytes,
+                        ackedRecords = syncProgress.ackedRecords + selected.size,
+                        lastError = null,
+                    )
                 selected.forEach { record(DiagnosticEvent.REPORT_ACK_ACCEPTED, it) }
                 if (role == "sos")
                     record(
@@ -417,20 +614,27 @@ class Sender(
                 waitUntil = 0
                 if (role == "status") lastRoutineElapsed = clock.elapsedMillis()
                 if (role != "sos") recovering = false
-                isolationLimit = 128
-                if (role == "history") adaptation.acknowledged()
+                isolationLimit = maximumBatchRecords
+                if (role == "history") {
+                    lastHistoryAck = clock.elapsedMillis()
+                    adaptation.acknowledged(
+                        payloadBytes,
+                        (clock.elapsedMillis() - started).coerceAtLeast(1),
+                        aggressive,
+                    )
+                }
                 return
             }
             if (batch && response.code in listOf(404, 405, 426)) {
                 batchSupported = false
-                adaptation.reset()
+                negotiateAfter = clock.elapsedMillis() + 60000
                 return
             }
             if (batch && response.code == 422 && response.json) {
                 val error = Protocol.parse(response.body)
                 if (error.get("error")?.asString == "unsupported_batch") {
                     batchSupported = false
-                    adaptation.reset()
+                    negotiateAfter = clock.elapsedMillis() + 60000
                     compatibilityWarning =
                         "Historical batch version unavailable; retaining individual v1 delivery."
                     return
@@ -445,11 +649,32 @@ class Sender(
                         true,
                         state.endpointGeneration,
                     )
-                    isolationLimit = 128
+                    isolationLimit = maximumBatchRecords
                     return
                 }
             }
-            if (batch && response.code in listOf(400, 413, 422)) {
+            if (response.code == 413) {
+                // Transport size is not evidence of poisoned GNSS. Retain and retry;
+                // a singleton batch uses individual v1 on the next attempt.
+                if (batch && selected.size == 1) {
+                    batchSupported = false
+                    negotiateAfter = clock.elapsedMillis() + 60000
+                } else if (batch) {
+                    maximumBatchBytes = maxOf(1, payloadBytes.toInt() / 2)
+                    isolationLimit = maxOf(1, selected.size / 2)
+                }
+                adaptation.reachableFailure()
+                nativeFailure(
+                    selected,
+                    503,
+                    response.retryAfter,
+                    "Transport size rejected (413); original retained",
+                    state,
+                    role,
+                )
+                return
+            }
+            if (batch && response.code in listOf(400, 422)) {
                 if (selected.size > 1) {
                     isolationLimit = maxOf(1, selected.size / 2)
                     return
@@ -468,9 +693,11 @@ class Sender(
                 selected,
                 response.code,
                 response.retryAfter,
-                "Command HTTP ${response.code}",
+                if (response.code == 429) RATE_LIMIT_RETRY_ERROR
+                else "Command HTTP ${response.code}",
                 state,
                 role,
+                response.historyOnlyThrottle,
             )
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
@@ -484,7 +711,7 @@ class Sender(
             }
             if (receivedResponse && transport.wifiAvailable()) {
                 if (role == "history") adaptation.reachableFailure()
-            } else adaptation.reset()
+            } else adaptation.reachableFailure()
             commandReachable = receivedResponse
             nativeFailure(selected, null, null, e.message ?: "ACK unavailable", state, role)
         }
@@ -497,10 +724,23 @@ class Sender(
         error: String,
         state: Installation,
         role: String,
+        historyOnlyThrottle: Boolean = false,
     ) {
+        syncProgress = syncProgress.copy(lastError = error)
         val count =
             if (role == "sos") rows.first().attempts + 1 else (failures + 1).coerceAtMost(32)
-        val retry = classify(code, count, after)
+        val baseRetry = classify(code, count, after)
+        // Positive-only jitter never violates Retry-After and desynchronizes fleet retries.
+        val retry =
+            baseRetry.copy(
+                delayMillis =
+                    (baseRetry.delayMillis +
+                            kotlin.random.Random.nextLong(
+                                0,
+                                (baseRetry.delayMillis / 4).coerceAtLeast(1),
+                            ))
+                        .coerceAtLeast(baseRetry.delayMillis)
+            )
         rows.forEach {
             store.fail(
                 it,
@@ -523,7 +763,15 @@ class Sender(
                 clock.elapsedMillis() +
                     retry.delayMillis.coerceAtMost(Long.MAX_VALUE - clock.elapsedMillis())
             recovering = true
+            if (code == 429) {
+                historyRateUntil = waitUntil
+                if (!historyOnlyThrottle) receiverWaitUntil = waitUntil
+            }
         }
+        syncProgress =
+            syncProgress.copy(
+                mode = "${if (aggressive) "Manual drain" else "Automatic"} waiting: $error"
+            )
         diagnostics =
             diagnostics.copy(
                 retryUntilElapsed =

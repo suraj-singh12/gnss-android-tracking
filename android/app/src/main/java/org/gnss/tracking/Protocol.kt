@@ -74,6 +74,7 @@ data class HistoryProgress(
     val unresolved_sequences: List<Long>,
     val known_collection_loss: Long,
     val measured_at: String,
+    val unresolved_sequence_count: Long? = null,
 )
 
 data class TrackingSession(val id: String, val startedMillis: Long)
@@ -113,8 +114,12 @@ object Protocol {
     fun isUuid(s: String) = uuid.matches(s)
 
     // Streaming parsing rejects duplicate keys at every depth, including ignored fields.
-    fun parse(json: String): JsonObject {
-        require(json.toByteArray(Charsets.UTF_8).size <= 65536) { "JSON exceeds limit" }
+    fun parse(json: String, maximumBytes: Int = 65536): JsonObject {
+        require(
+            maximumBytes in 1..2097152 && json.toByteArray(Charsets.UTF_8).size <= maximumBytes
+        ) {
+            "JSON exceeds limit"
+        }
         JsonReader(StringReader(json)).use { reader ->
             reader.strictness = Strictness.STRICT
             fun value(depth: Int): JsonElement {
@@ -205,6 +210,8 @@ object Protocol {
         if (m.type != "sos") tree.remove("sos")
         if (m.observation == null) tree.remove("observation")
         if (m.history_progress == null) tree.remove("history_progress")
+        else if (m.history_progress.unresolved_sequence_count == null)
+            tree.getAsJsonObject("history_progress").remove("unresolved_sequence_count")
         val json = gson.toJson(tree)
         decodeMessage(json) // Validate before committing any snapshot.
         return json
@@ -292,6 +299,10 @@ object Protocol {
                 whole(q, "oldest_pending_sequence", 1, n)
             val unresolved = field(q, "unresolved_sequences")
             require(unresolved.isJsonArray)
+            if (
+                q.has("unresolved_sequence_count") && !q.get("unresolved_sequence_count").isJsonNull
+            )
+                whole(q, "unresolved_sequence_count", unresolved.asJsonArray.size().toLong())
             unresolved.asJsonArray.forEach { value ->
                 val wrapper = JsonObject().apply { add("sequence", value) }
                 whole(wrapper, "sequence", 1, n)

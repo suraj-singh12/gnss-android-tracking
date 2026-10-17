@@ -68,15 +68,24 @@ type ObservationIdentity struct {
 	ElapsedMillis int64  `json:"measurement_elapsed_ms"`
 }
 type QueueProgress struct {
-	Session       string  `json:"tracking_session_id"`
-	SessionStart  string  `json:"session_started_at"`
-	Latest        int64   `json:"latest_committed_sequence"`
-	OldestPending *int64  `json:"oldest_pending_sequence"`
-	Pending       int64   `json:"pending_observations"`
-	Unresolved    []int64 `json:"unresolved_sequences"`
-	KnownLoss     int64   `json:"known_collection_loss"`
-	Measured      string  `json:"measured_at"`
+	Session         string  `json:"tracking_session_id"`
+	SessionStart    string  `json:"session_started_at"`
+	Latest          int64   `json:"latest_committed_sequence"`
+	OldestPending   *int64  `json:"oldest_pending_sequence"`
+	Pending         int64   `json:"pending_observations"`
+	Unresolved      []int64 `json:"unresolved_sequences"`
+	UnresolvedCount *int64  `json:"unresolved_sequence_count,omitempty"`
+	KnownLoss       int64   `json:"known_collection_loss"`
+	Measured        string  `json:"measured_at"`
 }
+
+func (q *QueueProgress) unresolvedCount() int {
+	if q.UnresolvedCount != nil {
+		return int(*q.UnresolvedCount)
+	}
+	return len(q.Unresolved)
+}
+
 type Message struct {
 	Observation *ObservationIdentity `json:"observation,omitempty"`
 	Progress    *QueueProgress       `json:"history_progress,omitempty"`
@@ -110,7 +119,13 @@ func Parse(b []byte) (Message, error) {
 	if err != nil {
 		return m, err
 	}
-	if err = checkRequest(v); err != nil {
+	return parseObject(v)
+}
+
+// The batch root has already passed strict duplicate-key/UTF-8 decoding.
+func parseObject(v map[string]any) (Message, error) {
+	var m Message
+	if err := checkRequest(v); err != nil {
 		return m, err
 	}
 	known := selectFields(v, "protocol_version", "type", "device_id", "party", "message_id", "sequence", "captured_at", "config_state", "health", "fix")
@@ -128,7 +143,7 @@ func Parse(b []byte) (Message, error) {
 			known[key] = v[key]
 		}
 	}
-	if err = validateObservation(v); err != nil {
+	if err := validateObservation(v); err != nil {
 		return m, err
 	}
 	canonical, err := json.Marshal(known)

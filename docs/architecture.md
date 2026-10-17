@@ -104,7 +104,7 @@ One serialized sender serves eligible SOS first, fresh live work next, then the
 oldest historical block. A live attempt grants a historical opportunity even when
 new callbacks continue. Status has an independent cadence. Historical batches are
 negotiated separately from individual v1/SOS, and adapt from one complete observation
-to about 20 KB without waiting for fill. No unrelated current/status ACK gate exists.
+to about 64 KB without waiting for fill, bounded by negotiated bytes/counts and local safety caps. One in-flight request per phone limits SQLite contention; independent phones make progress concurrently. No unrelated current/status ACK gate exists.
 Recovery blocks are contiguous pending sequences separated by delivery outcomes,
 not movement segments. Original envelopes and permanently unresolved errors remain
 retained. Android/OEM owns physical Wi-Fi reassociation; code recovers when a network
@@ -346,3 +346,33 @@ Provider I/O never holds the Store mutex. No background download or new storage
 engine. Local HGT import remains available. Map
 import/display/preparation never feeds reconstruction, raw observations, Recording,
 live/SOS state or qualified distance. There is no parallel database or projection.
+
+## Issue #22 synchronization changes
+
+Android retains one Room/outbox/Sender authority. Room v5 indexes retry deadlines and native measurement-time selection; v4 adds transactional derived
+queue counters; session progress uses bounded examples plus exact counts. Normal
+sync grows progressively with ACK RTT/goodput feedback. Local manual drain coalesces
+requests and accelerates discovery without resetting a healthy ramp or adding
+another engine. History-specific backoff does not suppress fresh LIVE. Endpoint
+receipt applicability and durable Room ACK writes return one atomic outcome.
+A user-started dataSync foreground lifetime can drain retained history with Tracking
+OFF and no GNSS acquisition. Process death/reboot still require operator reopening;
+OS/OEM budgets are not durability guarantees. See android/README.md for exact policy.
+
+Command still ACKs only committed SQLite raw/identity/receipt/work. Bounded history
+admission prevents an entire fleet queuing directly ahead of urgent traffic. The
+existing derived cache now stages per-device generation chunks and publishes pointers
+atomically. Large devices feed the same chronological Derivation in indexed keyset
+pages, closing readers between pages. Interrupted staging preserves the prior cache;
+legacy caches migrate without loading full geometry, and missing manifests rebuild
+from raw. Metadata distinguishes latest raw receipt from the projection's source set.
+
+Independent lightweight LIVE/SOS and bounded history-preview endpoints replace full
+history polling in the production dashboard. Full-resolution geometry/decisions and
+original envelopes remain inspectable through generation-pinned pages. Display LOD
+never changes qualified distance or raw authority. Large diagnostic ZIPs stream
+separate evidence files with explicit INCONCLUSIVE whole-corpus assessments. See
+command/README.md and protocol/protocol-v1.md for bounds and compatibility.
+
+Guidance remains identical to documentation-only branch chore/codex-repo-instructions
+at ca7b091e9032ac54e3ddd8d89a6b9ec414fb9f91; only AGENTS.md was transferred.

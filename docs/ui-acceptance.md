@@ -335,3 +335,24 @@ root/privileged hook, audio playback, extra foreground service or OEM-specific A
 Follow [Generic Android Physical Button Acceptance](../android/DEVICE-ACCEPTANCE.md)
 on actual hardware. Keep PRs #11, #12, #14 and #15 unmerged pending review and do
 not infer a physical-device pass from the rendered or JVM evidence.
+
+## Issue #22 synchronization controls and bounded history
+
+Sync All Now activates a distinct, coalesced manual drain on the existing Sender;
+Pause affects future history selection without erasing data or cancelling a durable
+in-flight ACK. Tracking OFF remains zero collection. A user-started dataSync service
+provides a visible notification/Pause action and a bounded execution lifetime after
+screen lock/backgrounding, subject to Android/OEM restrictions. Reboot/process death
+requires reopening. Automatic visible OFF delivery needs no tracking service.
+History separates pending, Room ACK and unresolved records from Command reconstruction.
+
+Command independently polls LIVE/SOS while bounded previews load. Large previews
+are labelled and capped at 2048 points; full qualified distance is unchanged. Inspect
+history pages original full-resolution geometry/decisions or retained envelopes with
+capture and receipt times. Quality/recording changes invalidate obsolete inspection
+cursors. Preserve party filtering, time boundaries, keyboard focus, SOS notification,
+separate human acknowledgement and raw-diagnostic qualification labels.
+
+Acceptance includes real Room/Sender→HTTP/SQLite tests and Chromium under backlog.
+These do not certify native Android screen-off/Doze/radio or desktop hardware; use
+android/DEVICE-ACCEPTANCE.md. Remote Sync All remains Issue #25.

@@ -161,6 +161,18 @@ class TrackingLifecycleTest {
                     delay(10)
                 }
             }
+            // Recovery now touches delayed rows only. Seed a genuine pending IO
+            // retry rather than depending on no-op writes of ready observations.
+            val at = System.currentTimeMillis()
+            val delayed = app.repository.snapshot(at, null, Health())
+            val deadline = at + 60000
+            app.repository.fail(
+                delayed,
+                "Wi-Fi unavailable",
+                deadline,
+                false,
+                app.repository.state().endpointGeneration,
+            )
             app.repository.db.openHelper.writableDatabase.execSQL(
                 "CREATE TRIGGER injected_failure BEFORE UPDATE ON outbox BEGIN SELECT RAISE(ABORT, 'injected disk failure'); END"
             )
@@ -176,6 +188,8 @@ class TrackingLifecycleTest {
                 }
             }
             shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
+            assertEquals(deadline, app.repository.dao.row(delayed.sequence)!!.nextAttemptMillis)
+            assertEquals(delayed.json, app.repository.dao.row(delayed.sequence)!!.json)
             assertTrue(app.diagnostics.value!!.loopError!!.contains("Connectivity recovery failed"))
             assertTrue(app.diagnostics.value!!.source.registered)
             assertTrue(ShadowPowerManager.getLatestWakeLock().isHeld)
@@ -334,5 +348,149 @@ class TrackingLifecycleTest {
         assertNotEquals(session.id, next.id)
         assertEquals(2L, app.repository.dao.session(session.id)!!.knownCollectionLoss)
         assertEquals(0L, app.repository.state().knownCollectionLoss)
+    }
+
+    @Test
+    fun localSyncControlsWhileStoppedStartOnlyDataTransferNeverLocation() = runBlocking {
+        app.repository.state()
+        val session = app.repository.beginTracking()
+        val at = System.currentTimeMillis() - 86400000L
+        val row =
+            app.repository.saveObservation(
+                CapturedObservation(
+                    Protocol.newId(),
+                    at,
+                    Fix(utc(at), 0, 28.0, 77.0, 1.0, null, null, null, null),
+                    Health(gnss_status = "fix"),
+                    null,
+                    1000000000L,
+                    CompletableDeferred(session),
+                )
+            )
+        app.repository.endTracking()
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup()
+        fun descendants(view: android.view.View): List<android.view.View> =
+            listOf(view) +
+                if (view is android.view.ViewGroup)
+                    (0 until view.childCount).flatMap { descendants(view.getChildAt(it)) }
+                else emptyList()
+        try {
+            val buttons =
+                descendants(activity.get().findViewById(android.R.id.content))
+                    .filterIsInstance<android.widget.Button>()
+            buttons.single { it.text == "Pause history sync" }.performClick()
+            assertTrue(app.operational.value.historyPaused)
+            buttons.single { it.text == "Sync All Now" }.performClick()
+            assertFalse(app.operational.value.historyPaused)
+            repeat(20) {
+                shadowOf(Looper.getMainLooper()).idle()
+                delay(10)
+            }
+            assertFalse(app.repository.state().tracking)
+            assertFalse(app.operational.value.tracking)
+            assertTrue(shadowOf(manager).getLocationUpdateListeners().isEmpty())
+            assertEquals(
+                RetainedTransferService::class.java.name,
+                shadowOf(app).nextStartedService.component!!.className,
+            )
+            assertTrue(shadowOf(manager).getLocationUpdateListeners().isEmpty())
+            assertEquals(listOf(row.json), app.repository.dao.all().map { it.json })
+        } finally {
+            activity.pause().stop().destroy()
+            app.finishForTests()
+        }
+    }
+
+    @Test
+    @Config(sdk = [35])
+    fun userTransferLifetimePromotesWithoutLocationAndPausePreservesData() = runBlocking {
+        val session = app.repository.beginTracking()
+        val at = System.currentTimeMillis() - 86400000
+        val row =
+            app.repository.saveObservation(
+                CapturedObservation(
+                    Protocol.newId(),
+                    at,
+                    Fix(utc(at), 0, 28.0, 77.0, 1.0, null, null, null, null),
+                    Health(gnss_status = "fix"),
+                    null,
+                    1000000,
+                    CompletableDeferred(session),
+                )
+            )
+        app.repository.endTracking()
+        app.syncAllNow()
+        val controller = Robolectric.buildService(RetainedTransferService::class.java).create()
+        try {
+            val service = controller.get()
+            assertEquals(
+                android.app.Service.START_NOT_STICKY,
+                service.onStartCommand(Intent(app, RetainedTransferService::class.java), 0, 1),
+            )
+            assertEquals(22, shadowOf(service).lastForegroundNotificationId)
+            assertNotNull(shadowOf(service).lastForegroundNotification)
+            assertTrue(shadowOf(manager).getLocationUpdateListeners().isEmpty())
+            assertFalse(app.repository.state().tracking)
+            service.onStartCommand(
+                Intent(app, RetainedTransferService::class.java).setAction("pause"),
+                0,
+                2,
+            )
+            assertTrue(app.operational.value.historyPaused)
+            assertEquals(listOf(row.json), app.repository.dao.all().map { it.json })
+        } finally {
+            controller.destroy()
+            app.finishForTests()
+        }
+        assertFalse(app.operational.value.transferActive)
+    }
+
+    @Test
+    @Config(sdk = [35])
+    fun pausingHistoryKeepsExistingForegroundLifetimeForSavedSOS() = runBlocking {
+        app.repository.settings("Field", "SOS", "http://127.0.0.1:1", 30)
+        val row =
+            SosEngine(app.repository, LatestLocation(SystemClock), { Health() }, SystemClock)
+                .activate(SosTrigger.SCREEN)
+                .row
+        app.syncAllNow()
+        val controller = Robolectric.buildService(RetainedTransferService::class.java).create()
+        try {
+            val service = controller.get()
+            service.onStartCommand(Intent(app, RetainedTransferService::class.java), 0, 1)
+            repeat(20) {
+                shadowOf(Looper.getMainLooper()).idle()
+                delay(10)
+            }
+            service.onStartCommand(
+                Intent(app, RetainedTransferService::class.java).setAction("pause"),
+                0,
+                2,
+            )
+            assertTrue(app.operational.value.historyPaused)
+            assertFalse(shadowOf(service).isStoppedBySelf)
+            assertTrue(service.retainedWorkStatus()!!.contains("SOS"))
+            assertTrue(app.repository.dao.pendingSosExists())
+            assertNull(app.repository.dao.row(row.sequence)!!.deliveredAt)
+            assertFalse(app.repository.state().tracking)
+            assertTrue(shadowOf(manager).getLocationUpdateListeners().isEmpty())
+            assertEquals(row.json, app.repository.dao.row(row.sequence)!!.json)
+            // Simulate the durable ACK boundary; networking is covered by the real bridge.
+            app.repository.dao.updateRow(
+                app.repository.dao
+                    .row(row.sequence)!!
+                    .copy(deliveredAt = utc(System.currentTimeMillis()))
+            )
+            assertNull(service.retainedWorkStatus())
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(16))
+            repeat(20) {
+                shadowOf(Looper.getMainLooper()).idle()
+                delay(10)
+            }
+            assertTrue(shadowOf(service).isStoppedBySelf)
+        } finally {
+            controller.destroy()
+            app.finishForTests()
+        }
     }
 }

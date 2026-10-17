@@ -520,3 +520,36 @@ Consistent clock skew into the past cannot be established by the wire protocol;
 report uncertain boundary attribution instead of substituting receipt time. This
 checklist validates reconstruction and diagnosis, not Issue #22 bulk-transfer speed
 or Issue #23 native Windows performance.
+
+## Issue #22 Tracking OFF and fleet acceptance — hardware pending
+
+Retain real observations, Stop Tracking and record provider/committed counts. With
+the app visible choose Sync All Now; verify queued/ACKed/unresolved facts against
+Command raw IDs and confirm **zero new GNSS fixes** and Tracking still OFF. Pause
+mid-transfer, retain the same IDs, resume and interrupt Wi-Fi three times. Kill/reopen
+the app and restart Command using the same databases; only rows lacking durable
+receipts should retry. Repeat with the screen locked/off and UI backgrounded,
+checking the dataSync notification/Pause action, five-hour app budget and Android
+15 aggregate budget. Record actual OS suspension rather than assuming execution.
+Automatic OFF transfer alone remains visible-app work; manual drain explicitly
+starts its permitted transfer lifetime. Validate notification-denied and FGS-start-
+denied paths, zero location-provider listeners, process kill, timeout and battery/OEM
+restrictions. Software service simulations do not certify those physical states.
+Reboot/force-stop require reopening; do not start GNSS merely to deliver old rows.
+
+Run 1/5/20 physical phones and join a 21st with retained history. Keep a disconnected
+phone explicitly unknown. During recovery trigger SOS, send real live fixes on
+tracking phones, change recording modes and quality policy. Compare exact retained
+IDs, route sections and unrounded distance with chronological reconstruction.
+Record request/byte density, Wi-Fi capacity, storage throughput and native OS/CPU;
+no universal 30-second guarantee is implied. Dense seven-day twenty-phone acceptance
+requires sufficient disk/RAM and cannot be inferred from sparse software fixtures.
+
+
+With Tracking OFF and a user-started saved-data foreground transfer, queue a new SOS,
+interrupt its ACK, then pause history from the notification and lock/background the
+phone. History selection must stop; the existing foreground lifetime must continue
+retrying the saved SOS (no location listener), within OS/app budgets. After its durable
+ACK, the paused transfer must stop. Repeat with GNSS history already drained but SOS
+waiting for its retry deadline. Robolectric covers lifecycle/Room policy only; actual
+screen-lock/radio/OEM execution still requires this handset acceptance step.

@@ -29,8 +29,9 @@ func run() error {
 	database := flag.String("db", filepath.Join(dir, "party-tracker", "command.sqlite"), "local SQLite file (back up while Command is stopped)")
 	ingest := flag.String("ingest-listen", ":8080", "LAN phone ingestion address")
 	local := flag.String("dashboard-listen", "127.0.0.1:8081", "local dashboard/control address")
+	batchBytes := flag.Int("history-batch-bytes", 65536, "negotiated history ceiling: 65536/131072/262144/524288/1048576/2097152; default preserves priority latency")
 	flag.Parse()
-	store, err := core.Open(*database)
+	store, err := core.OpenWithBatchLimit(*database, *batchBytes)
 	if err != nil {
 		return err
 	}

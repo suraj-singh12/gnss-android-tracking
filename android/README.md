@@ -42,7 +42,7 @@ and GPS enabled and Battery Saver off; notification refusal needs Settings befor
 that preserved Start intent can continue. Android itself allows an FGS without
 notification permission, but that is not healthy field setup.
 Start Tracking is a visible user action. Stop Tracking requires confirmation and
-stops collection/sending; pending messages remain for the next start. Reopening
+stops collection. Saved messages automatically synchronize while the app is visible, without restarting GNSS. The Tracking view's Saved GNSS sync bar uses current Room queue counts: acknowledgements since the view/manual-drain baseline divided by those acknowledgements plus **all currently pending GNSS**. If more observations are recorded while sending, the total increases and the percentage can fall; unresolved saved GNSS remains pending. The percentage refers to Android-local durable delivery, **not** Command's completed history reconstruction or any offline phone inventory. No estimated finish time is asserted. **Sync All Now** preserves learned capacity and accelerates the payload ramp using the same Sender; **Pause history sync** stops selecting new history requests, retaining every row. An in-flight request may still finish. SOS and live tracking remain independently eligible. Reopening
 the Activity does not restart or stop tracking. Reboot and force-stop require
 another explicit Start Tracking. Sticky service recreation can recover tracking
 and outbox after process death when Android permits it; it is not a bypass of
@@ -68,7 +68,7 @@ SSID/BSSID/MAC access is required.
 
 `TrackingService` owns `PlatformLocationSource`, reporting and the foreground
 sending loop. `TrackingApp` retains the shared `LatestLocation`, SOS engine and one
-`Sender`; while tracking is stopped its visible-Activity loop selects SOS only. Room stores one installation/configuration row plus immutable JSON
+`Sender`; while tracking is stopped its visible-Activity loop sends retained history and SOS through that same Sender, without generating GNSS or synthetic current snapshots. Closing/backgrounding the UI does not establish a transfer lifetime; reopen to resume, or use the existing user-started tracking service when collection is intended. Room stores one installation/configuration row plus immutable JSON
 snapshots and delivery metadata. Snapshot validation, sequence allocation, identity
 and outbox insertion occur in one transaction **before** transport. No destructive
 migration or backup restore is enabled; reinstall/data reset creates a new device
@@ -82,7 +82,7 @@ One sender prioritizes SOS, fresh live observations, oldest historical blocks an
 routine status. The same durable GNSS row supplies both live and history; no new fix
 copy is created on reconnect. Every live attempt grants historical work an opportunity.
 Historical eligibility needs no unrelated ACK. Negotiated atomic batches adapt from
-one observation through approximately 500 B/1/2/4/8/16/20 KB; permanent invalid entries
+one observation through approximately 500 B/1/2/4/8/16/20/32/64 KB, clamped to negotiated bytes and record counts (local safety caps 65,536 bytes and 128 records); permanent invalid entries
 remain unresolved while valid history continues. Old queued individual v1 envelopes
 remain deliverable. Missing capability falls back to individual envelopes with a warning.
 Transport uses 6-second calls and 3-second connections, network-bound DNS/sockets,
@@ -270,3 +270,87 @@ The sender reschedules the next live opportunity from its last live attempt when
 ## Issue #6 operational interface
 
 See [UI setup and acceptance](../docs/ui-acceptance.md) and [shared design system](../docs/design-system.md) for the three-destination Android interface, Command workspace, recording/quality controls, protected SOS and exactly two offline canvas/map modes. The existing tracking and SOS engines remain authoritative.
+
+### Issue #22 synchronization
+
+Room v5 retains every original envelope, observation/session ID, timestamp and ACKed
+row. Version 3's delivery/session index remains. Version 4 adds the derived single-row
+`outbox_summary`, seeded transactionally during migration and maintained by SQLite
+INSERT/UPDATE/DELETE triggers. Production queue observers read counters rather than
+scanning retained history after every fix/ACK. Missing summary initialization falls
+back to exact SQL counts; it never fabricates zero. Historical selection uses keyset pages of at most 64 complete rows and respects
+negotiated byte/count bounds before accumulating results. Session progress uses scalar
+queries; at most 256 unresolved sequence examples accompany an exact optional
+`unresolved_sequence_count`. Migration 1→2→3→4→5 never destructively recreates Room;
+older APKs cannot downgrade the schema. Version 5 adds delivery/deadline and
+measurement-time/sequence indexes. Reconnect/manual resume seeks only nonzero
+transient retry deadlines, leaving already-ready rows untouched and preserving
+HTTP 429 deadlines. Newest-native selection uses the time index instead of sorting
+the retained outbox. Sender completion uses an indexed existence check, not a repeated count of the entire pending history. These indexes do not change envelopes or observation order.
+
+The same Sender/outbox implements both policies. Automatic delivery starts with one
+observation, then targets 500/1000/2000/4000/8000/16000/20000/32000/64000 decimal bytes.
+It needs one history ACK through 2000 and two thereafter. Manual **Sync All Now**
+coalesces repeated presses, preserves the healthy ramp and advances two ladder
+levels per healthy ACK (RTT ≤1500 ms), prioritizing history over routine status while
+always retaining SOS and fresh LIVE opportunities. Neither policy waits to fill a
+batch, nor adds an artificial inter-request delay. Both use one in-flight request;
+fleet evidence does not justify additional phone concurrency. Where automatic sync
+already saturates safe capacity, manual mode cannot create extra capacity.
+
+Both policies compare RTT and useful-payload goodput. RTT above 1500 ms and twice
+the preceding RTT EWMA, combined with goodput below 60% of decaying best, reduces
+one level. Transport failures reduce one level rather than resetting to a single
+record. Healthy transient reconnects preserve adaptation; after more than two
+minutes without a history ACK, reconnection caps the retained target at 32000.
+An actual endpoint-generation change starts safely from one observation. Capability
+errors retry (15 seconds for an unsuccessful response; bounded retry after an
+exception); healthy capabilities refresh after five minutes, unsupported batch
+responses after one minute. These are service feedback rules, not RSSI estimation.
+
+Command defaults remain 65536 bytes/128 records. Explicit negotiated peers can use
+131072/262144/524288/1048576/2097152-byte upper ladder levels and up to 4096 records.
+Individual v1/SOS remain bounded to 65536 bytes. Historical call/read/write deadlines
+are 6..14 seconds by payload, connection deadline 3 seconds; urgent calls remain
+6 seconds. ACK bodies are independently bounded to 2 MiB for history. Complete
+immutable envelopes are sized once for batch construction. Oversize batch/413 can
+reduce the transport bound or fall back to individual v1; **413 never quarantines a
+valid original**. Indexed 422 poison isolation remains distinct.
+
+History/routine backoff does not block eligible fresh LIVE. Genuine receiver-wide
+429 still throttles ordinary traffic; `X-GNSS-Throttle-Scope: history` leaves LIVE
+eligible. SOS bypasses ordinary waiting and gets the next request after an in-flight
+call, while respecting its own saved retry deadline. Retry delays add 0..25%
+positive jitter to the 1/2/4/8/16/30-second base, never advancing numeric Retry-After.
+Manual/reconnect resume cannot bypass a retained HTTP 429 deadline, including SOS
+and process recreation. The existing persisted retry-reason value is kept stable;
+ordinary I/O retry deadlines can still be cleared without altering originals. Pause controls future
+selection, including queued steps, and preserves an in-flight receipt.
+
+Request attempts, received responses, validated ACK identities and ACKs actually
+committed in Room are distinct. The endpoint-generation check and ACK writes share
+one Room transaction, returning an applied/stale result. Only applied receipts count
+as successful delivery. Local counters reset with the process; Room counts survive.
+Command raw receipt and reconstruction remain separate; no global completion is
+inferred from unknown/offline phone inventory.
+
+With Tracking OFF, visible-app automatic transfer collects **zero new fixes**.
+User-started Sync All Now also starts a `dataSync` foreground-service lifetime,
+with a transfer notification/Pause action and bounded wakelock. The service owns no
+provider, queue or second Sender. It can continue after backgrounding/screen lock,
+subject to Android/OEM/Doze restrictions, permission/start restrictions and Android
+15's aggregate six-hour dataSync budget. It stops on completion, unresolved setup,
+Pause after retryable saved SOS is settled, Tracking taking over, OS timeout, or
+its own five-hour budget. Pausing history or finishing GNSS drain does not abandon
+a saved SOS waiting for its own retry deadline: the same foreground lifetime and
+Sender remain active for that emergency, without location acquisition. Unresolved
+receiver setup, OS termination and the time budget still stop execution honestly. It is
+START_NOT_STICKY: process death, force-stop and reboot require reopening/resuming;
+data durability does not imply autonomous execution. Android 13 notification
+permission affects notification visibility; the OS can still expose foreground work
+through its task manager. Background-start failures explicitly require keeping the
+app visible. Physical acceptance remains required.
+
+Command-originated Sync All Now remains Issue #25. This change does not alter GNSS
+acquisition/persistence cadence (#24), original recording/quality rules or human SOS
+acknowledgement.

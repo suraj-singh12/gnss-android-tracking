@@ -50,6 +50,10 @@ class MainActivity : Activity() {
     private lateinit var gnssSummary: TextView
     private lateinit var commandSummary: TextView
     private lateinit var historySummary: TextView
+    private lateinit var historyProgressLabel: TextView
+    private lateinit var historyProgressBar: ProgressBar
+    private var currentQueueCounts: QueueCounts? = null
+    private var historyProgressStartDelivered: Long? = null
     private lateinit var batterySummary: TextView
     private lateinit var cancelStartButton: Button
     private var destination = "Tracking"
@@ -120,6 +124,10 @@ class MainActivity : Activity() {
         pendingStart = savedInstanceState?.getBoolean("pendingStart") ?: false
         askedLocation = savedInstanceState?.getBoolean("askedLocation") ?: false
         askedNotifications = savedInstanceState?.getBoolean("askedNotifications") ?: false
+        historyProgressStartDelivered =
+            savedInstanceState
+                ?.takeIf { it.containsKey("historyProgressStartDelivered") }
+                ?.getLong("historyProgressStartDelivered")
         permissionInFlight = savedInstanceState?.getInt("permissionInFlight", 0)?.takeIf { it != 0 }
         if (pendingStart) app.operational.update { it.copy(starting = true) }
         if (savedInstanceState?.getBoolean("canceledSave") == true)
@@ -304,6 +312,33 @@ class MainActivity : Activity() {
                 }
             (card.layoutParams as LinearLayout.LayoutParams).topMargin = dp(8)
         }
+        historyProgressLabel =
+            TextView(this).apply {
+                text = "Saved GNSS sync · waiting for counts"
+                textSize = 14f
+                setTextColor(getColor(R.color.ink))
+                setPadding(dp(12), dp(8), dp(12), dp(4))
+            }
+        historyProgressBar =
+            ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+                max = 100
+                progress = 0
+                isIndeterminate = false
+                contentDescription = "Saved GNSS synchronization progress"
+                progressTintList =
+                    android.content.res.ColorStateList.valueOf(getColor(R.color.accent))
+            }
+        val historyIndex = content.indexOfChild(historySummary) + 1
+        content.addView(historyProgressLabel, historyIndex, LinearLayout.LayoutParams(-1, -2))
+        content.addView(
+            historyProgressBar,
+            historyIndex + 1,
+            LinearLayout.LayoutParams(-1, dp(8)).apply {
+                leftMargin = dp(12)
+                rightMargin = dp(12)
+                bottomMargin = dp(8)
+            },
+        )
         sosStatus = text("SOS · No saved event", 16f)
         sosStatus.accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         val sosButton =
@@ -413,6 +448,27 @@ class MainActivity : Activity() {
         content = group("Advanced technical evidence", false)
         status = text("Loading saved settings…")
         content = pages.getValue("Tracking")
+        button("Sync All Now") {
+            // A new manual drain gets its own progress baseline. Repeated presses
+            // and Pause -> Resume preserve the in-progress baseline.
+            val op = app.operational.value
+            if (!app.sender.aggressive && !op.drainStarting && !op.historyPaused)
+                historyProgressStartDelivered = currentQueueCounts?.deliveredGnss?.toLong()
+            app.syncAllNow()
+            if (!app.operational.value.tracking) {
+                try {
+                    startForegroundService(Intent(this, RetainedTransferService::class.java))
+                } catch (e: RuntimeException) {
+                    app.operational.update {
+                        it.copy(error = "Background transfer unavailable; keep this app visible")
+                    }
+                }
+            }
+        }
+        button("Pause history sync") { app.pauseHistory() }
+        text(
+            "Sync All Now uses a visible transfer notification, including with Tracking OFF, without collecting GNSS. Android may stop it; reopen after process death or reboot. Pause retains data; an in-flight receipt may finish."
+        )
         button("Check setup / permissions") { navigate("Settings") }
         content = pages.getValue("Settings")
         val fieldSettings = group("Permissions and battery readiness", false)
@@ -733,7 +789,9 @@ class MainActivity : Activity() {
                                     .replace("GPS: ", "")
                         val connection =
                             when {
-                                !op.tracking -> "Offline · Tracking stopped"
+                                app.sender.commandReachable == true -> "Command Connected"
+                                !op.tracking && op.health.wifi_connected == true ->
+                                    "Reconnecting · Tracking stopped"
                                 op.link.contains("Command reachable") -> "Command Connected"
                                 op.health.wifi_connected == true ->
                                     "Reconnecting · Command unavailable"
@@ -741,15 +799,42 @@ class MainActivity : Activity() {
                             }
                         commandSummary.text =
                             "Command\n$connection\nLast successful communication: ${state.lastAck ?: "None"}"
+                        currentQueueCounts = queues
+                        val progressBaseline =
+                            historyProgressStartDelivered
+                                ?: queues.deliveredGnss.toLong().also {
+                                    historyProgressStartDelivered = it
+                                }
+                        val sync = savedGnssSyncProgress(
+                            progressBaseline,
+                            queues.deliveredGnss.toLong(),
+                            queues.gnss.toLong(),
+                        )
+                        historyProgressBar.progress = sync.percentage
+                        historyProgressLabel.text =
+                            if (sync.total == 0L)
+                                "Saved GNSS sync · no observations pending"
+                            else
+                                "${sync.acknowledged} / ${sync.total} ACKed (${sync.percentage}%) · ${sync.pending} pending" +
+                                    if (queues.blocked > 0)
+                                        " · ${queues.blocked} unresolved messages"
+                                    else ""
+                        historyProgressBar.contentDescription =
+                            "Saved GNSS sync ${sync.percentage} percent; " +
+                                "${sync.acknowledged} of ${sync.total} currently known GNSS observations acknowledged, " +
+                                "${sync.pending} pending"
                         historySummary.text =
-                            "History\n" +
+                            "History · ${queues.deliveredGnss} ACKed · ${queues.blocked} unresolved\n${if (op.historyPaused) "Paused" else app.sender.syncProgress.mode}\n" +
                                 when {
                                     queues.blocked > 0 ||
                                         state.deliveryPaused ||
                                         state.knownCollectionLoss > 0 ||
                                         app.observationPersistence.state.awaitingCommit > 0 ->
                                         "Delivery problem · ${queues.gnss} GNSS pending"
-                                    queues.gnss == 0 -> "Fully synchronized"
+                                    queues.gnss == 0 ->
+                                        "All saved GNSS durably ACKed · Command reconstruction is separate"
+                                    op.historyPaused ->
+                                        "History paused · ${queues.gnss} GNSS pending"
                                     connection == "Command Connected" ->
                                         "Synchronizing · ${queues.gnss} GNSS pending"
                                     else -> "${queues.gnss} observations pending"
@@ -780,6 +865,14 @@ class MainActivity : Activity() {
                             appendLine(
                                 "Persistence: ${collection.awaitingCommit} awaiting commit · ${collection.writeFailures} failures"
                             )
+                            val transfer = app.sender.syncProgress
+                            appendLine(
+                                "This process: ${transfer.attemptedBytes} payload bytes attempted · ${transfer.ackedBytes} bytes durably ACKed · last batch ${transfer.lastBatchRecords} records"
+                            )
+                            transfer.lastError?.let { appendLine("Sync retry: $it") }
+                            appendLine(
+                                "History sync: ${if (op.historyPaused) "Paused" else app.sender.syncProgress.mode}"
+                            )
                             app.diagnostics.value?.let { diagnostic ->
                                 appendLine("Network: ${diagnostic.network}")
                                 appendLine("Transport: ${diagnostic.sender}")
@@ -790,7 +883,7 @@ class MainActivity : Activity() {
                             appendLine(
                                 if (op.starting) "Starting…"
                                 else if (op.tracking) "Tracking active"
-                                else "Tracking stopped — start to collect and send"
+                                else "Tracking stopped — saved history can sync without collection"
                             )
                             appendLine(op.fixDescription())
                             appendLine("Command: ${state.endpoint.ifEmpty { "Not configured" }}")
@@ -839,7 +932,7 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("Stop tracking on this phone?")
             .setMessage(
-                "Location collection and sending will stop. Saved pending messages remain on this phone until tracking starts again."
+                "Location collection will stop. Saved pending messages remain on this phone and can synchronize while the app is open, without restarting GNSS."
             )
             .setNegativeButton("Keep tracking", null)
             .setPositiveButton("Stop Tracking") { _, _ ->
@@ -1095,6 +1188,9 @@ class MainActivity : Activity() {
         outState.putBoolean("askedLocation", askedLocation)
         outState.putBoolean("askedNotifications", askedNotifications)
         outState.putInt("permissionInFlight", permissionInFlight ?: 0)
+        historyProgressStartDelivered?.let {
+            outState.putLong("historyProgressStartDelivered", it)
+        }
         super.onSaveInstanceState(outState)
     }
 

@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -32,11 +33,22 @@ func TestAndroidBridge(t *testing.T) {
 	s.Now = func() time.Time { return now }
 	var gate sync.Mutex
 	drop := false
+	var historyDelay atomic.Int64
+	var historyArrivals atomic.Int64
+	var receiptNanos atomic.Int64
 	phone := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/history" {
+			historyArrivals.Add(1)
+			if delay := historyDelay.Swap(0); delay > 0 {
+				time.Sleep(time.Duration(delay) * time.Millisecond)
+			}
+		}
 		gate.Lock()
 		defer gate.Unlock()
 		if !drop {
+			began := time.Now()
 			s.IngestHandler().ServeHTTP(w, r)
+			receiptNanos.Add(time.Since(began).Nanoseconds())
 			return
 		}
 		drop = false
@@ -80,6 +92,12 @@ func TestAndroidBridge(t *testing.T) {
 		gate.Lock()
 		result := map[string]any{}
 		switch input.Action {
+		case "receipt_timing":
+			result["nanos"] = receiptNanos.Load()
+		case "delay_history":
+			historyDelay.Store(input.Now)
+		case "history_arrivals":
+			result["count"] = historyArrivals.Load()
 		case "clock":
 			now = time.UnixMilli(input.Now).UTC()
 		case "drop":

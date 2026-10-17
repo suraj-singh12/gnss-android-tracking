@@ -296,7 +296,8 @@ class RepositoryTest {
             }
         sender.step()
         val failed = db.dao().row(current.sequence)!!
-        clock.now += 999
+        assertTrue(failed.nextAttemptMillis - clock.now in 1000..1249)
+        clock.now = failed.nextAttemptMillis - 1
         sender.step()
         assertEquals(listOf(current.json), payloads)
         assertEquals(failed, db.dao().row(current.sequence))
