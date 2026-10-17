@@ -73,9 +73,25 @@ c.rollback();c.close()`,database],{encoding:"utf8"});assert.equal(inspected.stat
   for(let n=1;n<=samples;){
    const messages=[];let bytes=32;
    while(n<=samples&&messages.length<128){const m=observation(d,n),size=Buffer.byteLength(JSON.stringify(m));if(messages.length&&bytes+size+1>64000)break;messages.push(m);bytes+=size+1;report.source_bytes+=size;n++;}
-   const body=JSON.stringify({batch_version:1,messages}),began=performance.now();active++;
-   const response=await fetch(phone+"/api/v1/history",{method:"POST",headers:{"Content-Type":"application/json"},body});const text=await response.text();active--;assert.equal(response.status,200,text);const a=JSON.parse(text).acks;assert.equal(a.length,messages.length);for(let i=0;i<a.length;i++){assert.equal(a[i].device_id,messages[i].device_id);assert.equal(a[i].message_id,messages[i].message_id);assert.equal(a[i].sequence,messages[i].sequence);}
-   historyRTT.push(performance.now()-began);report.history_requests++;report.request_body_bytes+=Buffer.byteLength(body);report.ack_body_bytes+=Buffer.byteLength(text);completed+=messages.length;
+   const body=JSON.stringify({batch_version:1,messages});
+   const retryDeadline=performance.now()+120000;
+   for(;;){
+    const began=performance.now();active++;report.history_requests++;report.request_body_bytes+=Buffer.byteLength(body);
+    let response,text;
+    try{response=await fetch(phone+"/api/v1/history",{method:"POST",headers:{"Content-Type":"application/json"},body,signal:AbortSignal.timeout(15000)});text=await response.text();}
+    finally{active--;}
+    if(response.status===429){
+     report.history_retry_responses=(report.history_retry_responses||0)+1;
+     report.error_response_body_bytes=(report.error_response_body_bytes||0)+Buffer.byteLength(text);
+     const value=response.headers.get("Retry-After");assert(value && /^[0-9]+$/.test(value),"Receiver must advertise bounded retry seconds");
+     const delay=Math.max(1000,Number(value)*1000)+Math.floor(Math.random()*250);
+     assert(Number.isSafeInteger(delay)&&performance.now()+delay<retryDeadline,"History backpressure did not resolve within the explicit per-batch retry budget");
+     report.history_retry_wait_ms=(report.history_retry_wait_ms||0)+delay;
+     await new Promise(r=>setTimeout(r,delay));continue;
+    }
+    assert.equal(response.status,200,text);const a=JSON.parse(text).acks;assert.equal(a.length,messages.length);for(let i=0;i<a.length;i++){assert.equal(a[i].device_id,messages[i].device_id);assert.equal(a[i].message_id,messages[i].message_id);assert.equal(a[i].sequence,messages[i].sequence);}
+    historyRTT.push(performance.now()-began);report.history_acked_requests=(report.history_acked_requests||0)+1;report.ack_body_bytes+=Buffer.byteLength(text);completed+=messages.length;break;
+   }
    if(phones>=20&&!lateStarted&&active>=10){lateStarted=true;report.late_join_active_http=active;report.late_join_acknowledged_history=completed;late=drain(phones+1);late.catch(()=>{});}
   }
  }

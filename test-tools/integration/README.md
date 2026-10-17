@@ -675,3 +675,12 @@ Pending summaries now expose an empty object; the renderer tolerates older null 
 and preserves focus independently for the device list and detail editor. The existing
 five-device UI test requires the complete list while Clear retains focus, rather
 than blurring the editor or relaxing its checkbox assertion.
+
+The fleet client honors actual history-only 429/Retry-After responses using the same
+immutable batch identities and a two-minute per-batch retry budget. Reports distinguish
+HTTP attempts, successful history requests, retry waits, ACK bytes and error-response
+bytes; all attempted request bodies count toward transferred bytes. A saturation 429
+is not silently called corruption or success. Network/other HTTP errors still fail
+this healthy-link capacity run; separate Room/fault regressions cover recovery.
+The Activity visual regression awaits the persisted interrupted diagnostic and
+debounced render within ten seconds; it retains the required state assertion.

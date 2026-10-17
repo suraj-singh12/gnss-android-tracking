@@ -367,8 +367,9 @@ func (s *Store) projectionLoop() {
 	}
 }
 
-// Read and compute outside the ingestion mutex. Apply only an unchanged raw/policy
-// generation; raw commits and SOS ACKs never wait for movement reconstruction.
+// Read and compute outside the ingestion mutex. Publish a captured raw prefix
+// only under unchanged policy; newer durable work stays queued. Raw/SOS receipts
+// never wait for movement reconstruction.
 func (s *Store) processProjection() error {
 	if !s.projectionMu.TryLock() {
 		return nil

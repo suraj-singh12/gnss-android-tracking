@@ -334,9 +334,22 @@ class UiNavigationVisualTest {
                         )
                         activity.pause().stop()
                         activity.start().resume()
+                        // Pause stops listening synchronously; the persisted diagnostic
+                        // and its debounced IO/render refresh complete asynchronously.
+                        assertFalse(app.physicalButtonTest.listening)
+                        withTimeout(10000) {
+                            while (
+                                descendants(tools).filterIsInstance<TextView>().none {
+                                    it.text.contains("Test status: INTERRUPTED")
+                                }
+                            ) {
+                                shadowOf(Looper.getMainLooper())
+                                    .idleFor(java.time.Duration.ofMillis(10))
+                                delay(10)
+                            }
+                        }
                         settle()
                         capture("diagnostics-interrupted")
-                        assertFalse(app.physicalButtonTest.listening)
                         assertTrue(
                             descendants(tools).filterIsInstance<TextView>().any {
                                 it.text.contains("Test status: INTERRUPTED")
