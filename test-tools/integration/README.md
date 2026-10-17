@@ -696,3 +696,9 @@ deadlines. Native Room regression migrates an actual seeded v4 database, preserv
 every original envelope/identity and 429 deadline, audits that only the one delayed
 IO row is updated (including repeated resets), and checks indexed range plans with
 no temporary native-time sort. v1/v3 migration tests now also validate the path to v5.
+
+Sender's eligible-history completion check is an indexed EXISTS predicate, not a
+COUNT across the retained pending queue on every backoff/UI-loop iteration. Exact
+operator counts still come from the transactional summary; the Boolean does not
+pretend to be a record count. Unknown legacy-store support still cannot certify
+completion. Real bridge assertions continue to verify every original row is ACKed.

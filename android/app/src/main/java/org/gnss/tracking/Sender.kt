@@ -448,14 +448,14 @@ class Sender(
             }
         }
         if (rows.isEmpty()) {
-            if (aggressive && store.pendingHistory() == 0L) {
+            if (aggressive && store.hasPendingHistory() == false) {
                 aggressive = false
                 syncProgress =
                     syncProgress.copy(
                         mode =
                             "Eligible history ACKed; inspect unresolved records; reconstruction separate"
                     )
-            } else if (!aggressive && !drainPaused && store.pendingHistory() == 0L) {
+            } else if (!aggressive && !drainPaused && store.hasPendingHistory() == false) {
                 syncProgress =
                     syncProgress.copy(
                         mode = "Eligible history ACKed; inspect unresolved; reconstruction separate"

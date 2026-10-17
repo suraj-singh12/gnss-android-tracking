@@ -1933,10 +1933,12 @@ class CommandIntegrationTest {
                 }
             if (manual) sender.requestDrain()
             val began = System.nanoTime()
-            repeat(300) { if (p.repository.pendingHistory() > 0) sender.step(retainedOnly = true) }
+            repeat(300) {
+                if (p.repository.hasPendingHistory() == true) sender.step(retainedOnly = true)
+            }
             sender.step(retainedOnly = true) // completion transition
             val elapsed = (System.nanoTime() - began) / 1000000
-            assertEquals(0L, p.repository.pendingHistory())
+            assertEquals(false, p.repository.hasPendingHistory())
             assertEquals(1200L, sender.syncProgress.ackedRecords)
             assertFalse(sender.aggressive)
             assertFalse(p.repository.state().tracking)

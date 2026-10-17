@@ -474,7 +474,7 @@ class HistoryDeliveryTest {
             assertEquals(before.ackedBytes, sender.syncProgress.ackedBytes)
             assertTrue(sender.syncProgress.validAckRecords > before.validAckRecords)
             assertTrue(sender.syncProgress.lastError!!.contains("not applied"))
-            assertTrue(r.pendingHistory() > 0)
+            assertTrue(r.hasPendingHistory() == true)
             sender.pauseDrain()
             assertFalse(sender.aggressive)
         } finally {
@@ -620,7 +620,7 @@ class HistoryDeliveryTest {
             assertTrue(largest > 128)
             assertTrue(largestAck > 65536)
             assertEquals(600L, sender.syncProgress.ackedRecords)
-            assertEquals(0L, r.pendingHistory())
+            assertEquals(false, r.hasPendingHistory())
             assertEquals(originals.map { it.json }, r.dao.all().map { it.json })
         } finally {
             db.close()

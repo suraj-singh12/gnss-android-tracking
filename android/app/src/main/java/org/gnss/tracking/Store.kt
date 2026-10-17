@@ -146,9 +146,9 @@ interface TrackingDao {
     suspend fun sessionPending(session: String): List<Outbound>
 
     @Query(
-        "SELECT COUNT(*) FROM outbox WHERE deliveredAt IS NULL AND type='location' AND quarantined=0"
+        "SELECT EXISTS(SELECT 1 FROM outbox WHERE deliveredAt IS NULL AND type='location' AND quarantined=0 LIMIT 1)"
     )
-    suspend fun pendingHistory(): Long
+    suspend fun hasPendingHistory(): Boolean
 
     @Query(
         "SELECT COUNT(*) FROM outbox WHERE trackingSession=:session AND deliveredAt IS NULL AND quarantined=0"
@@ -416,7 +416,7 @@ interface MessageStore {
         return state().endpointGeneration == generation
     }
 
-    suspend fun pendingHistory(): Long? = null
+    suspend fun hasPendingHistory(): Boolean? = null
 
     suspend fun resetTransientRetryTiming()
 
@@ -743,7 +743,7 @@ class Repository(val db: TrackingDatabase, private val clock: Clock = SystemCloc
         applyBatch(rows, receipts, generation)
     }
 
-    override suspend fun pendingHistory() = dao.pendingHistory()
+    override suspend fun hasPendingHistory() = dao.hasPendingHistory()
 
     override suspend fun applyBatch(
         rows: List<Outbound>,

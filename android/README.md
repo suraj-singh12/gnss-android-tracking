@@ -286,7 +286,7 @@ older APKs cannot downgrade the schema. Version 5 adds delivery/deadline and
 measurement-time/sequence indexes. Reconnect/manual resume seeks only nonzero
 transient retry deadlines, leaving already-ready rows untouched and preserving
 HTTP 429 deadlines. Newest-native selection uses the time index instead of sorting
-the retained outbox. These indexes do not change envelopes or observation order.
+the retained outbox. Sender completion uses an indexed existence check, not a repeated count of the entire pending history. These indexes do not change envelopes or observation order.
 
 The same Sender/outbox implements both policies. Automatic delivery starts with one
 observation, then targets 500/1000/2000/4000/8000/16000/20000/32000/64000 decimal bytes.
