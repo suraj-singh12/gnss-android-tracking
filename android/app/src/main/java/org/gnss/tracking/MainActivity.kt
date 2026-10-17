@@ -50,6 +50,10 @@ class MainActivity : Activity() {
     private lateinit var gnssSummary: TextView
     private lateinit var commandSummary: TextView
     private lateinit var historySummary: TextView
+    private lateinit var historyProgressLabel: TextView
+    private lateinit var historyProgressBar: ProgressBar
+    private var currentQueueCounts: QueueCounts? = null
+    private var historyProgressStartDelivered: Long? = null
     private lateinit var batterySummary: TextView
     private lateinit var cancelStartButton: Button
     private var destination = "Tracking"
@@ -120,6 +124,10 @@ class MainActivity : Activity() {
         pendingStart = savedInstanceState?.getBoolean("pendingStart") ?: false
         askedLocation = savedInstanceState?.getBoolean("askedLocation") ?: false
         askedNotifications = savedInstanceState?.getBoolean("askedNotifications") ?: false
+        historyProgressStartDelivered =
+            savedInstanceState
+                ?.takeIf { it.containsKey("historyProgressStartDelivered") }
+                ?.getLong("historyProgressStartDelivered")
         permissionInFlight = savedInstanceState?.getInt("permissionInFlight", 0)?.takeIf { it != 0 }
         if (pendingStart) app.operational.update { it.copy(starting = true) }
         if (savedInstanceState?.getBoolean("canceledSave") == true)
@@ -304,6 +312,33 @@ class MainActivity : Activity() {
                 }
             (card.layoutParams as LinearLayout.LayoutParams).topMargin = dp(8)
         }
+        historyProgressLabel =
+            TextView(this).apply {
+                text = "Saved GNSS sync · waiting for counts"
+                textSize = 14f
+                setTextColor(getColor(R.color.ink))
+                setPadding(dp(12), dp(8), dp(12), dp(4))
+            }
+        historyProgressBar =
+            ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+                max = 100
+                progress = 0
+                isIndeterminate = false
+                contentDescription = "Saved GNSS synchronization progress"
+                progressTintList =
+                    android.content.res.ColorStateList.valueOf(getColor(R.color.accent))
+            }
+        val historyIndex = content.indexOfChild(historySummary) + 1
+        content.addView(historyProgressLabel, historyIndex, LinearLayout.LayoutParams(-1, -2))
+        content.addView(
+            historyProgressBar,
+            historyIndex + 1,
+            LinearLayout.LayoutParams(-1, dp(8)).apply {
+                leftMargin = dp(12)
+                rightMargin = dp(12)
+                bottomMargin = dp(8)
+            },
+        )
         sosStatus = text("SOS · No saved event", 16f)
         sosStatus.accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         val sosButton =
@@ -414,6 +449,11 @@ class MainActivity : Activity() {
         status = text("Loading saved settings…")
         content = pages.getValue("Tracking")
         button("Sync All Now") {
+            // A new manual drain gets its own progress baseline. Repeated presses
+            // and Pause -> Resume preserve the in-progress baseline.
+            val op = app.operational.value
+            if (!app.sender.aggressive && !op.drainStarting && !op.historyPaused)
+                historyProgressStartDelivered = currentQueueCounts?.deliveredGnss?.toLong()
             app.syncAllNow()
             if (!app.operational.value.tracking) {
                 try {
@@ -759,6 +799,30 @@ class MainActivity : Activity() {
                             }
                         commandSummary.text =
                             "Command\n$connection\nLast successful communication: ${state.lastAck ?: "None"}"
+                        currentQueueCounts = queues
+                        val progressBaseline =
+                            historyProgressStartDelivered
+                                ?: queues.deliveredGnss.toLong().also {
+                                    historyProgressStartDelivered = it
+                                }
+                        val sync = savedGnssSyncProgress(
+                            progressBaseline,
+                            queues.deliveredGnss.toLong(),
+                            queues.gnss.toLong(),
+                        )
+                        historyProgressBar.progress = sync.percentage
+                        historyProgressLabel.text =
+                            if (sync.total == 0L)
+                                "Saved GNSS sync · no observations pending"
+                            else
+                                "${sync.acknowledged} / ${sync.total} ACKed (${sync.percentage}%) · ${sync.pending} pending" +
+                                    if (queues.blocked > 0)
+                                        " · ${queues.blocked} unresolved messages"
+                                    else ""
+                        historyProgressBar.contentDescription =
+                            "Saved GNSS sync ${sync.percentage} percent; " +
+                                "${sync.acknowledged} of ${sync.total} currently known GNSS observations acknowledged, " +
+                                "${sync.pending} pending"
                         historySummary.text =
                             "History · ${queues.deliveredGnss} ACKed · ${queues.blocked} unresolved\n${if (op.historyPaused) "Paused" else app.sender.syncProgress.mode}\n" +
                                 when {
@@ -1124,6 +1188,9 @@ class MainActivity : Activity() {
         outState.putBoolean("askedLocation", askedLocation)
         outState.putBoolean("askedNotifications", askedNotifications)
         outState.putInt("permissionInFlight", permissionInFlight ?: 0)
+        historyProgressStartDelivered?.let {
+            outState.putLong("historyProgressStartDelivered", it)
+        }
         super.onSaveInstanceState(outState)
     }
 
