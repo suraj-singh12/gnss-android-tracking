@@ -165,6 +165,10 @@ func TestSyncStoredColdReconstruction(t *testing.T) {
 	}
 	startup := time.Since(opened)
 	defer s.Close()
+	// Fingerprinting is fixture inspection on the worker's single reader. Hold
+	// the existing projection lock before borrowing it, including the first hash.
+	s.projectionMu.Lock()
+	defer s.projectionMu.Unlock()
 	fingerprint := func() ([32]byte, error) {
 		h := sha256.New()
 		rows, e := s.projectionDB.Query("SELECT device,message,wire,known FROM raw ORDER BY device,sequence")
@@ -190,8 +194,6 @@ func TestSyncStoredColdReconstruction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.projectionMu.Lock()
-	defer s.projectionMu.Unlock()
 	err = func() error {
 		s.mu.Lock()
 		defer s.mu.Unlock()

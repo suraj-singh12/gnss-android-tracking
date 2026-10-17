@@ -263,7 +263,35 @@ func (s *Store) validateProjectionCache() error {
 		}
 	}
 	if len(broken) == 0 {
-		return nil
+		var queued bool
+		if err = tx.QueryRow("SELECT EXISTS(SELECT 1 FROM projection_work LIMIT 1)").Scan(&queued); err != nil {
+			return err
+		}
+		if !st.ProjectionPending || queued {
+			return nil
+		}
+		// Older failure handling could persist pending=true after an idle reader
+		// timeout with no work. Recover by reconstructing, never by asserting that
+		// ACKs or a structurally valid cache alone prove completion.
+		work := 0
+		for device, d := range st.Devices {
+			if d.DurableObservations == 0 {
+				continue
+			}
+			if _, err = tx.Exec("INSERT INTO projection_work(device,earliest) VALUES(?,'')", device); err != nil {
+				return err
+			}
+			work++
+		}
+		st.ProjectionPending = work > 0
+		st.ProjectionError = ""
+		if work > 0 {
+			st.ProjectionError = "Pending state had no queued work; rebuilding retained history"
+		}
+		if err = saveReceiptState(tx, st); err != nil {
+			return err
+		}
+		return tx.Commit()
 	}
 	for device := range broken {
 		delete(h.Generations, device)

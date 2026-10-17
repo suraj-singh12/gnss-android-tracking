@@ -702,3 +702,12 @@ COUNT across the retained pending queue on every backoff/UI-loop iteration. Exac
 operator counts still come from the transactional summary; the Boolean does not
 pretend to be a record count. Unknown legacy-store support still cannot certify
 completion. Real bridge assertions continue to verify every original row is ACKed.
+
+The strict dense cold-reopen check exposed an idle-reader progress race: the fixture
+fingerprint borrowed the worker's sole reader before holding its projection lock,
+and a background timeout could persist pending=true with no queued work. The helper
+now takes that existing lock before its first fingerprint. Production failure
+recording requires queued work; startup requeues older orphan pending state through
+the existing worker. Regression distinguishes idle errors from real queued failures
+and verifies repair reconstructs before completion without changing raw envelopes.
+Earlier failed dense reports remain failures; they are not retroactively made green.

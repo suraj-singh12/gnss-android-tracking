@@ -917,3 +917,78 @@ func TestStreamedFleetCacheIsCompleteOnReopen(t *testing.T) {
 		t.Fatal("completed streamed cache requeued on restart", st.ProjectionError, work)
 	}
 }
+
+func TestIdleProjectionFailureCannotInventPendingAndOldOrphanStateRebuilds(t *testing.T) {
+	s, _, _ := open(t)
+	if err := s.ActionMode("start", "from_beginning"); err != nil {
+		t.Fatal(err)
+	}
+	s.projectionMu.Lock()
+	defer s.projectionMu.Unlock()
+	read := func() State {
+		tx, e := s.db.Begin()
+		if e != nil {
+			t.Fatal(e)
+		}
+		defer tx.Rollback()
+		st, e := loadReceiptState(tx)
+		if e != nil {
+			t.Fatal(e)
+		}
+		return st
+	}
+	s.recordProjectionFailure(context.DeadlineExceeded)
+	if st := read(); st.ProjectionPending || st.ProjectionError != "" {
+		t.Fatal("Idle failure invented pending work", st.ProjectionError)
+	}
+	m := observationMessage(t, 1, id())
+	wire := encode(t, m)
+	if _, err := s.Ingest(wire); err != nil {
+		t.Fatal(err)
+	}
+	s.recordProjectionFailure(context.DeadlineExceeded)
+	if st := read(); !st.ProjectionPending || st.ProjectionError == "" {
+		t.Fatal("Real pending failure was hidden")
+	}
+	if err := s.processProjectionLocked(); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := loadReceiptState(tx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.ProjectionPending = true
+	st.ProjectionError = context.DeadlineExceeded.Error()
+	if err = saveReceiptState(tx, st); err == nil {
+		err = tx.Commit()
+	} else {
+		tx.Rollback()
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.validateProjectionCache(); err != nil {
+		t.Fatal(err)
+	}
+	var work int
+	if err = s.db.QueryRow("SELECT COUNT(*) FROM projection_work").Scan(&work); err != nil || work != 1 {
+		t.Fatal("Orphan pending not requeued", work, err)
+	}
+	if !read().ProjectionPending {
+		t.Fatal("Repair falsely declared completion before reconstruction")
+	}
+	if err = s.processProjectionLocked(); err != nil {
+		t.Fatal(err)
+	}
+	if st = read(); st.ProjectionPending || st.ProjectionError != "" {
+		t.Fatal("Repair stalled", st.ProjectionError)
+	}
+	var retained []byte
+	if err = s.db.QueryRow("SELECT wire FROM raw WHERE device=? AND message=?", m.Device, m.ID).Scan(&retained); err != nil || !bytes.Equal(retained, wire) {
+		t.Fatal("Repair changed raw", err)
+	}
+}

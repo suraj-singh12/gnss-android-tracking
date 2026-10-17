@@ -826,6 +826,12 @@ func (s *Store) recordProjectionFailure(err error) {
 		return
 	}
 	defer tx.Rollback()
+	var pending bool
+	if e = tx.QueryRow("SELECT EXISTS(SELECT 1 FROM projection_work LIMIT 1)").Scan(&pending); e != nil || !pending {
+		// An idle reader timeout, or work completed before this error was recorded,
+		// must not invent pending geometry without durable work to process.
+		return
+	}
 	st, e := loadReceiptState(tx)
 	if e != nil {
 		return

@@ -729,3 +729,8 @@ Export readers close between pages, maintain SOS redaction, and abort on cancell
 cache-generation loss or write failure rather than return a valid truncated archive.
 Clients consuming schema 3 must process its NDJSON files. Native platform runtime,
 physical Android and dense-fleet capacity remain separate acceptance evidence.
+
+Projection failure status is conditional on durable queued work. An idle reader
+timeout cannot invent pending history. Startup detects older pending-without-work
+state and enqueues the existing reconstruction worker; it does not claim completion
+from an ACK or structurally valid cache alone. Original raw envelopes stay unchanged.
