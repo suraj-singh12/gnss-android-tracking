@@ -349,7 +349,7 @@ live/SOS state or qualified distance. There is no parallel database or projectio
 
 ## Issue #22 synchronization changes
 
-Android retains one Room/outbox/Sender authority. Room v4 adds transactional derived
+Android retains one Room/outbox/Sender authority. Room v5 indexes retry deadlines and native measurement-time selection; v4 adds transactional derived
 queue counters; session progress uses bounded examples plus exact counts. Normal
 sync grows progressively with ACK RTT/goodput feedback. Local manual drain coalesces
 requests and accelerates discovery without resetting a healthy ramp or adding

@@ -6,6 +6,11 @@ import kotlinx.coroutines.flow.Flow
 
 // Stable persisted retry reason used by existing outboxes; never localize this value.
 internal const val RATE_LIMIT_RETRY_ERROR = "Command HTTP 429"
+// Seek delayed rows only: ready records must not be rewritten on every resume.
+internal const val RESET_TRANSIENT_RETRY_SQL =
+    "UPDATE outbox SET nextAttemptMillis=0 WHERE deliveredAt IS NULL AND quarantined=0 AND nextAttemptMillis>0 AND (error IS NULL OR error!='" +
+        RATE_LIMIT_RETRY_ERROR +
+        "')"
 
 @Entity(tableName = "installation")
 data class Installation(
@@ -39,6 +44,8 @@ data class Installation(
         [
             Index(value = ["messageId"], unique = true),
             Index(value = ["deliveredAt", "quarantined", "sequence"]),
+            Index(value = ["deliveredAt", "quarantined", "nextAttemptMillis"]),
+            Index(value = ["observedMillis", "sequence"]),
             Index(value = ["trackingSession", "measurementKey"], unique = true),
             Index(value = ["deliveredAt", "type", "observedMillis"]),
             Index(
@@ -210,12 +217,7 @@ CASE WHEN EXISTS(SELECT 1 FROM outbox_summary WHERE `key`=1) THEN (SELECT delive
     )
     suspend fun releasePending()
 
-    @Query(
-        "UPDATE outbox SET nextAttemptMillis=0 WHERE deliveredAt IS NULL AND quarantined=0 AND (error IS NULL OR error!='" +
-            RATE_LIMIT_RETRY_ERROR +
-            "')"
-    )
-    suspend fun resetTransientRetryTiming()
+    @Query(RESET_TRANSIENT_RETRY_SQL) suspend fun resetTransientRetryTiming()
 
     @Query("SELECT * FROM outbox WHERE type='sos' ORDER BY sequence DESC LIMIT 1")
     suspend fun latestSos(): Outbound?
@@ -256,7 +258,7 @@ CASE WHEN EXISTS(SELECT 1 FROM outbox_summary WHERE `key`=1) THEN (SELECT delive
 
 @Database(
     entities = [Installation::class, Outbound::class, SessionRecord::class, OutboxSummary::class],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class TrackingDatabase : RoomDatabase() {
@@ -265,7 +267,7 @@ abstract class TrackingDatabase : RoomDatabase() {
     companion object {
         fun open(context: Context) =
             Room.databaseBuilder(context, TrackingDatabase::class.java, "tracking.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .addCallback(SUMMARY_CALLBACK)
                 .build()
 
@@ -293,6 +295,18 @@ abstract class TrackingDatabase : RoomDatabase() {
                     initializeSummary(db)
                 }
             }
+        val MIGRATION_4_5 =
+            object : androidx.room.migration.Migration(4, 5) {
+                override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "CREATE INDEX index_outbox_deliveredAt_quarantined_nextAttemptMillis ON outbox(deliveredAt,quarantined,nextAttemptMillis)"
+                    )
+                    db.execSQL(
+                        "CREATE INDEX index_outbox_observedMillis_sequence ON outbox(observedMillis,sequence)"
+                    )
+                }
+            }
+
         val MIGRATION_3_4 =
             object : androidx.room.migration.Migration(3, 4) {
                 override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {

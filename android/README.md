@@ -273,7 +273,7 @@ See [UI setup and acceptance](../docs/ui-acceptance.md) and [shared design syste
 
 ### Issue #22 synchronization
 
-Room v4 retains every original envelope, observation/session ID, timestamp and ACKed
+Room v5 retains every original envelope, observation/session ID, timestamp and ACKed
 row. Version 3's delivery/session index remains. Version 4 adds the derived single-row
 `outbox_summary`, seeded transactionally during migration and maintained by SQLite
 INSERT/UPDATE/DELETE triggers. Production queue observers read counters rather than
@@ -281,8 +281,12 @@ scanning retained history after every fix/ACK. Missing summary initialization fa
 back to exact SQL counts; it never fabricates zero. Historical selection uses keyset pages of at most 64 complete rows and respects
 negotiated byte/count bounds before accumulating results. Session progress uses scalar
 queries; at most 256 unresolved sequence examples accompany an exact optional
-`unresolved_sequence_count`. Migration 1→2→3→4 never destructively recreates Room;
-older APKs cannot downgrade the schema.
+`unresolved_sequence_count`. Migration 1→2→3→4→5 never destructively recreates Room;
+older APKs cannot downgrade the schema. Version 5 adds delivery/deadline and
+measurement-time/sequence indexes. Reconnect/manual resume seeks only nonzero
+transient retry deadlines, leaving already-ready rows untouched and preserving
+HTTP 429 deadlines. Newest-native selection uses the time index instead of sorting
+the retained outbox. These indexes do not change envelopes or observation order.
 
 The same Sender/outbox implements both policies. Automatic delivery starts with one
 observation, then targets 500/1000/2000/4000/8000/16000/20000/32000/64000 decimal bytes.

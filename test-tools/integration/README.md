@@ -413,7 +413,7 @@ unrun fleet cells explicitly incomplete; PR #35 remains draft pending acceptance
 New deterministic regressions cover endpoint changes *inside* ACK application,
 RTT/goodput pressure, manual coalescing/ramp, capability retry, history backoff versus
 fresh LIVE, oversized valid originals/413, negotiated requests/ACKs above 64 KiB,
-Room v3→v4 retained-data counters, and dataSync lifetime with no location listener.
+Room v3→v4→v5 retained-data counters and queue indexes, and dataSync lifetime with no location listener.
 Jitter tests assert the saved deadline and no early retry instead of assuming an
 exact unjittered second. No identity or safety assertion was removed.
 
@@ -689,3 +689,10 @@ The SOS Activity regression likewise waits for both independent notice and Room
 flow emissions: the storage-failure notice must coexist with the earlier retained
 SOS awaiting Command receipt. Both assertions and the single durable SOS assertion
 remain required; observing only the notice is not a completed UI state.
+
+Final Android queue review found no-op mass retry rewrites and an unindexed native
+latest-by-time subquery. Room v5 adds two indexes and resets only nonzero transient
+deadlines. Native Room regression migrates an actual seeded v4 database, preserves
+every original envelope/identity and 429 deadline, audits that only the one delayed
+IO row is updated (including repeated resets), and checks indexed range plans with
+no temporary native-time sort. v1/v3 migration tests now also validate the path to v5.

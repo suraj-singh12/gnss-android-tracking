@@ -1,0 +1,422 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 5,
+    "identityHash": "ae59d2fd50d4bf90a1e4a10e23b31fb0",
+    "entities": [
+      {
+        "tableName": "installation",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`key` INTEGER NOT NULL, `deviceId` TEXT NOT NULL, `sequence` INTEGER NOT NULL, `partyId` TEXT NOT NULL, `partyName` TEXT NOT NULL, `endpoint` TEXT NOT NULL, `localInterval` INTEGER NOT NULL, `authority` TEXT, `version` INTEGER NOT NULL, `overrideSeconds` INTEGER, `tracking` INTEGER NOT NULL, `lastAck` TEXT, `configError` TEXT, `operationalError` TEXT, `endpointGeneration` INTEGER NOT NULL, `deliveryPaused` INTEGER NOT NULL, `trackingSession` TEXT, `sessionStartedMillis` INTEGER, `observationSequence` INTEGER NOT NULL DEFAULT 0, `knownCollectionLoss` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`key`))",
+        "fields": [
+          {
+            "fieldPath": "key",
+            "columnName": "key",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deviceId",
+            "columnName": "deviceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sequence",
+            "columnName": "sequence",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "partyId",
+            "columnName": "partyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "partyName",
+            "columnName": "partyName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endpoint",
+            "columnName": "endpoint",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localInterval",
+            "columnName": "localInterval",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "authority",
+            "columnName": "authority",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "version",
+            "columnName": "version",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "overrideSeconds",
+            "columnName": "overrideSeconds",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "tracking",
+            "columnName": "tracking",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastAck",
+            "columnName": "lastAck",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "configError",
+            "columnName": "configError",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "operationalError",
+            "columnName": "operationalError",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "endpointGeneration",
+            "columnName": "endpointGeneration",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deliveryPaused",
+            "columnName": "deliveryPaused",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "trackingSession",
+            "columnName": "trackingSession",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sessionStartedMillis",
+            "columnName": "sessionStartedMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "observationSequence",
+            "columnName": "observationSequence",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "knownCollectionLoss",
+            "columnName": "knownCollectionLoss",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "key"
+          ]
+        }
+      },
+      {
+        "tableName": "outbox",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sequence` INTEGER NOT NULL, `messageId` TEXT NOT NULL, `type` TEXT NOT NULL, `capturedMillis` INTEGER NOT NULL, `json` TEXT NOT NULL, `deliveredAt` TEXT, `quarantined` INTEGER NOT NULL, `attempts` INTEGER NOT NULL, `nextAttemptMillis` INTEGER NOT NULL, `error` TEXT, `historical` INTEGER NOT NULL DEFAULT 0, `observedMillis` INTEGER, `trackingSession` TEXT, `observationSequence` INTEGER, `measurementKey` TEXT, PRIMARY KEY(`sequence`))",
+        "fields": [
+          {
+            "fieldPath": "sequence",
+            "columnName": "sequence",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "messageId",
+            "columnName": "messageId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "capturedMillis",
+            "columnName": "capturedMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "json",
+            "columnName": "json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deliveredAt",
+            "columnName": "deliveredAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "quarantined",
+            "columnName": "quarantined",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attempts",
+            "columnName": "attempts",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nextAttemptMillis",
+            "columnName": "nextAttemptMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "error",
+            "columnName": "error",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "historical",
+            "columnName": "historical",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "observedMillis",
+            "columnName": "observedMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "trackingSession",
+            "columnName": "trackingSession",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "observationSequence",
+            "columnName": "observationSequence",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "measurementKey",
+            "columnName": "measurementKey",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sequence"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_outbox_messageId",
+            "unique": true,
+            "columnNames": [
+              "messageId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_outbox_messageId` ON `${TABLE_NAME}` (`messageId`)"
+          },
+          {
+            "name": "index_outbox_deliveredAt_quarantined_sequence",
+            "unique": false,
+            "columnNames": [
+              "deliveredAt",
+              "quarantined",
+              "sequence"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_outbox_deliveredAt_quarantined_sequence` ON `${TABLE_NAME}` (`deliveredAt`, `quarantined`, `sequence`)"
+          },
+          {
+            "name": "index_outbox_deliveredAt_quarantined_nextAttemptMillis",
+            "unique": false,
+            "columnNames": [
+              "deliveredAt",
+              "quarantined",
+              "nextAttemptMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_outbox_deliveredAt_quarantined_nextAttemptMillis` ON `${TABLE_NAME}` (`deliveredAt`, `quarantined`, `nextAttemptMillis`)"
+          },
+          {
+            "name": "index_outbox_observedMillis_sequence",
+            "unique": false,
+            "columnNames": [
+              "observedMillis",
+              "sequence"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_outbox_observedMillis_sequence` ON `${TABLE_NAME}` (`observedMillis`, `sequence`)"
+          },
+          {
+            "name": "index_outbox_trackingSession_measurementKey",
+            "unique": true,
+            "columnNames": [
+              "trackingSession",
+              "measurementKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_outbox_trackingSession_measurementKey` ON `${TABLE_NAME}` (`trackingSession`, `measurementKey`)"
+          },
+          {
+            "name": "index_outbox_deliveredAt_type_observedMillis",
+            "unique": false,
+            "columnNames": [
+              "deliveredAt",
+              "type",
+              "observedMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_outbox_deliveredAt_type_observedMillis` ON `${TABLE_NAME}` (`deliveredAt`, `type`, `observedMillis`)"
+          },
+          {
+            "name": "index_outbox_deliveredAt_quarantined_type_trackingSession_observationSequence",
+            "unique": false,
+            "columnNames": [
+              "deliveredAt",
+              "quarantined",
+              "type",
+              "trackingSession",
+              "observationSequence"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_outbox_deliveredAt_quarantined_type_trackingSession_observationSequence` ON `${TABLE_NAME}` (`deliveredAt`, `quarantined`, `type`, `trackingSession`, `observationSequence`)"
+          }
+        ]
+      },
+      {
+        "tableName": "tracking_sessions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `startedMillis` INTEGER NOT NULL, `endedMillis` INTEGER, `knownCollectionLoss` INTEGER NOT NULL DEFAULT 0, `sequence` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedMillis",
+            "columnName": "startedMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endedMillis",
+            "columnName": "endedMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "knownCollectionLoss",
+            "columnName": "knownCollectionLoss",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "sequence",
+            "columnName": "sequence",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "outbox_summary",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`key` INTEGER NOT NULL, `pending` INTEGER NOT NULL, `gnss` INTEGER NOT NULL, `sos` INTEGER NOT NULL, `routine` INTEGER NOT NULL, `blocked` INTEGER NOT NULL, `deliveredGnss` INTEGER NOT NULL, `deliveredSos` INTEGER NOT NULL, `deliveredRoutine` INTEGER NOT NULL, PRIMARY KEY(`key`))",
+        "fields": [
+          {
+            "fieldPath": "key",
+            "columnName": "key",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "counts.pending",
+            "columnName": "pending",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "counts.gnss",
+            "columnName": "gnss",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "counts.sos",
+            "columnName": "sos",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "counts.routine",
+            "columnName": "routine",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "counts.blocked",
+            "columnName": "blocked",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "counts.deliveredGnss",
+            "columnName": "deliveredGnss",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "counts.deliveredSos",
+            "columnName": "deliveredSos",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "counts.deliveredRoutine",
+            "columnName": "deliveredRoutine",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "key"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'ae59d2fd50d4bf90a1e4a10e23b31fb0')"
+    ]
+  }
+}

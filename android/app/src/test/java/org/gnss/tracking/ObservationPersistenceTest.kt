@@ -232,6 +232,7 @@ class ObservationPersistenceTest {
                     TrackingDatabase.MIGRATION_1_2,
                     TrackingDatabase.MIGRATION_2_3,
                     TrackingDatabase.MIGRATION_3_4,
+                    TrackingDatabase.MIGRATION_4_5,
                 )
                 .build()
         try {
@@ -372,6 +373,8 @@ class ObservationPersistenceTest {
                     "DROP TRIGGER outbox_summary_$operation"
                 )
                 old.execSQL("DROP TABLE outbox_summary")
+                old.execSQL("DROP INDEX index_outbox_deliveredAt_quarantined_nextAttemptMillis")
+                old.execSQL("DROP INDEX index_outbox_observedMillis_sequence")
                 old.execSQL(
                     "UPDATE room_master_table SET identity_hash=? WHERE id=42",
                     arrayOf(schema["identityHash"].asString),
@@ -380,7 +383,7 @@ class ObservationPersistenceTest {
             }
         db =
             Room.databaseBuilder(app, TrackingDatabase::class.java, name)
-                .addMigrations(TrackingDatabase.MIGRATION_3_4)
+                .addMigrations(TrackingDatabase.MIGRATION_3_4, TrackingDatabase.MIGRATION_4_5)
                 .build()
         try {
             val upgraded = Repository(db, clock)
@@ -427,6 +430,98 @@ class ObservationPersistenceTest {
             assertNull(repo.sos(clock.now))
             assertEquals(rate.messageId, repo.sos(until)!!.messageId)
             assertEquals(rate.json, db.dao().row(rate.sequence)!!.json)
+        } finally {
+            db.close()
+            app.deleteDatabase(name)
+        }
+    }
+
+    @Test
+    fun versionFourUpgradeAndRetryResetTouchOnlyDelayedRows() = runBlocking {
+        val name = "retry-index-upgrade.db"
+        var db =
+            Room.databaseBuilder(app, TrackingDatabase::class.java, name)
+                .addCallback(TrackingDatabase.SUMMARY_CALLBACK)
+                .build()
+        try {
+            var repo = Repository(db, clock)
+            val writer = ObservationPersistence(repo::saveObservation, clock = clock)
+            repeat(48) { i ->
+                clock.now = 100000 + i * 1000L
+                assertTrue(writer.submit(observation(clock.now), Health(), null))
+            }
+            writer.finish()
+            val original = db.dao().all()
+            val io = original[0]
+            val rate = original[1]
+            val until = clock.now + 60000
+            repo.fail(io, "Wi-Fi unavailable", until, false, repo.state().endpointGeneration)
+            repo.fail(rate, RATE_LIMIT_RETRY_ERROR, until, false, repo.state().endpointGeneration)
+            val identity = repo.state().deviceId
+            db.close()
+            val schema =
+                Gson()
+                    .fromJson(
+                        listOf(
+                                File("schemas/org.gnss.tracking.TrackingDatabase/4.json"),
+                                File("app/schemas/org.gnss.tracking.TrackingDatabase/4.json"),
+                            )
+                            .first { it.exists() }
+                            .readText(),
+                        com.google.gson.JsonObject::class.java,
+                    )["database"]
+                    .asJsonObject
+            android.database.sqlite.SQLiteDatabase.openDatabase(
+                    app.getDatabasePath(name).path,
+                    null,
+                    android.database.sqlite.SQLiteDatabase.OPEN_READWRITE,
+                )
+                .use { old ->
+                    old.execSQL("DROP INDEX index_outbox_deliveredAt_quarantined_nextAttemptMillis")
+                    old.execSQL("DROP INDEX index_outbox_observedMillis_sequence")
+                    old.execSQL(
+                        "UPDATE room_master_table SET identity_hash=? WHERE id=42",
+                        arrayOf(schema["identityHash"].asString),
+                    )
+                    old.version = 4
+                }
+            db =
+                Room.databaseBuilder(app, TrackingDatabase::class.java, name)
+                    .addMigrations(TrackingDatabase.MIGRATION_4_5)
+                    .build()
+            repo = Repository(db, clock)
+            assertEquals(identity, repo.state().deviceId)
+            val sql = db.openHelper.writableDatabase
+            sql.execSQL("CREATE TABLE retry_mutations(sequence INTEGER NOT NULL)")
+            sql.execSQL(
+                "CREATE TRIGGER retry_mutation_audit AFTER UPDATE ON outbox BEGIN INSERT INTO retry_mutations VALUES(NEW.sequence); END"
+            )
+            repo.resetTransientRetryTiming()
+            repo.resetTransientRetryTiming() // Already-ready rows must not trigger writes again.
+            sql.query("SELECT sequence FROM retry_mutations").use { changes ->
+                assertTrue(changes.moveToNext())
+                assertEquals(io.sequence, changes.getLong(0))
+                assertFalse(changes.moveToNext())
+            }
+            assertEquals(0L, db.dao().row(io.sequence)!!.nextAttemptMillis)
+            assertEquals(until, db.dao().row(rate.sequence)!!.nextAttemptMillis)
+            assertEquals(original.map { it.json }, db.dao().all().map { it.json })
+            assertEquals(48, db.dao().queueCounts().first().gnss)
+            assertEquals(original.last().sequence, repo.live(clock.now)!!.sequence)
+            fun plan(query: String): String =
+                sql.query("EXPLAIN QUERY PLAN " + query).use { rows ->
+                    buildString { while (rows.moveToNext()) appendLine(rows.getString(3)) }
+                }
+            assertTrue(
+                plan(RESET_TRANSIENT_RETRY_SQL)
+                    .contains("index_outbox_deliveredAt_quarantined_nextAttemptMillis")
+            )
+            val latest =
+                plan(
+                    "SELECT sequence FROM outbox WHERE observationSequence IS NOT NULL AND observedMillis>=0 AND observedMillis<=999999 ORDER BY observedMillis DESC,sequence DESC LIMIT 1"
+                )
+            assertTrue(latest.contains("index_outbox_observedMillis_sequence"))
+            assertFalse(latest.contains("TEMP B-TREE"))
         } finally {
             db.close()
             app.deleteDatabase(name)
