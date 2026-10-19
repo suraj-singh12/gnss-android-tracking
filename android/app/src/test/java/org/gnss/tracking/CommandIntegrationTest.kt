@@ -973,6 +973,295 @@ class CommandIntegrationTest {
     }
 
     @Test
+    fun adaptiveAgainstDenseReferencesUsesRealRoomSenderAndCommandQualification(): Unit =
+        runBlocking {
+            recording("start")
+            val reports = mutableListOf<Map<String, Any>>()
+            for ((caseName, trace) in AdaptiveTraces.cases()) {
+                at(0)
+                val dense = phone()
+                val adaptive = phone()
+                val denseSession =
+                    kotlinx.coroutines.CompletableDeferred(dense.repository.beginTracking())
+                val adaptiveSession =
+                    kotlinx.coroutines.CompletableDeferred(adaptive.repository.beginTracking())
+                val policy = PersistencePolicy(enabled = true, changes = 1, effectiveAt = utc(base))
+                val sampler = AdaptivePersistence()
+                val original = trace.map { AdaptiveTraces.value(it, base) }
+                val retained = mutableListOf<CapturedObservation>()
+                trace.zip(original).forEach { (sample, value) ->
+                    retained.addAll(sampler.select(value, policy))
+                    if (sample.boundary) retained.addAll(sampler.boundary("lifecycle_or_sos"))
+                }
+                retained.addAll(sampler.boundary("stop"))
+                assertTrue(original.containsAll(retained))
+                assertEquals(original.first(), retained.first())
+                assertEquals(original.last(), retained.last())
+                val meaningful =
+                    trace.indices.filter { i ->
+                        i > 0 && (trace[i].bearing != trace[i - 1].bearing || trace[i].boundary)
+                    }
+                val retainedIds = retained.map { it.id }.toSet()
+                val missed =
+                    meaningful.count {
+                        original[it].id !in retainedIds || original[it - 1].id !in retainedIds
+                    }
+                // A gradual curve is evaluated geometrically; a change under 10 degrees
+                // is not counted as a discrete meaningful turn.
+                val discreteMissed =
+                    meaningful
+                        .filter { i ->
+                            trace[i].boundary ||
+                                (trace[i].bearing != null &&
+                                    trace[i - 1].bearing != null &&
+                                    kotlin.math.abs(
+                                        (trace[i].bearing!! - trace[i - 1].bearing!! + 540) % 360 -
+                                            180
+                                    ) >= 10)
+                        }
+                        .count {
+                            original[it].id !in retainedIds ||
+                                (!trace[it].boundary && original[it - 1].id !in retainedIds)
+                        }
+                assertEquals("$caseName missed turn/boundary", 0, discreteMissed)
+                for ((p, values, session) in
+                    listOf(
+                        Triple(dense, original, denseSession),
+                        Triple(adaptive, retained, adaptiveSession),
+                    )) {
+                    val replayClock =
+                        object : Clock {
+                            override fun wallMillis() = clock.wallMillis()
+
+                            override fun elapsedMillis() = 100000 + clock.now - base
+                        }
+                    val writer =
+                        ObservationPersistence(
+                            p.repository::saveObservation,
+                            clock = replayClock,
+                            policy = { policy.copy(enabled = p === adaptive) },
+                        )
+                    for ((sample, v) in trace.zip(original)) {
+                        clock.now = v.capturedMillis
+                        assertTrue(
+                            writer.submit(
+                                Observation(v.fix, v.elapsedNanos / 1000000, v.elapsedNanos),
+                                v.health,
+                                v.generation,
+                                session,
+                            )
+                        )
+                        if (sample.boundary) writer.retainBoundary("lifecycle_or_sos")
+                        while (writer.state.awaitingCommit >= 128) kotlinx.coroutines.delay(1)
+                    }
+                    writer.finish()
+                    assertEquals(
+                        values.map { it.fix },
+                        p.db.dao().all().map { Protocol.decodeMessage(it.json).fix },
+                    )
+                    assertEquals(values.size.toLong(), writer.state.committedObservations)
+                    p.repository.endTracking()
+                    p.reopen() // File-backed Room/process object restoration before transfer.
+                    at(trace.last().second.toLong() + 1)
+                    // Actual negotiated Sender uses the accepted #22 transport path.
+                    // Other bridge tests retain explicit older-peer fallback coverage.
+                    val adapter =
+                        object : Transport {
+                            override suspend fun post(endpoint: String, immutableJson: String) =
+                                p.transport.post(endpoint, immutableJson)
+
+                            override suspend fun capabilities(endpoint: String) =
+                                request(endpoint + "/api/v1/capabilities")
+
+                            override suspend fun history(endpoint: String, json: String): Response {
+                                for (entry in Protocol.parse(json).getAsJsonArray("messages")) {
+                                    val message = Protocol.decodeMessage(entry.toString())
+                                    assertEquals(
+                                        message,
+                                        Protocol.decodeMessage(
+                                            p.db.dao().row(message.sequence)!!.json
+                                        ),
+                                    )
+                                }
+                                return request(endpoint + "/api/v1/history", json)
+                            }
+                        }
+                    p.sender =
+                        Sender(p.repository, adapter, clock) { error("No synthetic current fix") }
+                    repeat(values.size + 5) { p.sender.step(retainedOnly = true) }
+                    assertTrue("$caseName pending", p.db.dao().all().all { it.deliveredAt != null })
+                    p.deliver(
+                        p.db.dao().all().first()
+                    ) // Duplicate remains exactly one raw identity.
+                }
+                fun qualified(p: Phone) = points().filter { it["device_id"].asString == p.id }
+                // Independent metric: these fixtures lie near the equator. Project
+                // Command's qualified coordinates to that local metre plane and use
+                // JDK line geometry, not the selector's distance/deviation functions.
+                fun referencePoint(point: JsonObject): Pair<Double, Double> {
+                    val fix = point["fix"].asJsonObject
+                    return Math.toRadians(fix["longitude"].asDouble) * 6371008.8 to
+                        Math.toRadians(fix["latitude"].asDouble) * 6371008.8
+                }
+                // Android's compile classpath omits AWT; load the independent host-JDK
+                // geometry method reflectively in this JVM-only integration harness.
+                val segmentDistance =
+                    Class.forName("java.awt.geom.Line2D")
+                        .getMethod("ptSegDist", *Array<Class<*>>(6) { java.lang.Double.TYPE })
+                val densePoints = qualified(dense).map(::referencePoint)
+                val sparse = qualified(adaptive)
+                val sparsePoints = sparse.map(::referencePoint)
+                val edges =
+                    sparse.indices.drop(1).filter {
+                        sparse[it - 1]["segment_id"] == sparse[it]["segment_id"]
+                    }
+                val maxDeviation =
+                    if (densePoints.isEmpty()) 0.0
+                    else
+                        densePoints.maxOf { point ->
+                            val endpoint =
+                                sparsePoints.minOfOrNull {
+                                    kotlin.math.hypot(
+                                        point.first - it.first,
+                                        point.second - it.second,
+                                    )
+                                } ?: Double.POSITIVE_INFINITY
+                            minOf(
+                                endpoint,
+                                edges.minOfOrNull { i ->
+                                    val a = sparsePoints[i - 1]
+                                    val b = sparsePoints[i]
+                                    segmentDistance.invoke(
+                                        null,
+                                        a.first,
+                                        a.second,
+                                        b.first,
+                                        b.second,
+                                        point.first,
+                                        point.second,
+                                    ) as Double
+                                } ?: endpoint,
+                            )
+                        }
+                val denseDistance = distance(dense)
+                val adaptiveDistance = distance(adaptive)
+                val distanceError = kotlin.math.abs(denseDistance - adaptiveDistance)
+                val intervals =
+                    retained.zipWithNext { a, b -> (b.elapsedNanos - a.elapsedNanos) / 1000000 }
+                val denseBytes = dense.db.dao().all().sumOf { it.json.toByteArray().size.toLong() }
+                val adaptiveBytes =
+                    adaptive.db.dao().all().sumOf { it.json.toByteArray().size.toLong() }
+                reports.add(
+                    linkedMapOf(
+                        "case" to caseName,
+                        "original" to original.size,
+                        "retained" to retained.size,
+                        "max_interval_ms" to intervals.max(),
+                        "min_interval_ms" to intervals.min(),
+                        "max_qualified_route_deviation_m" to maxDeviation,
+                        "missed_meaningful_turns" to discreteMissed,
+                        "unretained_small_heading_changes" to missed,
+                        "dense_qualified_m" to denseDistance,
+                        "adaptive_qualified_m" to adaptiveDistance,
+                        "distance_error_m" to distanceError,
+                        "dense_payload_bytes" to denseBytes,
+                        "adaptive_payload_bytes" to adaptiveBytes,
+                    )
+                )
+                println("ADAPTIVE_CASE " + com.google.gson.Gson().toJson(reports.last()))
+                System.getenv("GNSS_ADAPTIVE_REPORT")?.let {
+                    File(it)
+                        .writeText(
+                            com.google.gson
+                                .GsonBuilder()
+                                .setPrettyPrinting()
+                                .create()
+                                .toJson(reports)
+                        )
+                }
+                assertTrue("$caseName max route deviation $maxDeviation", maxDeviation <= 2.1)
+                assertTrue(
+                    "$caseName distance error $distanceError / $denseDistance",
+                    distanceError <= maxOf(2.1, denseDistance * 0.01),
+                )
+                // Cold rebuild uses the unchanged Command oracle, including all eight filters.
+                val reference = bridge.rpc("reference")
+                assertEquals(reference["decisions"], state()["decisions"])
+            }
+            val json = com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(reports)
+            println("ADAPTIVE_ACCURACY_REPORT " + json)
+            System.getenv("GNSS_ADAPTIVE_REPORT")?.let {
+                File(it).apply {
+                    parentFile?.mkdirs()
+                    writeText(json)
+                }
+            }
+        }
+
+    @Test
+    fun activeAdaptiveLiveCommitDoesNotChaseCallbacksAndSosUsesLatest() = runBlocking {
+        at(0)
+        recording("start")
+        val p = phone()
+        val session = kotlinx.coroutines.CompletableDeferred(p.repository.beginTracking())
+        val policy = PersistencePolicy(enabled = true, changes = 1, effectiveAt = utc(base))
+        val writer =
+            ObservationPersistence(
+                p.repository::saveObservation,
+                clock = clock,
+                policy = { policy },
+            )
+        val latest = LatestLocation(clock).apply { enabled = true }
+        suspend fun committed() =
+            kotlinx.coroutines.withTimeout(10000) {
+                while (writer.state.awaitingCommit > 0) kotlinx.coroutines.delay(1)
+            }
+        fun feed(second: Long) {
+            at(second)
+            val observation =
+                Observation(
+                    fix(clock.now, second * 3.0).copy(speed_mps = 3.0, bearing_deg = 90.0),
+                    clock.now,
+                )
+            assertTrue(writer.submit(observation, Health(gnss_status = "fix"), "active", session))
+            latest.update(observation)
+        }
+        for (n in 0L..13L) feed(n)
+        committed()
+        p.sender =
+            Sender(p.repository, p.transport, clock, prepareLive = writer::prepareLive) {
+                error("No invented LIVE fix")
+            }
+        p.sender.step() // Promote actual callback 13; no backlog HTTP before commit.
+        assertFalse(p.sender.attemptedLastStep)
+        assertTrue(p.sent.isEmpty())
+        committed()
+        feed(14) // A newer unsaved callback must not move the outstanding commit goal.
+        p.sender.step()
+        assertEquals(utc(base + 13000), Protocol.decodeMessage(p.sent.single()).fix!!.observed_at)
+        assertTrue(writer.samplingState.boundaryCandidate)
+        val sos =
+            SosEngine(
+                p.repository,
+                latest,
+                { Health(gnss_status = "fix") },
+                clock,
+                beforeSave = { writer.retainBoundary("sos_boundary") },
+            )
+        val event = sos.activate(SosTrigger.SCREEN)
+        p.sender.step()
+        assertEquals("sos", Protocol.decodeMessage(p.sent.last()).type)
+        assertEquals(utc(base + 14000), Protocol.decodeMessage(p.sent.last()).fix!!.observed_at)
+        p.delivered(event.row)
+        writer.finish()
+        p.repository.endTracking()
+        while (p.db.dao().hasPendingHistory()) p.sender.step(retainedOnly = true)
+        assertEquals(5L, writer.state.committedObservations)
+        assertEquals(6, raw().size()) // Five retained originals and one independent SOS.
+        assertTrue(p.db.dao().all().all { it.deliveredAt != null })
+    }
+
+    @Test
     fun invalidAcksStorageFailureConflictsAndRetryAfterAreSafe() = runBlocking {
         val p = phone()
         at(1)

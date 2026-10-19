@@ -189,6 +189,8 @@ class LanTransport(private val network: () -> Network?) : Transport {
 
 data class SyncTransferProgress(
     val attemptedBytes: Long = 0,
+    val attemptedGnssRecords: Long = 0,
+    val ackedGnssRecords: Long = 0,
     val responses: Long = 0,
     val validAckRecords: Long = 0,
     val mode: String = "Automatic",
@@ -220,6 +222,7 @@ class Sender(
     private val clock: Clock,
     private val evidence: (DiagnosticEvent, SosEvidence) -> Unit = { _, _ -> },
     private val deliveryEvidence: (DiagnosticEvent, ReportEvidence) -> Unit = { _, _ -> },
+    private val prepareLive: () -> Boolean = { true },
     private val capture: suspend () -> Outbound,
 ) {
     private fun record(kind: DiagnosticEvent, value: SosEvidence) {
@@ -398,15 +401,15 @@ class Sender(
             )
                 capture()
         }
-        val live =
-            if (
-                !retainedOnly &&
-                    priority == null &&
-                    (!historyNext || clock.elapsedMillis() < waitUntil) &&
-                    (recovering || clock.elapsedMillis() >= nextLiveElapsed)
-            )
-                store.live(now)
-            else null
+        val liveDue =
+            !retainedOnly &&
+                priority == null &&
+                (!historyNext || clock.elapsedMillis() < waitUntil) &&
+                (recovering || clock.elapsedMillis() >= nextLiveElapsed)
+        // No network/history request while the latest original is committing.
+        // The next step rechecks SOS before resuming this opportunity.
+        if (liveDue && !prepareLive()) return
+        val live = if (liveDue) store.live(now) else null
         val rows: List<Outbound>
         var role = "history"
         if (priority != null) {
@@ -559,6 +562,9 @@ class Sender(
             syncProgress =
                 syncProgress.copy(
                     attemptedBytes = syncProgress.attemptedBytes + payloadBytes,
+                    attemptedGnssRecords =
+                        syncProgress.attemptedGnssRecords +
+                            selected.count { it.type == "location" },
                     lastBatchRecords = selected.size,
                 )
             val response =
@@ -596,6 +602,9 @@ class Sender(
                     syncProgress.copy(
                         ackedBytes = syncProgress.ackedBytes + payloadBytes,
                         ackedRecords = syncProgress.ackedRecords + selected.size,
+                        ackedGnssRecords =
+                            syncProgress.ackedGnssRecords +
+                                selected.count { it.type == "location" },
                         lastError = null,
                     )
                 selected.forEach { record(DiagnosticEvent.REPORT_ACK_ACCEPTED, it) }

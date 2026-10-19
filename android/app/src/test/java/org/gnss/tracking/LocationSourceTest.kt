@@ -57,6 +57,23 @@ class LocationSourceTest {
         assertEquals(3.0, latest.currentFix()!!.horizontal_accuracy_m!!, 0.0)
         observe(141000) // More than the stale threshold since the first callback.
         assertEquals(utc(141000), latest.currentFix()!!.observed_at)
+        assertEquals(1L, source.diagnostics.callbackGaps)
+        clock.now = 142000
+        shadowOf(manager)
+            .simulateLocation(
+                Location(LocationManager.GPS_PROVIDER).apply {
+                    latitude = 28.0
+                    longitude = 77.0
+                    time = 100000
+                    elapsedRealtimeNanos = 100000L * 1000000
+                    accuracy = 3f
+                }
+            )
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(
+            1L,
+            source.diagnostics.callbackGaps,
+        ) // Old measurement is not an arrival outage.
         source.stop()
         source.stop()
         assertTrue(shadowOf(manager).getLocationUpdateListeners().isEmpty())

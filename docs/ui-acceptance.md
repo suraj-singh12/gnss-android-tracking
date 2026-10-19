@@ -356,3 +356,17 @@ separate human acknowledgement and raw-diagnostic qualification labels.
 Acceptance includes real Room/Sender→HTTP/SQLite tests and Chromium under backlog.
 These do not certify native Android screen-off/Doze/radio or desktop hardware; use
 android/DEVICE-ACCEPTANCE.md. Remote Sync All remains Issue #25.
+
+## Issue #24 Settings/Diagnostics acceptance
+
+Fresh/upgrade: Settings → GNSS persistence is collapsed and Adaptive is unchecked.
+Explicitly check it; confirm saved requested ON and effective Adaptive. Recreate the
+Activity and restart the process: saved intent remains; collection requires the
+existing permitted lifecycle. Uncheck: subsequent callbacks use dense capture.
+A failed preference write must show NOT SAVED/dense fallback. Unknown schema/revision
+must never enable selection. Policy changes must neither restart the location service
+nor edit old rows. Tracking layout/navigation/SOS/sync controls remain as before.
+Diagnostics differentiates valid callback candidates, selected/in-memory candidates,
+actual Room commits, intentional omissions, source gaps, pending/ACKed history and
+save failures; journal bounds still apply. A runtime fallback must remain visible
+even with requested ON. Physical TalkBack and OEM/OS behavior: NOT TESTED in JVM CI.

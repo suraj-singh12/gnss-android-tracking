@@ -566,6 +566,62 @@ class MainActivity : Activity() {
         appearanceButton.id = R.id.appearance
         settingsPage.removeView(appearanceButton)
         settingsPage.addView(appearanceButton, 2)
+        content = settingsPage
+        val persistenceSettings = group("GNSS persistence", false)
+        content = persistenceSettings
+        text(
+            "Adaptive persistence is optional and OFF by default. Tracking controls GNSS collection; SOS uses the latest native fix. Changes affect future fixes only.",
+            14f,
+        )
+        val adaptive =
+            android.widget.CheckBox(this).apply {
+                text = "Adaptive GNSS persistence"
+                minHeight = dp(48)
+                isChecked = app.persistencePolicy.state.enabled
+                content.addView(this)
+            }
+        val policyStatus =
+            text(
+                "Effective: ${if (app.persistencePolicy.state.enabled && app.observationPersistence.samplingState.fallback == null) "Adaptive ON" else "Dense OFF"}",
+                14f,
+            )
+        adaptive.setOnCheckedChangeListener { _, enabled ->
+            if (!adaptive.isEnabled) return@setOnCheckedChangeListener
+            adaptive.isEnabled = false
+            // The saved user action belongs to the application, so rotating or
+            // leaving this Activity cannot cancel an accepted preference write.
+            app.workScope.launch {
+                val result = runCatching {
+                    app.persistencePolicy.setEnabled(enabled, utc(SystemClock.wallMillis())).also {
+                        app.recorder.event(
+                            DiagnosticEvent.PERSISTENCE_POLICY_CHANGED,
+                            persistencePolicy = it,
+                        )
+                    }
+                }
+                if (result.isFailure)
+                    app.recorder.event(
+                        DiagnosticEvent.PERSISTENCE_POLICY_FAILED,
+                        persistencePolicy = app.persistencePolicy.state,
+                    )
+                withContext(Dispatchers.Main) {
+                    if (isDestroyed) return@withContext
+                    result.fold(
+                        onSuccess = { policy ->
+                            policyStatus.text =
+                                "Saved: ${if (policy.enabled) "Adaptive ON" else "Dense OFF"} · applies to future fixes"
+                        },
+                        onFailure = {
+                            adaptive.isChecked = false
+                            policyStatus.text =
+                                "Policy NOT SAVED · dense persistence effective. Check storage."
+                        },
+                    )
+                    adaptive.isEnabled = true
+                }
+            }
+        }
+
         content = pages.getValue("Diagnostics")
         val diagnosticTools =
             LinearLayout(this).apply {
@@ -752,8 +808,13 @@ class MainActivity : Activity() {
                     app.repository.dao.queueCounts(),
                     app.repository.dao.blockedError(),
                     app.operational,
-                ) { state, queues, blockedError, op ->
+                    app.persistencePolicy.updates,
+                ) { state, queues, blockedError, op, localPolicy ->
                     if (state != null) {
+                        val oldestPending =
+                            withContext(Dispatchers.IO) {
+                                app.repository.dao.oldestPendingCapturedMillis()?.let { utc(it) }
+                            }
                         if (!initialized) {
                             partyId.setText(state.partyId)
                             partyName.setText(state.partyName)
@@ -841,7 +902,22 @@ class MainActivity : Activity() {
                                 }
                         batterySummary.text =
                             "Battery · ${op.health.battery_percent?.let { "$it%" } ?: "Unavailable"}${if (op.health.charging == true) " · Charging" else ""}"
+                        if (adaptive.isEnabled) {
+                            adaptive.isEnabled = false
+                            adaptive.isChecked = localPolicy.enabled
+                            adaptive.isEnabled = true
+                            policyStatus.text =
+                                "Requested: ${if (localPolicy.enabled) "ON" else "OFF"} · effective: ${if (localPolicy.enabled && app.observationPersistence.samplingState.fallback == null) "Adaptive" else "Dense"}" +
+                                    (app.observationPersistence.samplingState.fallback
+                                            ?: localPolicy.error)
+                                        ?.let { " · $it" }
+                                        .orEmpty()
+                        }
                         diagnosticsSummary.text = buildString {
+                            val fallback = app.observationPersistence.samplingState.fallback
+                            appendLine(
+                                "GNSS persistence · ${if (localPolicy.enabled && fallback == null) "Adaptive ON" else "Dense OFF"}${if (fallback != null) " · fallback" else ""}"
+                            )
                             appendLine("Tracking · ${if (op.tracking) "Active" else "Stopped"}")
                             appendLine(op.fixDescription().replace("GPS:", "GNSS:"))
                             appendLine("Command · $connection")
@@ -858,6 +934,32 @@ class MainActivity : Activity() {
                         }
                         status.text = buildString {
                             appendLine("Device: ${state.deviceId}")
+                            val sampling = app.observationPersistence.samplingState
+                            val policy = localPolicy
+                            appendLine(
+                                "Persistence policy · ${if (policy.enabled && sampling.fallback == null) "Adaptive ON" else "Dense OFF"} · revision ${policy.revision} · changes ${policy.changes} · saved change ${policy.effectiveAt ?: "default"} · first callback applied ${sampling.firstCallbackAppliedAt ?: "none this process"}"
+                            )
+                            app.diagnostics.value?.source?.let {
+                                appendLine(
+                                    "This service · ${it.locationCallbacks} native location callbacks · ${it.callbackGaps} arrival gaps >2.5 s · ${it.rejectedObservations} rejected/stale for latest display"
+                                )
+                            }
+                            appendLine(
+                                "This Sender · ${app.sender.syncProgress.attemptedGnssRecords} GNSS record attempts · ${app.sender.syncProgress.ackedGnssRecords} GNSS records ACKed (retries may repeat attempts)"
+                            )
+                            appendLine(
+                                "This process · ${sampling.candidates} valid callback candidates · ${app.observationPersistence.state.committedObservations} originals committed · ${sampling.intentionallyNotSelected} intentionally sampled · ${sampling.callbackGaps} valid-candidate arrival gaps"
+                            )
+                            appendLine(
+                                "Boundary candidate in memory: ${sampling.boundaryCandidate} · ${sampling.reason}"
+                            )
+                            (sampling.fallback ?: policy.error)?.let { appendLine(it) }
+                            appendLine(
+                                "GNSS durably ACKed · ${queues.deliveredGnss} · pending ${queues.gnss}"
+                            )
+                            appendLine(
+                                "Storage free · ${filesDir.usableSpace / (1024 * 1024)} MiB · ${if (filesDir.usableSpace < 64L * 1024 * 1024) "LOW — new durable capture at risk" else "no automatic deletion"}"
+                            )
                             appendLine(
                                 "GNSS observations: ${state.observationSequence} · known collection loss: ${state.knownCollectionLoss}"
                             )
@@ -872,6 +974,9 @@ class MainActivity : Activity() {
                             transfer.lastError?.let { appendLine("Sync retry: $it") }
                             appendLine(
                                 "History sync: ${if (op.historyPaused) "Paused" else app.sender.syncProgress.mode}"
+                            )
+                            appendLine(
+                                "Oldest pending envelope capture: ${oldestPending ?: "None"}"
                             )
                             app.diagnostics.value?.let { diagnostic ->
                                 appendLine("Network: ${diagnostic.network}")

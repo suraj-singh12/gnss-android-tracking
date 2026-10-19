@@ -238,9 +238,11 @@ request timeout (current default 6 s overall, 3 s connection); no limit on trans
 block new current snapshots or SOS behind indefinitely failing backlog. Serialization
 and storage failures must be visible rather than quietly losing observations.
 
-Android preserves every distinct structurally valid native Location measurement in
-its existing outbox. Reporting cadence controls live delivery/status, not history
-resolution. Live/history reuse the same identity. SOS preempts; live attempts grant
+Android by default preserves every distinct structurally valid native Location
+measurement in its existing outbox. The authorized Issue #24 local opt-in persistence
+policy may select fewer original measurements; it is OFF for fresh/upgrade/absent
+consent and changes future capture only. Reporting cadence controls live delivery/status,
+independently of native acquisition. LIVE may promote a real pending candidate. Live/history reuse the same identity. SOS preempts; live attempts grant
 oldest history an opportunity; there is no unrelated ACK gate. Recovery selects a
 fresh committed observation when available, never creates another copy of it. A stale
 observation remains historical. Satellite-status callbacks are not locations. The
@@ -265,6 +267,12 @@ A new `location` may add `observation`:
 ```json
 {"observation_id":"00000000-0000-4000-8000-000000000001","tracking_session_id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","session_started_at":"2026-10-06T12:00:00.000Z","observation_sequence":1,"measurement_elapsed_ms":1000}
 ```
+
+Intentional local persistence selection does not consume observation sequences or
+create `known_collection_loss`: sequences inventory committed originals, not native
+callbacks. Callback/selection counts and policy boundaries are Android diagnostics,
+not new v1 fields. Older peers receive unchanged original envelopes. Contiguous
+retained sequences do not assert 1 Hz geographic coverage or interpolate skipped fixes.
 
 Observation ID equals message ID. Observation sequences start at 1 per durable
 Android tracking session and commit with the observation. Envelope sequence

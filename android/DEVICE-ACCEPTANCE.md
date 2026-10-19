@@ -553,3 +553,25 @@ retrying the saved SOS (no location listener), within OS/app budgets. After its 
 ACK, the paused transfer must stop. Repeat with GNSS history already drained but SOS
 waiting for its retry deadline. Robolectric covers lifecycle/Room policy only; actual
 screen-lock/radio/OEM execution still requires this handset acceptance step.
+
+## Issue #24 physical adaptive acceptance — NOT TESTED
+
+Use a signing-compatible upgrade or separate handset; preserve pending evidence.
+Verify OFF on fresh install and upgrade, dense callback/commit counts, then explicitly
+opt in in Settings. Export diagnostics for OFF/ON, policy changes while tracking,
+Activity recreation, process kill/sticky recovery, screen-off and Stop/Start. Verify
+one listener, original timestamps, live freshness, immediate freshest-real-fix SOS,
+priority delivery under backlog, offline/reconnect and low-storage failures. Never
+claim a sampled callback was committed. Check requested mode versus effective fallback.
+
+Walk and drive routes including slow curves, sharp corners, hairpin, reversal,
+rapid acceleration/deceleration, stationary jitter, weak sky view and GNSS outage.
+Use a separately recorded dense reference with known original measurement times for
+route comparisons; repeated physical traversals are not identical reference data.
+Use Command's same eight filters for both references. Record callback/commit/ACK
+counts, retention intervals, maximum geometric deviation, lost meaningful turns,
+qualified distance differences, payload/disk bytes and battery on each OEM/OS.
+Run 1/2/7-day and 20-phone plus late-21st LAN scenarios with SOS/LIVE backlog probes.
+Software replay and scaled fleet-volume estimates do not establish these physical
+results. No native macOS/Windows execution or field battery/accuracy acceptance is
+inferred from portable cross-builds.

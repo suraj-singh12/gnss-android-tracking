@@ -22,6 +22,7 @@ data class SourceState(
     val lastLocationCallback: Long? = null,
     val lastGnssCallback: Long? = null,
     val locationCallbacks: Long = 0,
+    val callbackGaps: Long = 0,
     val gnssCallbacks: Long = 0,
     val rejectedObservations: Long = 0,
     val lastRejection: String? = null,
@@ -141,6 +142,8 @@ data class GnssDiagnostic(
     val sender: SenderState? = null,
     val collection: CollectionState? = null,
     val knownCollectionLoss: Long? = null,
+    val storageAvailableBytes: Long? = null,
+    val oldestPendingCapturedAt: String? = null,
 )
 
 data class NetworkState(
@@ -234,6 +237,9 @@ enum class DiagnosticEvent {
     REPORT_ACK_ACCEPTED,
     REPORT_RETRY,
     NETWORK_CHANGED,
+    PERSISTENCE_POLICY_CHANGED,
+    PERSISTENCE_POLICY_RESTORED,
+    PERSISTENCE_POLICY_FAILED,
     PHYSICAL_BUTTON_TEST_STARTED,
     PHYSICAL_BUTTON_TEST_STOPPED,
     PHYSICAL_BUTTON_TEST_CLEARED,
@@ -254,6 +260,7 @@ data class DiagnosticEntry(
     val sos: SosEvidence? = null,
     val report: ReportEvidence? = null,
     val physicalButton: PhysicalButtonEvidence? = null,
+    val persistencePolicy: PersistencePolicy? = null,
 )
 
 data class IncidentSummary(
@@ -1125,6 +1132,7 @@ class DiagnosticRecorder(
         source: SourceState? = null,
         startReason: ServiceStartReason? = null,
         report: ReportEvidence? = null,
+        persistencePolicy: PersistencePolicy? = null,
     ) {
         val e =
             DiagnosticEntry(
@@ -1135,6 +1143,7 @@ class DiagnosticRecorder(
                 source = source,
                 startReason = startReason,
                 report = report,
+                persistencePolicy = persistencePolicy,
             )
         if (!messages.trySend(e).isSuccess) {
             lost.incrementAndGet()

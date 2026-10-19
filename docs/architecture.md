@@ -26,8 +26,17 @@ Protocol v1 is their only contract. Both can use shared examples and independent
 mocks to develop in parallel after Issue #1 is reviewed and merged.
 
 Android's foreground service requests GPS_PROVIDER observations at about one second,
-independently of Activity visibility, Wi-Fi and reporting cadence. Every structurally
-valid distinct measurement enters one bounded IO handoff and the existing Room outbox.
+independently of Activity visibility, Wi-Fi and reporting cadence. By default every
+structurally valid distinct measurement enters one bounded IO handoff and the existing
+Room outbox. Issue #24 adds an explicitly enabled local persistence selector at that
+handoff, OFF for fresh/upgrade/absent consent. It retains only actual originals;
+Command qualification/reconstruction is unchanged. Versioned local effective policy
+uses one atomic preference record, separate from reporting overrides; unknown or
+failed behavior falls back densely. No remote control (#25) or new wire fields exist.
+One pending original provides boundary lookback; abrupt process death before commit
+can lose it, just as it can lose the existing memory handoff. LIVE opportunities and
+SOS boundaries promote real candidates through the same writer, independently of
+native collection. See Android README for thresholds, diagnostics and limitations.
 The same immutable observation ID and per-session sequence are used for live/history.
 Explicit Start creates a durable Android session; sticky restart preserves it; Stop
 ends it. Status and SOS retain separate envelope numbering. Reporting cadence controls

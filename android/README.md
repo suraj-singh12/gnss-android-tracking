@@ -64,6 +64,117 @@ quality policy. GNSS accuracy/altitude/speed/bearing use platform `has*` flags.
 Wi-Fi RSSI is nullable (including on older platforms/redacted callbacks); no
 SSID/BSSID/MAC access is required.
 
+## Optional adaptive GNSS persistence (Issue #24)
+
+**OFF is the default**, for fresh installs, upgrades and absent/unreadable policy.
+Settings → GNSS persistence → Adaptive GNSS persistence explicitly opts in/out.
+This separate local policy is schema/revision 1, atomically committed before it is
+published, with a change counter and saved-change UTC (`effectiveAt`, assigned
+before commit). The existing journal records publication; sampling diagnostics record
+the first callback applying that version, so a slow write is not an exact callback
+boundary claim. Activity recreation and process
+restart preserve consent; no Command connection can enable it. The existing
+reporting/override configuration is separate. A failed setting write is reported
+as NOT SAVED and uses dense behavior in that process; a subsequent restart can
+restore only the last successfully committed preference. Issue #25 remote control is not
+implemented. No Room schema, original envelope or previously saved evidence changes.
+
+OFF keeps the original dense capture path. ON selects original callback objects
+before the same bounded handoff and transactional Room allocator. Credible ordinary
+movement targets ≤5 s; ≥10° accumulated heading changes, >1 m local chord deviation,
+reversals, rapid speed changes and boundaries preserve adjacent available originals.
+Stationarity requires 30 s of low speed (≤0.2 m/s), accuracy ≤5 m and bounded
+position jitter; periodic retention then targets 30 s. Entry/exit thresholds differ.
+Timing anomalies and GNSS gaps reset stationary confidence, including when the last
+pre-gap observation was already durably selected.
+Missing speed, moving fixes without bearing, weak/unknown accuracy, questionable
+speed/displacement, clock anomalies and unexpected timing retain densely. These are
+selection safeguards, not replacements for Command's eight qualification filters.
+Unknown policy and selection/write/overflow failures use dense fallback; runtime
+failure is latched until process restart and shown separately from saved consent.
+
+The native ~1 s request, LatestLocation, elapsed freshness and SOS selection are
+unchanged. One last candidate is held in memory for Stop, provider/GNSS loss,
+valid-candidate silence (3 s), recovery, connectivity and SOS boundaries. A turn can promote
+that original with its original capture time/age/health. The same writer retries its
+UUID after failure. Start/service generation and policy changes retain the next real
+fix; nothing invents an endpoint when callbacks are absent. Normal service teardown
+flushes the candidate; abrupt process death can lose that one candidate and existing
+uncommitted handoffs. Sticky restart preserves session identity and starts selection
+conservatively. No guarantee is made after force-stop/reboot/OEM termination.
+
+LIVE opportunities also promote the actual latest candidate into the existing
+writer. Sender defers that selection to a later iteration while commit is pending,
+without waiting on SQLite or blocking SOS. Thus online reporting can retain more
+stationary observations than the nominal 30 s policy. Accuracy and freshness take
+precedence over savings. OFF bypasses this hook and preserves legacy selection.
+No second LIVE envelope, queue or location engine exists.
+
+Diagnostics shows the effective mode/revision/change boundary, valid callback
+candidates, originals actually committed, intentionally unselected candidates,
+in-memory boundary candidate, callback gaps, write failures, pending/ACKed GNSS and
+free storage. Native callbacks (including rejected callbacks), transport attempts and
+ACK evidence remain in the existing bounded journal/export. Counters are labelled
+by process/service/durable lifetime; selected/submitted is not committed. Sampling
+is not reported as `known_collection_loss`. No automatic observation/SOS deletion is
+introduced; disk use still grows, particularly OFF or under uncertainty. Storage
+exhaustion remains an explicit capture failure, never a successful save.
+
+Reproduce synthetic route and storage evidence using `AdaptivePersistenceTest` and
+the real [Room/Sender → Command bridge](../test-tools/integration/README.md).
+Physical GNSS, battery, screen-off/OEM and sustained multi-day LAN acceptance are
+**NOT TESTED** by those tests; use [device acceptance](DEVICE-ACCEPTANCE.md).
+
+### Reproducible software evidence (Issue #24)
+
+Deterministic instrumented 1 Hz fixtures through production Room/handoff/Sender and
+real Command SQLite, using its unchanged default qualification policy. These are
+synthetic references, not survey or handset field acceptance. Maximum deviation is
+dense qualified-point distance to retained qualified segments/endpoints; gap connectors
+are excluded. All discrete ≥10° turns and tagged boundaries retained their real fixes.
+
+| Reference | Dense → retained | Max deviation (m) | Distance difference (m) |
+| --- | ---: | ---: | ---: |
+| walking | 301 → 61 | 0.000 | 0.000 |
+| vehicle | 301 → 61 | 0.000 | 0.000 |
+| stationary_jitter | 3601 → 126 | 0.400 | 0.000 |
+| sharp_turns_hairpin | 181 → 41 | 0.000 | 0.000 |
+| slow_curve | 181 → 37 | 0.055 | 0.050 |
+| reversal | 181 → 39 | 0.000 | 0.000 |
+| rapid_acceleration_deceleration | 181 → 42 | 0.000 | 0.000 |
+| start_stop_restart_sos | 181 → 39 | 0.000 | 0.000 |
+| gnss_loss_recovery | 181 → 39 | 0.000 | 0.000 |
+| weak_accuracy | 181 → 87 | 0.000 | 0.000 |
+| missing_speed_bearing | 181 → 181 | 0.000 | 0.000 |
+| timestamp_anomalies | 181 → 71 | 0.000 | 0.000 |
+
+Ordinary movement intervals were ≤5 s; turn/reversal boundaries retained adjacent
+1 s originals. Confident stationary intervals reached 30 s. The outage fixture has
+a real 301 s source interval; no policy promises callbacks across it. Missing metadata
+retained every callback. Aggregate original payload bytes (not HTTP framing) were
+5,806,129 dense versus 822,327 adaptive, for
+5,832 versus 824 observations. No general route equivalence is claimed.
+
+Actual one-hour stationary file-backed Room measurement: 3,601 →126 pending originals;
+immutable JSON 3,560,682 →124,955 B; allocated SQLite pages 5,988,352 →274,432 B.
+All rows remained pending and retained. No byte estimate is presented as measured
+seven-day disk usage. The seven-day policy replay (75% stationary /25% walking)
+counts 12,096,020 dense versus 913,100 retained callbacks across 20 scaled devices;
+stationary-only gives 403,320 and walking-only 2,419,220. Scaling per-device replay
+counts is not simultaneous physical-device testing or online LIVE-promotion traffic.
+
+Independent existing race-enabled receiver benchmarks used 600 originals/phone spread
+over 1/2/7 days for 1/5/20 simultaneous simulated phones, with interleaved LIVE/SOS.
+Measured transfer including durable receipt: 1.10 /5.25 /25.52 s; history ACK p99:
+0.113 /0.643 /3.661 s. These single loopback samples ran alongside Android work;
+they are not a field throughput/battery SLA or a dense seven-day fleet benchmark.
+The real bridge separately checks 20 phones plus a late 21st and delayed 1/2/7-day
+sparse history, ACK loss, retries/reordering, restart and SOS/LIVE priority.
+
+Full seven-day fleet disk/endurance, physical GNSS/OEM/background/process termination,
+battery and native macOS/Windows execution remain **NOT TESTED**. Source-specific
+CI reports and matched APK/Command assets are linked from the issue PR.
+
 ## Durability and recovery
 
 `TrackingService` owns `PlatformLocationSource`, reporting and the foreground
@@ -253,7 +364,7 @@ separate submitted/processed handoffs, distinct committed observations, outstand
 storage errors and overflow. Normal service stop leaves accepted handoffs draining;
 process death before commit remains a limitation. Raw/ACKed observations are retained.
 
-At approximately 1 Hz, about 3,600 distinct observations/hour are stored, plus routine
+With adaptive persistence OFF, approximately 1 Hz produces about 3,600 distinct observations/hour, plus routine
 status envelopes at configured cadence. Live delivery reuses those observations.
 Batch transfer reduces HTTP requests, not source resolution. Battery/storage capacity
 and unattended locked-screen Wi-Fi recovery require the real-device acceptance run.
