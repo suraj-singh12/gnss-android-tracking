@@ -97,8 +97,11 @@ jobs:
           git merge-base --is-ancestor d78ef85e689ca43281127599e814b04cb99aefc8 HEAD
           test -z "$(git status --porcelain)"
       - name: Android tests, lint and debug APK
+        env:
+          GNSS_ADAPTIVE_REPORT: ${{ runner.temp }}/gnss-test-reports/adaptive-accuracy.json
         working-directory: android
         run: |
+          mkdir -p "$RUNNER_TEMP/gnss-test-reports"
           ./gradlew testDebugUnitTest lintDebug assembleDebug --console=plain
           python3 - <<'PY'
           import pathlib,xml.etree.ElementTree as E
@@ -132,6 +135,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/gnss-test-reports"
           go test ./internal/core -run '^TestSyncFleetPerformance$' -count=1 -v | tee "$RUNNER_TEMP/gnss-test-reports/sync-benchmark.txt"
       - name: Real Android to Command integration
+        env:
+          GNSS_ADAPTIVE_REPORT: ${{ runner.temp }}/gnss-test-reports/adaptive-accuracy.json
         run: test-tools/integration/run.sh --console=plain
       - name: Record cross-language test counts
         run: |

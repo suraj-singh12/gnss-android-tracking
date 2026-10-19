@@ -380,6 +380,23 @@ class UiNavigationVisualTest {
                                 }
                             )
                             capture("settings-emergency-expanded")
+                            val persistence =
+                                all.filterIsInstance<Button>().single {
+                                    it.text.startsWith("GNSS persistence  ")
+                                }
+                            persistence.performClick()
+                            settle()
+                            reveal(persistence)
+                            assertFalse(
+                                all.filterIsInstance<android.widget.CheckBox>()
+                                    .single { it.text == "Adaptive GNSS persistence" }
+                                    .isChecked
+                            )
+                            val adaptiveChoice = all.filterIsInstance<android.widget.CheckBox>().single {
+                                it.text == "Adaptive GNSS persistence"
+                            }
+                            assertTrue("Adaptive control must retain a 48 dp touch target", adaptiveChoice.height >= (48 * density).toInt())
+                            capture("settings-gnss-persistence")
                             (root as ViewGroup).let { view ->
                                 descendants(view)
                                     .filterIsInstance<android.widget.ScrollView>()

@@ -35,6 +35,54 @@ class TrackingLifecycleTest {
     }
 
     @Test
+    fun adaptivePolicyChangesKeepNativeListenerAndSosLatestIndependent() = runBlocking {
+        app.persistencePolicy.setEnabled(true, utc(SystemClock.wallMillis()))
+        val service = Robolectric.buildService(TrackingService::class.java).create()
+        try {
+            service.get().onStartCommand(Intent(app, TrackingService::class.java), 0, 1)
+            withTimeout(10000) {
+                while (!app.sessionReady.isCompleted) {
+                    shadowOf(Looper.getMainLooper()).idle()
+                    delay(10)
+                }
+            }
+            val listener = shadowOf(manager).getLocationUpdateListeners().single()
+            repeat(4) { n ->
+                shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
+                val location =
+                    android.location.Location(LocationManager.GPS_PROVIDER).apply {
+                        time = SystemClock.wallMillis()
+                        elapsedRealtimeNanos = SystemClock.elapsedMillis() * 1000000
+                        latitude = 0.0
+                        longitude = Math.toDegrees(n * 2.0 / 6371008.8)
+                        accuracy = 1f
+                        speed = 2f
+                        bearing = 90f
+                    }
+                listener.onLocationChanged(location)
+            }
+            assertEquals(4L, app.observationPersistence.samplingState.candidates)
+            assertTrue(app.observationPersistence.samplingState.boundaryCandidate)
+            val latest = app.latest.observation!!.fix.observed_at
+            app.activateSos(SosTrigger.VOLUME_UP)
+            withTimeout(10000) {
+                while (app.repository.dao.sosHistory().isEmpty()) {
+                    shadowOf(Looper.getMainLooper()).idle()
+                    delay(10)
+                }
+            }
+            val sos = Protocol.decodeMessage(app.repository.dao.sosHistory().single().json)
+            assertEquals(latest, sos.fix!!.observed_at)
+            assertFalse(app.observationPersistence.samplingState.boundaryCandidate)
+            app.persistencePolicy.setEnabled(false, utc(SystemClock.wallMillis()))
+            assertSame(listener, shadowOf(manager).getLocationUpdateListeners().single())
+            assertEquals(1, app.diagnostics.value!!.source.registrations)
+        } finally {
+            service.destroy()
+        }
+    }
+
+    @Test
     fun asynchronousStartCannotCreateLocationServiceAfterActivityHidden() {
         val activity = Robolectric.buildActivity(MainActivity::class.java).setup()
         val request =
@@ -97,6 +145,17 @@ class TrackingLifecycleTest {
 
     @Test
     fun stickyRecreationRestoresResourcesWithoutInventingFix() = runBlocking {
+        verifyStickyRecreation()
+    }
+
+    @Test
+    fun adaptiveConsentSurvivesStickyServiceRecreation() = runBlocking {
+        app.persistencePolicy.setEnabled(true, utc(SystemClock.wallMillis()))
+        verifyStickyRecreation()
+        assertTrue(app.persistencePolicy.state.enabled)
+    }
+
+    private suspend fun verifyStickyRecreation() {
         app.repository.edit { it.copy(tracking = true) }
         val first = Robolectric.buildService(TrackingService::class.java).create()
         first.get().onStartCommand(Intent(app, TrackingService::class.java), 0, 1)

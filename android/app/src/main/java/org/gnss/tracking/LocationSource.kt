@@ -135,10 +135,17 @@ class PlatformLocationSource(
         object : LocationListener {
             override fun onLocationChanged(location: Location) {
                 if (!started) return
+                val callbackAt = clock.elapsedMillis()
+                val gap =
+                    diagnostics.registered &&
+                        diagnostics.lastLocationCallback?.let {
+                            it >= (diagnostics.registeredAt ?: callbackAt) && callbackAt - it > 2500
+                        } == true
                 diagnostics =
                     diagnostics.copy(
-                        lastLocationCallback = clock.elapsedMillis(),
+                        lastLocationCallback = callbackAt,
                         locationCallbacks = diagnostics.locationCallbacks + 1,
+                        callbackGaps = diagnostics.callbackGaps + if (gap) 1 else 0,
                         lastObservationAccepted = false,
                         lastMeasurementAgeMs =
                             (location.elapsedRealtimeNanos / 1000000)

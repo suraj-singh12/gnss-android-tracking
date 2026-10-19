@@ -93,6 +93,59 @@ class MemoryStore : MessageStore {
 
 class SenderTest {
     @Test
+    fun pendingLiveCommitDefersHistoryButNeverSos() = runBlocking {
+        val store = MemoryStore()
+        val clock = FakeClock()
+        store.snapshot(
+            clock.now,
+            Fix(utc(clock.now), 0, 0.0, 0.0, 1.0, null, null, 2.0, 90.0),
+            Health(gnss_status = "fix"),
+        )
+        var ready = false
+        var preparations = 0
+        val roles = mutableListOf<String>()
+        val sender =
+            Sender(
+                store,
+                object : Transport {
+                    override suspend fun post(endpoint: String, immutableJson: String) =
+                        ack(immutableJson)
+
+                    override suspend fun postRole(
+                        endpoint: String,
+                        json: String,
+                        role: String,
+                    ): Response {
+                        roles.add(role)
+                        return ack(json)
+                    }
+                },
+                clock,
+                prepareLive = {
+                    preparations++
+                    ready
+                },
+            ) {
+                error("No synthetic fix")
+            }
+        sender.step()
+        assertFalse(sender.attemptedLastStep)
+        assertTrue(roles.isEmpty())
+        val row = store.snapshot(clock.now, null, Health())
+        val sos =
+            Protocol.decodeMessage(row.json)
+                .copy(type = "sos", sos = Sos(row.messageId, utc(clock.now)))
+        store.rows[store.rows.lastIndex] = row.copy(type = "sos", json = Protocol.encode(sos))
+        sender.step()
+        assertEquals(listOf("sos"), roles)
+        assertEquals(1, preparations)
+        ready = true
+        sender.step()
+        assertEquals(listOf("sos", "live"), roles)
+        assertEquals(1L, sender.syncProgress.ackedGnssRecords)
+    }
+
+    @Test
     fun interruptedRequestBodyIsTransientRatherThanQuarantined() {
         assertFalse(classify(408, 1).quarantine)
         assertEquals(1000L, classify(408, 1).delayMillis)

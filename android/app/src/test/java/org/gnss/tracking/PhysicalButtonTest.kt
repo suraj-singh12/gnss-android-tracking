@@ -199,7 +199,7 @@ class PhysicalButtonActivityTest {
         val activity = activityController.get()
         try {
             val views = descendants(activity.findViewById(android.R.id.content))
-            views.filterIsInstance<CheckBox>().single().isChecked = true
+            views.filterIsInstance<CheckBox>().single { it.text == activity.getString(R.string.sos_volume_option) }.isChecked = true
             views.filterIsInstance<Button>().single { it.text == "Diagnostics" }.performClick()
             views.filterIsInstance<Button>().single { it.text == "Physical Button Test" }.performClick()
             views.filterIsInstance<Button>().single { it.text == "Start Test" }.performClick()

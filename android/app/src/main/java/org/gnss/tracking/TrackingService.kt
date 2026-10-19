@@ -44,6 +44,7 @@ class TrackingService : Service() {
     @Volatile private var senderIteration: Long? = null
     @Volatile private var effectiveInterval: Int? = null
     @Volatile private var knownCollectionLoss: Long? = null
+    @Volatile private var oldestPendingCapturedAt: String? = null
     @Volatile private var wifiAvailable: Boolean? = null
     @Volatile private var lastAckElapsed: Long? = null
     @Volatile private var observedAck: String? = null
@@ -101,6 +102,7 @@ class TrackingService : Service() {
                 runCatching { publishDiagnostics(power.snapshot(), false) }
             }
             if (restored) {
+                app.observationPersistence.retainBoundary("network_recovery_boundary")
                 try {
                     sender.connectivityRestored()
                 } catch (e: CancellationException) {
@@ -118,13 +120,25 @@ class TrackingService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        app.persistencePolicy // Load preferences before registering native callbacks.
         app.sessionReady = kotlinx.coroutines.CompletableDeferred()
         app.recorder.event(DiagnosticEvent.SERVICE_CREATE, generation)
         source =
             PlatformLocationSource(
                 this,
                 latest,
-                diagnosticEvent = { kind, state -> app.recorder.event(kind, generation, state) },
+                diagnosticEvent = { kind, state ->
+                    if (
+                        kind in
+                            listOf(
+                                DiagnosticEvent.PROVIDER_DISABLED,
+                                DiagnosticEvent.GNSS_STOPPED,
+                                DiagnosticEvent.UNREGISTER,
+                            )
+                    )
+                        app.observationPersistence.retainBoundary("gnss_or_lifecycle_boundary")
+                    app.recorder.event(kind, generation, state)
+                },
                 onObservation = { value ->
                     val session = app.sessionReady
                     if (
@@ -148,7 +162,7 @@ class TrackingService : Service() {
                         app.recorder.event(DiagnosticEvent.LOOP_FAILURE, generation)
                         // Overflow is explicit loss, not a permanent stop after temporary writer
                         // pressure.
-                        app.recordCollectionLoss(session)
+                        // The shared handoff records overflow against the original session.
                     }
                 },
             )
@@ -339,6 +353,8 @@ class TrackingService : Service() {
                 val newInterval = config.effective_reporting_interval_s
                 effectiveInterval = newInterval
                 knownCollectionLoss = state.knownCollectionLoss
+                oldestPendingCapturedAt =
+                    repository.dao.oldestPendingCapturedMillis()?.let { utc(it) }
                 deliveryPaused = state.deliveryPaused
                 deliveryError = state.operationalError != null
                 if (ackInitialized && state.lastAck != observedAck) {
@@ -439,6 +455,7 @@ class TrackingService : Service() {
                     return
                 }
                 source.refreshProvider()
+                app.observationPersistence.checkSilence(SystemClock.elapsedMillis())
                 app.operational.update {
                     it.copy(
                         gnss = latest.status(),
@@ -513,6 +530,8 @@ class TrackingService : Service() {
                 sender = sender.diagnostics,
                 collection = app.observationPersistence.state,
                 knownCollectionLoss = knownCollectionLoss,
+                storageAvailableBytes = filesDir.usableSpace,
+                oldestPendingCapturedAt = oldestPendingCapturedAt,
             )
         app.diagnostics.value = snapshot
         app.recorder.sample(snapshot)

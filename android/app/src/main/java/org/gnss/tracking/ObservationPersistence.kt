@@ -23,6 +23,7 @@ data class CollectionState(
     val overflow: Long,
     val awaitingCommit: Long,
     val committedObservations: Long = saved,
+    val sampling: SamplingState = SamplingState(),
 )
 
 class ObservationPersistence(
@@ -32,8 +33,15 @@ class ObservationPersistence(
     private val clock: Clock = SystemClock,
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     capacity: Int = 1024,
+    private val policy: () -> PersistencePolicy = { PersistencePolicy() },
+    private val onOverflow: (CapturedObservation) -> Unit = {},
 ) {
     private val work = Channel<CapturedObservation>(capacity)
+    private val sampling = AdaptivePersistence()
+    private var liveAwaiting: Long? = null
+    val samplingState: SamplingState
+        get() = synchronized(this) { sampling.state }
+
     private val submitted = AtomicLong()
     private val saved = AtomicLong()
     private val committed = AtomicLong()
@@ -50,6 +58,7 @@ class ObservationPersistence(
                 overflow.get(),
                 total - committed - overflow.get(),
                 this.committed.get(),
+                samplingState,
             )
         }
 
@@ -66,6 +75,7 @@ class ObservationPersistence(
                             throw e
                         } catch (_: Exception) {
                             failures.incrementAndGet()
+                            synchronized(this@ObservationPersistence) { sampling.failSafe() }
                             if (!reportedFailure) {
                                 runCatching { onFailure() }
                                 reportedFailure = true
@@ -81,6 +91,7 @@ class ObservationPersistence(
             }
         }
 
+    @Synchronized
     fun submit(
         observation: Observation,
         health: Health,
@@ -99,9 +110,53 @@ class ObservationPersistence(
                 observation.elapsedNanos,
                 session,
             )
+        val candidates = sampling.state.candidates + 1
+        val selected =
+            try {
+                sampling.select(value, policy())
+            } catch (_: Exception) {
+                runCatching { onFailure() }
+                sampling.recover(value, candidates)
+            }
+        return enqueue(selected)
+    }
+
+    // Promote once per LIVE opportunity. Continuous callbacks must not move the
+    // commit goal and indefinitely defer LIVE behind a slow writer/history request.
+    @Synchronized
+    fun prepareLive(): Boolean {
+        if (sampling.state.fallback != null) {
+            liveAwaiting = null
+            return true
+        }
+        liveAwaiting?.let { goal ->
+            if (saved.get() < goal) return false
+            liveAwaiting = null
+            return true
+        }
+        if (!sampling.state.boundaryCandidate) return true
+        enqueue(sampling.boundary("live_opportunity"))
+        liveAwaiting = submitted.get()
+        return false
+    }
+
+    @Synchronized fun retainBoundary(reason: String): Boolean = enqueue(sampling.boundary(reason))
+
+    @Synchronized
+    fun checkSilence(nowElapsedMillis: Long): Boolean = enqueue(sampling.quiet(nowElapsedMillis))
+
+    private fun enqueue(values: List<CapturedObservation>): Boolean {
+        var ok = true
+        for (value in values) if (!enqueue(value)) ok = false
+        return ok
+    }
+
+    private fun enqueue(value: CapturedObservation): Boolean {
         submitted.incrementAndGet()
         if (work.trySend(value).isSuccess) return true
         overflow.incrementAndGet()
+        sampling.failSafe()
+        runCatching { onOverflow(value) }
         runCatching { onFailure() }
         return false // Caller records known loss; acquisition continues after temporary pressure.
     }
@@ -110,6 +165,7 @@ class ObservationPersistence(
     // accepted callbacks even after Activity/service closes; process death can lose
     // uncommitted memory and must never be claimed as durable success.
     suspend fun finish() {
+        retainBoundary("writer_finish")
         work.close()
         worker.join()
     }

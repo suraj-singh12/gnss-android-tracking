@@ -119,3 +119,17 @@ Tracking OFF remains zero collection; user-started dataSync work has a visible,
 bounded lifetime and no unrestricted execution guarantee. Coverage: HistoryDeliveryTest, TrackingLifecycleTest local
 control assertion, real CommandIntegrationTest twenty-phone/late-join recovery,
 and existing rendered navigation/large-font checks.
+
+## Issue #24 · optional adaptive persistence
+
+| Surface / capability | Change / authority | Verification |
+| --- | --- | --- |
+| Tracking page / navigation / Start/Stop / SOS dock / Sync All | Existing views and actions preserved | Existing native visual/navigation, lifecycle, hold and sync suites |
+| Settings | One collapsed GNSS persistence group; explicit saved opt-in; OFF default | AdaptiveSettingsTest: OFF → ON → Activity recreation → OFF, no service start |
+| Diagnostics | Effective/requested policy, counters, pending/ACKed evidence and storage | Existing journal/sample/export; no per-skipped-fix durable log |
+| Native GNSS / LIVE / SOS | Original listener/latest fix; pending originals promoted via same writer | TrackingLifecycleTest adaptive/SOS regression; real bridge dense/adaptive comparison |
+| Room / identity / Sender / Command | Existing schema/allocator/outbox/priority/quality remain authoritative | Migration, failed-write, retry/ACK loss, tracking-OFF and reconstruction regressions |
+
+No Settings/Diagnostics redesign (#39), Tracking redesign, remote control (#25), or
+Command quality UI change is included. Rendered software checks are not TalkBack,
+OEM/OS, native GNSS or physical field acceptance.

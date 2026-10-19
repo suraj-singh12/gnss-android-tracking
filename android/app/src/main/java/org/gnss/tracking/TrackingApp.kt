@@ -110,10 +110,15 @@ class TrackingApp : Application() {
     var sessionReady = kotlinx.coroutines.CompletableDeferred<TrackingSession>()
     @Volatile var sessionStartup: kotlinx.coroutines.Job? = null
     val repository by lazy { Repository(TrackingDatabase.open(this)) }
+    val persistencePolicy by lazy {
+        LocalPersistencePolicy(getSharedPreferences("gnss-persistence", MODE_PRIVATE))
+    }
     val observationPersistence by lazy {
         ObservationPersistence(
             { value -> repository.saveObservation(value) },
             scope = durableWork,
+            policy = { persistencePolicy.state },
+            onOverflow = { value -> value.session?.let { recordCollectionLoss(it) } },
             onSaved = { value, row ->
                 recorder.event(
                     DiagnosticEvent.SNAPSHOT_SAVED,
@@ -133,7 +138,7 @@ class TrackingApp : Application() {
                 operational.update {
                     it.copy(
                         error =
-                            "GNSS history storage failed. Keep the app running, free storage and export diagnostics; history is not fully durable."
+                            "GNSS capture policy or persistence failed. Dense fallback is active. Check Diagnostics and storage; uncommitted history is not yet durable."
                     )
                 }
             },
@@ -157,7 +162,10 @@ class TrackingApp : Application() {
             latest,
             health::snapshot,
             evidence = recorder::sos,
-            beforeSave = { recoveryReady.await() },
+            beforeSave = {
+                observationPersistence.retainBoundary("sos_boundary")
+                recoveryReady.await()
+            },
         )
     }
     val sosNotice = MutableStateFlow<String?>(null)
@@ -171,6 +179,12 @@ class TrackingApp : Application() {
             transport,
             SystemClock,
             evidence = recorder::sos,
+            prepareLive = {
+                // Promote the actual latest candidate at a LIVE opportunity without
+                // waiting for SQLite or delaying SOS. Retry selection on the next
+                // sender iteration once the shared writer has committed it.
+                !persistencePolicy.state.enabled || observationPersistence.prepareLive()
+            },
             deliveryEvidence = { kind, report ->
                 recorder.event(kind, diagnostics.value?.serviceGeneration, report = report)
             },
@@ -265,6 +279,13 @@ class TrackingApp : Application() {
                 sosNotice.value = "Cannot restore saved SOS — open app and check storage"
             } finally {
                 recoveryReady.complete(Unit)
+            }
+            // Policy diagnostics must never gate SOS recovery or activation.
+            runCatching {
+                recorder.event(
+                    DiagnosticEvent.PERSISTENCE_POLICY_RESTORED,
+                    persistencePolicy = persistencePolicy.state,
+                )
             }
         }
         workScope.launch {

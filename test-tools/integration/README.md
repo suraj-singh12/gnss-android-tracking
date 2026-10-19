@@ -871,3 +871,34 @@ Compact JSON reports/logs are retained in the implementation workspace under
 `/workspace/issue23-evidence/` (`fleet-before/report.json`, `fleet-after/report.json`,
 `browser-before.json`, `browser-measured-after.json`, `go-race-final.log`). The PR
 publishes this comparison; CI publishes independently measured exact-head evidence.
+
+## Issue #24 adaptive versus dense evidence
+
+`CommandIntegrationTest.adaptiveAgainstDenseReferencesUsesRealRoomSenderAndCommandQualification`
+feeds deterministic instrumented 1 Hz source observations through the production
+selector/handoff, file-backed Room allocator, Sender, real HTTP receiver/SQLite and
+unchanged Command qualification/reconstruction. It compares OFF dense with ON for
+walking, vehicle, jitter, curves, turns/hairpins, reversal, speed changes, boundaries,
+outage, weak accuracy, missing metadata and clock anomalies. Originals are checked
+by source fields/timestamps; no interpolated fix is generated. Geometry comparisons
+exclude cross-segment connectors, and a cold one-pass reference checks decisions.
+The independent metric uses Command-qualified geographic coordinates, a local
+equatorial metre plane (the fixtures lie near the equator) and JDK line geometry,
+not the selector’s distance/deviation helper. Deviation is the maximum dense qualified-point distance to the retained qualified
+segments/endpoints (no gap connector). Test acceptance budgets are ≤2.1 m deviation and
+≤max(2.1 m, 1%) distance error on these fixtures, with zero missed discrete ≥10°
+turns/boundaries. These are regression budgets, not general GNSS accuracy guarantees.
+
+Set `GNSS_ADAPTIVE_REPORT=/absolute/evidence/adaptive-accuracy.json` (create parent)
+when running the bridge. The ordinary `AdaptivePersistenceTest` also writes
+`adaptive-volumes.json` and `adaptive-storage.json` beside it. Volume replay runs
+seven days and snapshots 1/2/7 days for stationary/walking/75%-stationary mixes;
+1/5/20/21-phone counts scale the per-device deterministic replay, not real devices.
+Storage measures actual one-hour file-backed Room pages and immutable JSON bytes.
+It is not a full seven-day fleet disk benchmark. Existing delayed 1/2/7-day bridge
+fixtures are sparse captures delivered after those delays; do not call them dense
+multi-day field tests. The reused matched-assets workflow publishes the JSON reports.
+
+All software traces are synthetic/instrumented. Physical GNSS/native Android,
+real Wi-Fi/OEM/background/process-kill endurance, battery and multi-day fleet disk
+acceptance remain separately NOT TESTED until the device runbook is executed.

@@ -117,6 +117,10 @@ interface TrackingDao {
 
     @Update suspend fun updateRow(row: Outbound)
 
+    // Two bounded seeks include unresolved/quarantined evidence without scanning history.
+    @Query("SELECT MIN(capturedMillis) FROM outbox WHERE sequence IN (SELECT MIN(sequence) FROM outbox WHERE deliveredAt IS NULL AND quarantined=0 UNION ALL SELECT MIN(sequence) FROM outbox WHERE deliveredAt IS NULL AND quarantined=1)")
+    suspend fun oldestPendingCapturedMillis(): Long?
+
     @Query("SELECT * FROM outbox WHERE sequence=:sequence")
     suspend fun row(sequence: Long): Outbound?
 
