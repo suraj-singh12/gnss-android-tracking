@@ -212,6 +212,8 @@ class AdaptivePersistence {
                 abs(value.capturedMillis - wall(value) - value.fix.fix_age_ms) > 2000
         ) {
             reason = "gap_or_timestamp_anomaly"
+            stillSince = null
+            stillAnchor = null
         } else {
             val f = value.fix
             val p = last.fix

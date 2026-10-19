@@ -85,6 +85,8 @@ movement targets ≤5 s; ≥10° accumulated heading changes, >1 m local chord d
 reversals, rapid speed changes and boundaries preserve adjacent available originals.
 Stationarity requires 30 s of low speed (≤0.2 m/s), accuracy ≤5 m and bounded
 position jitter; periodic retention then targets 30 s. Entry/exit thresholds differ.
+Timing anomalies and GNSS gaps reset stationary confidence, including when the last
+pre-gap observation was already durably selected.
 Missing speed, moving fixes without bearing, weak/unknown accuracy, questionable
 speed/displacement, clock anomalies and unexpected timing retain densely. These are
 selection safeguards, not replacements for Command's eight qualification filters.

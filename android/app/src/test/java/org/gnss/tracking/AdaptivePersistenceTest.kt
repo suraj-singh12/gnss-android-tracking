@@ -218,6 +218,18 @@ class AdaptivePersistenceTest {
     }
 
     @Test
+    fun gapWithoutPendingCandidateResetsStationaryConfidence() {
+        val selector = AdaptivePersistence()
+        (0..60).forEach { selector.select(value(it, speed = 0.0, x = 0.0), on) }
+        assertFalse(selector.state.boundaryCandidate) // Last pre-gap fix is already selected.
+        val recovery = (361..391).flatMap { selector.select(value(it, speed = 0.0, x = 0.0), on) }
+        assertEquals(value(361, speed = 0.0, x = 0.0), recovery.first())
+        assertTrue(recovery.size >= 7)
+        assertTrue(recovery.zipWithNext { a, b -> (b.elapsedNanos - a.elapsedNanos) / 1000000 }.max() <= 5000)
+        assertEquals(1L, selector.state.callbackGaps)
+    }
+
+    @Test
     fun silenceFlushesLastAvailableFixWithoutInventingRecovery() {
         val sampler = AdaptivePersistence()
         (0..3).forEach { sampler.select(value(it), on) }
