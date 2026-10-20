@@ -820,6 +820,7 @@ class MainActivity : Activity() {
         val commandRows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         content.addView(commandRows)
         var commandHistory = emptyList<CommandRecord>()
+        val expandedCommandIds = mutableSetOf<String>()
         fun renderCommands() {
             commandRows.removeAllViews()
             val filter = commandFilter.text.toString().lowercase()
@@ -843,13 +844,15 @@ class MainActivity : Activity() {
                     TextView(this).apply {
                         text =
                             "${if(row.trusted) "Command" else "Security event"} ${row.id}\nOrigin: configured Command endpoint (address redacted)\nAuthority ${row.authority}\nPhone ${row.device}\nAuthenticated ${row.trusted} · attempted ${row.attempted}\nVersion ${row.version} · priority ${row.priority} · created ${if(row.created>0) utc(row.created) else "unknown"} · expires ${if(row.expires>0) utc(row.expires) else "unknown"}\nAttempted ${if(row.attemptedAt>0) utc(row.attemptedAt) else "unconfirmed"} · result ${if(row.completedAt>0) utc(row.completedAt) else "pending"} · custody ${if(row.confirmedAt>0) utc(row.confirmedAt) else "unconfirmed"}\nRequested ${row.requested}\nEffective ${row.effective.ifEmpty { "unconfirmed" }}\nResult ${if(row.confirmed) "delivery confirmed" else "pending or unknown delivery"}\n${row.events}"
-                        visibility = View.GONE
+                        visibility = if (row.id in expandedCommandIds) View.VISIBLE else View.GONE
                         setTextIsSelectable(true)
                     }
                 title.contentDescription = "${title.text}. Tap to expand details"
                 title.setOnClickListener {
-                    detail.visibility =
-                        if (detail.visibility == View.GONE) View.VISIBLE else View.GONE
+                    val expand = detail.visibility == View.GONE
+                    if (expand) expandedCommandIds.add(row.id)
+                    else expandedCommandIds.remove(row.id)
+                    detail.visibility = if (expand) View.VISIBLE else View.GONE
                 }
                 commandRows.addView(detail)
                 commandRows.addView(

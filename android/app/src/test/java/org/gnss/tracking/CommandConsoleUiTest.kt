@@ -86,6 +86,22 @@ class CommandConsoleUiTest {
                     it.visibility == View.VISIBLE && it.text.toString().contains(id)
                 }
             )
+            app.repository.dao.updateCommand(
+                app.repository.dao
+                    .command(id)!!
+                    .event(System.currentTimeMillis(), "Result pending delivery")
+            )
+            withTimeout(10000) {
+                while (
+                    views(root).filterIsInstance<TextView>().none {
+                        it.visibility == View.VISIBLE &&
+                            it.text.toString().contains("Result pending delivery")
+                    }
+                ) {
+                    shadowOf(Looper.getMainLooper()).idle()
+                    delay(10)
+                }
+            }
             views(root)
                 .filterIsInstance<Button>()
                 .single { it.text == "Copy command ID" }
