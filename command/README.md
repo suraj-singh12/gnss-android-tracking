@@ -845,7 +845,10 @@ cross-build evidence. See the normative protocol extension for trust/race limits
 In the existing Phone controls choose **Phone alert**, Normal attention or Urgent
 repeating, optional message, and one/selected/all eligible enrolled phones. Review
 actual recipient IDs/count, payload and TTL before confirming. All freezes that
-list; late joiners are excluded and there is no 20-phone cap. Defaults: TTL 300 s;
+list; late joiners are excluded and there is no 20-phone cap. Eligibility comes from
+fresh enrollment state even when the independent LIVE inventory is delayed; newly
+enrolled phones remain visible by UUID. Issuance waits for recipient selection to
+finish. Defaults: TTL 300 s;
 urgent 60-second duration / 10-second repeats. TTL range 5–3600 s; urgent duration
 5–120 s; cadence 5–30 s. Normal attempts once, notification available until expiry.
 

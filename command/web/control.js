@@ -3,6 +3,7 @@
 // No recording/import/playback object is a source of recipients or instructions.
 const controlTargets = new Set();
 let controlView = {phones: {}, commands: []};
+let controlSelecting = false;
 async function controlPost(action, payload) {
   const response = await fetch(`/local/control/${action}`, {method: "POST", headers: {"Content-Type":"application/json"}, body:JSON.stringify(payload)});
   const value = await response.json();
@@ -16,6 +17,9 @@ async function refreshControl() {
   controlView = await response.json();
   const list = $("control-phones"); list.replaceChildren();
   const devices = Object.values(state?.devices || {});
+  const known=new Set(devices.map(phone=>phone.device_id));
+  // Enrollment is authoritative even before the independent LIVE inventory poll catches up.
+  for(const id of Object.keys(controlView.phones))if(!known.has(id))devices.push({device_id:id,snapshot:{party:{id:"Enrolled phone"}}});
   for (const phone of devices) {
     const id = phone.device_id, enrollment = controlView.phones[id];
     const row = el("div");
@@ -53,24 +57,35 @@ async function refreshControl() {
   }
 }
 async function chooseControlTargets(all) {
+  if(controlSelecting)return;
+  controlSelecting=true;
+  for(const id of ["control-one","control-all","control-none","control-issue"])$(id).disabled=true;
+  $("control-status").textContent="Loading eligible recipients; wait for the selection before reviewing.";
   try {
     await refreshControl();controlTargets.clear();
-    if(all){for(const id of Object.keys(state?.devices||{}))if(controlView.phones[id]?.enabled)controlTargets.add(id);}
+    if(all){for(const [id,phone] of Object.entries(controlView.phones))if(phone.enabled)controlTargets.add(id);}
     else if(selectedParty&&controlView.phones[selectedParty]?.enabled)controlTargets.add(selectedParty);
     await refreshControl();
+    $("control-status").textContent=`${controlTargets.size} enrolled recipients selected. Review identities and expiry.`;
   }catch(error){controlError(error);}
+  finally {
+    controlSelecting=false;
+    for(const id of ["control-one","control-all","control-none","control-issue"])$(id).disabled=false;
+  }
 }
 $("open-control").onclick=()=>{$("phone-control").showModal();refreshControl().catch(controlError);};
 $("control-one").onclick=()=>chooseControlTargets(false);
 $("control-all").onclick=()=>chooseControlTargets(true);
 $("control-none").onclick=()=>{
   controlTargets.clear();
+  $("control-status").textContent="No recipients selected.";
   // Reflect the selection immediately; a network refresh must not leave checked
   // boxes whose next click would silently disagree with the frozen target set.
   for(const input of $("control-phones").querySelectorAll("input"))input.checked=false;
   refreshControl().catch(controlError);
 };
 $("control-issue").onclick=async()=>{try{
+  if(controlSelecting)throw new Error("Wait for the recipient selection to finish");
   const targets=[...controlTargets]; // Frozen at the explicit review action.
   const operation=$("control-operation").value;
   const ttl=Number($("control-ttl").value);

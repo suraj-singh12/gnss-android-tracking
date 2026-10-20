@@ -114,6 +114,13 @@ async function wait(check) {
   await page.locator("#control-operation").selectOption("sync");
   await page.locator("#control-issue").click();
   await wait(async()=>((await (await fetch(local+"/local/control")).json()).commands.length===20));
+  // Hold the real LIVE/inventory responses while a new enrolled phone arrives.
+  // All recipients must come from fresh enrollment, not this intentionally stale browser inventory.
+  let releaseInventory;
+  const inventoryGate=new Promise(resolve=>{releaseInventory=resolve;});
+  const holdInventory=async route=>{await inventoryGate;await route.continue();};
+  await page.route("**/local/live",holdInventory);
+  await page.route("**/local/state?**",holdInventory);
   const late=structuredClone(fixture);late.device_id=randomUUID();late.message_id=randomUUID();late.observation.observation_id=late.message_id;late.observation.tracking_session_id=randomUUID();await send(late);await post("control/enroll",{device:late.device_id,confirmed:true});
   let controls=await (await fetch(local+"/local/control")).json();assert.equal(controls.commands.some(c=>c.device===late.device_id),false);
   assert.ok(controls.commands.every(c=>c.state==="queued"&&c.result===null));
@@ -135,7 +142,22 @@ async function wait(check) {
   await page.locator("#control-alert-repeat").fill("0");
   await page.locator("#control-issue").click();
   await wait(async()=>((await (await fetch(local+"/local/control")).json()).commands.filter(c=>c.operation==="alert").length===2));
+  // Delay the real control response to prove issuance cannot race All selection.
+  let selectionHeld=false, releaseSelection;
+  const selectionGate=new Promise(resolve=>{releaseSelection=resolve;});
+  await page.route("**/local/control",async route=>{selectionHeld=true;await selectionGate;await route.continue();});
   await page.locator("#control-all").click();
+  await wait(async()=>selectionHeld);
+  assert.equal(await page.locator("#control-issue").isDisabled(),true);
+  assert.equal(await page.locator("#control-none").isDisabled(),true);
+  releaseSelection();
+  await wait(async()=>await page.locator("#control-phones input:checked").count()===21&&await page.locator("#control-issue").isEnabled());
+  await page.unroute("**/local/control");
+  assert.match(await page.locator("#control-status").textContent(),/21 enrolled recipients selected/);
+  assert.equal(await page.evaluate(()=>Object.keys(state.devices).length),20);
+  releaseInventory();
+  await page.unroute("**/local/live");
+  await page.unroute("**/local/state?**");
   await page.locator("#control-alert-mode").selectOption("urgent");
   await page.locator("#control-alert-duration").fill("60");
   await page.locator("#control-alert-repeat").fill("10");
