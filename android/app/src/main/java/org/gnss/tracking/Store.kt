@@ -124,6 +124,11 @@ interface TrackingDao {
     )
     suspend fun activeSyncCommands(enrollment: String): List<CommandRecord>
 
+    @Query(
+        "SELECT * FROM command_journal WHERE operation='alert' AND state IN ('output_attempted','alert_blocked')"
+    )
+    suspend fun activeAlerts(): List<CommandRecord>
+
     @Query("SELECT ordering FROM command_watermark WHERE token=:token")
     suspend fun commandWatermark(token: String): Long?
 
@@ -131,11 +136,13 @@ interface TrackingDao {
     suspend fun commandWatermark(row: CommandWatermark)
 
     @Query(
-        "DELETE FROM command_journal WHERE id IN (SELECT id FROM command_journal WHERE (confirmed=1 AND state!='received') OR trusted=0 ORDER BY received DESC LIMIT -1 OFFSET 500)"
+        "DELETE FROM command_journal WHERE id IN (SELECT id FROM command_journal WHERE (confirmed=1 AND state NOT IN ('received','output_attempted','alert_blocked')) OR trusted=0 ORDER BY received DESC LIMIT -1 OFFSET 500)"
     )
     suspend fun pruneCommands()
 
-    @Query("SELECT COUNT(*) FROM command_journal WHERE (confirmed=0 OR state='received') AND trusted=1")
+    @Query(
+        "SELECT COUNT(*) FROM command_journal WHERE (confirmed=0 OR state IN ('received','output_attempted','alert_blocked')) AND trusted=1"
+    )
     suspend fun unresolvedCommands(): Int
 
     @Query(

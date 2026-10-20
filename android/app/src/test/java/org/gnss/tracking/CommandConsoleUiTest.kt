@@ -114,6 +114,68 @@ class CommandConsoleUiTest {
                     .text
                     .toString(),
             )
+            filter.setText("")
+            val alertId = Protocol.newId()
+            app.repository.dao.insertCommand(
+                CommandRecord(
+                    alertId,
+                    Protocol.newId(),
+                    state.deviceId,
+                    Protocol.newId(),
+                    "alert",
+                    2,
+                    System.currentTimeMillis(),
+                    state = "unknown",
+                    attempted = true,
+                    requested =
+                        """{"mode":"urgent","message":"private-alert-content","duration_s":60,"repeat_s":10}""",
+                )
+            )
+            withTimeout(10000) {
+                while (
+                    views(root).filterIsInstance<Button>().none {
+                        it.text == "Acknowledge / Stop Alert"
+                    }
+                ) {
+                    shadowOf(Looper.getMainLooper()).idle()
+                    delay(10)
+                }
+            }
+            views(root)
+                .filterIsInstance<Button>()
+                .last { it.text == "Acknowledge / Stop Alert" }
+                .performClick()
+            withTimeout(10000) {
+                while (
+                    app.repository.dao.command(alertId)!!.state != "recipient_acknowledged"
+                ) delay(10)
+            }
+            assertFalse(app.repository.dao.command(alertId)!!.confirmed)
+            val output = java.io.ByteArrayOutputStream()
+            val directory = java.nio.file.Files.createTempDirectory("alert-diagnostic").toFile()
+            try {
+                DiagnosticJournal(directory)
+                    .export(
+                        output,
+                        DiagnosticBuild("test", 1, 28, "source"),
+                        commands = app.repository.dao.commandHistory(),
+                    )
+                val exported =
+                    java.util.zip.ZipInputStream(output.toByteArray().inputStream()).use { zip ->
+                        buildString {
+                            while (true) {
+                                val entry = zip.nextEntry ?: break
+                                append(entry.name)
+                                append(String(zip.readBytes()))
+                            }
+                        }
+                    }
+                assertTrue(exported.contains("recipient_acknowledged"))
+                assertTrue(exported.contains(alertId))
+                assertFalse(exported.contains("private-alert-content"))
+            } finally {
+                directory.deleteRecursively()
+            }
             assertFalse(app.operational.value.tracking)
         } finally {
             activity.pause().stop().destroy()

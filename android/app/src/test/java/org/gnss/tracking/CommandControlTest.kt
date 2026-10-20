@@ -30,6 +30,30 @@ class CommandControlTest {
     private var capturedRequest = ""
     private var capturedResponse = ""
     private var replay = false
+    private var responseDelayMillis = 0L
+    private var alertAttempts = 0
+    private var alertStops = 0
+    private var outputBlocked = false
+    private val output =
+        object : PhoneAlertOutput {
+            override fun attempt(
+                row: CommandRecord,
+                spec: PhoneAlertSpec,
+                remaining: Long,
+            ): Pair<String, String> {
+                assertTrue(runBlocking { repository.dao.command(row.id)?.attempted == true })
+                alertAttempts++
+                return if (outputBlocked) "alert_blocked" to "Notification permission denied"
+                else
+                    "output_attempted" to
+                        "Notification/sound/vibration attempted; actual output unknown"
+            }
+
+            override fun stop(id: String) {
+                alertStops++
+            }
+        }
+
     private val transport =
         object : Transport {
             override suspend fun post(endpoint: String, immutableJson: String) = error("unused")
@@ -83,6 +107,8 @@ class CommandControlTest {
                     )
                 if (replay) return Response(200, capturedResponse)
                 capturedResponse = value
+                clock.now += responseDelayMillis
+                responseDelayMillis = 0
                 return Response(200, value)
             }
         }
@@ -117,6 +143,7 @@ class CommandControlTest {
                     else "applied" to "Tracking stopped and verified"
                 },
                 clock = clock,
+                alertOutput = output,
             )
         engine.bind(key) {}
     }
@@ -151,6 +178,208 @@ class CommandControlTest {
     private suspend fun poll() {
         clock.now += 6000
         engine.step()
+    }
+
+    private fun alert(
+        mode: String = "urgent",
+        expires: Long = clock.now + 300000,
+        disposition: String = "queued",
+    ) =
+        ins(
+            "alert",
+            1,
+            expires = expires,
+            payload =
+                mapOf(
+                    "mode" to mode,
+                    "message" to "Check in",
+                    "duration_s" to if (mode == "normal") 5 else 60,
+                    "repeat_s" to if (mode == "normal") 5 else 10,
+                ),
+            disposition = disposition,
+        )
+
+    @Test
+    fun alertLocalButtonPersistsOnceAndStopsDuplicateReplay() = runBlocking {
+        val command = alert()
+        instructions = listOf(command)
+        poll()
+        val id = command["id"] as String
+        assertEquals("output_attempted", repository.dao.command(id)!!.state)
+        assertEquals(1, alertAttempts)
+        engine.acknowledgeAlert(id)
+        engine.acknowledgeAlert(id)
+        val ack = repository.dao.command(id)!!
+        assertEquals("recipient_acknowledged", ack.state)
+        val revision = ack.revision
+        assertEquals(1, ack.events.lines().count { it.contains("recipient_acknowledged") })
+        repeat(4) { poll() }
+        assertEquals(1, alertAttempts)
+        assertEquals(revision, repository.dao.command(id)!!.revision)
+        assertTrue(repository.dao.command(id)!!.confirmed)
+    }
+
+    @Test
+    fun urgentRepeatsBoundedActualExpiryAndAuthenticatedCancel() = runBlocking {
+        val command = alert()
+        instructions = listOf(command)
+        poll()
+        clock.now += 10001
+        engine.tickAlerts()
+        assertEquals(2, alertAttempts)
+        instructions = listOf(command + ("disposition" to "cancel_requested_unknown"))
+        poll()
+        assertEquals("cancelled", repository.dao.command(command["id"] as String)!!.state)
+        clock.now += 100000
+        engine.tickAlerts()
+        assertEquals(2, alertAttempts)
+        assertTrue(alertStops > 0)
+    }
+
+    @Test
+    fun normalOneAttemptBlockedLocalAckAndLateExpiry() = runBlocking {
+        val normal = alert("normal")
+        instructions = listOf(normal)
+        poll()
+        repeat(3) {
+            clock.now += 10000
+            engine.tickAlerts()
+        }
+        assertEquals(1, alertAttempts)
+        assertEquals("output_attempted", repository.dao.command(normal["id"] as String)!!.state)
+        engine.acknowledgeAlert(normal["id"] as String)
+        outputBlocked = true
+        val blocked = alert().toMutableMap().apply { this["ordering"] = 2 }
+        instructions = listOf(blocked)
+        poll()
+        assertEquals("alert_blocked", repository.dao.command(blocked["id"] as String)!!.state)
+        engine.acknowledgeAlert(blocked["id"] as String)
+        assertEquals(
+            "recipient_acknowledged",
+            repository.dao.command(blocked["id"] as String)!!.state,
+        )
+        val expired = alert(expires = clock.now)
+        instructions = listOf(expired)
+        poll()
+        assertEquals("expired", repository.dao.command(expired["id"] as String)!!.state)
+        assertEquals(2, alertAttempts)
+    }
+
+    @Test
+    fun processRestartNeverRestartsOutputAndDurationIsAuthoritative() = runBlocking {
+        val command = alert()
+        instructions = listOf(command)
+        poll()
+        clock.now += 60001
+        engine.tickAlerts()
+        assertEquals("expired", repository.dao.command(command["id"] as String)!!.state)
+        assertEquals(1, alertAttempts)
+        val active = alert().toMutableMap().apply { this["ordering"] = 2 }
+        instructions = listOf(active)
+        poll()
+        engine =
+            CommandControl(
+                repository,
+                transport,
+                { key },
+                { _, _ -> PersistencePolicy() },
+                {},
+                { "blocked" to "test" },
+                clock = clock,
+                alertOutput = output,
+            )
+        engine.tickAlerts()
+        assertEquals("unknown", repository.dao.command(active["id"] as String)!!.state)
+        poll()
+        assertEquals(2, alertAttempts)
+    }
+
+    @Test
+    fun alertAuthenticationTargetReplayAndLocalRevocation() = runBlocking {
+        val command = alert()
+        instructions = listOf(command)
+        forged = true
+        poll()
+        assertEquals(0, alertAttempts)
+        forged = false
+        instructions = listOf(command + ("device" to Protocol.newId()))
+        poll()
+        assertEquals(0, alertAttempts)
+        instructions = listOf(command)
+        poll()
+        assertEquals(1, alertAttempts)
+        replay = true
+        poll()
+        assertEquals(1, alertAttempts)
+        engine.disable()
+        assertEquals("unknown", repository.dao.command(command["id"] as String)!!.state)
+        assertTrue(alertStops > 0)
+    }
+
+    @Test
+    fun skewedWallClockAndSuspendedResponseCannotStartExpiredAlert() = runBlocking {
+        val skewed =
+            object : Clock {
+                override fun wallMillis() = clock.now - 45000
+
+                override fun elapsedMillis() = clock.now
+            }
+        for (mode in listOf("normal", "urgent")) {
+            val command = alert(mode, expires = clock.now + 5000)
+            instructions = listOf(command)
+            responseDelayMillis =
+                10000 // Signed at t0, processed ten seconds later; wall time is behind.
+            val delayed =
+                CommandControl(
+                    repository,
+                    transport,
+                    { key },
+                    { _, _ -> PersistencePolicy() },
+                    {},
+                    { "blocked" to "test" },
+                    clock = skewed,
+                    alertOutput = output,
+                )
+            delayed.step()
+            val row = repository.dao.command(command["id"] as String)!!
+            assertEquals("expired", row.state)
+            assertFalse(row.attempted)
+            assertEquals(0, alertAttempts)
+        }
+    }
+
+    @Test
+    fun malformedAlertModeIsDurablyRejectedWithoutOutput() = runBlocking {
+        val command =
+            ins(
+                "alert",
+                payload =
+                    mapOf(
+                        "mode" to mapOf("invalid" to true),
+                        "message" to "",
+                        "duration_s" to 60,
+                        "repeat_s" to 10,
+                    ),
+            )
+        instructions = listOf(command)
+        poll()
+        val row = repository.dao.command(command["id"] as String)!!
+        assertEquals("rejected", row.state)
+        assertFalse(row.attempted)
+        assertEquals(0, alertAttempts)
+    }
+
+    @Test
+    fun sharedAlertPayloadFixtures() {
+        val fixture =
+            Protocol.parse(
+                javaClass.classLoader!!.getResource("control-v1/alerts.json")!!.readText()
+            )
+        assertEquals("normal", PhoneAlertSpec.parse(fixture["normal"].asJsonObject).mode)
+        assertEquals(60, PhoneAlertSpec.parse(fixture["urgent"].asJsonObject).duration_s)
+        assertTrue(
+            runCatching { PhoneAlertSpec.parse(fixture["invalid_duration"].asJsonObject) }.isFailure
+        )
     }
 
     @Test

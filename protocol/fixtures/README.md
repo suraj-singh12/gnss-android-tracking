@@ -35,3 +35,7 @@ applications must consume these examples in serializer/parser regression tests.
 native identity and timestamped queue progress. `history-batch-v1/` contains the
 negotiated batch request, ordered ACK and indexed permanent error; those files are
 batch wire examples, not individual messages or simulator scripts.
+
+`control-v1/alerts.json` contains #26 normal/urgent payloads, rejected duration and
+recipient-ACK evidence. Same control-v1 envelope/MAC vector, ordering and result
+custody apply; the fixture contains no provisioning key or claim of physical output.

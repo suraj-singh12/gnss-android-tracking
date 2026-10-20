@@ -138,7 +138,9 @@ jobs:
         env:
           GNSS_CONTROL_LOAD: "1"
         working-directory: command
-        run: go test -race ./internal/core -run '^TestFreshPriorityAndLateJoinDuringActualSlowWriterSaturation$' -count=1 -v | tee "$RUNNER_TEMP/gnss-test-reports/control-priority.txt"
+        run: |
+          go test -race ./internal/core -run '^TestFreshPriorityAndLateJoinDuringActualSlowWriterSaturation$' -count=1 -v | tee "$RUNNER_TEMP/gnss-test-reports/control-priority.txt"
+          GNSS_ALERT_LOAD=1 go test -race ./internal/core -run '^TestFreshPriorityAndLateJoinDuringActualSlowWriterSaturation$' -count=1 -v | tee "$RUNNER_TEMP/gnss-test-reports/alert-priority.txt"
       - name: Real Android to Command integration
         env:
           GNSS_ADAPTIVE_REPORT: ${{ runner.temp }}/gnss-test-reports/adaptive-accuracy.json

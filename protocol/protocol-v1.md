@@ -518,11 +518,12 @@ Command atomically commits results before returning `confirmed[id]` = SHA-256 he
 of the **exact phone result JSON bytes**. Android marks delivery confirmed only
 when that matching digest arrives in an authenticated fresh response. ACK loss
 retains the result for retry with a new nonce; execution does not repeat. Terminal
-results cannot be replaced; sync progress has increasing result revisions.
+results cannot be replaced; sync progress and active alert stages have increasing
+result revisions, with the explicit interrupted-alert local ACK exception below.
 
 Queued expired/cancelled/superseded instructions are not delivered and never appear
 as invented Android console records. Sent instructions remain uncertain; cancellation
-is a disposition Android can honor only before execution. A late cancellation cannot
+is a disposition Android can honor before execution or to stop an active #26 alert. A late cancellation cannot
 hide or undo an already applied effect. Queued reporting/adaptive changes supersede
 older queued changes; already sent commands preserve their evidence. Recipients are
 explicit identity snapshots, with no fleet cap or late-join subscription.
@@ -533,3 +534,71 @@ retains up to 512 unresolved instructions and 500 resolved/security history entr
 per-operation watermarks survive history pruning. No GNSS/SOS deletion occurs.
 The console displays/filter-searches bounded canonical records and exports sanitized
 metadata/stages through the existing ZIP, never keys, MACs or sensitive raw payloads.
+
+### Issue #26 phone alerts — operation version 1
+
+`alert` extends this same control envelope, enrollment, queue, result custody and
+recipient snapshot. No new endpoint, connection, phone listener or ACK engine.
+Payload keys are exactly `{mode,message,duration_s,repeat_s}`: mode `normal` or
+`urgent`, optional-content message represented as a string (empty allowed), at most
+160 Unicode code points on one line. Alert TTL is **5–3600 seconds**, default 300.
+Normal uses duration/repeat placeholders `5,5`; it attempts one notification and
+leaves it available for local Stop until TTL. Urgent defaults to duration **60 s**,
+repeat **10 s**, validated duration **5–120 s**, repeat **5–30 s** (at most 24 attempts including the first). Priority is
+`urgent` only for urgent alerts. Every recipient has its own existing command UUID.
+Older Android peers return `unsupported`; GNSS/SOS v1 and control envelope version 1
+are unchanged. Room v6 and existing SQLite records require no schema changes.
+
+The existing result contract adds `output_attempted`, `alert_blocked`, and terminal
+`recipient_acknowledged`. Output attempted means notification API invoked and
+channel sound/vibration requested; actual heard/felt output remains **unknown**.
+Disabled notification permission/channel yields alert_blocked; reported DND, mute
+or channel restrictions do not imply the remaining output worked. These active
+states may progress to expired, cancelled, failed or unknown, or local human ACK.
+Only Android notification action or its local UI button invokes human ACK, saved
+in Room before it is reported. `received` is durable receipt time; result `reason`
+and `effective` explain execution/limitations, with the local ACK timestamp in
+`effective`. Existing revision/digest custody confirms the exact human event.
+Unknown interrupted alert may subsequently accept the recipient's explicit local
+ACK; ACK is immutable and cannot be replaced by a late cancellation.
+
+Urgent repeat attempts occur only in a permitted existing Activity/tracking/transfer
+runtime, at most once per cadence (missed intervals are never caught up). A deadline
+uses the minimum of actual absolute expiry and duration from the first attempt,
+with a process-local monotonic cap against wall-clock rollback. Admission also
+includes monotonic exchange and staging elapsed time in a conservative upper bound
+on signed server time, so delayed/suspended processing cannot revive TTL while the
+phone wall clock is behind. This may expire a short-lived alert early on a slow path. The existing app
+loop checks expiry/Stop about every 250 ms while scheduled; Android scheduling may
+delay checks. Notification timeout also uses the remaining deadline. No exact-alarm,
+new foreground service, volume/DND override, full-screen launch or wake lock is
+introduced. Channels are independent normal/default-importance and urgent/high-importance channels, respect user edits,
+and use notification sound/vibration. Output is best effort, not an unstoppable
+alarm or proof of audibility. No current legal runtime means unreachable/blocked.
+Force-stop, Doze and OEM constraints can prevent delivery/repeats entirely.
+
+Cold start/reboot never automatically restarts output. On process start only the
+app's own command-alert notification tags are cancelled, including the window after
+a durable ACK commit but before OS cancellation; tracking/transfer/SOS are untouched. Active Room alert states
+are reconciled to `unknown` and their notification cancelled when the app runs;
+interrupted staged attempts retain #25's no-repeated-effect behavior. A local ACK
+can be retained offline and confirmed later through the same Sender. Active alerts
+are excluded from resolved-history pruning and count toward unresolved limits.
+After pruning, existing persistent ordering watermarks still prevent replay output.
+
+Cancel of a queued alert prevents delivery. Cancel after send/output persists
+`cancel_requested_unknown` and is prioritized for authenticated redelivery; an
+intermediate output result must not erase that pending disposition. Only phone
+`cancelled` proves cancellation applied. Offline phones may keep attempting until
+local Stop/deadline; Command does not infer Stop from its own Cancel click or TTL.
+An Android ACK racing Cancel wins if already durable. Re-enrollment/revocation
+retain uncertain results; local authorization changes stop local output. Remote
+revocation cannot notify an offline phone; duration/expiry still bound it.
+
+Diagnostics reuse Command Instructions and existing ZIP export. Per-command
+bounded events record output queue/attempt/repeat start/stop, OS restrictions,
+expiry/cancellation/human ACK and pending/confirmed result custody. Alert message
+content is redacted from ZIP; identity, timing, mode and bounds remain. No instruction
+never received is invented in Android. Phone alert ACK never invokes SOS APIs,
+changes GNSS state or touches SOS notifications. Sender still selects SOS/LIVE/history
+before control; alerts use its existing bounded control timeout and skip pending SOS.

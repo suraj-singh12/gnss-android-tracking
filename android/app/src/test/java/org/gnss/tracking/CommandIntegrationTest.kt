@@ -310,6 +310,279 @@ class CommandIntegrationTest {
     }
 
     @Test
+    fun phoneAlertsUseRealSenderRoomAndCommandCustodyForFrozenFleets() = runBlocking {
+        val gson = com.google.gson.Gson()
+        val issueToReceipt = mutableListOf<Double>()
+        val receiptToOutput = mutableListOf<Double>()
+        val ackToCustody = mutableListOf<Double>()
+        val arrivals = mutableMapOf<String, Long>()
+        val cancelStarts = mutableMapOf<String, Long>()
+        val cancelToStop = mutableListOf<Double>()
+        val attempts = mutableMapOf<String, Int>()
+        val output = NotificationPhoneAlertOutput(context)
+        var dropControlReply = false
+        data class Peer(val p: Phone, val key: ControlCredential, var engine: CommandControl)
+        val transport =
+            object : Transport {
+                override suspend fun post(endpoint: String, immutableJson: String) =
+                    request(endpoint + "/api/v1/messages", immutableJson)
+
+                override suspend fun capabilities(endpoint: String) =
+                    request(endpoint + "/api/v1/capabilities")
+
+                override suspend fun history(endpoint: String, json: String) =
+                    request(endpoint + "/api/v1/history", json)
+
+                override suspend fun control(endpoint: String, json: String): Response {
+                    val response = request(endpoint + "/api/v1/control", json)
+                    if (response.code == 200) {
+                        val arrived = System.nanoTime()
+                        val envelope = Protocol.parse(response.body)
+                        val body =
+                            Protocol.parse(
+                                String(
+                                    java.util.Base64.getDecoder().decode(envelope["data"].asString)
+                                )
+                            )
+                        for (command in body["commands"].asJsonArray) {
+                            val id = command.asJsonObject["id"].asString
+                            if (id !in arrivals) {
+                                arrivals[id] = arrived
+                                receiptStarts[id]?.let { issueToReceipt.add((arrived - it) / 1e6) }
+                            }
+                        }
+                    }
+                    if (dropControlReply) {
+                        dropControlReply = false
+                        throw java.io.IOException("Injected loss after durable Command custody")
+                    }
+                    return response
+                }
+            }
+        fun engine(p: Phone, key: ControlCredential) =
+            CommandControl(
+                p.repository,
+                transport,
+                { key },
+                { _, _ -> PersistencePolicy() },
+                { p.sender.requestDrain() },
+                { "blocked" to "test runtime" },
+                clock = clock,
+                alertOutput =
+                    object : PhoneAlertOutput {
+                        override fun attempt(
+                            row: CommandRecord,
+                            spec: PhoneAlertSpec,
+                            remaining: Long,
+                        ): Pair<String, String> {
+                            assertTrue(runBlocking { p.repository.dao.command(row.id)!!.attempted })
+                            attempts[row.id] = (attempts[row.id] ?: 0) + 1
+                            receiptToOutput.add(
+                                (System.nanoTime() - arrivals.getValue(row.id)) / 1e6
+                            )
+                            return output.attempt(row, spec, remaining)
+                        }
+
+                        override fun stop(id: String) {
+                            output.stop(id)
+                            cancelStarts.remove(id)?.let {
+                                cancelToStop.add((System.nanoTime() - it) / 1e6)
+                            }
+                        }
+                    },
+            )
+        suspend fun enroll(): Peer {
+            val p = phone(legacy = false)
+            p.deliver(p.snapshot())
+            val response =
+                request(
+                    bridge.local + "/local/control/enroll",
+                    gson.toJson(mapOf("device" to p.id, "confirmed" to true)),
+                )
+            assertEquals(response.body, 200, response.code)
+            val key =
+                ControlCrypto.parseCredential(Protocol.parse(response.body)["credential"].asString)
+            val peer = Peer(p, key, engine(p, key))
+            peer.engine.bind(key) {}
+            p.sender =
+                Sender(p.repository, transport, clock, controlStep = { peer.engine.step() }) {
+                    p.snapshot()
+                }
+            return peer
+        }
+        suspend fun poll(peers: List<Peer>) {
+            atMillis(clock.now + 6000)
+            for (peer in peers) peer.p.sender.step(retainedOnly = true)
+        }
+        suspend fun issue(peers: List<Peer>, mode: String, ttl: Int = 300): List<String> {
+            val issuedAt = System.nanoTime()
+            val response =
+                request(
+                    bridge.local + "/local/control/issue",
+                    gson.toJson(
+                        mapOf(
+                            "targets" to peers.map { it.p.id },
+                            "operation" to "alert",
+                            "payload" to
+                                mapOf(
+                                    "mode" to mode,
+                                    "message" to "Check in",
+                                    "duration_s" to if (mode == "normal") 5 else 60,
+                                    "repeat_s" to if (mode == "normal") 5 else 10,
+                                ),
+                            "ttl" to ttl,
+                            "confirmed" to true,
+                        )
+                    ),
+                )
+            assertEquals(response.body, 200, response.code)
+            val ids = Protocol.parse(response.body)["ids"].asJsonArray.map { it.asString }
+            for (id in ids) receiptStarts[id] = issuedAt
+            return ids
+        }
+        for (n in listOf(1, 5, 20)) {
+            val fleet = (1..n).map { enroll() }
+            if (n == 20) {
+                for (peer in fleet) {
+                    repeat(100) { sample ->
+                        peer.p.snapshot(
+                            x = sample.toDouble(),
+                            captured = clock.now - 7 * 86400000L + sample * 60000L,
+                        )
+                    }
+                    peer.p.snapshot(x = 101.0)
+                    peer.p.sender.requestDrain()
+                }
+                val emergency =
+                    SosEngine(
+                            fleet.first().p.repository,
+                            LatestLocation(clock),
+                            { Health() },
+                            clock,
+                        )
+                        .activate(SosTrigger.SCREEN)
+                        .row
+                fleet.first().p.sender.step(sosOnly = true, retainedOnly = true)
+                assertNotNull(fleet.first().p.repository.dao.row(emergency.sequence)!!.deliveredAt)
+            }
+            for (mode in listOf("normal", "urgent")) {
+                val ids = issue(fleet, mode)
+                val late = enroll()
+                val online = if (n == 1) fleet else fleet.take(if (n == 5) 3 else 15)
+                poll(online + late)
+                assertTrue(late.p.repository.dao.commandHistory().isEmpty())
+                for (peer in online) {
+                    val index = fleet.indexOf(peer)
+                    val row = peer.p.repository.dao.command(ids[index])!!
+                    assertEquals("output_attempted", row.state)
+                    assertFalse(row.confirmed)
+                    assertEquals(1, attempts[row.id])
+                }
+                for (peer in fleet - online.toSet()) assertTrue(
+                    peer.p.repository.dao.commandHistory().none { it.id in ids }
+                )
+                poll(fleet) // offline members reconnect before expiry
+                for ((index, peer) in fleet.withIndex()) {
+                    val started = System.nanoTime()
+                    peer.engine.acknowledgeAlert(
+                        ids[index]
+                    ) // same local UI entry point; no operator ACK API
+                    peer.engine.acknowledgeAlert(ids[index])
+                    if (n == 1 && mode == "urgent") dropControlReply = true
+                    peer.engine.step()
+                    if (n == 1 && mode == "urgent") {
+                        assertFalse(peer.p.repository.dao.command(ids[index])!!.confirmed)
+                        bridge.restart()
+                        peer.p.repository.settings("same", "same", bridge.phone, 10)
+                        peer.engine = engine(peer.p, peer.key)
+                        poll(listOf(peer))
+                    }
+                    assertEquals(
+                        "recipient_acknowledged",
+                        peer.p.repository.dao.command(ids[index])!!.state,
+                    )
+                    assertTrue(peer.p.repository.dao.command(ids[index])!!.confirmed)
+                    ackToCustody.add((System.nanoTime() - started) / 1e6)
+                }
+                poll(fleet)
+                for ((index, peer) in fleet.withIndex()) {
+                    assertEquals(
+                        1,
+                        peer.p.repository.dao.command(ids[index])!!.events.lines().count {
+                            it.contains("recipient_acknowledged")
+                        },
+                    )
+                    val count = attempts[ids[index]]
+                    peer.p.reopen()
+                    peer.engine = engine(peer.p, peer.key)
+                    peer.p.sender =
+                        Sender(
+                            peer.p.repository,
+                            transport,
+                            clock,
+                            controlStep = { peer.engine.step() },
+                        ) {
+                            peer.p.snapshot()
+                        }
+                    peer.engine.step()
+                    assertEquals(count, attempts[ids[index]])
+                }
+            }
+            if (n == 20) {
+                assertEquals(1, state()["sos_alerts"].asJsonArray.size())
+                assertTrue(
+                    state()["sos_alerts"]
+                        .asJsonArray[0]
+                        .asJsonObject["operator_acknowledged_at"]
+                        .isJsonNull
+                )
+                assertNotNull(fleet.first().p.repository.dao.sosHistory().single().deliveredAt)
+            }
+            bridge.restart()
+            for (peer in fleet) peer.p.repository.settings("same", "same", bridge.phone, 10)
+            val expired = issue(fleet, "urgent", 5)
+            poll(fleet)
+            for ((index, peer) in fleet.withIndex()) {
+                assertNull(peer.p.repository.dao.command(expired[index]))
+                assertNull(attempts[expired[index]])
+            }
+            val cancelled = issue(fleet, "urgent")
+            for (id in cancelled) control("control/cancel", gson.toJson(mapOf("id" to id)))
+            poll(fleet)
+            for (id in cancelled) assertNull(attempts[id])
+            val active = issue(fleet, "urgent")
+            poll(fleet)
+            for (id in active) {
+                cancelStarts[id] = System.nanoTime()
+                control("control/cancel", gson.toJson(mapOf("id" to id)))
+            }
+            val before = request(bridge.local + "/local/control")
+            assertTrue(before.body.contains("cancel_requested_unknown"))
+            poll(fleet)
+            for ((index, peer) in fleet.withIndex()) assertEquals(
+                "cancelled",
+                peer.p.repository.dao.command(active[index])!!.state,
+            )
+            poll(fleet)
+            println(
+                "ALERT_FLEET n=$n modes=normal,urgent frozenLateJoin=true independentAck=true offlineExpiry=true cancellation=true"
+            )
+        }
+        fun report(name: String, values: List<Double>) {
+            val sorted = values.sorted()
+            println(
+                "ALERT_LATENCY $name wall_ms count=${sorted.size} p50=${sorted[sorted.size/2]} p95=${sorted[((sorted.size-1)*95)/100]} worst=${sorted.last()} synthetic-clock polling; Linux HTTP/Room/SQLite, no physical audio"
+            )
+        }
+        report("issue_to_phone_envelope_receipt", issueToReceipt)
+        report("envelope_receipt_to_output_attempt", receiptToOutput)
+        report("local_ack_to_custody", ackToCustody)
+        report("operator_cancel_to_phone_stop", cancelToStop)
+    }
+
+    private val receiptStarts = mutableMapOf<String, Long>()
+
+    @Test
     fun authenticatedRemoteControlRealRoomSenderFleetAndReconciliation() = runBlocking {
         val gson = com.google.gson.GsonBuilder().serializeNulls().create()
         var dropReply = false

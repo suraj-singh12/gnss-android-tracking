@@ -836,7 +836,30 @@ per-phone journal. Expand history for requested versus effective values, actual
 attempt/result and errors. Automatic retries retain identity; **Review new request**
 is a deliberate new instruction. Safe cancellation distinguishes queued cancellation
 from uncertain already-sent work. Desired config or HTTP success never proves effect.
-No alarms (#26), recording/playback, map architecture or quality/distance changes are
-introduced. Remote controls belong only to this live local application, never to
+Recording/playback, map architecture and quality/distance controls are unchanged. Remote controls belong only to this live local application, never to
 historical data objects. Native Windows/macOS execution remains separate from CI
 cross-build evidence. See the normative protocol extension for trust/race limits.
+
+### Phone alerts (#26)
+
+In the existing Phone controls choose **Phone alert**, Normal attention or Urgent
+repeating, optional message, and one/selected/all eligible enrolled phones. Review
+actual recipient IDs/count, payload and TTL before confirming. All freezes that
+list; late joiners are excluded and there is no 20-phone cap. Eligibility comes from
+fresh enrollment state even when the independent LIVE inventory is delayed; newly
+enrolled phones remain visible by UUID. Issuance waits for recipient selection to
+finish. Defaults: TTL 300 s;
+urgent 60-second duration / 10-second repeats. TTL range 5–3600 s; urgent duration
+5–120 s; cadence 5–30 s. Normal attempts once, notification available until expiry.
+
+History distinguishes queued/offline, durable receipt, output attempted (heard/felt
+unknown), OS blocked, human recipient ACK, expiry, failure/unknown, operator cancel
+requested and Android cancellation confirmed. Expand to see request, timings,
+expiry, effective result and authenticated result revision. An operator cannot
+produce recipient ACK. Cancel after send/output stays pending while the phone is
+offline; TTL/duration and local Stop remain phone-owned. Human ACK survives a late
+Cancel, duplicate, restart or reconnect. Interrupted output is not automatically
+replayed. Older phones report unsupported. These alerts share #25 security,
+SQLite, transport and result custody and never acknowledge Android SOS or control
+Command's SOS siren. Native Windows/macOS, real LAN fleet/endurance and actual
+Android audio remain NOT TESTED until the deferred combined acceptance session.

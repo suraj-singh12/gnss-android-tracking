@@ -387,3 +387,17 @@ Physical Android OS/background/Keystore and native macOS/Windows acceptance rema
 NOT TESTED; use the device checklist. #24 remains OPEN, with physical adaptive testing
 deferred. #40's external Overpass overall CI failure remains a separate visible
 failure until independently resolved; no map implementation is changed here.
+
+### #26 phone alerts
+
+Verify Phone controls Normal/Urgent, optional message, one/selected/all checked
+identities, actual count/IDs in confirmation, validated expiry and bounded urgent
+cadence/duration. Enroll 20 and a late 21st; late join never enters an issued snapshot.
+Expand history during refresh: queued versus receipt/output versus local human ACK
+and Cancel pending versus confirmed must remain distinct. Confirm no browser action
+can ACK a phone on behalf of its recipient. Run control-ui.cjs plus existing SOS/UI
+suites and axe checks; capture the real UI without claiming hardware execution.
+Android notification action and Command Instructions local action must persist a
+single recipient event and leave SOS untouched; invalid permissions show truthful
+blocked/unknown outcomes. Apply the physical checklist for actual output/locked/OEM
+behavior; synthetic browser/Robolectric evidence does not satisfy those gates.
