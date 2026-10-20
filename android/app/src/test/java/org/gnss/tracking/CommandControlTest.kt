@@ -388,6 +388,32 @@ class CommandControlTest {
     }
 
     @Test
+    fun receivedWithoutAttemptResumesOnceEvenAfterReceiptCustody() = runBlocking {
+        val command = ins("sync", 1, payload = emptyMap(), disposition = "received")
+        val id = command["id"] as String
+        repository.dao.insertCommand(
+            CommandRecord(
+                id,
+                key.authority,
+                key.device,
+                key.enrollment,
+                "sync",
+                1,
+                clock.now,
+                confirmed = true,
+            )
+        )
+        instructions = listOf(command)
+        poll()
+        assertEquals(1, syncCount)
+        assertTrue(repository.dao.command(id)!!.attempted)
+        assertEquals("sync_started", repository.dao.command(id)!!.state)
+        assertFalse(repository.dao.command(id)!!.confirmed)
+        poll()
+        assertEquals(1, syncCount)
+    }
+
+    @Test
     fun interruptedAttemptRemainsUnknownAndDoesNotRepeatEffect() = runBlocking {
         val command = ins("sync", 1, payload = emptyMap())
         val id = command["id"] as String

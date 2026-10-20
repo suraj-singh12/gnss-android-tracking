@@ -452,6 +452,7 @@ class CommandControl(
                             listOf(
                                 "queued",
                                 "sent_unknown",
+                                "received",
                                 "cancel_requested_unknown",
                                 "cancelled",
                             )
