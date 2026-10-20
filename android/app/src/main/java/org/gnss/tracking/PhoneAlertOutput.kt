@@ -49,6 +49,8 @@ interface PhoneAlertOutput {
     fun attempt(row: CommandRecord, spec: PhoneAlertSpec, remaining: Long): Pair<String, String>
 
     fun stop(id: String)
+
+    fun resetAfterProcessStart() {}
 }
 
 class NotificationPhoneAlertOutput(private val context: Context) : PhoneAlertOutput {
@@ -143,6 +145,13 @@ class NotificationPhoneAlertOutput(private val context: Context) : PhoneAlertOut
         if (actual?.shouldVibrate() != true) restrictions.add("channel vibration disabled")
         return "output_attempted" to
             "Notification attempted; channel sound/vibration requested; actual audible/haptic output unknown${if (restrictions.isEmpty()) "" else "; OS limitations: " + restrictions.joinToString(", ")}"
+    }
+
+    override fun resetAfterProcessStart() {
+        for (notification in manager.activeNotifications) {
+            if (notification.tag?.startsWith("command-phone-alert:") == true)
+                manager.cancel(notification.tag, notification.id)
+        }
     }
 
     override fun stop(id: String) {

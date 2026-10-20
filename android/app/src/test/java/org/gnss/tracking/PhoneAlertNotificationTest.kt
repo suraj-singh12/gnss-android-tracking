@@ -81,6 +81,7 @@ class PhoneAlertNotificationTest {
     fun actualNotificationButtonPersistsHumanAckAndDoesNotAcknowledgeSos() = runBlocking {
         val app = ApplicationProvider.getApplicationContext<TrackingApp>()
         try {
+            app.commandControl.tickAlerts()
             val now = System.currentTimeMillis()
             val row =
                 CommandRecord(
@@ -129,6 +130,20 @@ class PhoneAlertNotificationTest {
             assertEquals(2L, app.repository.dao.command(row.id)!!.revision)
             assertFalse(app.repository.dao.command(row.id)!!.confirmed)
             assertEquals(1, manager.activeNotifications.size)
+            // Model process loss after ACK commit but before OS cancellation.
+            output.attempt(row, PhoneAlertSpec("normal", "Old notification", 5, 5), 60000)
+            assertEquals(2, manager.activeNotifications.size)
+            manager.notify(
+                1,
+                android.app.Notification.Builder(app, "command-phone-alert-normal-v1")
+                    .setSmallIcon(R.drawable.ic_device)
+                    .setContentTitle("Unrelated tracking notification")
+                    .build(),
+            )
+            output.resetAfterProcessStart()
+            assertEquals(1, manager.activeNotifications.size)
+            assertNull(manager.activeNotifications.single().tag)
+            assertEquals("recipient_acknowledged", app.repository.dao.command(row.id)!!.state)
         } finally {
             app.finishForTests()
         }

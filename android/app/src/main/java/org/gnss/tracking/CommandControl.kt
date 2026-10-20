@@ -193,6 +193,7 @@ class CommandControl(
     private var failures = 0
     private val alertNext = mutableMapOf<String, Long>()
     private val alertDeadline = mutableMapOf<String, Long>()
+    private var alertOutputRecovered = false
     private val dao
         get() = repository.dao
 
@@ -534,7 +535,11 @@ class CommandControl(
                         priority =
                             if (
                                 operation == "alert" &&
-                                    ins["payload"].asJsonObject["mode"]?.asString == "urgent"
+                                    runCatching {
+                                            ins["payload"].asJsonObject["mode"]?.asString ==
+                                                "urgent"
+                                        }
+                                        .getOrDefault(false)
                             )
                                 "urgent"
                             else "normal",
@@ -788,6 +793,12 @@ class CommandControl(
     suspend fun acknowledgeAlert(id: String) =
         mutex.withLock {
             val row = dao.command(id) ?: return@withLock
+            if (row.trusted && row.operation == "alert" && row.state == "recipient_acknowledged") {
+                // Retry the OS Stop after a crash between durable ACK and notification
+                // cancellation.
+                alertOutput?.stop(id)
+                return@withLock
+            }
             if (
                 !row.trusted ||
                     row.operation != "alert" ||
@@ -849,6 +860,10 @@ class CommandControl(
     // No alarm service, wake lock or autonomous replay. Cold-start effects become unknown.
     suspend fun tickAlerts() =
         mutex.withLock {
+            if (!alertOutputRecovered) {
+                alertOutput?.resetAfterProcessStart()
+                alertOutputRecovered = true
+            }
             val alerts = dao.activeAlerts()
             if (alerts.isEmpty()) return@withLock
             val binding = repository.state()

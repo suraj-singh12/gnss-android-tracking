@@ -574,7 +574,9 @@ and use notification sound/vibration. Output is best effort, not an unstoppable
 alarm or proof of audibility. No current legal runtime means unreachable/blocked.
 Force-stop, Doze and OEM constraints can prevent delivery/repeats entirely.
 
-Cold start/reboot never automatically restarts output. Active Room alert states
+Cold start/reboot never automatically restarts output. On process start only the
+app's own command-alert notification tags are cancelled, including the window after
+a durable ACK commit but before OS cancellation; tracking/transfer/SOS are untouched. Active Room alert states
 are reconciled to `unknown` and their notification cancelled when the app runs;
 interrupted staged attempts retain #25's no-repeated-effect behavior. A local ACK
 can be retained offline and confirmed later through the same Sender. Active alerts

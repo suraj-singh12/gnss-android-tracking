@@ -314,6 +314,27 @@ class CommandControlTest {
     }
 
     @Test
+    fun malformedAlertModeIsDurablyRejectedWithoutOutput() = runBlocking {
+        val command =
+            ins(
+                "alert",
+                payload =
+                    mapOf(
+                        "mode" to mapOf("invalid" to true),
+                        "message" to "",
+                        "duration_s" to 60,
+                        "repeat_s" to 10,
+                    ),
+            )
+        instructions = listOf(command)
+        poll()
+        val row = repository.dao.command(command["id"] as String)!!
+        assertEquals("rejected", row.state)
+        assertFalse(row.attempted)
+        assertEquals(0, alertAttempts)
+    }
+
+    @Test
     fun sharedAlertPayloadFixtures() {
         val fixture =
             Protocol.parse(
