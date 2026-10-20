@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -15,12 +16,17 @@ import (
 	"time"
 )
 
+func controlLoopback(r *http.Request) *http.Request {
+	r.RemoteAddr = "127.0.0.1:12345"
+	r.Host = "localhost"
+	return r
+}
 func controlAPI(t *testing.T, s *Store, path string, value any, want int) map[string]json.RawMessage {
 	t.Helper()
 	r := httptest.NewRequest("POST", "http://localhost/local/control/"+path, bytes.NewReader(encode(t, value)))
 	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-	s.LocalHandler(nil).ServeHTTP(w, r)
+	s.LocalHandler(nil).ServeHTTP(w, controlLoopback(r))
 	if w.Code != want {
 		t.Fatalf("%s: %d %s", path, w.Code, w.Body)
 	}
@@ -169,7 +175,7 @@ func TestControlLocalOriginAndLegacy(t *testing.T) {
 	r.Header.Set("Origin", "http://attacker")
 	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-	s.LocalHandler(nil).ServeHTTP(w, r)
+	s.LocalHandler(nil).ServeHTTP(w, controlLoopback(r))
 	if w.Code != 403 {
 		t.Fatal("cross origin mutation")
 	}
@@ -182,7 +188,7 @@ func TestControlLocalOriginAndLegacy(t *testing.T) {
 		t.Fatal("legacy GNSS broken", w.Body)
 	}
 	w = httptest.NewRecorder()
-	s.LocalHandler(nil).ServeHTTP(w, httptest.NewRequest("GET", "/local/control", nil))
+	s.LocalHandler(nil).ServeHTTP(w, controlLoopback(httptest.NewRequest("GET", "/local/control", nil)))
 	if strings.Contains(w.Body.String(), "secret") || strings.Contains(w.Body.String(), "credential") {
 		t.Fatal("credential in ordinary view")
 	}
@@ -238,7 +244,7 @@ func TestControlSupersessionCrossPhoneResultsAndOfflineExpiry(t *testing.T) {
 	expiring := issue(20, 5)
 	*now = base.Add(6 * time.Second)
 	w := httptest.NewRecorder()
-	s.LocalHandler(nil).ServeHTTP(w, httptest.NewRequest("GET", "/local/control", nil))
+	s.LocalHandler(nil).ServeHTTP(w, controlLoopback(httptest.NewRequest("GET", "/local/control", nil)))
 	if w.Code != 200 {
 		t.Fatal(w.Body)
 	}
@@ -311,5 +317,22 @@ func TestControlStopResultOnlyFlushDoesNotDispatchNextInstruction(t *testing.T) 
 	var state string
 	if e := s.db.QueryRow(`SELECT state FROM control_commands WHERE id=?`, next).Scan(&state); e != nil || state != "queued" {
 		t.Fatal("next instruction incorrectly dispatched", state, e)
+	}
+}
+
+func TestControlRejectsRemoteConsoleAndDNSRebindingHost(t *testing.T) {
+	s, _, _ := open(t)
+	for _, remote := range []bool{true, false} {
+		r := controlLoopback(httptest.NewRequest("GET", "/local/control", nil))
+		if remote {
+			r.RemoteAddr = "192.168.1.22:1234"
+		} else {
+			r.Host = "attacker.example:8081"
+		}
+		w := httptest.NewRecorder()
+		s.LocalHandler(nil).ServeHTTP(w, r)
+		if w.Code != 403 {
+			t.Fatal("remote or rebinding console access allowed", w.Code)
+		}
 	}
 }

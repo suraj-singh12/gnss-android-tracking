@@ -816,7 +816,7 @@ class MainActivity : Activity() {
                 contentDescription = hint
             }
         content.addView(commandFilter)
-        val commandSummary = text("Loading Command Instructions…")
+        val instructionSummary = text("Loading Command Instructions…")
         val commandRows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         content.addView(commandRows)
         var commandHistory = emptyList<CommandRecord>()
@@ -829,7 +829,7 @@ class MainActivity : Activity() {
                         .lowercase()
                         .contains(filter)
                 }
-            commandSummary.text =
+            instructionSummary.text =
                 "${app.commandControl.availability}\n${matching.size} matching / ${commandHistory.size} retained. Only instructions actually received appear. Pending results are never cleared by this console."
             for (row in matching.take(100)) {
                 val title =
@@ -896,7 +896,7 @@ class MainActivity : Activity() {
                         renderCommands()
                     }
             } catch (_: Exception) {
-                commandSummary.text =
+                instructionSummary.text =
                     "Command Instructions unavailable: cannot read durable journal; check storage"
             }
         }

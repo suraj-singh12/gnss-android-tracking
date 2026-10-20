@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -307,6 +308,17 @@ func controlResultDigest(b []byte, id string) string {
 func (s *Store) controlLocal(w http.ResponseWriter, r *http.Request) bool {
 	if !strings.HasPrefix(r.URL.Path, "/local/control") {
 		return false
+	}
+	peer, _, peerErr := net.SplitHostPort(r.RemoteAddr)
+	host, _, hostErr := net.SplitHostPort(r.Host)
+	if hostErr != nil {
+		host = r.Host
+	}
+	host = strings.Trim(host, "[]")
+	hostIP := net.ParseIP(host)
+	if peerErr != nil || !net.ParseIP(peer).IsLoopback() || (strings.ToLower(host) != "localhost" && (hostIP == nil || !hostIP.IsLoopback())) {
+		failure(w, 403, "loopback_required", errors.New("open Phone controls through localhost or a loopback address on the Command computer"))
+		return true
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	if r.Method == "GET" && r.URL.Path == "/local/control" {

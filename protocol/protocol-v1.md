@@ -416,6 +416,9 @@ UUID. No trust is learned from an unauthenticated LAN response; no QR app, disco
 server or phone listener is involved. Never transfer credentials through an
 unverified LAN server, logs, diagnostic exports or shared clipboard services.
 The local provisioning response alone contains the secret, with `no-store`.
+Control APIs require both a loopback peer and localhost/loopback Host, including
+when an operator overrides the dashboard bind flag; same-origin JSON mutations
+additionally reject cross-site requests and DNS-rebinding console access.
 
 A random enrollment UUID is a key generation/revocation identifier, **not another
 Command authority**. Replacement credentials invalidate old generations immediately
