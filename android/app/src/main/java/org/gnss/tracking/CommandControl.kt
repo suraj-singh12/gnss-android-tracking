@@ -241,9 +241,19 @@ class CommandControl(
 
     suspend fun changeSettings(block: suspend () -> Unit) = mutex.withLock { block() }
 
-    suspend fun step() =
+    suspend fun step() {
+        var flushStopResult = false
+        stepOnce(false) { flushStopResult = true }
+        // Stop may end the only legal sending lifetime while the Activity is
+        // hidden. Use this same bounded conversation once more before returning,
+        // rather than waiting for a scheduler that was just stopped. No wake-up,
+        // listener, service or continuing timer is created.
+        if (flushStopResult) stepOnce(true) {}
+    }
+
+    private suspend fun stepOnce(immediate: Boolean, stopped: () -> Unit) =
         mutex.withLock {
-            if (clock.elapsedMillis() < next) return@withLock
+            if (!immediate && clock.elapsedMillis() < next) return@withLock
             val state = repository.state()
             val key = credential()
             if (key == null) {
@@ -361,6 +371,8 @@ class CommandControl(
                 for (command in commands) {
                     try {
                         receive(command.asJsonObject, key, body["at"].asLong)
+                        if (command.asJsonObject["operation"]?.asString == "tracking_stop")
+                            stopped()
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         throw e
                     } catch (_: IllegalArgumentException) {

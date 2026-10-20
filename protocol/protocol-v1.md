@@ -468,7 +468,9 @@ Each command has immutable `{id,authority,device,enrollment,operation,version:1,
 payload,created,expires,ordering,priority:"normal"}` plus current `disposition`. Timestamps are Unix
 milliseconds; ordering is SQLite's monotonic command allocation, never phone count.
 One instruction/phone/exchange and at most 32 results bound work and body size.
-Polls are at most once/5 seconds, failures back off to 30 seconds. Existing SOS/LIVE/
+Ordinary polls are at most once/5 seconds, failures back off to 30 seconds. A Stop
+uses one immediate bounded result reconciliation before returning, because it may
+end the only running sending service; this creates no continuing background work. Existing SOS/LIVE/
 history selection runs first; pending SOS takes precedence; control HTTP has a
 one-second deadline. No autonomous lifetime is promised after Android force-stop,
 reboot, hidden Activity without a permitted running service, or OEM termination.

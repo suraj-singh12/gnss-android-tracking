@@ -24,6 +24,7 @@ class CommandControlTest {
     private var forged = false
     private var syncCount = 0
     private var adaptiveCount = 0
+    private var trackingCalls = 0
     private var failAdaptive = false
     private var storedResults = 0
     private var capturedRequest = ""
@@ -107,7 +108,11 @@ class CommandControlTest {
                     PersistencePolicy(enabled = enabled, effectiveAt = at)
                 },
                 sync = { syncCount++ },
-                tracking = { "blocked" to "OS background restriction" },
+                tracking = { start ->
+                    trackingCalls++
+                    if (start) "blocked" to "OS background restriction"
+                    else "applied" to "Tracking stopped and verified"
+                },
                 clock = clock,
             )
         engine.bind(key) {}
@@ -199,6 +204,18 @@ class CommandControlTest {
             migrated.close()
             context.deleteDatabase(name)
         }
+    }
+
+    @Test
+    fun remoteStopFlushesResultBeforeTheSendingLifetimeEnds() = runBlocking {
+        val stop = ins("tracking_stop", 1, payload = emptyMap())
+        instructions = listOf(stop)
+        poll()
+        val row = repository.dao.command(stop["id"] as String)!!
+        assertEquals("applied", row.state)
+        assertEquals(1, trackingCalls)
+        assertTrue("Stop result must reconcile without another scheduler iteration", row.confirmed)
+        assertTrue(row.confirmedAt > 0)
     }
 
     @Test
