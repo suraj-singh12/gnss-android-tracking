@@ -197,7 +197,11 @@ func Open(path string) (*Store, error) {
 		}
 	}
 	// SQLite is compiled into embedded WASM and executed by Go's wazero runtime.
-	db, err := sql.Open("sqlite3", path)
+	dsn, err := privateDSN(path)
+	if err != nil {
+		return nil, err
+	}
+	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
 		return nil, err
 	}
@@ -366,20 +370,20 @@ func Open(path string) (*Store, error) {
 	if path != ":memory:" {
 		// A single bounded WAL reader uses the same authoritative database. Cold
 		// dashboard materialization must not hold the ingestion mutex/connection.
-		s.viewDB, err = driver.Open(path, func(c *sqlite3.Conn) error {
+		s.viewDB, err = driver.Open(dsn, func(c *sqlite3.Conn) error {
 			return c.Exec("PRAGMA query_only=ON; PRAGMA busy_timeout=5000")
 		})
 		if err != nil {
 			return fail(err)
 		}
-		s.projectionDB, err = driver.Open(path, func(c *sqlite3.Conn) error {
+		s.projectionDB, err = driver.Open(dsn, func(c *sqlite3.Conn) error {
 			return c.Exec("PRAGMA query_only=ON; PRAGMA busy_timeout=5000")
 		})
 		if err != nil {
 			s.viewDB.Close()
 			return fail(err)
 		}
-		s.liveDB, err = driver.Open(path, func(c *sqlite3.Conn) error { return c.Exec("PRAGMA query_only=ON; PRAGMA busy_timeout=1000") })
+		s.liveDB, err = driver.Open(dsn, func(c *sqlite3.Conn) error { return c.Exec("PRAGMA query_only=ON; PRAGMA busy_timeout=1000") })
 		if err != nil {
 			s.projectionDB.Close()
 			s.viewDB.Close()

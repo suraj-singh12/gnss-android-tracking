@@ -170,6 +170,11 @@ waiting for a lower sequence ACK; sequence is identity/order, not cumulative ACK
 
 ## Remote reporting configuration
 
+The ACK adoption rules in this section describe legacy v1 clients. Current
+Android requires authenticated Issue #25 instructions from first contact and
+ignores unauthenticated ACK configuration, while preserving v1 GNSS/SOS receipts.
+The revision and effective-value model below remains shared by both paths.
+
 Reporting intervals are integer seconds in `5..86400`, divisible by 5 (examples
 5, 10, 15, 20, 30, 60, 120); the finite upper bound allows consistent validation. Local
 default is 10 s. Command display-dot interval is independent and never transmitted
@@ -427,7 +432,9 @@ invalidates the binding and override, preserving phone identity and original
 history. New authority/installation requires explicit new credential transfer.
 Android seals credentials using Android Keystore AES-GCM; existing no-backup rules
 exclude preferences and databases. Missing/unreadable keys yield unavailable control
-without fallback. Command's private application SQLite stores the per-phone key;
+without fallback. Command's private application SQLite stores the per-phone key; its database,
+WAL, journal and shared-memory files are created/reopened with owner-only modes
+through the existing embedded SQLite VFS (Windows additionally relies on OS ACLs);
 backups must be protected like credentials and preserve authority, command order,
 nonce state and desired revisions. Restoring an old snapshot is not anti-rollback
 hardware: revoke/re-enroll phones after suspect restore or credential compromise.
@@ -500,9 +507,10 @@ legacy config echo or desired value is **never** proof of executed effect.
 Android persists receipt before attempt, per-operation ordering watermarks, result
 and bounded stage chronology in Room v6. Reporting effect/result is one transaction.
 Duplicates return existing results, never repeat effects. Reordered settings cannot
-roll back a newer operation/config revision. After interruption between receipt/
-attempt and durable completion, the persisted result becomes **unknown**, without
-repeating an uncertain side effect. Operator may issue a deliberate new request.
+roll back a newer operation/config revision. A received-only stage is nonterminal: Command continues delivery and preserves
+late cancellation. After restart, a receipt with no durable attempt resumes through
+the same expiry/order/authorization checks. An interrupted **attempted** effect
+becomes **unknown**, without repeating an uncertain side effect. Operator may issue a deliberate new request.
 Nontransactional OS/policy effects cannot honestly promise exactly-once execution
 under arbitrary power loss; deduplication prevents an automatic second attempt.
 

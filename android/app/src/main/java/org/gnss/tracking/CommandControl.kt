@@ -480,7 +480,7 @@ class CommandControl(
                 operation.length <= 40
         )
         val old = dao.command(id)
-        if (old != null) {
+        if (old != null && !(old.state == "received" && !old.attempted)) {
             dao.updateCommand(
                 old.event(clock.wallMillis(), "Duplicate ignored; persisted result retained")
             )
@@ -493,27 +493,38 @@ class CommandControl(
                 )
             return
         }
-        if (dao.unresolvedCommands() >= 512) {
+        if (old == null && dao.unresolvedCommands() >= 512) {
             denied("command_storage_pressure")
             return
         }
         var row =
-            CommandRecord(
-                    id,
-                    key.authority,
-                    key.device,
-                    key.enrollment,
-                    operation,
-                    ordering,
-                    clock.wallMillis(),
-                    version = ins["version"].asLong,
-                    created = ins["created"].asLong,
-                    expires = ins["expires"].asLong,
-                    priority = "normal",
-                    requested = safeRequested(operation, ins["payload"].asJsonObject),
-                )
-                .event(clock.wallMillis(), "Received durably · Authenticated")
-        repository.db.withTransaction { dao.insertCommand(row) }
+            old
+                ?: CommandRecord(
+                        id,
+                        key.authority,
+                        key.device,
+                        key.enrollment,
+                        operation,
+                        ordering,
+                        clock.wallMillis(),
+                        version = ins["version"].asLong,
+                        created = ins["created"].asLong,
+                        expires = ins["expires"].asLong,
+                        priority = "normal",
+                        requested = safeRequested(operation, ins["payload"].asJsonObject),
+                    )
+                    .event(clock.wallMillis(), "Received durably · Authenticated")
+        repository.db.withTransaction {
+            if (old == null) dao.insertCommand(row)
+            else {
+                row =
+                    row.event(
+                        clock.wallMillis(),
+                        "Resuming durable receipt; no prior execution attempt",
+                    )
+                dao.updateCommand(row)
+            }
+        }
         if (ins["version"].asLong != 1L) {
             finish(row, "unsupported", "Unsupported operation version")
             return
@@ -575,12 +586,22 @@ class CommandControl(
             finish(row, "superseded", "Stale ordering; newer instruction already received")
             return
         }
-        repository.db.withTransaction {
-            dao.commandWatermark(CommandWatermark(token, ordering))
-            row =
-                row.copy(attempted = true, attemptedAt = clock.wallMillis())
-                    .event(clock.wallMillis(), "Execution attempted")
-            dao.updateCommand(row)
+        try {
+            repository.db.withTransaction {
+                dao.commandWatermark(CommandWatermark(token, ordering))
+                row =
+                    row.copy(attempted = true, attemptedAt = clock.wallMillis())
+                        .event(clock.wallMillis(), "Execution attempted")
+                dao.updateCommand(row)
+            }
+        } catch (e: Exception) {
+            dao.updateCommand(
+                (dao.command(id) ?: row).event(
+                    clock.wallMillis(),
+                    "Execution staging storage failure; no effect attempted",
+                )
+            )
+            throw e
         }
         try {
             when (operation) {

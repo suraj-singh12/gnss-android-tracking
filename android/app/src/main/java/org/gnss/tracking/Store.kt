@@ -131,11 +131,11 @@ interface TrackingDao {
     suspend fun commandWatermark(row: CommandWatermark)
 
     @Query(
-        "DELETE FROM command_journal WHERE id IN (SELECT id FROM command_journal WHERE confirmed=1 OR trusted=0 ORDER BY received DESC LIMIT -1 OFFSET 500)"
+        "DELETE FROM command_journal WHERE id IN (SELECT id FROM command_journal WHERE (confirmed=1 AND state!='received') OR trusted=0 ORDER BY received DESC LIMIT -1 OFFSET 500)"
     )
     suspend fun pruneCommands()
 
-    @Query("SELECT COUNT(*) FROM command_journal WHERE confirmed=0 AND trusted=1")
+    @Query("SELECT COUNT(*) FROM command_journal WHERE (confirmed=0 OR state='received') AND trusted=1")
     suspend fun unresolvedCommands(): Int
 
     @Query(

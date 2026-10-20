@@ -336,3 +336,34 @@ func TestControlRejectsRemoteConsoleAndDNSRebindingHost(t *testing.T) {
 		}
 	}
 }
+
+func TestControlReceivedIsNonterminalAndCancellationSurvivesReceiptRetry(t *testing.T) {
+	s, now, _ := open(t)
+	*now = base
+	ingest(t, s, message(t, 1, 0, 0, 0, 1))
+	a, en, k := controlEnroll(t, s, device)
+	v := controlAPI(t, s, "issue", map[string]any{"targets": []string{device}, "operation": "sync", "payload": map[string]any{}, "ttl": 300, "confirmed": true}, 200)
+	var ids []string
+	_ = json.Unmarshal(v["ids"], &ids)
+	controlPoll(t, s, device, en, k, a, randomControlKey(), nil, 200)
+	receipt := controlResult{ids[0], 1, "received", "Durable receipt", "", base.UnixMilli(), false}
+	check := func(want string) {
+		t.Helper()
+		v, _ := controlPoll(t, s, device, en, k, a, randomControlKey(), []controlResult{receipt}, 200)
+		var commands []controlInstruction
+		_ = json.Unmarshal(v["commands"], &commands)
+		if len(commands) != 1 || commands[0].ID != ids[0] || commands[0].Disposition != want {
+			t.Fatalf("receipt lost pending instruction: %s", v["commands"])
+		}
+	}
+	check("received")
+	controlAPI(t, s, "cancel", map[string]any{"id": ids[0]}, 200)
+	check("cancel_requested_unknown")
+	result := receipt
+	result.Revision = 2
+	result.State = "cancelled"
+	v, _ = controlPoll(t, s, device, en, k, a, randomControlKey(), []controlResult{result}, 200)
+	if string(v["commands"]) != "[]" {
+		t.Fatal("terminal cancellation redelivered", v)
+	}
+}

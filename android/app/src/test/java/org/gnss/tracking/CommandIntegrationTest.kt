@@ -139,7 +139,7 @@ class CommandIntegrationTest {
             )
             // Existing scenarios explicitly exercise the legacy v1 peer contract.
             // The authenticated control suite uses the secure production default.
-            if(legacy) it.repository.edit { state -> state.copy(controlRequired=false) }
+            if (legacy) it.repository.edit { state -> state.copy(controlRequired = false) }
             it.id = it.repository.state().deviceId
         }
 
@@ -410,9 +410,9 @@ class CommandIntegrationTest {
         }
         for (n in listOf(1, 5, 20)) {
             val measuredStart = System.nanoTime()
-            val fleet = (1..n).map { enroll(phone(legacy=false)) }
+            val fleet = (1..n).map { enroll(phone(legacy = false)) }
             val ids = issue(fleet, "reporting", mapOf("seconds" to 5))
-            val late = enroll(phone(legacy=false))
+            val late = enroll(phone(legacy = false))
             poll(fleet + late)
             assertTrue(late.phone.repository.dao.commandHistory().isEmpty())
             for ((index, p) in fleet.withIndex()) {
@@ -489,7 +489,7 @@ class CommandIntegrationTest {
                 "CONTROL_FLEET elapsed_ms=${(System.nanoTime()-measuredStart)/1000000} phones=$n plus late join: actual Room settings, adaptive policy, Sender drain and authenticated custody passed"
             )
         }
-        val p = enroll(phone(legacy=false))
+        val p = enroll(phone(legacy = false))
         val ids = issue(listOf(p), "reporting", mapOf("seconds" to 20))
         forgeReply = true
         poll(listOf(p))
@@ -516,6 +516,36 @@ class CommandIntegrationTest {
         control("control/cancel", gson.toJson(mapOf("id" to cancelled[0])))
         poll(listOf(p))
         assertNull(p.phone.repository.dao.command(cancelled[0]))
+        // Inject failure after receipt but before the durable execution attempt.
+        // Both databases/controllers restart; the received result is nonterminal.
+        val recovering = enroll(phone(legacy = false))
+        val recoveryId = issue(listOf(recovering), "reporting", mapOf("seconds" to 25)).single()
+        recovering.phone.repository.db.openHelper.writableDatabase.execSQL(
+            "CREATE TRIGGER fail_control_attempt BEFORE INSERT ON command_watermark BEGIN SELECT RAISE(ABORT, 'injected staging failure'); END"
+        )
+        poll(listOf(recovering))
+        val staged = recovering.phone.repository.dao.command(recoveryId)!!
+        assertEquals("received", staged.state)
+        assertFalse(staged.attempted)
+        assertEquals(
+            10,
+            recovering.phone.repository.state().config().effective_reporting_interval_s,
+        )
+        recovering.phone.reopen()
+        recovering.phone.repository.db.openHelper.writableDatabase.execSQL(
+            "DROP TRIGGER fail_control_attempt"
+        )
+        bridge.restart()
+        recovering.phone.repository.settings("local", "recovered", bridge.phone, 10)
+        recovering.engine = engine(recovering.phone, recovering.key, recovering.policy)
+        poll(listOf(recovering))
+        assertEquals("applied", recovering.phone.repository.dao.command(recoveryId)!!.state)
+        assertEquals(
+            25,
+            recovering.phone.repository.state().config().effective_reporting_interval_s,
+        )
+        poll(listOf(recovering))
+        assertTrue(recovering.phone.repository.dao.command(recoveryId)!!.confirmed)
         control("control/revoke", gson.toJson(mapOf("device" to p.phone.id, "confirmed" to true)))
         val denied =
             request(

@@ -186,8 +186,8 @@ func (s *Store) controlExchange(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var prior sql.NullString
-		var ins string
-		if e = tx.QueryRow(`SELECT instruction,result FROM control_commands WHERE id=? AND device=? AND enrollment=?`, res.ID, env.Device, enrollment).Scan(&ins, &prior); e != nil {
+		var ins, deliveryState string
+		if e = tx.QueryRow(`SELECT instruction,result,state FROM control_commands WHERE id=? AND device=? AND enrollment=?`, res.ID, env.Device, enrollment).Scan(&ins, &prior, &deliveryState); e != nil {
 			failure(w, 400, "invalid_result", errors.New("unknown target command"))
 			return
 		}
@@ -216,7 +216,11 @@ func (s *Store) controlExchange(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		if _, e = tx.Exec(`UPDATE control_commands SET result=?,state=? WHERE id=?`, string(raw), res.State, res.ID); e != nil {
+		nextState := res.State
+		if res.State == "received" && deliveryState == "cancel_requested_unknown" {
+			nextState = deliveryState
+		}
+		if _, e = tx.Exec(`UPDATE control_commands SET result=?,state=? WHERE id=?`, string(raw), nextState, res.ID); e != nil {
 			failure(w, 503, "storage", e)
 			return
 		}
@@ -230,7 +234,7 @@ func (s *Store) controlExchange(w http.ResponseWriter, r *http.Request) {
 	}
 	instructions := []controlInstruction{}
 	if !req.ResultsOnly {
-		rows, e := tx.Query(`SELECT instruction,state,result FROM control_commands WHERE device=? AND enrollment=? AND result IS NULL AND state IN ('queued','sent_unknown','cancel_requested_unknown') ORDER BY ordering LIMIT 1`, env.Device, enrollment)
+		rows, e := tx.Query(`SELECT instruction,state,result FROM control_commands WHERE device=? AND enrollment=? AND (result IS NULL OR state IN ('received','cancel_requested_unknown')) AND state IN ('queued','sent_unknown','received','cancel_requested_unknown') ORDER BY ordering LIMIT 1`, env.Device, enrollment)
 		if e != nil {
 			failure(w, 503, "storage", e)
 			return
@@ -438,7 +442,7 @@ func (s *Store) controlLocal(w http.ResponseWriter, r *http.Request) bool {
 		enrollment, key := id(), randomControlKey()
 		_, e = tx.Exec(`INSERT INTO control_enrollment(device,enrollment,secret,enabled) VALUES(?,?,?,1) ON CONFLICT(device) DO UPDATE SET enrollment=excluded.enrollment,secret=excluded.secret,enabled=1,last_seen=0`, v.Device, enrollment, key)
 		if e == nil {
-			_, e = tx.Exec(`UPDATE control_commands SET state='revoked_unknown' WHERE device=? AND result IS NULL`, v.Device)
+			_, e = tx.Exec(`UPDATE control_commands SET state='revoked_unknown' WHERE device=? AND (result IS NULL OR state IN ('received','cancel_requested_unknown'))`, v.Device)
 		}
 		response = map[string]string{"credential": "gnss1:" + st.Authority + ":" + v.Device + ":" + enrollment + ":" + key}
 	case "/local/control/revoke":
@@ -448,12 +452,12 @@ func (s *Store) controlLocal(w http.ResponseWriter, r *http.Request) bool {
 		}
 		_, e = tx.Exec(`UPDATE control_enrollment SET enabled=0,secret='' WHERE device=?`, v.Device)
 		if e == nil {
-			_, e = tx.Exec(`UPDATE control_commands SET state='revoked_unknown' WHERE device=? AND result IS NULL`, v.Device)
+			_, e = tx.Exec(`UPDATE control_commands SET state='revoked_unknown' WHERE device=? AND (result IS NULL OR state IN ('received','cancel_requested_unknown'))`, v.Device)
 		}
 	case "/local/control/cancel":
 		// A sent command might already have executed. Preserve uncertainty and return
 		// cancellation as a disposition; only Android can prove no effect occurred.
-		_, e = tx.Exec(`UPDATE control_commands SET state=CASE WHEN state='queued' THEN 'cancelled' ELSE 'cancel_requested_unknown' END WHERE id=? AND result IS NULL AND state IN ('queued','sent_unknown')`, v.ID)
+		_, e = tx.Exec(`UPDATE control_commands SET state=CASE WHEN state='queued' THEN 'cancelled' ELSE 'cancel_requested_unknown' END WHERE id=? AND (result IS NULL OR state='received') AND state IN ('queued','sent_unknown','received')`, v.ID)
 	case "/local/control/issue":
 		if !v.Confirmed || len(v.Targets) == 0 || v.TTL < 5 || v.TTL > 86400 {
 			e = errors.New("confirm frozen recipients and TTL 5..86400 seconds")
@@ -500,7 +504,7 @@ func (s *Store) controlLocal(w http.ResponseWriter, r *http.Request) bool {
 				break
 			}
 			var count int
-			if e = tx.QueryRow(`SELECT COUNT(*) FROM control_commands WHERE device=? AND result IS NULL AND state IN ('queued','sent_unknown','cancel_requested_unknown')`, device).Scan(&count); e != nil {
+			if e = tx.QueryRow(`SELECT COUNT(*) FROM control_commands WHERE device=? AND (result IS NULL OR state IN ('received','cancel_requested_unknown')) AND state IN ('queued','sent_unknown','received','cancel_requested_unknown')`, device).Scan(&count); e != nil {
 				break
 			}
 			if count >= 256 {
