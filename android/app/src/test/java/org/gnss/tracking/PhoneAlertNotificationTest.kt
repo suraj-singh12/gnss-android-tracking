@@ -108,6 +108,16 @@ class PhoneAlertNotificationTest {
             output.attempt(other, PhoneAlertSpec("normal", "Other phone alert", 5, 5), 60000)
             val manager = app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             assertEquals(2, manager.activeNotifications.size)
+            Shadows.shadowOf(manager).setNotificationPolicyAccessGranted(true)
+            manager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_NONE)
+            app.getSystemService(android.media.AudioManager::class.java)
+                .setStreamVolume(android.media.AudioManager.STREAM_NOTIFICATION, 0, 0)
+            val restricted =
+                output.attempt(other, PhoneAlertSpec("normal", "DND/muted attempt", 5, 5), 60000)
+            assertEquals("output_attempted", restricted.first)
+            assertTrue(restricted.second.contains("DND may restrict output"))
+            assertTrue(restricted.second.contains("volume muted"))
+            assertTrue(restricted.second.contains("output unknown"))
             val notification =
                 manager.activeNotifications.first { it.tag.endsWith(row.id) }.notification
             assertEquals("Acknowledge / Stop Alert", notification.actions[0].title.toString())
