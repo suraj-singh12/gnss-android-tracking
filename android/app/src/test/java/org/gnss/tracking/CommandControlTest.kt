@@ -200,7 +200,7 @@ class CommandControlTest {
             val restored = Repository(migrated, clock)
             assertEquals(key.device, restored.state().deviceId)
             assertEquals(15, restored.state().localInterval)
-            assertFalse(restored.state().controlRequired)
+            assertTrue(restored.state().controlRequired)
             assertEquals("immutable original", restored.dao.row(1)!!.json)
             assertTrue(restored.dao.commandHistory().isEmpty())
         } finally {
@@ -342,6 +342,35 @@ class CommandControlTest {
             assertFalse(contents.contains("gnss1:"))
         } finally {
             directory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun firstContactCannotCaptureAuthorityOrReportingSettings() = runBlocking {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        val fresh = Room.inMemoryDatabaseBuilder(context, TrackingDatabase::class.java).build()
+        try {
+            val phone = Repository(fresh, clock)
+            assertTrue(phone.state().controlRequired)
+            val row = phone.snapshot(clock.now, null, Health())
+            phone.accept(
+                row,
+                Receipt(
+                    phone.state().deviceId,
+                    row.messageId,
+                    row.sequence,
+                    utc(clock.now),
+                    RemoteConfig(Protocol.newId(), 1, 5),
+                    null,
+                ),
+                0,
+            )
+            assertNull(phone.state().authority)
+            assertEquals(0L, phone.state().version)
+            assertEquals(10, phone.state().config().effective_reporting_interval_s)
+            assertNotNull(phone.dao.row(row.sequence)!!.deliveredAt)
+        } finally {
+            fresh.close()
         }
     }
 

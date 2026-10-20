@@ -292,6 +292,7 @@ class ObservationPersistenceTest {
         val db = Room.inMemoryDatabaseBuilder(app, TrackingDatabase::class.java).build()
         try {
             val repo = Repository(db, clock)
+            val receiverAuthority=Protocol.newId()
             val current =
                 repo.snapshot(clock.now, observation(clock.now).fix, Health(gnss_status = "fix"))
             repo.accept(
@@ -301,7 +302,7 @@ class ObservationPersistenceTest {
                     current.messageId,
                     current.sequence,
                     utc(clock.now),
-                    RemoteConfig(Protocol.newId(), 0, null),
+                    RemoteConfig(receiverAuthority, 0, null),
                     null,
                 ),
                 0,
@@ -328,7 +329,7 @@ class ObservationPersistenceTest {
                     next.messageId,
                     next.sequence,
                     utc(clock.now),
-                    RemoteConfig(repo.state().authority!!, 0, null),
+                    RemoteConfig(receiverAuthority, 0, null),
                     null,
                 ),
                 0,

@@ -17,10 +17,13 @@ class RepositoryTest {
     private lateinit var context: Context
 
     @Before
-    fun setup() {
+    fun setup() = runBlocking {
         context = ApplicationProvider.getApplicationContext()
         context.deleteDatabase("tracking.db")
         open()
+        // Explicit legacy-v1 compatibility fixture. Current production installs
+        // and upgrades require authenticated settings before accepting overrides.
+        repository.edit { it.copy(controlRequired = false) }
     }
 
     private fun open() {

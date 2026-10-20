@@ -201,13 +201,14 @@ Wi-Fi availability and last proven Command communication are independent.
 
 ACK validation rejects duplicate JSON keys, malformed receipt fields, noninteger
 identity fields, mismatched identities and unsupported versions. Valid stored or
-duplicate receipt updates delivery and configuration in one local transaction.
-Config errors preserve delivery but keep previous applied config with a visible
-error. Older versions cannot roll back; different authority/equal-version conflicts
-cannot silently apply. Remote overrides survive restart/local edits; explicit null
-restores the current local interval. Endpoint address changes retain authority.
-“Enroll with a different Command” explicitly clears authority/override for the
-next valid ACK. In-flight responses from an edited endpoint generation are ignored.
+duplicate receipt commits delivery in one local transaction. Current Android
+installs/upgrades ignore the unauthenticated configuration portion, including first
+contact; an ACK never enrolls a new trusted authority. Authenticated #25 reporting
+instructions reuse the persisted desired/effective revision machinery. Older revisions
+cannot roll back; overrides survive restart/local edits and explicit null restores
+the current local interval. Endpoint address changes retain trusted authority.
+“Enroll with a different Command” clears authority/override and requires a new
+privately verified credential before any further remote setting can apply. In-flight responses from an edited endpoint generation are ignored.
 Historical packets retain their captured applied configuration. “Retry saved messages”
 releases delivery errors after explicit confirmation without clearing authority,
 override or message identity.
@@ -473,8 +474,8 @@ per-phone credential there, enter it under **Authenticated remote control**, and
 explicitly authorize. Address/authority first contact never authorizes commands.
 Keystore-sealed credentials are excluded from backups and diagnostic exports.
 Disable remote control locally to remove authorization; **Enroll with a different
-Command** requires new verified provisioning. Previously securely enrolled phones
-never fall back to unauthenticated ACK configuration. Existing GNSS/SOS uploads
+Command** requires new verified provisioning. Current installs and upgrades never adopt remote settings/authority from an
+unauthenticated first-contact ACK and never fall back after local Disable. Existing GNSS/SOS uploads
 continue; they remain Protocol v1, not authenticated device attestation.
 
 The same Sender polls the configured receiver after its SOS/LIVE/history selection.

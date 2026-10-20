@@ -399,9 +399,9 @@ This negotiated opt-in extension adds `POST /api/v1/control` on the **existing
 receiver**, through the **existing Android Sender and Wi-Fi transport**. It does
 not change frozen GNSS/SOS bodies, authenticate legacy ingestion, add a phone
 listener, or depend on internet. Legacy clients have remote control **unavailable**.
-The legacy reporting ACK path remains compatible for unenrolled v1 clients; after
-secure enrollment Android permanently requires authenticated configuration, even
-if control is subsequently disabled or re-enrollment is pending. A v1 ACK still
+The legacy reporting ACK path remains compatible for older v1 clients. Current
+Android installs and upgrades require authenticated configuration from first
+contact, including before enrollment, after local Disable and during re-enrollment. A v1 ACK still
 commits the original GNSS/SOS receipt but cannot change secure settings.
 
 ### Enrollment and threat model

@@ -34,7 +34,7 @@ data class Installation(
     val sessionStartedMillis: Long? = null,
     @ColumnInfo(defaultValue = "0") val observationSequence: Long = 0,
     @ColumnInfo(defaultValue = "0") val knownCollectionLoss: Long = 0,
-    @ColumnInfo(defaultValue = "0") val controlRequired: Boolean = false,
+    @ColumnInfo(defaultValue = "1") val controlRequired: Boolean = true,
     val controlAuthority: String? = null,
     val controlEnrollment: String? = null,
 ) {
@@ -364,7 +364,7 @@ abstract class TrackingDatabase : RoomDatabase() {
             object : androidx.room.migration.Migration(5, 6) {
                 override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                     db.execSQL(
-                        "ALTER TABLE installation ADD COLUMN controlRequired INTEGER NOT NULL DEFAULT 0"
+                        "ALTER TABLE installation ADD COLUMN controlRequired INTEGER NOT NULL DEFAULT 1"
                     )
                     db.execSQL("ALTER TABLE installation ADD COLUMN controlAuthority TEXT")
                     db.execSQL("ALTER TABLE installation ADD COLUMN controlEnrollment TEXT")

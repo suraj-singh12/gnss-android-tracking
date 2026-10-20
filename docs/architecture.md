@@ -403,8 +403,9 @@ custody confirmation. Sent, received, attempted, applied and result-confirmed ar
 separate facts. Unknown stays unknown after an interrupted nontransactional effect;
 no automatic repeat pretends to provide power-loss atomicity for Android OS APIs.
 
-Reporting reuses existing desired revisions and effective Room settings; secure
-phones ignore legacy ACK configuration without losing GNSS receipt. Adaptive ON/OFF
+Reporting reuses existing desired revisions and effective Room settings. Current
+Android installs/upgrades ignore unauthenticated ACK configuration from first contact,
+without losing GNSS receipt; older v1 clients retain their legacy wire behavior. Adaptive ON/OFF
 uses #24's actual local policy surface, never a second selector. Sync invokes #22's
 same drain and counts pending originals through the received instruction's saved
 sequence; Tracking OFF never starts collection. Tracking Start requires visible

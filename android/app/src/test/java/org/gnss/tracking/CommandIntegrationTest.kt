@@ -127,7 +127,7 @@ class CommandIntegrationTest {
             null,
         )
 
-    private suspend fun phone(): Phone =
+    private suspend fun phone(legacy: Boolean = true): Phone =
         Phone("phone-${phones.size}.db").also {
             phones.add(it)
             it.open()
@@ -137,6 +137,9 @@ class CommandIntegrationTest {
                 bridge.phone,
                 10,
             )
+            // Existing scenarios explicitly exercise the legacy v1 peer contract.
+            // The authenticated control suite uses the secure production default.
+            if(legacy) it.repository.edit { state -> state.copy(controlRequired=false) }
             it.id = it.repository.state().deviceId
         }
 
@@ -407,9 +410,9 @@ class CommandIntegrationTest {
         }
         for (n in listOf(1, 5, 20)) {
             val measuredStart = System.nanoTime()
-            val fleet = (1..n).map { enroll(phone()) }
+            val fleet = (1..n).map { enroll(phone(legacy=false)) }
             val ids = issue(fleet, "reporting", mapOf("seconds" to 5))
-            val late = enroll(phone())
+            val late = enroll(phone(legacy=false))
             poll(fleet + late)
             assertTrue(late.phone.repository.dao.commandHistory().isEmpty())
             for ((index, p) in fleet.withIndex()) {
@@ -486,7 +489,7 @@ class CommandIntegrationTest {
                 "CONTROL_FLEET elapsed_ms=${(System.nanoTime()-measuredStart)/1000000} phones=$n plus late join: actual Room settings, adaptive policy, Sender drain and authenticated custody passed"
             )
         }
-        val p = enroll(phone())
+        val p = enroll(phone(legacy=false))
         val ids = issue(listOf(p), "reporting", mapOf("seconds" to 20))
         forgeReply = true
         poll(listOf(p))

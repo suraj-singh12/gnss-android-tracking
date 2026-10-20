@@ -23,7 +23,7 @@ async function refreshControl() {
     check.disabled=!enrollment?.enabled;
     check.onchange=()=>{if(check.checked)controlTargets.add(id);else controlTargets.delete(id);};
     const seen = enrollment?.last_seen;
-    label.append(check, document.createTextNode(`${phone.snapshot.party.id} · ${id} · ${!enrollment?.enabled ? "remote control unavailable / legacy or revoked" : !seen ? "enrolled, not yet authenticated" : Date.now()-seen>30000 ? "offline / last authenticated "+new Date(seen).toISOString() : "authenticated contact "+new Date(seen).toISOString()}`));
+    label.append(check, document.createTextNode(`${phone.snapshot.party.id} · ${id} · ${!enrollment?.enabled ? "remote control unavailable / legacy or revoked" : !seen ? "remote control unavailable: enrollment not yet authenticated" : Date.now()-seen>30000 ? "offline / last authenticated "+new Date(seen).toISOString() : "authenticated contact "+new Date(seen).toISOString()}`));
     const enroll = el("button", enrollment ? "Replace credential" : "Enroll remote control");
     enroll.onclick=async()=>{try {
       if(!confirm(`Verify phone UUID ${id} directly in Android Settings. Generate a private credential? Replacing it revokes previous authorization. Saved history is retained.`))return;
