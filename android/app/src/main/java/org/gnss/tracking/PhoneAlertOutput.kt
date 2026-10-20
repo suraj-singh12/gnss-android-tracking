@@ -164,7 +164,7 @@ class PhoneAlertActionReceiver : BroadcastReceiver() {
         val app = context.applicationContext as TrackingApp
         app.workScope.launch {
             try {
-                app.commandControl.acknowledgeAlert(id)
+                app.acknowledgePhoneAlert(id)
             } finally {
                 result.finish()
             }

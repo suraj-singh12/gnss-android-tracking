@@ -193,6 +193,21 @@ class TrackingApp : Application() {
         )
     }
 
+    suspend fun acknowledgePhoneAlert(id: String) {
+        try {
+            commandControl.acknowledgeAlert(id)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            operational.update {
+                it.copy(
+                    error =
+                        "Alert acknowledgement could not be saved or output stopped. Reopen the alert and retry; Command acknowledgement remains unconfirmed."
+                )
+            }
+        }
+    }
+
     internal suspend fun executeRemoteTracking(start: Boolean): Pair<String, String> {
         if (start) {
             if (operational.value.tracking && repository.state().tracking)

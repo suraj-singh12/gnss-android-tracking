@@ -470,7 +470,7 @@ class MainActivity : Activity() {
                             text = "Acknowledge / Stop Alert"
                             minHeight = dp(48)
                             setOnClickListener {
-                                app.workScope.launch { app.commandControl.acknowledgeAlert(row.id) }
+                                app.workScope.launch { app.acknowledgePhoneAlert(row.id) }
                             }
                         }
                     )
@@ -893,7 +893,7 @@ class MainActivity : Activity() {
                         Button(this).apply {
                             text = "Acknowledge / Stop Alert"
                             setOnClickListener {
-                                app.workScope.launch { app.commandControl.acknowledgeAlert(row.id) }
+                                app.workScope.launch { app.acknowledgePhoneAlert(row.id) }
                             }
                         }
                     )

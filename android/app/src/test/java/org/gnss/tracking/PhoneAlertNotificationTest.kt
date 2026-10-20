@@ -16,6 +16,38 @@ import org.robolectric.annotation.Config
 @Config(sdk = [28], application = TrackingApp::class)
 class PhoneAlertNotificationTest {
     @Test
+    fun failedLocalAckStorageDoesNotCrashOrFabricateHumanAcknowledgement() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<TrackingApp>()
+        try {
+            val row =
+                CommandRecord(
+                    Protocol.newId(),
+                    Protocol.newId(),
+                    app.repository.state().deviceId,
+                    Protocol.newId(),
+                    "alert",
+                    1,
+                    System.currentTimeMillis(),
+                    state = "unknown",
+                    attempted = true,
+                )
+            app.repository.dao.insertCommand(row)
+            app.repository.db.openHelper.writableDatabase.execSQL(
+                "CREATE TRIGGER fail_alert_ack BEFORE UPDATE ON command_journal WHEN NEW.state='recipient_acknowledged' BEGIN SELECT RAISE(ABORT, 'injected acknowledgement storage failure'); END"
+            )
+            app.acknowledgePhoneAlert(row.id)
+            assertEquals("unknown", app.repository.dao.command(row.id)!!.state)
+            assertTrue(app.operational.value.error!!.contains("could not be saved"))
+            app.repository.db.openHelper.writableDatabase.execSQL("DROP TRIGGER fail_alert_ack")
+            app.acknowledgePhoneAlert(row.id)
+            assertEquals("recipient_acknowledged", app.repository.dao.command(row.id)!!.state)
+            assertFalse(app.repository.dao.command(row.id)!!.confirmed)
+        } finally {
+            app.finishForTests()
+        }
+    }
+
+    @Test
     @Config(sdk = [35])
     fun modernNotificationPermissionDeniedHasNoNotificationAndReportsBlocked() = runBlocking {
         val app = ApplicationProvider.getApplicationContext<TrackingApp>()
