@@ -120,6 +120,7 @@ async function wait(check) {
   const holdInventory=async route=>{await route.abort("connectionreset");};
   await page.route("**/local/live",holdInventory);
   await page.route("**/local/state?**",holdInventory);
+  await page.waitForFunction(()=>!livePolling&&!polling); // Settle any request already in flight.
   const late=structuredClone(fixture);late.device_id=randomUUID();late.message_id=randomUUID();late.observation.observation_id=late.message_id;late.observation.tracking_session_id=randomUUID();await send(late);await post("control/enroll",{device:late.device_id,confirmed:true});
   let controls=await (await fetch(local+"/local/control")).json();assert.equal(controls.commands.some(c=>c.device===late.device_id),false);
   assert.ok(controls.commands.every(c=>c.state==="queued"&&c.result===null));
