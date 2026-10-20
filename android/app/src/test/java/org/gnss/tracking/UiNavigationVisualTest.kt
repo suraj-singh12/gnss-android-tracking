@@ -159,7 +159,17 @@ class UiNavigationVisualTest {
                             ),
                     )) {
                     app.operational.value = op
-                    settle()
+                    // Room-backed summaries render asynchronously. Wait for the
+                    // complete injected visual state, keeping every assertion.
+                    withTimeout(6000) {
+                        while(true) {
+                            settle()
+                            val rendered=descendants(root).filterIsInstance<TextView>().filter{it.isShown}.joinToString("\n"){it.text}
+                            if(rendered.contains(if(op.tracking) "TRACKING" else "STOPPED") &&
+                                (name!="tracking" || rendered.contains("GNSS Fresh") && rendered.contains("Command Connected")) &&
+                                (name!="offline-stale" || rendered.contains("GNSS Stale") && rendered.contains("Offline"))) break
+                        }
+                    }
                     capture(name)
                     val visibleText =
                         descendants(root)

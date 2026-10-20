@@ -133,3 +133,15 @@ and existing rendered navigation/large-font checks.
 No Settings/Diagnostics redesign (#39), Tracking redesign, remote control (#25), or
 Command quality UI change is included. Rendered software checks are not TalkBack,
 OEM/OS, native GNSS or physical field acceptance.
+
+## Issue #25 control and audit preservation
+
+| Surface / authority | Required preserved behavior / added acceptance |
+| --- | --- |
+| Android Tracking / SOS | Existing Start/Stop, saved-history UI and SOS unchanged; Sync control never starts GNSS. |
+| Android Settings | Existing endpoint/identity/re-enrollment reused; explicit private verified credential transfer; local disable; secure enrollment never downgrades silently. |
+| Android Diagnostics | Command Instructions filters/expand/copy and actual canonical stages; pending state survives restart; existing ZIP sanitizes records, never keys. |
+| Command live party selection | Individual/selected/all explicit identities, frozen targets, high-impact confirmation and independent result/error/unknown. |
+| Command recording/history | Historical objects and view filters never target phone instructions; quality/distance and recording APIs unchanged. |
+| Legacy GNSS / SOS | Frozen v1 receipt and human SOS ACK retained; unsupported control shown honestly. |
+| Native acceptance | Physical Android background/OEM/Keystore and native Windows/macOS remain NOT TESTED until operator evidence. #24 stays OPEN. |

@@ -370,3 +370,20 @@ Diagnostics differentiates valid callback candidates, selected/in-memory candida
 actual Room commits, intentional omissions, source gaps, pending/ACKed history and
 save failures; journal bounds still apply. A runtime fallback must remain visible
 even with requested ON. Physical TalkBack and OEM/OS behavior: NOT TESTED in JVM CI.
+
+## Issue #25 software and physical control acceptance
+
+The live Command Phone controls dialog uses existing semantic controls, local API,
+selected-party identity and accessible labels. It provides enrollment/revoke,
+one/selected/all scope, immutable recipients, confirmation, TTL, requested/effective
+values, per-phone states, safe cancellation and deliberate new-request review.
+No recording/history object supplies control recipients. Android keeps its three
+existing destinations and Tracking layout; Settings adds explicit authorization,
+and Diagnostics adds a bounded filterable/expandable Command Instructions console,
+copy ID and sanitized existing ZIP export backed by the same Room journal.
+
+Automated production-handler/Room/Sender/browser evidence is recorded in the #25 PR.
+Physical Android OS/background/Keystore and native macOS/Windows acceptance remain
+NOT TESTED; use the device checklist. #24 remains OPEN, with physical adaptive testing
+deferred. #40's external Overpass overall CI failure remains a separate visible
+failure until independently resolved; no map implementation is changed here.

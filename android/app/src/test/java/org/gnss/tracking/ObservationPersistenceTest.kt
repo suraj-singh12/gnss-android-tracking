@@ -25,6 +25,31 @@ class ObservationPersistenceTest {
     private fun observation(t: Long) =
         Observation(Fix(utc(t), 0, 28.0, 77.0, 3.0, null, null, null, null), t)
 
+    // Old-version fixtures must contain the old installation schema, not a v6
+    // table carrying a manually lowered user_version.
+    private fun removeControlSchema(
+        old: android.database.sqlite.SQLiteDatabase,
+        schema: com.google.gson.JsonObject,
+    ) {
+        val installation =
+            schema["entities"]
+                .asJsonArray
+                .first { it.asJsonObject["tableName"].asString == "installation" }
+                .asJsonObject
+        val columns =
+            installation["fields"].asJsonArray.joinToString(",") {
+                "`" + it.asJsonObject["columnName"].asString + "`"
+            }
+        old.execSQL(
+            installation["createSql"].asString.replace("${'$'}{TABLE_NAME}", "installation_legacy")
+        )
+        old.execSQL("INSERT INTO installation_legacy ($columns) SELECT $columns FROM installation")
+        old.execSQL("DROP TABLE installation")
+        old.execSQL("ALTER TABLE installation_legacy RENAME TO installation")
+        old.execSQL("DROP TABLE command_journal")
+        old.execSQL("DROP TABLE command_watermark")
+    }
+
     @Test
     fun everyCallbackPersistsDespiteSlowerLiveCadenceAndReopen() = runBlocking {
         val name = "callbacks.db"
@@ -233,6 +258,7 @@ class ObservationPersistenceTest {
                     TrackingDatabase.MIGRATION_2_3,
                     TrackingDatabase.MIGRATION_3_4,
                     TrackingDatabase.MIGRATION_4_5,
+                    TrackingDatabase.MIGRATION_5_6,
                 )
                 .build()
         try {
@@ -379,11 +405,16 @@ class ObservationPersistenceTest {
                     "UPDATE room_master_table SET identity_hash=? WHERE id=42",
                     arrayOf(schema["identityHash"].asString),
                 )
+                removeControlSchema(old, schema)
                 old.version = 3
             }
         db =
             Room.databaseBuilder(app, TrackingDatabase::class.java, name)
-                .addMigrations(TrackingDatabase.MIGRATION_3_4, TrackingDatabase.MIGRATION_4_5)
+                .addMigrations(
+                    TrackingDatabase.MIGRATION_3_4,
+                    TrackingDatabase.MIGRATION_4_5,
+                    TrackingDatabase.MIGRATION_5_6,
+                )
                 .build()
         try {
             val upgraded = Repository(db, clock)
@@ -483,11 +514,12 @@ class ObservationPersistenceTest {
                         "UPDATE room_master_table SET identity_hash=? WHERE id=42",
                         arrayOf(schema["identityHash"].asString),
                     )
+                    removeControlSchema(old, schema)
                     old.version = 4
                 }
             db =
                 Room.databaseBuilder(app, TrackingDatabase::class.java, name)
-                    .addMigrations(TrackingDatabase.MIGRATION_4_5)
+                    .addMigrations(TrackingDatabase.MIGRATION_4_5, TrackingDatabase.MIGRATION_5_6)
                     .build()
             repo = Repository(db, clock)
             assertEquals(identity, repo.state().deviceId)

@@ -817,6 +817,7 @@ class DiagnosticJournal(private val directory: File, val limits: Limits = Limits
         build: DiagnosticBuild,
         ioFailures: Long = 0,
         dropped: Long = 0,
+        commands: List<CommandRecord> = emptyList(),
     ) {
         initialize()
         prune()
@@ -826,6 +827,7 @@ class DiagnosticJournal(private val directory: File, val limits: Limits = Limits
                 zip.write(bytes)
                 zip.closeEntry()
             }
+            put("command-instructions.json", gson.toJson(commands).toByteArray(Charsets.UTF_8))
             put(
                 "manifest.json",
                 gson
@@ -1046,6 +1048,7 @@ class DiagnosticRecorder(
     private data class Export(
         val file: File,
         val build: DiagnosticBuild,
+        val commands: List<CommandRecord>,
         val done: kotlinx.coroutines.CompletableDeferred<File>,
     )
 
@@ -1101,7 +1104,7 @@ class DiagnosticRecorder(
                     is Export -> {
                         try {
                             m.file.outputStream().use {
-                                journal.export(it, m.build, ioFailures, totalLost.get())
+                                journal.export(it, m.build, ioFailures, totalLost.get(), m.commands)
                             }
                             m.done.complete(m.file)
                         } catch (e: Exception) {
@@ -1198,12 +1201,16 @@ class DiagnosticRecorder(
         return done.await()
     }
 
-    suspend fun export(file: File, build: DiagnosticBuild): File =
+    suspend fun export(
+        file: File,
+        build: DiagnosticBuild,
+        commands: List<CommandRecord> = emptyList(),
+    ): File =
         kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
             val done = kotlinx.coroutines.CompletableDeferred<File>()
             // Sending and awaiting are one handoff: Activity cancellation cannot delete
             // the temporary file while an accepted export is still queued/writing.
-            messages.send(Export(file, build, done))
+            messages.send(Export(file, build, commands, done))
             done.await()
         }
 

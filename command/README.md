@@ -815,3 +815,28 @@ laptop, use the exact PR-head workflow executable and checksum manifest:
    failures, firewall/profile changes and Wi-Fi/repeater handoff require native
    evidence; no such cause was established by the Linux tests. Repeat native
    launch/restart, offline maps, LIVE/SOS and controls on macOS ARM64 separately.
+
+## Authenticated phone controls (Issue #25)
+
+Use **Phone controls** in the toolbar or selected party detail. Verify a phone UUID
+at Android before generating its private enrollment credential. Transfer it directly
+into Android Settings, explicitly authorize, then await authenticated contact. The
+ordinary configured address and persistent authority UUID are reused; they do not
+prove trust. Old clients explicitly show remote control unavailable. Revocation/
+replacement invalidates the old per-phone enrollment; unknown in-flight effects are
+not retroactively undone. Protect the private SQLite file/backups as credentials;
+application storage uses private directory/file permissions where the OS supports them.
+No key is included in ordinary state, history, events or diagnostics exports.
+
+Select one party, check selected identities, or select all currently eligible phones.
+Review operation, values, TTL and the frozen recipient list before issuing. Late
+joins do not inherit earlier all-phone requests. Reporting interval/null default,
+#24 adaptive ON/OFF, #22 Sync All and guarded Tracking Start/Stop share one durable
+per-phone journal. Expand history for requested versus effective values, actual
+attempt/result and errors. Automatic retries retain identity; **Review new request**
+is a deliberate new instruction. Safe cancellation distinguishes queued cancellation
+from uncertain already-sent work. Desired config or HTTP success never proves effect.
+No alarms (#26), recording/playback, map architecture or quality/distance changes are
+introduced. Remote controls belong only to this live local application, never to
+historical data objects. Native Windows/macOS execution remains separate from CI
+cross-build evidence. See the normative protocol extension for trust/race limits.

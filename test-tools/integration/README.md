@@ -902,3 +902,39 @@ multi-day field tests. The reused matched-assets workflow publishes the JSON rep
 All software traces are synthetic/instrumented. Physical GNSS/native Android,
 real Wi-Fi/OEM/background/process-kill endurance, battery and multi-day fleet disk
 acceptance remain separately NOT TESTED until the device runbook is executed.
+
+## Issue #25 authenticated control checks
+
+`CommandIntegrationTest.authenticatedRemoteControlRealRoomSenderFleetAndReconciliation`
+uses production Room, `CommandControl`, #24 `LocalPersistencePolicy`, #22 Sender,
+real Command HTTP/SQLite and signed exchange/custody verification for 1/5/20 plus
+late join. It asserts actual Room values/results and scoped saved-history delivery,
+local defaults, adaptive ON/OFF, fake response rejection, lost result ACK, restart,
+expiry/cancellation and revocation. Its tracking restriction callback is a test
+adapter; `TrackingLifecycleTest.remoteTrackingUsesActualLifecycleAndRejectsBackgroundStart`
+separately tests the production OS/lifecycle adapter under Robolectric. Neither proves
+physical Android background behavior. `CommandControlTest` additionally checks shared
+crypto vectors, ordering/dedup, denied/unsupported/failed/interrupted outcomes,
+sanitized ZIP and additive Room 5→6 migration.
+
+`go test -race ./...` includes `TestControl*` against real Command SQLite/handlers:
+nonce replay through restart, forged keys/authority, immutable result revisions,
+revocation, result ACK retry, frozen recipients and legacy v1 compatibility.
+`control-ui.cjs` uses production API/Chromium for enrollment, 20+1 targeting, guarded
+requests, cancellation, unknown execution and axe checks. Use the same
+GNSS_COMMAND_BINARY/GNSS_PLAYWRIGHT_MODULE/GNSS_AXE_MODULE/GNSS_CHROMIUM configuration
+as `ui-dashboard.cjs`. The existing matched-assets workflow runs it and preserves
+external map acceptance failure **after** software evidence/artifact uploads, so a
+provider failure remains visible without suppressing exact-source assets.
+
+Development measurements on this shared Linux worker (loopback, synthetic inputs;
+not handset/Wi-Fi acceptance): the real control suite's complete 1/5/20-phone phases
+plus late joins took 2.358 / 2.007 / 7.105 seconds wall time, including enrollment,
+report/default changes, policy changes, Tracking ON/OFF scoped drains and result
+custody exchanges. These are whole test-phase durations, not instruction latency
+or dense-history throughput. The occupied-writer regression with 21 concurrent
+history uploads, 20 authenticated control polls and eight **fresh** LIVE/SOS messages
+measured combined priority ACK p50 163 ms, p95/p99/worst 287 ms in one run; all 1,288
+original raw identities were accounted for. Another no-control run measured worst
+404 ms under different competing work; these single runs are not an A/B speedup
+claim or field SLA. CI uploads its own exact-source control-priority measurements.

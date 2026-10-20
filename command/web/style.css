@@ -994,3 +994,17 @@ fieldset {
   max-height: 55vh;
   overflow: auto;
 }
+
+/* Existing dialog vocabulary, with bounded fleet/history lists. */
+#phone-control { max-width: 840px; }
+#control-phones { max-height: 28vh; overflow: auto; border-block: 1px solid var(--line); }
+#control-phones > div { display: flex; align-items: center; gap: 6px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+#control-phones label { display: flex; flex: 1; flex-wrap: nowrap; align-items: center; gap: 8px; margin: 0; overflow-wrap: anywhere; font-size: 12px; }
+#control-phones input { flex: 0 0 auto; }
+#control-phones button { flex: 0 0 auto; padding: 6px; font-size: 12px; }
+#control-history { max-height: 32vh; overflow: auto; }
+#control-history summary { overflow-wrap: anywhere; font-size: 12px; }
+@media (max-width: 600px) {
+  #control-phones > div { flex-wrap: wrap; }
+  #control-phones label { flex-basis: 100%; }
+}

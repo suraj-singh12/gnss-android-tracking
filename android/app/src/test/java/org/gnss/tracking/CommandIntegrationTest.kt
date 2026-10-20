@@ -307,6 +307,230 @@ class CommandIntegrationTest {
     }
 
     @Test
+    fun authenticatedRemoteControlRealRoomSenderFleetAndReconciliation() = runBlocking {
+        val gson = com.google.gson.GsonBuilder().serializeNulls().create()
+        var dropReply = false
+        var forgeReply = false
+        val received = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val authenticated =
+            object : Transport {
+                override suspend fun post(endpoint: String, immutableJson: String) =
+                    request(endpoint + "/api/v1/messages", immutableJson)
+
+                override suspend fun capabilities(endpoint: String) =
+                    request(endpoint + "/api/v1/capabilities")
+
+                override suspend fun history(endpoint: String, json: String) =
+                    request(endpoint + "/api/v1/history", json)
+
+                override suspend fun control(endpoint: String, json: String): Response {
+                    received.add(json)
+                    val response = request(endpoint + "/api/v1/control", json)
+                    if (dropReply) {
+                        dropReply = false
+                        throw java.io.IOException("Lost after Command commit")
+                    }
+                    if (forgeReply) {
+                        forgeReply = false
+                        return response.copy(
+                            body =
+                                response.body.replace(
+                                    Regex("\"mac\":\"[0-9a-f]+\""),
+                                    "\"mac\":\"forged\"",
+                                )
+                        )
+                    }
+                    return response
+                }
+            }
+        data class Peer(
+            val phone: Phone,
+            val key: ControlCredential,
+            val policy: LocalPersistencePolicy,
+            var engine: CommandControl,
+        )
+        fun engine(p: Phone, k: ControlCredential, policy: LocalPersistencePolicy) =
+            CommandControl(
+                p.repository,
+                authenticated,
+                { k },
+                policy::setEnabled,
+                sync = { p.sender.requestDrain() },
+                tracking = { "blocked" to "OS background restriction: needs user interaction" },
+                clock = clock,
+            )
+        suspend fun enroll(p: Phone): Peer {
+            p.deliver(p.snapshot())
+            val response =
+                request(
+                    bridge.local + "/local/control/enroll",
+                    gson.toJson(mapOf("device" to p.id, "confirmed" to true)),
+                )
+            assertEquals(response.body, 200, response.code)
+            val key =
+                ControlCrypto.parseCredential(Protocol.parse(response.body)["credential"].asString)
+            val policy =
+                LocalPersistencePolicy(context.getSharedPreferences("remote-policy-${p.id}", 0))
+            val control = engine(p, key, policy)
+            control.bind(key) {}
+            return Peer(p, key, policy, control)
+        }
+        suspend fun issue(
+            peers: List<Peer>,
+            operation: String,
+            payload: Map<String, Any?>,
+            ttl: Int = 300,
+        ): List<String> {
+            val response =
+                request(
+                    bridge.local + "/local/control/issue",
+                    gson.toJson(
+                        mapOf(
+                            "targets" to peers.map { it.phone.id },
+                            "operation" to operation,
+                            "payload" to payload,
+                            "ttl" to ttl,
+                            "confirmed" to true,
+                        )
+                    ),
+                )
+            assertEquals(response.body, 200, response.code)
+            return Protocol.parse(response.body)["ids"].asJsonArray.map { it.asString }
+        }
+        suspend fun poll(peers: List<Peer>) {
+            at((clock.now - base) / 1000 + 6)
+            kotlinx.coroutines.coroutineScope {
+                peers
+                    .map { async(kotlinx.coroutines.Dispatchers.IO) { it.engine.step() } }
+                    .forEach { it.await() }
+            }
+        }
+        for (n in listOf(1, 5, 20)) {
+            val measuredStart = System.nanoTime()
+            val fleet = (1..n).map { enroll(phone()) }
+            val ids = issue(fleet, "reporting", mapOf("seconds" to 5))
+            val late = enroll(phone())
+            poll(fleet + late)
+            assertTrue(late.phone.repository.dao.commandHistory().isEmpty())
+            for ((index, p) in fleet.withIndex()) {
+                assertEquals(5, p.phone.repository.state().config().effective_reporting_interval_s)
+                val journal = p.phone.repository.dao.command(ids[index])!!
+                assertTrue(journal.attempted)
+                assertEquals("applied", journal.state)
+                assertFalse(journal.confirmed)
+                p.phone.repository.settings("local", "override", bridge.phone, 15)
+                assertEquals(5, p.phone.repository.state().config().effective_reporting_interval_s)
+            }
+            dropReply = true
+            poll(fleet)
+            poll(fleet) // Result ACK loss must reconcile exact persisted result.
+            for (p in fleet) assertTrue(
+                p.phone.repository.dao.commandHistory().all { it.confirmed }
+            )
+            issue(fleet, "adaptive", mapOf("enabled" to true))
+            poll(fleet)
+            for (p in fleet) assertTrue(p.policy.state.enabled)
+            issue(fleet, "adaptive", mapOf("enabled" to false))
+            poll(fleet)
+            for (p in fleet) assertFalse(p.policy.state.enabled)
+            poll(fleet)
+            issue(fleet, "reporting", mapOf("seconds" to null))
+            poll(fleet)
+            for (p in fleet) assertEquals(
+                15,
+                p.phone.repository.state().config().effective_reporting_interval_s,
+            )
+            poll(fleet)
+            // Actual history drain through the existing production Sender, Tracking OFF.
+            for (p in fleet) p.phone.snapshot(2.0)
+            val syncIds = issue(fleet, "sync", emptyMap())
+            poll(fleet)
+            for (p in fleet) {
+                assertFalse(p.phone.repository.state().tracking)
+                assertTrue(p.phone.sender.aggressive)
+                repeat(10) { p.phone.sender.step(retainedOnly = true) }
+            }
+            poll(fleet)
+            for ((i, p) in fleet.withIndex()) assertEquals(
+                "sync_complete",
+                p.phone.repository.dao.command(syncIds[i])!!.state,
+            )
+            // The same Sender also drains while the durable tracking session is ON.
+            for (p in fleet) {
+                p.phone.repository.beginTracking()
+                p.phone.snapshot(4.0)
+            }
+            val trackingSync = issue(fleet, "sync", emptyMap())
+            poll(fleet)
+            for (p in fleet) repeat(10) { p.phone.sender.step(retainedOnly = true) }
+            poll(fleet)
+            for ((i, p) in fleet.withIndex()) {
+                assertEquals(
+                    "sync_complete",
+                    p.phone.repository.dao.command(trackingSync[i])!!.state,
+                )
+                assertTrue(p.phone.repository.state().tracking)
+                p.phone.repository.endTracking()
+            }
+            issue(fleet, "tracking_start", emptyMap())
+            poll(fleet)
+            for (p in fleet) assertEquals(
+                "blocked",
+                p.phone.repository.dao
+                    .commandHistory()
+                    .first { it.operation == "tracking_start" }
+                    .state,
+            )
+            poll(fleet)
+            println(
+                "CONTROL_FLEET elapsed_ms=${(System.nanoTime()-measuredStart)/1000000} phones=$n plus late join: actual Room settings, adaptive policy, Sender drain and authenticated custody passed"
+            )
+        }
+        val p = enroll(phone())
+        val ids = issue(listOf(p), "reporting", mapOf("seconds" to 20))
+        forgeReply = true
+        poll(listOf(p))
+        assertEquals(10, p.phone.repository.state().config().effective_reporting_interval_s)
+        assertTrue(p.phone.repository.dao.commandHistory().any { !it.trusted })
+        // A legitimate retry executes once; subsequent restart and lost result ACK reconcile.
+        poll(listOf(p))
+        assertEquals("applied", p.phone.repository.dao.command(ids[0])!!.state)
+        dropReply = true
+        poll(listOf(p))
+        p.phone.reopen()
+        bridge.restart()
+        p.engine = engine(p.phone, p.key, p.policy)
+        p.phone.repository.settings("local", "same identity", bridge.phone, 10)
+        poll(listOf(p))
+        assertTrue(p.phone.repository.dao.command(ids[0])!!.confirmed)
+        val expired = issue(listOf(p), "adaptive", mapOf("enabled" to true), 5)
+        poll(listOf(p))
+        assertFalse(p.policy.state.enabled)
+        assertNull(
+            p.phone.repository.dao.command(expired[0])
+        ) // Never received, no invented console entry.
+        val cancelled = issue(listOf(p), "sync", emptyMap())
+        control("control/cancel", gson.toJson(mapOf("id" to cancelled[0])))
+        poll(listOf(p))
+        assertNull(p.phone.repository.dao.command(cancelled[0]))
+        control("control/revoke", gson.toJson(mapOf("device" to p.phone.id, "confirmed" to true)))
+        val denied =
+            request(
+                bridge.local + "/local/control/issue",
+                gson.toJson(
+                    mapOf(
+                        "targets" to listOf(p.phone.id),
+                        "operation" to "sync",
+                        "payload" to emptyMap<String, String>(),
+                        "ttl" to 300,
+                        "confirmed" to true,
+                    )
+                ),
+            )
+        assertEquals(400, denied.code)
+    }
+
+    @Test
     fun normalLocationStatusAndFirstAuthorityEnrollment() = runBlocking {
         val p = phone()
         assertEquals(ConfigState(), p.repository.state().config())

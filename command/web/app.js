@@ -480,7 +480,7 @@ function renderDashboard() {
           "div",
           d.snapshot.config_state.effective_reporting_interval_s +
             " s reporting · " +
-            (d.config_converged ? "settings applied" : "settings pending"),
+            (d.config_converged ? "reported settings match" : "reported settings differ") + " · execution evidence in Phone controls",
         ),
       );
       if (d.field_evidence) {
@@ -565,6 +565,10 @@ function renderDashboard() {
           }).catch(showError);
       };
       form.append(input, set, clear);
+      const remote = el("button", "Phone controls");
+      remote.type = "button";
+      remote.onclick = () => { selectParty(d.device_id); $("open-control").click(); $("control-one").click(); };
+      card.append(remote);
       card.append(
         el("small", "Reporting interval override · seconds"),
         form,
@@ -572,7 +576,7 @@ function renderDashboard() {
           "small",
           "Remote override " +
             (d.desired_config.reporting_interval_override_s ?? "cleared") +
-            " · delivered in next ACK",
+            " · legacy v1 setting; authenticated controls are in Phone controls",
         ),
       );
       const overview = el(

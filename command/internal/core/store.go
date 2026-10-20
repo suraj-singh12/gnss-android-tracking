@@ -181,6 +181,20 @@ func Open(path string) (*Store, error) {
 		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 			return nil, err
 		}
+		// Restrict the database before SQLite creates WAL/SHM companions: they
+		// also contain credential pages and inherit the database's mode.
+		file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0600)
+		if err != nil {
+			return nil, err
+		}
+		if err = file.Close(); err != nil {
+			return nil, err
+		}
+		for _, private := range []string{path, path + "-wal", path + "-shm"} {
+			if err = os.Chmod(private, 0600); err != nil && !os.IsNotExist(err) {
+				return nil, err
+			}
+		}
 	}
 	// SQLite is compiled into embedded WASM and executed by Go's wazero runtime.
 	db, err := sql.Open("sqlite3", path)
@@ -194,6 +208,9 @@ func Open(path string) (*Store, error) {
 		if _, err = db.Exec(q); err != nil {
 			return fail(err)
 		}
+	}
+	if err = s.initControl(); err != nil {
+		return fail(err)
 	}
 	state := State{Authority: id(), Policy: DefaultPolicy(), Devices: map[string]*Device{}, Points: []Point{}, Decisions: []Decision{}}
 	if _, err = db.Exec(`CREATE TABLE IF NOT EXISTS offline_maps (id TEXT PRIMARY KEY, source TEXT NOT NULL, data BLOB NOT NULL, created TEXT NOT NULL)`); err != nil {
@@ -968,7 +985,14 @@ func (s *Store) SetOverride(device string, v *int) error {
 	if v != nil && (*v < 5 || *v > 86400 || *v%5 != 0) {
 		return fmt.Errorf("interval must be 5..86400 in multiples of 5")
 	}
-	return s.change("override_requested", device, func(st *State, _ time.Time, _ *sql.Tx) error {
+	return s.change("override_requested", device, func(st *State, _ time.Time, tx *sql.Tx) error {
+		var enrolled int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM control_enrollment WHERE device=?`, device).Scan(&enrolled); err != nil {
+			return err
+		}
+		if enrolled > 0 {
+			return errors.New("use authenticated Phone controls for this enrolled phone")
+		}
 		d := st.Devices[device]
 		if d == nil {
 			return fmt.Errorf("unknown device")

@@ -35,6 +35,41 @@ class TrackingLifecycleTest {
     }
 
     @Test
+    fun remoteTrackingUsesActualLifecycleAndRejectsBackgroundStart() = runBlocking {
+        app.activityVisible = false
+        assertEquals("blocked", app.executeRemoteTracking(true).first)
+        assertFalse(app.repository.state().tracking)
+        assertTrue(shadowOf(manager).getLocationUpdateListeners().isEmpty())
+        val service = Robolectric.buildService(TrackingService::class.java).create()
+        try {
+            service.get().onStartCommand(Intent(app, TrackingService::class.java), 0, 1)
+            withTimeout(10000) {
+                while (!app.operational.value.tracking) {
+                    shadowOf(Looper.getMainLooper()).idle()
+                    delay(10)
+                }
+            }
+            assertEquals("applied", app.executeRemoteTracking(true).first)
+            assertEquals(1, shadowOf(manager).getLocationUpdateListeners().size)
+            val stopped = async(Dispatchers.IO) { app.executeRemoteTracking(false) }
+            // Robolectric does not deliver stopService lifecycle automatically.
+            shadowOf(Looper.getMainLooper()).idle()
+            service.destroy()
+            withTimeout(10000) {
+                while (!stopped.isCompleted) {
+                    shadowOf(Looper.getMainLooper()).idle()
+                    delay(10)
+                }
+            }
+            assertEquals("applied", stopped.await().first)
+            assertFalse(app.repository.state().tracking)
+            assertTrue(shadowOf(manager).getLocationUpdateListeners().isEmpty())
+        } finally {
+            if (app.operational.value.tracking) service.destroy()
+        }
+    }
+
+    @Test
     fun adaptivePolicyChangesKeepNativeListenerAndSosLatestIndependent() = runBlocking {
         app.persistencePolicy.setEnabled(true, utc(SystemClock.wallMillis()))
         val service = Robolectric.buildService(TrackingService::class.java).create()

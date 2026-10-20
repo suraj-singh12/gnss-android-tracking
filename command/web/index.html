@@ -9,6 +9,7 @@
     <script src="/terrain.js" defer></script>
     <script src="/sos-alarm.js" defer></script>
     <script src="/app.js" defer></script>
+    <script src="/control.js" defer></script>
   </head>
   <body>
     <header>
@@ -41,6 +42,7 @@
         <button id="appearance" aria-label="Switch to Night appearance">
           Night
         </button>
+        <button id="open-control">Phone controls</button>
         <button id="open-about">About</button>
         <button
           id="open-sos"
@@ -51,6 +53,19 @@
         </button>
       </div>
     </header>
+    <dialog id="phone-control" aria-labelledby="phone-control-title">
+      <div class="dialog-heading"><h1 id="phone-control-title">Live phone controls</h1><button data-close="phone-control" aria-label="Close phone controls">×</button></div>
+      <p>Commands address enrolled phones through their existing outbound connection. Offline / closed apps may not execute. Recording and historical map views never determine recipients.</p>
+      <div class="controls"><button id="control-one">Selected party</button><button id="control-all">All eligible phones</button><button id="control-none">Clear selection</button></div>
+      <div id="control-phones" aria-label="Remote recipients"></div>
+      <label>Instruction <select id="control-operation"><option value="reporting">Reporting interval</option><option value="adaptive">Adaptive GNSS persistence</option><option value="sync">Sync All Now</option><option value="tracking_start">Start Tracking</option><option value="tracking_stop">Stop Tracking</option></select></label>
+      <label>Reporting seconds (5–86400, step 5; blank restores local default)<input id="control-seconds" type="number" min="5" max="86400" step="5" value="10"></label>
+      <label><input id="control-adaptive" type="checkbox">Enable adaptive persistence (OFF otherwise; future measurements only)</label>
+      <label>Expires after seconds<input id="control-ttl" type="number" min="5" max="86400" value="300"></label>
+      <button id="control-issue" class="primary">Review and issue</button>
+      <p id="control-status" role="status">Loading…</p>
+      <h2>Per-phone command history</h2><div id="control-history"></div>
+    </dialog>
     <div id="error" role="alert" hidden></div>
     <section class="recording-bar" aria-label="Recording controls">
       <span id="recording" role="status">Connecting…</span>

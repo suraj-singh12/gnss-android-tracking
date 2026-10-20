@@ -392,3 +392,129 @@ re-encoded map. Command retains those original entry bytes (including unknown fi
 and numeric/string spelling) after strict JSON/schema/identity validation. An unknown
 case-variant wrapper key cannot replace the exact `messages` array. Valid HTML/Unicode
 characters must not become an oversized/poison record through serializer expansion.
+
+## Issue #25 authenticated control extension — control version 1
+
+This negotiated opt-in extension adds `POST /api/v1/control` on the **existing
+receiver**, through the **existing Android Sender and Wi-Fi transport**. It does
+not change frozen GNSS/SOS bodies, authenticate legacy ingestion, add a phone
+listener, or depend on internet. Legacy clients have remote control **unavailable**.
+The legacy reporting ACK path remains compatible for unenrolled v1 clients; after
+secure enrollment Android permanently requires authenticated configuration, even
+if control is subsequently disabled or re-enrollment is pending. A v1 ACK still
+commits the original GNSS/SOS receipt but cannot change secure settings.
+
+### Enrollment and threat model
+
+The persistent Command authority UUID and configured endpoint remain the authority
+identifier and route, **not credentials**. From loopback Command → Phone controls,
+the operator compares the phone installation UUID directly with Android Settings,
+generates a unique 256-bit random per-phone secret, and privately transfers the
+`gnss1:authorityUUID:deviceUUID:enrollmentUUID:hexSecret` credential to the existing
+Android Settings form. Android requires explicit authorization and matching phone
+UUID. No trust is learned from an unauthenticated LAN response; no QR app, discovery
+server or phone listener is involved. Never transfer credentials through an
+unverified LAN server, logs, diagnostic exports or shared clipboard services.
+The local provisioning response alone contains the secret, with `no-store`.
+
+A random enrollment UUID is a key generation/revocation identifier, **not another
+Command authority**. Replacement credentials invalidate old generations immediately
+at Command. Local Disable removes authorization; Enroll with a different Command
+invalidates the binding and override, preserving phone identity and original
+history. New authority/installation requires explicit new credential transfer.
+Android seals credentials using Android Keystore AES-GCM; existing no-backup rules
+exclude preferences and databases. Missing/unreadable keys yield unavailable control
+without fallback. Command's private application SQLite stores the per-phone key;
+backups must be protected like credentials and preserve authority, command order,
+nonce state and desired revisions. Restoring an old snapshot is not anti-rollback
+hardware: revoke/re-enroll phones after suspect restore or credential compromise.
+
+HMAC-SHA256 uses JCA on Android and Go's standard library on Command. A stolen
+per-phone secret can impersonate either party **for that phone**: this protocol
+provides authentication/integrity, not physical-device attestation or confidentiality.
+Use a trusted isolated LAN (or trusted HTTPS for confidentiality). A LAN observer
+without the secret cannot forge commands or results; address takeover cannot acquire
+trust. A compromised Command installation can control its enrolled phones. Protect
+local console/OS access. Revocation prevents future authenticated exchange, but
+cannot undo an instruction already received/executed by a disconnected phone.
+GNSS v1's device_id remains forgeable and is never execution evidence.
+
+### Wire envelope and replay protection
+
+Both directions carry JSON `{device,enrollment,data,mac}`. `data` is standard padded
+Base64 of the exact UTF-8 JSON bytes. `mac` is lowercase hex HMAC-SHA256 over:
+
+```
+gnss-control-v1\n{direction}\n{device}\n{enrollment}\n{data}
+```
+
+`direction` is `phone` or `command`; there is no final newline. Authenticate the
+exact encoded bytes **before** parsing instruction payloads. Reject duplicate JSON
+keys, oversized bodies (64 KiB), mismatched target/authority/enrollment, unsupported
+versions and invalid MACs. The test-only cross-language vector is
+`fixtures/control-v1/authentication-vector.json`; its key is not a product key.
+
+Phone request data: `{version:1,authority,nonce,at,results}`. `nonce` is 32 random
+bytes encoded hex; `at` is Unix milliseconds. Command persists used nonces in the
+same SQLite transaction as results and rejects replays across restart. Require
+clocks within 60 seconds, retain nonce evidence for 120 seconds, and rate-limit to
+256 requests/phone in that window. Incorrect clocks fail closed; operators correct
+local clocks without requiring internet. Response data:
+`{version:1,authority,nonce,at,commands,confirmed}`. Android verifies the matching
+request nonce and timestamp; a captured response cannot satisfy a fresh request.
+For expiry Android uses the later of its time and authenticated response time.
+
+Each command has immutable `{id,authority,device,enrollment,operation,version:1,
+payload,created,expires,ordering,priority:"normal"}` plus current `disposition`. Timestamps are Unix
+milliseconds; ordering is SQLite's monotonic command allocation, never phone count.
+One instruction/phone/exchange and at most 32 results bound work and body size.
+Polls are at most once/5 seconds, failures back off to 30 seconds. Existing SOS/LIVE/
+history selection runs first; pending SOS takes precedence; control HTTP has a
+one-second deadline. No autonomous lifetime is promised after Android force-stop,
+reboot, hidden Activity without a permitted running service, or OEM termination.
+
+### Operations and execution evidence
+
+| Operation | Payload | Effect and proof |
+| --- | --- | --- |
+| `reporting` | `seconds`: interval or null, `revision`: existing desired config revision | Atomic Room effective configuration + result; null restores current local default. Existing overrides survive local interval edits. |
+| `adaptive` | `enabled`: boolean | #24 `LocalPersistencePolicy.setEnabled`, revision 1's actual supported ON/OFF interface. Future measurements only; OFF remains initial default. Threshold editing is unsupported by policy revision 1. |
+| `sync` | `{}` | Existing #22 Sender bounded aggressive drain, never starts GNSS. Freeze current saved sequence; report unresolved rows through that sequence, then complete only after every scoped GNSS row has durable receipt. Reconstruction and subsequently captured history are separate. |
+| `tracking_start` | `{}` | Existing visible location FGS; require visible Activity and existing precise/GPS/notification/Battery Saver preflight. Return blocked if user interaction/background restriction prevents Start. Applied requires actual service state and durable session. |
+| `tracking_stop` | `{}` | Stop existing service and end durable session, verifying both. No fake success on timeout; local controls and SOS remain independent. |
+
+Results: `{id,revision,state,reason,effective,received,attempted}`. `received` is the
+phone's actual durable receipt time. States include received, applied, rejected,
+blocked, failed, expired, cancelled, superseded, unsupported, unknown, sync_started,
+sync_partial and sync_complete. Command additionally represents queued, sent_unknown,
+cancel_requested_unknown and revoked_unknown. A successful HTTP response, send,
+legacy config echo or desired value is **never** proof of executed effect.
+
+Android persists receipt before attempt, per-operation ordering watermarks, result
+and bounded stage chronology in Room v6. Reporting effect/result is one transaction.
+Duplicates return existing results, never repeat effects. Reordered settings cannot
+roll back a newer operation/config revision. After interruption between receipt/
+attempt and durable completion, the persisted result becomes **unknown**, without
+repeating an uncertain side effect. Operator may issue a deliberate new request.
+Nontransactional OS/policy effects cannot honestly promise exactly-once execution
+under arbitrary power loss; deduplication prevents an automatic second attempt.
+
+Command atomically commits results before returning `confirmed[id]` = SHA-256 hex
+of the **exact phone result JSON bytes**. Android marks delivery confirmed only
+when that matching digest arrives in an authenticated fresh response. ACK loss
+retains the result for retry with a new nonce; execution does not repeat. Terminal
+results cannot be replaced; sync progress has increasing result revisions.
+
+Queued expired/cancelled/superseded instructions are not delivered and never appear
+as invented Android console records. Sent instructions remain uncertain; cancellation
+is a disposition Android can honor only before execution. A late cancellation cannot
+hide or undo an already applied effect. Queued reporting/adaptive changes supersede
+older queued changes; already sent commands preserve their evidence. Recipients are
+explicit identity snapshots, with no fleet cap or late-join subscription.
+
+Storage fails closed: maximum 256 outstanding/phone and 10,000 retained Command
+instructions/phone; new requests are rejected rather than dropping evidence. Android
+retains up to 512 unresolved instructions and 500 resolved/security history entries;
+per-operation watermarks survive history pruning. No GNSS/SOS deletion occurs.
+The console displays/filter-searches bounded canonical records and exports sanitized
+metadata/stages through the existing ZIP, never keys, MACs or sensitive raw payloads.

@@ -34,6 +34,9 @@ data class Installation(
     val sessionStartedMillis: Long? = null,
     @ColumnInfo(defaultValue = "0") val observationSequence: Long = 0,
     @ColumnInfo(defaultValue = "0") val knownCollectionLoss: Long = 0,
+    @ColumnInfo(defaultValue = "0") val controlRequired: Boolean = false,
+    val controlAuthority: String? = null,
+    val controlEnrollment: String? = null,
 ) {
     fun config() = ConfigState(authority, version, overrideSeconds, localInterval)
 }
@@ -98,6 +101,48 @@ data class OutboxSummary(@PrimaryKey val key: Int = 1, @Embedded val counts: Que
 
 @Dao
 interface TrackingDao {
+    @Query("SELECT * FROM command_journal ORDER BY confirmed ASC,received DESC LIMIT 1012")
+    fun observeCommands(): Flow<List<CommandRecord>>
+
+    @Query("SELECT * FROM command_journal ORDER BY confirmed ASC,received DESC LIMIT 1012")
+    suspend fun commandHistory(): List<CommandRecord>
+
+    @Query("SELECT * FROM command_journal WHERE id=:id")
+    suspend fun command(id: String): CommandRecord?
+
+    @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertCommand(row: CommandRecord)
+
+    @Update suspend fun updateCommand(row: CommandRecord)
+
+    @Query(
+        "SELECT * FROM command_journal WHERE enrollment=:enrollment AND confirmed=0 AND trusted=1 ORDER BY received LIMIT 32"
+    )
+    suspend fun pendingCommands(enrollment: String): List<CommandRecord>
+
+    @Query(
+        "SELECT * FROM command_journal WHERE enrollment=:enrollment AND state IN ('sync_started','sync_partial')"
+    )
+    suspend fun activeSyncCommands(enrollment: String): List<CommandRecord>
+
+    @Query("SELECT ordering FROM command_watermark WHERE token=:token")
+    suspend fun commandWatermark(token: String): Long?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun commandWatermark(row: CommandWatermark)
+
+    @Query(
+        "DELETE FROM command_journal WHERE id IN (SELECT id FROM command_journal WHERE confirmed=1 OR trusted=0 ORDER BY received DESC LIMIT -1 OFFSET 500)"
+    )
+    suspend fun pruneCommands()
+
+    @Query("SELECT COUNT(*) FROM command_journal WHERE confirmed=0 AND trusted=1")
+    suspend fun unresolvedCommands(): Int
+
+    @Query(
+        "SELECT COUNT(*) FROM outbox WHERE type='location' AND sequence<=:through AND deliveredAt IS NULL"
+    )
+    suspend fun syncRemaining(through: Long): Long
+
     @Query("SELECT * FROM installation WHERE `key`=1") suspend fun state(): Installation?
 
     @Query("SELECT * FROM tracking_sessions WHERE id=:id")
@@ -118,7 +163,9 @@ interface TrackingDao {
     @Update suspend fun updateRow(row: Outbound)
 
     // Two bounded seeks include unresolved/quarantined evidence without scanning history.
-    @Query("SELECT MIN(capturedMillis) FROM outbox WHERE sequence IN (SELECT MIN(sequence) FROM outbox WHERE deliveredAt IS NULL AND quarantined=0 UNION ALL SELECT MIN(sequence) FROM outbox WHERE deliveredAt IS NULL AND quarantined=1)")
+    @Query(
+        "SELECT MIN(capturedMillis) FROM outbox WHERE sequence IN (SELECT MIN(sequence) FROM outbox WHERE deliveredAt IS NULL AND quarantined=0 UNION ALL SELECT MIN(sequence) FROM outbox WHERE deliveredAt IS NULL AND quarantined=1)"
+    )
     suspend fun oldestPendingCapturedMillis(): Long?
 
     @Query("SELECT * FROM outbox WHERE sequence=:sequence")
@@ -261,8 +308,16 @@ CASE WHEN EXISTS(SELECT 1 FROM outbox_summary WHERE `key`=1) THEN (SELECT delive
 }
 
 @Database(
-    entities = [Installation::class, Outbound::class, SessionRecord::class, OutboxSummary::class],
-    version = 5,
+    entities =
+        [
+            Installation::class,
+            Outbound::class,
+            SessionRecord::class,
+            OutboxSummary::class,
+            CommandRecord::class,
+            CommandWatermark::class,
+        ],
+    version = 6,
     exportSchema = true,
 )
 abstract class TrackingDatabase : RoomDatabase() {
@@ -271,7 +326,13 @@ abstract class TrackingDatabase : RoomDatabase() {
     companion object {
         fun open(context: Context) =
             Room.databaseBuilder(context, TrackingDatabase::class.java, "tracking.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(
+                    MIGRATION_1_2,
+                    MIGRATION_2_3,
+                    MIGRATION_3_4,
+                    MIGRATION_4_5,
+                    MIGRATION_5_6,
+                )
                 .addCallback(SUMMARY_CALLBACK)
                 .build()
 
@@ -297,6 +358,22 @@ abstract class TrackingDatabase : RoomDatabase() {
             object : Callback() {
                 override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                     initializeSummary(db)
+                }
+            }
+        val MIGRATION_5_6 =
+            object : androidx.room.migration.Migration(5, 6) {
+                override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "ALTER TABLE installation ADD COLUMN controlRequired INTEGER NOT NULL DEFAULT 0"
+                    )
+                    db.execSQL("ALTER TABLE installation ADD COLUMN controlAuthority TEXT")
+                    db.execSQL("ALTER TABLE installation ADD COLUMN controlEnrollment TEXT")
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS command_journal (id TEXT NOT NULL PRIMARY KEY,authority TEXT NOT NULL,device TEXT NOT NULL,enrollment TEXT NOT NULL,operation TEXT NOT NULL,ordering INTEGER NOT NULL,received INTEGER NOT NULL,trusted INTEGER NOT NULL,state TEXT NOT NULL,reason TEXT NOT NULL,effective TEXT NOT NULL,attempted INTEGER NOT NULL,revision INTEGER NOT NULL,confirmed INTEGER NOT NULL,events TEXT NOT NULL,syncThrough INTEGER NOT NULL,version INTEGER NOT NULL,created INTEGER NOT NULL,expires INTEGER NOT NULL,priority TEXT NOT NULL,requested TEXT NOT NULL,attemptedAt INTEGER NOT NULL,completedAt INTEGER NOT NULL,confirmedAt INTEGER NOT NULL)"
+                    )
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS command_watermark (token TEXT NOT NULL PRIMARY KEY,ordering INTEGER NOT NULL)"
+                    )
                 }
             }
         val MIGRATION_4_5 =
@@ -770,7 +847,11 @@ class Repository(val db: TrackingDatabase, private val clock: Clock = SystemCloc
                 }
                 if (current.deliveredAt != null) continue
                 var updated = state.copy(lastAck = utc(clock.wallMillis()), operationalError = null)
-                when (val decision = receipt.config?.let { applyConfig(state.config(), it) }) {
+                when (
+                    val decision =
+                        if (state.controlRequired) ConfigDecision.NoChange
+                        else receipt.config?.let { applyConfig(state.config(), it) }
+                ) {
                     is ConfigDecision.Applied ->
                         updated =
                             updated.copy(
@@ -873,6 +954,8 @@ class Repository(val db: TrackingDatabase, private val clock: Clock = SystemCloc
                     endpoint = endpoint,
                     localInterval = localInterval,
                     authority = if (reenroll) null else old.authority,
+                    controlAuthority = if (reenroll) null else old.controlAuthority,
+                    controlEnrollment = if (reenroll) null else old.controlEnrollment,
                     version = if (reenroll) 0 else old.version,
                     overrideSeconds = if (reenroll) null else old.overrideSeconds,
                     configError = if (reenroll) null else old.configError,
