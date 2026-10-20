@@ -565,7 +565,10 @@ ACK; ACK is immutable and cannot be replaced by a late cancellation.
 Urgent repeat attempts occur only in a permitted existing Activity/tracking/transfer
 runtime, at most once per cadence (missed intervals are never caught up). A deadline
 uses the minimum of actual absolute expiry and duration from the first attempt,
-with a process-local monotonic cap against wall-clock rollback. The existing app
+with a process-local monotonic cap against wall-clock rollback. Admission also
+includes monotonic exchange and staging elapsed time in a conservative upper bound
+on signed server time, so delayed/suspended processing cannot revive TTL while the
+phone wall clock is behind. This may expire a short-lived alert early on a slow path. The existing app
 loop checks expiry/Stop about every 250 ms while scheduled; Android scheduling may
 delay checks. Notification timeout also uses the remaining deadline. No exact-alarm,
 new foreground service, volume/DND override, full-screen launch or wake lock is

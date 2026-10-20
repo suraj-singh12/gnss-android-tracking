@@ -317,6 +317,7 @@ class CommandControl(
                         data,
                         ControlCrypto.mac(key.key, "phone", key.device, key.enrollment, data),
                     )
+                val exchangeStarted = clock.elapsedMillis()
                 val response =
                     transport.control(state.endpoint, gson.toJson(env)) ?: return@withLock
                 if (response.code != 200 || !response.json) {
@@ -379,7 +380,12 @@ class CommandControl(
                 }
                 for (command in commands) {
                     try {
-                        receive(command.asJsonObject, key, body["at"].asLong)
+                        receive(
+                            command.asJsonObject,
+                            key,
+                            body["at"].asLong,
+                            (clock.elapsedMillis() - exchangeStarted).coerceAtLeast(0),
+                        )
                         if (command.asJsonObject["operation"]?.asString == "tracking_stop")
                             stopped()
                     } catch (e: kotlinx.coroutines.CancellationException) {
@@ -439,7 +445,13 @@ class CommandControl(
         dao.pruneCommands()
     }
 
-    private suspend fun receive(ins: JsonObject, key: ControlCredential, serverAt: Long) {
+    private suspend fun receive(
+        ins: JsonObject,
+        key: ControlCredential,
+        serverAt: Long,
+        exchangeElapsed: Long,
+    ) {
+        val receiveStarted = clock.elapsedMillis()
         val metadataValid =
             runCatching {
                     for (name in listOf("id", "authority", "device", "enrollment")) require(
@@ -483,6 +495,8 @@ class CommandControl(
         }
         val ordering = ins["ordering"].asLong
         val operation = ins["operation"].asString
+        // A delayed signed reply must not extend alert TTL on a phone whose wall clock is behind.
+        val serverBound = if (operation == "alert") serverAt + exchangeElapsed else serverAt
         require(
             operation in
                 listOf("reporting", "adaptive", "sync", "tracking_start", "tracking_stop") ||
@@ -562,10 +576,16 @@ class CommandControl(
             return
         }
         if (
-            ins["expires"].asLong <= maxOf(clock.wallMillis(), serverAt) ||
+            ins["expires"].asLong <= maxOf(clock.wallMillis(), serverBound) ||
                 ins["created"].asLong > clock.wallMillis() + 60000
         ) {
-            finish(row, "expired", "Expired command; no execution")
+            finish(
+                row,
+                "expired",
+                if (operation == "alert")
+                    "Expired alert or transport delay exhausted proven TTL; no output"
+                else "Expired command; no execution",
+            )
             return
         }
         if (ins["disposition"].asString in listOf("cancelled", "cancel_requested_unknown")) {
@@ -656,7 +676,14 @@ class CommandControl(
                     alertDeadline[row.id] =
                         clock.elapsedMillis() +
                             minOf(
-                                row.expires - maxOf(clock.wallMillis(), serverAt),
+                                row.expires -
+                                    maxOf(
+                                        clock.wallMillis(),
+                                        serverBound +
+                                            (clock.elapsedMillis() - receiveStarted).coerceAtLeast(
+                                                0
+                                            ),
+                                    ),
                                 if (spec.mode == "normal") Long.MAX_VALUE
                                 else spec.duration_s * 1000L,
                             )
@@ -835,7 +862,7 @@ class CommandControl(
                 (alertDeadline[row.id] ?: clock.elapsedMillis()) - clock.elapsedMillis(),
             )
         if (remaining <= 0) {
-            stopAlert(row, "expired", "Actual expiry/duration reached; repetition stopped")
+            stopAlert(row, "expired", "Expiry/duration bound reached; repetition stopped")
             return
         }
         val result =
@@ -888,7 +915,7 @@ class CommandControl(
                     row.expires <= clock.wallMillis() ||
                         clock.elapsedMillis() >= alertDeadline.getValue(row.id)
                 ) {
-                    stopAlert(row, "expired", "Actual expiry/duration reached; repetition stopped")
+                    stopAlert(row, "expired", "Expiry/duration bound reached; repetition stopped")
                     continue
                 }
                 val spec = PhoneAlertSpec.parse(Protocol.parse(row.requested))

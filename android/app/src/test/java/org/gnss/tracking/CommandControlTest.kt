@@ -30,6 +30,7 @@ class CommandControlTest {
     private var capturedRequest = ""
     private var capturedResponse = ""
     private var replay = false
+    private var responseDelayMillis = 0L
     private var alertAttempts = 0
     private var alertStops = 0
     private var outputBlocked = false
@@ -106,6 +107,8 @@ class CommandControlTest {
                     )
                 if (replay) return Response(200, capturedResponse)
                 capturedResponse = value
+                clock.now += responseDelayMillis
+                responseDelayMillis = 0
                 return Response(200, value)
             }
         }
@@ -311,6 +314,38 @@ class CommandControlTest {
         engine.disable()
         assertEquals("unknown", repository.dao.command(command["id"] as String)!!.state)
         assertTrue(alertStops > 0)
+    }
+
+    @Test
+    fun skewedWallClockAndSuspendedResponseCannotStartExpiredAlert() = runBlocking {
+        val skewed =
+            object : Clock {
+                override fun wallMillis() = clock.now - 45000
+
+                override fun elapsedMillis() = clock.now
+            }
+        for (mode in listOf("normal", "urgent")) {
+            val command = alert(mode, expires = clock.now + 5000)
+            instructions = listOf(command)
+            responseDelayMillis =
+                10000 // Signed at t0, processed ten seconds later; wall time is behind.
+            val delayed =
+                CommandControl(
+                    repository,
+                    transport,
+                    { key },
+                    { _, _ -> PersistencePolicy() },
+                    {},
+                    { "blocked" to "test" },
+                    clock = skewed,
+                    alertOutput = output,
+                )
+            delayed.step()
+            val row = repository.dao.command(command["id"] as String)!!
+            assertEquals("expired", row.state)
+            assertFalse(row.attempted)
+            assertEquals(0, alertAttempts)
+        }
     }
 
     @Test
