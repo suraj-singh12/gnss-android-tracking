@@ -462,9 +462,9 @@ permission affects notification visibility; the OS can still expose foreground w
 through its task manager. Background-start failures explicitly require keeping the
 app visible. Physical acceptance remains required.
 
-Command-originated Sync All Now remains Issue #25. This change does not alter GNSS
-acquisition/persistence cadence (#24), original recording/quality rules or human SOS
-acknowledgement.
+Issue #25 now invokes this same Sender for authenticated Command-originated Sync
+All Now. Synchronization does not alter GNSS acquisition/persistence cadence (#24),
+original recording/quality rules or human SOS acknowledgement.
 
 ## Authenticated Command instructions (Issue #25)
 
@@ -499,6 +499,6 @@ adds `command-instructions.json` without keys/MACs/raw instruction bodies. No co
 operation deletes GNSS/SOS or pending control state. The UI shows the newest 100
 matching records; refine the filter for older retained records.
 
-See the [wire/security contract](../protocol/protocol-v1.md#issue-25-authenticated-control-extension--control-version-1).
+See the [wire/security contract](../protocol/protocol-v1.md).
 Physical Android background, Keystore/OEM, GNSS and LAN acceptance remain **NOT TESTED**
 by JVM tests; #24 remains OPEN for its deferred physical field checks.
