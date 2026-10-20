@@ -181,17 +181,13 @@ func Open(path string) (*Store, error) {
 		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 			return nil, err
 		}
-		// Restrict the database before SQLite creates WAL/SHM companions: they
-		// also contain credential pages and inherit the database's mode.
-		file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0600)
-		if err != nil {
-			return nil, err
-		}
-		if err = file.Close(); err != nil {
+		// Restrict existing credential storage before opening SQLite. The private
+		// VFS also protects newly created database/journal/SHM companions.
+		if err := privateFile(path); err != nil {
 			return nil, err
 		}
 		for _, private := range []string{path, path + "-wal", path + "-shm"} {
-			if err = os.Chmod(private, 0600); err != nil && !os.IsNotExist(err) {
+			if err := os.Chmod(private, 0600); err != nil && !os.IsNotExist(err) {
 				return nil, err
 			}
 		}

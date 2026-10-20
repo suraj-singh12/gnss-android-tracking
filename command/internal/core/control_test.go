@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -366,4 +367,22 @@ func TestControlReceivedIsNonterminalAndCancellationSurvivesReceiptRetry(t *test
 	if string(v["commands"]) != "[]" {
 		t.Fatal("terminal cancellation redelivered", v)
 	}
+}
+
+func TestControlPrivateSQLiteURIPreservesPlatformFilenames(t *testing.T) {
+	for _, path := range []string{"C:/Users/Field Team/command?#%.sqlite", "/tmp/Field Team/command?#%.sqlite"} {
+		uri := privateURI(path)
+		encoded := strings.TrimSuffix(strings.TrimPrefix(uri, "file:"), "?vfs=gnss-private")
+		decoded, err := url.PathUnescape(encoded)
+		if err != nil || decoded != path || strings.HasPrefix(encoded, "//") {
+			t.Fatalf("filename changed: %q %v", uri, err)
+		}
+	}
+	s, err := Open(filepath.Join(t.TempDir(), "field team?#%.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ingest(t, s, message(t, 1, 0, 0, 0, 1))
+	controlEnroll(t, s, device)
 }

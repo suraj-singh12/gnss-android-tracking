@@ -1,11 +1,12 @@
 package core
 
 import (
-	"github.com/ncruces/go-sqlite3/util/vfsutil"
-	"github.com/ncruces/go-sqlite3/vfs"
 	"net/url"
 	"os"
 	"path/filepath"
+
+	"github.com/ncruces/go-sqlite3/util/vfsutil"
+	"github.com/ncruces/go-sqlite3/vfs"
 )
 
 // The embedded OS VFS creates journals with 0666. Precreate privately on every
@@ -47,6 +48,11 @@ func privateDSN(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	u := url.URL{Scheme: "file", Path: filepath.ToSlash(absolute), RawQuery: "vfs=gnss-private"}
-	return u.String(), nil
+	return privateURI(filepath.ToSlash(absolute)), nil
+}
+
+// Escape the filename without introducing a URI authority. In particular,
+// C:/... must not become file://C:/... (which treats C: as a hostname).
+func privateURI(path string) string {
+	return "file:" + url.PathEscape(path) + "?vfs=gnss-private"
 }
