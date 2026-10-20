@@ -130,6 +130,9 @@ async function wait(check) {
   await page.locator("#control-operation").selectOption("alert");
   await page.locator("#control-alert-mode").selectOption("normal");
   await page.locator("#control-alert-message").fill("Check in with Command");
+  // Normal mode must ignore stale invalid urgent-only fields.
+  await page.locator("#control-alert-duration").fill("121");
+  await page.locator("#control-alert-repeat").fill("0");
   await page.locator("#control-issue").click();
   await wait(async()=>((await (await fetch(local+"/local/control")).json()).commands.filter(c=>c.operation==="alert").length===2));
   await page.locator("#control-all").click();

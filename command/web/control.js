@@ -81,8 +81,8 @@ $("control-issue").onclick=async()=>{try{
   if(operation==="adaptive")payload={enabled:$("control-adaptive").checked};
   if(operation==="alert"){
     if(ttl>3600)throw new Error("Phone alert expiry must be 5–3600 seconds");
-    if(!$("control-alert-duration").reportValidity() || !$("control-alert-repeat").reportValidity())return;
     const mode=$("control-alert-mode").value;
+    if(mode==="urgent" && (!$("control-alert-duration").reportValidity() || !$("control-alert-repeat").reportValidity()))return;
     payload={mode,message:$("control-alert-message").value,duration_s:mode==="normal"?5:Number($("control-alert-duration").value),repeat_s:mode==="normal"?5:Number($("control-alert-repeat").value)};
   }
   if(!confirm(`${operation} ${JSON.stringify(payload)}\n${targets.length} frozen recipients:\n${targets.join("\n")}\nExpires in ${ttl} seconds. Tracking Start requires Android visibility and permissions. Proceed?`))return;
