@@ -744,11 +744,164 @@ class MainActivity : Activity() {
             AlertDialog.Builder(this)
                 .setTitle("Change Command enrollment?")
                 .setMessage(
-                    "Clear the remote reporting override and bind the next successful reply from this receiver. Saved messages and device identity are retained."
+                    "Clear remote control authorization and reporting override. Secure remote instructions require a new credential verified at the local Command console. Saved messages and device identity are retained."
                 )
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Re-enroll") { _, _ -> save(reenroll = true) }
                 .show()
+        }
+        content = connectionSettings
+        text("Authenticated remote control", 18f)
+        val controlPhoneIdentity = text("Loading phone identity…")
+        controlPhoneIdentity.setTextIsSelectable(true)
+        scope.launch {
+            controlPhoneIdentity.text =
+                try {
+                    "Phone UUID: " + withContext(Dispatchers.IO) { app.repository.state().deviceId }
+                } catch (_: Exception) {
+                    "Phone identity unavailable: check storage before enrolling"
+                }
+        }
+        val commandCredential =
+            EditText(this).apply {
+                hint = "One-time credential from local Command console"
+                inputType =
+                    android.text.InputType.TYPE_CLASS_TEXT or
+                        android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+                setSaveEnabled(false)
+            }
+        content.addView(commandCredential)
+        val enrollmentStatus =
+            text(
+                "Remote control is unavailable until deliberately enrolled. Compare this phone UUID with Command. Transfer the credential privately; never obtain it from an unverified LAN server."
+            )
+        button("Authorize this Command for remote instructions") {
+            val value = commandCredential.text.toString()
+            commandCredential.text.clear()
+            AlertDialog.Builder(this)
+                .setTitle("Authorize remote control?")
+                .setMessage(
+                    "Only continue after verifying the phone identity and credential directly at your local Command console. Allows reporting, adaptive persistence, sync and OS-permitted tracking controls."
+                )
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Authorize") { _, _ ->
+                    scope.launch {
+                        enrollmentStatus.text =
+                            try {
+                                withContext(Dispatchers.IO) {
+                                    val key = ControlCrypto.parseCredential(value)
+                                    app.commandControl.bind(key) { app.controlKeys.save(key) }
+                                }
+                                "Remote control enrolled; awaiting authenticated contact"
+                            } catch (_: Exception) {
+                                "Enrollment failed: check phone identity, credential and secure key storage"
+                            }
+                    }
+                }
+                .show()
+        }
+        button("Disable remote control locally") {
+            scope.launch {
+                withContext(Dispatchers.IO) { app.commandControl.disable() }
+                enrollmentStatus.text = "Remote control disabled; pending results retained"
+            }
+        }
+        content = pages.getValue("Diagnostics")
+        val commandGroup = group("Command Instructions", false)
+        content = commandGroup
+        val commandFilter =
+            EditText(this).apply {
+                hint = "Filter outcome, action, command ID or UTC date"
+                contentDescription = hint
+            }
+        content.addView(commandFilter)
+        val instructionSummary = text("Loading Command Instructions…")
+        val commandRows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        content.addView(commandRows)
+        var commandHistory = emptyList<CommandRecord>()
+        val expandedCommandIds = mutableSetOf<String>()
+        fun renderCommands() {
+            commandRows.removeAllViews()
+            val filter = commandFilter.text.toString().lowercase()
+            val matching =
+                commandHistory.filter {
+                    (it.id + it.operation + it.state + it.reason + utc(it.received))
+                        .lowercase()
+                        .contains(filter)
+                }
+            instructionSummary.text =
+                "${app.commandControl.availability}\n${matching.size} matching / ${commandHistory.size} retained. Only instructions actually received appear. Pending results are never cleared by this console."
+            for (row in matching.take(100)) {
+                val title =
+                    TextView(this).apply {
+                        text =
+                            "${utc(row.received)} · ${row.operation} · ${row.state}\n${row.reason}"
+                        setPadding(0, 12, 0, 12)
+                    }
+                commandRows.addView(title)
+                val detail =
+                    TextView(this).apply {
+                        text =
+                            "${if(row.trusted) "Command" else "Security event"} ${row.id}\nOrigin: configured Command endpoint (address redacted)\nAuthority ${row.authority}\nPhone ${row.device}\nAuthenticated ${row.trusted} · attempted ${row.attempted}\nVersion ${row.version} · priority ${row.priority} · created ${if(row.created>0) utc(row.created) else "unknown"} · expires ${if(row.expires>0) utc(row.expires) else "unknown"}\nAttempted ${if(row.attemptedAt>0) utc(row.attemptedAt) else "unconfirmed"} · result ${if(row.completedAt>0) utc(row.completedAt) else "pending"} · custody ${if(row.confirmedAt>0) utc(row.confirmedAt) else "unconfirmed"}\nRequested ${row.requested}\nEffective ${row.effective.ifEmpty { "unconfirmed" }}\nResult ${if(row.confirmed) "delivery confirmed" else "pending or unknown delivery"}\n${row.events}"
+                        visibility = if (row.id in expandedCommandIds) View.VISIBLE else View.GONE
+                        setTextIsSelectable(true)
+                    }
+                title.contentDescription = "${title.text}. Tap to expand details"
+                title.setOnClickListener {
+                    val expand = detail.visibility == View.GONE
+                    if (expand) expandedCommandIds.add(row.id)
+                    else expandedCommandIds.remove(row.id)
+                    detail.visibility = if (expand) View.VISIBLE else View.GONE
+                }
+                commandRows.addView(detail)
+                commandRows.addView(
+                    Button(this).apply {
+                        text = if (row.trusted) "Copy command ID" else "Copy security event ID"
+                        setOnClickListener {
+                            getSystemService(android.content.ClipboardManager::class.java)
+                                .setPrimaryClip(
+                                    android.content.ClipData.newPlainText("Command ID", row.id)
+                                )
+                        }
+                    }
+                )
+            }
+            if (matching.isEmpty())
+                commandRows.addView(
+                    TextView(this).apply { text = "No received instructions match this filter" }
+                )
+        }
+        commandFilter.addTextChangedListener(
+            object : android.text.TextWatcher {
+                override fun beforeTextChanged(
+                    s: CharSequence?,
+                    start: Int,
+                    count: Int,
+                    after: Int,
+                ) {}
+
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    renderCommands()
+                }
+
+                override fun afterTextChanged(s: android.text.Editable?) {}
+            }
+        )
+        scope.launch {
+            try {
+                combine(app.repository.dao.observeCommands(), app.commandControl.updates) { rows, _
+                        ->
+                        rows
+                    }
+                    .collect {
+                        commandHistory = it.sortedByDescending { row -> row.received }
+                        renderCommands()
+                    }
+            } catch (_: Exception) {
+                instructionSummary.text =
+                    "Command Instructions unavailable: cannot read durable journal; check storage"
+            }
         }
         content = diagnosticTools
         button("Export diagnostics") {
@@ -866,15 +1019,15 @@ class MainActivity : Activity() {
                                 ?: queues.deliveredGnss.toLong().also {
                                     historyProgressStartDelivered = it
                                 }
-                        val sync = savedGnssSyncProgress(
-                            progressBaseline,
-                            queues.deliveredGnss.toLong(),
-                            queues.gnss.toLong(),
-                        )
+                        val sync =
+                            savedGnssSyncProgress(
+                                progressBaseline,
+                                queues.deliveredGnss.toLong(),
+                                queues.gnss.toLong(),
+                            )
                         historyProgressBar.progress = sync.percentage
                         historyProgressLabel.text =
-                            if (sync.total == 0L)
-                                "Saved GNSS sync · no observations pending"
+                            if (sync.total == 0L) "Saved GNSS sync · no observations pending"
                             else
                                 "${sync.acknowledged} / ${sync.total} ACKed (${sync.percentage}%) · ${sync.pending} pending" +
                                     if (queues.blocked > 0)
@@ -1085,7 +1238,9 @@ class MainActivity : Activity() {
                     if (start)
                         require(url.isNotEmpty()) { "Configure a Command URL before tracking" }
                     withContext(Dispatchers.IO) {
-                        app.repository.settings(id, name, url, seconds, reenroll)
+                        app.commandControl.changeSettings {
+                            app.repository.settings(id, name, url, seconds, reenroll)
+                        }
                     }
                     if (start) {
                         savingStart = false
@@ -1293,9 +1448,7 @@ class MainActivity : Activity() {
         outState.putBoolean("askedLocation", askedLocation)
         outState.putBoolean("askedNotifications", askedNotifications)
         outState.putInt("permissionInFlight", permissionInFlight ?: 0)
-        historyProgressStartDelivered?.let {
-            outState.putLong("historyProgressStartDelivered", it)
-        }
+        historyProgressStartDelivered?.let { outState.putLong("historyProgressStartDelivered", it) }
         super.onSaveInstanceState(outState)
     }
 
@@ -1348,6 +1501,7 @@ class MainActivity : Activity() {
                             Build.VERSION.SDK_INT,
                             BuildConfig.SOURCE_REVISION,
                         ),
+                        app.repository.dao.commandHistory(),
                     )
                     contentResolver.openOutputStream(uri, "wt")?.use { out ->
                         file.inputStream().use { it.copyTo(out) }

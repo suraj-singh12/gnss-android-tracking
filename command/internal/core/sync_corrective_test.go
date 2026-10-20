@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"github.com/ncruces/go-sqlite3"
@@ -13,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -269,6 +271,18 @@ func TestChronologicalIndexMatchesComparatorAndUsesRange(t *testing.T) {
 func TestFreshPriorityAndLateJoinDuringActualSlowWriterSaturation(t *testing.T) {
 	s, now, _ := open(t)
 	*now = base.Add(time.Hour)
+	type controlPhone struct{ device, authority, enrollment, key string }
+	controlPhones := []controlPhone{}
+	if os.Getenv("GNSS_CONTROL_LOAD") == "1" {
+		for n := 1; n <= 20; n++ {
+			m := message(t, 20000, 0, 0, 0, 1)
+			m.Device = fmt.Sprintf("11111111-1111-4111-8111-%012d", n)
+			ingest(t, s, m)
+			authority, enrollment, key := controlEnroll(t, s, m.Device)
+			controlAPI(t, s, "issue", map[string]any{"targets": []string{m.Device}, "operation": "sync", "payload": map[string]any{}, "ttl": 300, "confirmed": true}, 200)
+			controlPhones = append(controlPhones, controlPhone{m.Device, authority, enrollment, key})
+		}
+	}
 	entered, release := make(chan struct{}), make(chan struct{})
 	var once sync.Once
 	conn, err := s.db.Conn(context.Background())
@@ -298,7 +312,7 @@ func TestFreshPriorityAndLateJoinDuringActualSlowWriterSaturation(t *testing.T) 
 	defer server.Close()
 	var unblock sync.Once
 	defer unblock.Do(func() { close(release) })
-	result := make(chan error, 32)
+	result := make(chan error, 64)
 	sendBatch := func(d int) {
 		session := id()
 		messages := []Message{}
@@ -370,10 +384,35 @@ func TestFreshPriorityAndLateJoinDuringActualSlowWriterSaturation(t *testing.T) 
 			result <- e
 		}()
 	}
+	for _, phone := range controlPhones {
+		phone := phone
+		request := controlRequest{1, phone.authority, randomControlKey(), now.UnixMilli(), nil, false}
+		data := base64.StdEncoding.EncodeToString(encode(t, request))
+		body := encode(t, controlEnvelope{phone.device, phone.enrollment, data, controlMAC(phone.key, "phone", phone.device, phone.enrollment, data)})
+		go func() {
+			var err error
+			defer func() { result <- err }()
+			response, e := http.Post(server.URL+"/api/v1/control", "application/json", bytes.NewReader(body))
+			if e != nil {
+				err = e
+				return
+			}
+			defer response.Body.Close()
+			raw, e := io.ReadAll(response.Body)
+			if e != nil {
+				err = e
+				return
+			}
+			var reply controlEnvelope
+			if response.StatusCode != 200 || json.Unmarshal(raw, &reply) != nil || reply.MAC != controlMAC(phone.key, "command", phone.device, phone.enrollment, reply.Data) {
+				err = fmt.Errorf("invalid control response HTTP %d", response.StatusCode)
+			}
+		}()
+	}
 	// Storage fault deliberately overlaps requests, not pauses after successful ACKs.
 	time.Sleep(50 * time.Millisecond)
 	unblock.Do(func() { close(release) })
-	for i := 0; i < 29; i++ {
+	for i := 0; i < 29+len(controlPhones); i++ {
 		if err := <-result; err != nil {
 			t.Fatal(err)
 		}
@@ -383,12 +422,12 @@ func TestFreshPriorityAndLateJoinDuringActualSlowWriterSaturation(t *testing.T) 
 		values = append(values, <-priority)
 	}
 	sort.Slice(values, func(i, j int) bool { return values[i] < values[j] })
-	t.Logf("fresh priority under 21 uploads + slow writer p50=%s p95=%s p99=%s worst=%s", values[4], values[7], values[7], values[7])
+	t.Logf("fresh priority under 21 uploads + slow writer p50=%s p95=%s p99=%s worst=%s concurrent_authenticated_control_polls=%d", values[4], values[7], values[7], values[7], len(controlPhones))
 	if values[7] > 10*time.Second {
 		t.Fatal("priority starved")
 	}
 	var count int
-	if err = s.db.QueryRow("SELECT COUNT(*) FROM raw").Scan(&count); err != nil || count != 21*60+8 {
+	if err = s.db.QueryRow("SELECT COUNT(*) FROM raw").Scan(&count); err != nil || count != 21*60+8+len(controlPhones) {
 		t.Fatal("lost raw identity", count, err)
 	}
 }

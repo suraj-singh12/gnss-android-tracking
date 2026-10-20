@@ -575,3 +575,33 @@ Run 1/2/7-day and 20-phone plus late-21st LAN scenarios with SOS/LIVE backlog pr
 Software replay and scaled fleet-volume estimates do not establish these physical
 results. No native macOS/Windows execution or field battery/accuracy acceptance is
 inferred from portable cross-builds.
+
+## Issue #25 physical authenticated control acceptance — NOT TESTED
+
+Use the exact-source APK/Command manifest linked from the draft PR. JVM/bridge and
+browser results are software evidence, not this hardware gate. Keep #24 OPEN and its
+physical adaptive checks NOT TESTED. The inherited #40 external Overpass failure is
+not fixed or waived by control software verification.
+
+1. On an offline router, privately provision each verified phone UUID at the existing
+   Settings/Command console; deny first-contact impostor at the same IP:port. Confirm
+   enrollment/replacement/revocation and local Disable fail closed, including Keystore
+   failure/device restore; no secret appears in ZIP/logcat/network diagnostic output.
+2. Run 1/5/20 phones plus late 21st, one/selected/all frozen recipients. Verify actual
+   reporting seconds/local override/null default and #24 future-only adaptive ON/OFF,
+   not desired echo alone. Compare originals before/after; OFF remains default.
+3. Sync saved originals with Tracking ON and OFF while visible, locked, backgrounded,
+   and during permitted dataSync lifetime. Verify zero new GNSS when OFF; distinguish
+   progress, unresolved rows, durable delivery and Command reconstruction.
+4. Request Start/Stop with visible/background/locked Android, denied/revoked location,
+   notifications, GPS and Battery Saver/OEM restrictions. Verify actual service,
+   notification, callbacks and Room session; blocked/unknown must never appear applied.
+5. Kill/restart Android/Command, lose LAN/result ACK, duplicate/reorder commands, expire
+   offline TTL, cancel before/after effect, revoke/re-enroll and replace authority.
+   Inspect persistent receipt → decision → effect → result-pending/confirmed chronology
+   and sanitized ZIP. An uncertain interrupted action must not execute again silently.
+6. Measure fresh LIVE and unique SOS durable receipt/operator visibility during control
+   fanout and saturated history, Wi-Fi roam/Doze and phone churn. Record exact handset,
+   OS/OEM, source SHA, source IDs, timestamps, latency quantiles, bytes and failure states.
+   Native macOS ARM64/Windows AMD64, offline LAN endurance and seven-day fleets need
+   their own evidence. Do not label cross-compilation as native acceptance.

@@ -73,11 +73,10 @@ published, with a change counter and saved-change UTC (`effectiveAt`, assigned
 before commit). The existing journal records publication; sampling diagnostics record
 the first callback applying that version, so a slow write is not an exact callback
 boundary claim. Activity recreation and process
-restart preserve consent; no Command connection can enable it. The existing
+restart preserve consent; only explicit local consent or an authorized #25 instruction can enable it. The existing
 reporting/override configuration is separate. A failed setting write is reported
 as NOT SAVED and uses dense behavior in that process; a subsequent restart can
-restore only the last successfully committed preference. Issue #25 remote control is not
-implemented. No Room schema, original envelope or previously saved evidence changes.
+restore only the last successfully committed preference. Issue #25 remote control uses this same local ON/OFF surface. No Room schema, original envelope or previously saved evidence changes.
 
 OFF keeps the original dense capture path. ON selects original callback objects
 before the same bounded handoff and transactional Room allocator. Credible ordinary
@@ -202,13 +201,14 @@ Wi-Fi availability and last proven Command communication are independent.
 
 ACK validation rejects duplicate JSON keys, malformed receipt fields, noninteger
 identity fields, mismatched identities and unsupported versions. Valid stored or
-duplicate receipt updates delivery and configuration in one local transaction.
-Config errors preserve delivery but keep previous applied config with a visible
-error. Older versions cannot roll back; different authority/equal-version conflicts
-cannot silently apply. Remote overrides survive restart/local edits; explicit null
-restores the current local interval. Endpoint address changes retain authority.
-“Enroll with a different Command” explicitly clears authority/override for the
-next valid ACK. In-flight responses from an edited endpoint generation are ignored.
+duplicate receipt commits delivery in one local transaction. Current Android
+installs/upgrades ignore the unauthenticated configuration portion, including first
+contact; an ACK never enrolls a new trusted authority. Authenticated #25 reporting
+instructions reuse the persisted desired/effective revision machinery. Older revisions
+cannot roll back; overrides survive restart/local edits and explicit null restores
+the current local interval. Endpoint address changes retain trusted authority.
+“Enroll with a different Command” clears authority/override and requires a new
+privately verified credential before any further remote setting can apply. In-flight responses from an edited endpoint generation are ignored.
 Historical packets retain their captured applied configuration. “Retry saved messages”
 releases delivery errors after explicit confirmation without clearing authority,
 override or message identity.
@@ -462,6 +462,43 @@ permission affects notification visibility; the OS can still expose foreground w
 through its task manager. Background-start failures explicitly require keeping the
 app visible. Physical acceptance remains required.
 
-Command-originated Sync All Now remains Issue #25. This change does not alter GNSS
-acquisition/persistence cadence (#24), original recording/quality rules or human SOS
-acknowledgement.
+Issue #25 now invokes this same Sender for authenticated Command-originated Sync
+All Now. Synchronization does not alter GNSS acquisition/persistence cadence (#24),
+original recording/quality rules or human SOS acknowledgement.
+
+## Authenticated Command instructions (Issue #25)
+
+In existing Settings configure the Command IP:port, then compare this installation's
+phone UUID directly at the local Command → Phone controls console. Generate a private
+per-phone credential there, enter it under **Authenticated remote control**, and
+explicitly authorize. Address/authority first contact never authorizes commands.
+Keystore-sealed credentials are excluded from backups and diagnostic exports.
+Disable remote control locally to remove authorization; **Enroll with a different
+Command** requires new verified provisioning. Current installs and upgrades never adopt remote settings/authority from an
+unauthenticated first-contact ACK and never fall back after local Disable. Existing GNSS/SOS uploads
+continue; they remain Protocol v1, not authenticated device attestation.
+
+The same Sender polls the configured receiver after its SOS/LIVE/history selection.
+Tracking OFF can receive/execute while the Activity or an existing permitted transfer
+service runs; it does not create an invisible permanent service or start GNSS. Sync
+uses #22's existing aggressive bounded drain. Progress counts saved GNSS through the
+command's receipt-time sequence, including unresolved rows. Later measurements and
+Command reconstruction are separate. Remote Start requires visible Activity and the
+existing preflight; denied OS/permission conditions produce blocked/needs interaction.
+Stop verifies service teardown plus durable session end. An interrupted uncertain
+OS effect is unknown, never automatically retriggered to fabricate success.
+
+Diagnostics → **Command Instructions** reads the canonical Room v6 command journal:
+actual receipt/authentication, attempted execution, effective result, duplicate,
+expiry/rejection/block/failure and authenticated result-custody confirmation. Filter
+by outcome/action/UUID/UTC date, tap a row to expand stages, and copy its ID. Invalid
+control responses are sanitized security events with local event IDs. Offline
+commands never received are absent, not fabricated rejects. Pending/unconfirmed
+results survive restart and bounded history pruning. Existing Export diagnostics
+adds `command-instructions.json` without keys/MACs/raw instruction bodies. No console
+operation deletes GNSS/SOS or pending control state. The UI shows the newest 100
+matching records; refine the filter for older retained records.
+
+See the [wire/security contract](../protocol/protocol-v1.md).
+Physical Android background, Keystore/OEM, GNSS and LAN acceptance remain **NOT TESTED**
+by JVM tests; #24 remains OPEN for its deferred physical field checks.

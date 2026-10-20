@@ -22,7 +22,7 @@ call chain: raw persistence precedes ACK, and live reception continues independe
 of recording. Android owns measurement, local durability and transmission.
 Command owns interpretation, recording, accepted-track generation, distance
 calculation and presentation. Neither application knows the other's internals.
-Protocol v1 is their only contract. Both can use shared examples and independent
+Protocol v1 and its negotiated authenticated control extension define their contract. Both can use shared examples and independent
 mocks to develop in parallel after Issue #1 is reviewed and merged.
 
 Android's foreground service requests GPS_PROVIDER observations at about one second,
@@ -32,7 +32,7 @@ Room outbox. Issue #24 adds an explicitly enabled local persistence selector at 
 handoff, OFF for fresh/upgrade/absent consent. It retains only actual originals;
 Command qualification/reconstruction is unchanged. Versioned local effective policy
 uses one atomic preference record, separate from reporting overrides; unknown or
-failed behavior falls back densely. No remote control (#25) or new wire fields exist.
+failed behavior falls back densely. Issue #25 extends this local policy through authenticated remote control below.
 One pending original provides boundary lookback; abrupt process death before commit
 can lose it, just as it can lose the existing memory handoff. LIVE opportunities and
 SOS boundaries promote real candidates through the same writer, independently of
@@ -385,3 +385,37 @@ command/README.md and protocol/protocol-v1.md for bounds and compatibility.
 
 Guidance remains identical to documentation-only branch chore/codex-repo-instructions
 at ca7b091e9032ac54e3ddd8d89a6b9ec414fb9f91; only AGENTS.md was transferred.
+
+## Issue #25 durable authenticated Command → Android control
+
+Control extends the existing configured endpoint, persistent authority UUID, local
+Command browser API, receiver, SQLite, Android enrollment Settings, Room and single
+Sender. See the [normative authenticated extension](../protocol/protocol-v1.md)
+for provisioning, cryptographic framing, states and limits. V1 GNSS/SOS remains
+compatible and unauthenticated; legacy clients are explicitly unavailable for
+secure remote operations. Android opens no listening port.
+
+Command snapshots explicit phone recipients and persists instructions before
+network delivery. Android durably records actual receipt before execution, uses
+per-operation ordering and immutable IDs for deduplication, then returns actual
+effective outcomes. Command commits those results before authenticating matching
+custody confirmation. Sent, received, attempted, applied and result-confirmed are
+separate facts. Unknown stays unknown after an interrupted nontransactional effect;
+no automatic repeat pretends to provide power-loss atomicity for Android OS APIs.
+
+Reporting reuses existing desired revisions and effective Room settings. Current
+Android installs/upgrades ignore unauthenticated ACK configuration from first contact,
+without losing GNSS receipt; older v1 clients retain their legacy wire behavior. Adaptive ON/OFF
+uses #24's actual local policy surface, never a second selector. Sync invokes #22's
+same drain and counts pending originals through the received instruction's saved
+sequence; Tracking OFF never starts collection. Tracking Start requires visible
+Android and the existing preflight; Stop verifies teardown and durable session end.
+Existing GNSS, quality/projection, recording, SOS and human SOS ACK authorities do
+not change. Polling uses the same bounded Wi-Fi transport after priority selection.
+
+Room v6 additively adds authorization metadata, `command_journal` and per-operation
+watermarks. The canonical journal powers Diagnostics → Command Instructions and
+sanitized existing ZIP export. Credential material is outside diagnostic models,
+sealed in Android Keystore-backed preferences; Command keys stay outside exported
+State/events. Operator credential transfer is private and deliberate; IP/UUID alone
+cannot bootstrap trust. Authority/credential replacement requires re-enrollment.

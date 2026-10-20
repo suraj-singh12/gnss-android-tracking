@@ -93,6 +93,30 @@ class MemoryStore : MessageStore {
 
 class SenderTest {
     @Test
+    fun controlExecutionCanRequestExistingDrainWithoutHoldingSenderLock() = runBlocking {
+        val store = MemoryStore()
+        val clock = FakeClock()
+        lateinit var sender: Sender
+        var executed = 0
+        sender =
+            Sender(
+                store,
+                Transport { _, _ -> error("No message send expected") },
+                clock,
+                controlStep = {
+                    executed++
+                    sender.requestDrain()
+                },
+            ) {
+                error("Tracking OFF must not collect")
+            }
+        kotlinx.coroutines.withTimeout(2000) { sender.step(retainedOnly = true) }
+        assertEquals(1, executed)
+        assertTrue(sender.aggressive)
+        assertTrue(store.rows.isEmpty())
+    }
+
+    @Test
     fun pendingLiveCommitDefersHistoryButNeverSos() = runBlocking {
         val store = MemoryStore()
         val clock = FakeClock()

@@ -30,6 +30,7 @@ android {
     kotlinOptions { jvmTarget = "17" }
     sourceSets["test"].resources.apply {
         srcDir("../../protocol/fixtures")
+        srcDir("schemas")
         exclude("**/*.md")
     }
     testOptions { unitTests.isIncludeAndroidResources = true }

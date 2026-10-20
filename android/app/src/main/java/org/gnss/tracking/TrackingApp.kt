@@ -173,12 +173,84 @@ class TrackingApp : Application() {
     @Volatile var activityVisible = false
     @Volatile var lastCaptureElapsed = 0L
     val transport by lazy { LanTransport(health::wifiNetwork) }
-    val sender by lazy {
+    val controlKeys by lazy { ControlKeyStore(this) }
+    val commandControl: CommandControl by lazy {
+        CommandControl(
+            repository,
+            transport,
+            controlKeys::load,
+            adaptive = { enabled, at -> persistencePolicy.setEnabled(enabled, at) },
+            adaptiveFallback = { observationPersistence.samplingState.fallback },
+            sync = {
+                operational.update { it.copy(historyPaused = false) }
+                sender.requestDrain()
+            },
+            tracking = { start -> executeRemoteTracking(start) },
+        )
+    }
+
+    internal suspend fun executeRemoteTracking(start: Boolean): Pair<String, String> {
+        if (start) {
+            if (operational.value.tracking && repository.state().tracking)
+                return "applied" to "Tracking already active"
+            if (!activityVisible)
+                return "blocked" to
+                    "OS background restriction: open Android app to permit remote Start"
+            val ready = FieldPreflight(this).snapshot()
+            if (
+                !ready.precise ||
+                    ready.gps != true ||
+                    ready.notifications != true ||
+                    ready.powerSave != false
+            )
+                return "blocked" to
+                    "Needs user interaction: precise location, GPS, notifications and Battery Saver preflight required"
+            return try {
+                withContext(Dispatchers.Main) {
+                    if (!activityVisible) throw IllegalStateException("Activity hidden")
+                    startForegroundService(
+                        android.content.Intent(this@TrackingApp, TrackingService::class.java)
+                    )
+                }
+                val active =
+                    withTimeoutOrNull(3000) {
+                        while (!operational.value.tracking) {
+                            if (operational.value.error != null) break
+                            delay(25)
+                        }
+                        operational.value.tracking
+                    }
+                if (active == true && repository.state().tracking)
+                    "applied" to "Tracking active: service and durable session verified"
+                else
+                    "unknown" to
+                        "Start attempted; actual service activation not confirmed; inspect Android"
+            } catch (_: Exception) {
+                "blocked" to
+                    "OS denied foreground location service; open Android and use local Start"
+            }
+        }
+        withContext(Dispatchers.Main) {
+            stopService(android.content.Intent(this@TrackingApp, TrackingService::class.java))
+        }
+        val stopped =
+            withTimeoutOrNull(3000) {
+                while (operational.value.tracking || operational.value.starting) delay(25)
+                finishTracking().join()
+                !repository.state().tracking
+            }
+        return if (stopped == true)
+            "applied" to "Tracking stopped: collection service and durable session verified"
+        else "unknown" to "Stop attempted; service/session teardown not confirmed"
+    }
+
+    val sender: Sender by lazy {
         Sender(
             repository,
             transport,
             SystemClock,
             evidence = recorder::sos,
+            controlStep = { withContext(NonCancellable) { commandControl.step() } },
             prepareLive = {
                 // Promote the actual latest candidate at a LIVE opportunity without
                 // waiting for SQLite or delaying SOS. Retry selection on the next

@@ -134,6 +134,11 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/gnss-test-reports"
           go test ./internal/core -run '^TestSyncFleetPerformance$' -count=1 -v | tee "$RUNNER_TEMP/gnss-test-reports/sync-benchmark.txt"
+      - name: Authenticated controls under saturated history and fresh SOS/LIVE
+        env:
+          GNSS_CONTROL_LOAD: "1"
+        working-directory: command
+        run: go test -race ./internal/core -run '^TestFreshPriorityAndLateJoinDuringActualSlowWriterSaturation$' -count=1 -v | tee "$RUNNER_TEMP/gnss-test-reports/control-priority.txt"
       - name: Real Android to Command integration
         env:
           GNSS_ADAPTIVE_REPORT: ${{ runner.temp }}/gnss-test-reports/adaptive-accuracy.json
@@ -160,6 +165,8 @@ jobs:
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -buildvcs=true -o "$RUNNER_TEMP/gnss-assets/GNSS-Command-windows-x64.exe" ./cmd/party-tracker
           go build -o "$RUNNER_TEMP/gnss-command-linux" ./cmd/party-tracker
       - name: Attempt bounded real online map acceptance and record external result
+        id: map-acceptance
+        continue-on-error: true
         env:
           GNSS_COMMAND_BINARY: ${{ runner.temp }}/gnss-command-linux
           GNSS_MAP_ACCEPTANCE_REPORT: ${{ runner.temp }}/gnss-assets/map-online-acceptance.json
@@ -174,6 +181,7 @@ jobs:
           export GNSS_SCREENSHOT_DIR="$RUNNER_TEMP/gnss-assets/visual-evidence"
           node test-tools/integration/sos-dashboard.cjs
           node test-tools/integration/ui-dashboard.cjs
+          node test-tools/integration/control-ui.cjs
           node test-tools/integration/history-dashboard.cjs
           GNSS_STABILITY_REPORT="$RUNNER_TEMP/gnss-assets/windows-stability.json" node test-tools/integration/windows-stability.cjs
           node test-tools/integration/map-download-ui.cjs
@@ -247,3 +255,8 @@ jobs:
             android/app/build/reports
             android/app/build/test-results
             ${{ runner.temp }}/gnss-assets/visual-evidence
+      - name: Preserve external map acceptance failure after uploading evidence
+        if: ${{ always() && steps.map-acceptance.outcome == 'failure' }}
+        run: |
+          echo "External Overpass/map acceptance failed. Software checks and artifacts do not waive this gate."
+          exit 1

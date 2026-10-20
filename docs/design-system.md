@@ -169,3 +169,19 @@ components, with local instant toggles. DEM availability is not inferred from ch
 selection. Existing geographic renderer orders hillshade, vectors, contours, tracks,
 live positions, SOS and controls; points/coordinates/distance remain authoritative.
 See Command README for actual local DEM formats, provenance, bounds and provider limits.
+
+## Issue #25 remote instructions
+
+Phone controls reuse Command's live party selection, native browser controls,
+semantic states and local same-origin API. Scope confirmation enumerates frozen
+identities; queued/requested/sent-unknown/effective/result custody are distinct.
+The individual party shortcut opens the same shared control dialog. Legacy reporting
+forms remain for unenrolled v1 peers; enrolled phones use authenticated controls.
+No historical recording/import/Travel Back object can issue live instructions.
+
+Android Settings reuses endpoint/enrollment and adds explicit private provisioning,
+visible phone UUID and local Disable. Diagnostics → Command Instructions uses the
+same canonical Room journal for chronological stages, filter/expand/copy and ZIP.
+Security-denied attempts carry local event IDs; absent offline commands have no
+invented phone record. Existing Tracking and SOS geometry/behavior stays intact;
+#39 may later polish Settings/Diagnostics independently.

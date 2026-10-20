@@ -23,6 +23,10 @@ func failure(w http.ResponseWriter, status int, code string, err error) {
 }
 func (s *Store) IngestHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/control" {
+			s.controlExchange(w, r)
+			return
+		}
 		ingress := s.Now().UTC()
 		switch r.URL.Path {
 		case "/api/v1/messages", "/api/v1/history":
@@ -104,6 +108,9 @@ func (s *Store) LocalHandler(assets http.Handler) http.Handler {
 			var done func()
 			w, done = s.timeHTTP(w, "http_local_"+strings.TrimPrefix(r.URL.Path, "/local/"))
 			defer done()
+		}
+		if s.controlLocal(w, r) {
+			return
 		}
 		if s.mapRequest(w, r, maps) {
 			return
@@ -268,7 +275,7 @@ func dashboardView(st State, now time.Time) map[string]any {
 		if d.Location != nil {
 			location = map[string]any{"fix": d.Location.Fix}
 		}
-		devices[id] = map[string]any{"device_id": id, "track_color": d.Color, "track_dash": d.Dash, "snapshot": map[string]any{"party": d.Snapshot.Party, "health": d.Snapshot.Health, "config_state": d.Snapshot.Config}, "location": location, "current_position": d.CurrentPosition, "live_x_m": d.LiveX, "live_y_m": d.LiveY, "location_reason": d.LocationReason, "last_contact": d.Contact, "desired_config": d.Desired, "config_converged": d.Converged, "contact_condition": d.ContactCondition, "gnss_condition": d.GNSSCondition, "location_age_s": d.LocationAge, "total_m": d.Total, "durably_received_observations": d.DurableObservations, "field_evidence": d.Evidence, "history": d.History, "history_sessions": d.HistorySessions, "reconstruction": d.Reconstruction}
+		devices[id] = map[string]any{"device_id": id, "track_color": d.Color, "track_dash": d.Dash, "snapshot": map[string]any{"party": d.Snapshot.Party, "health": d.Snapshot.Health, "config_state": d.Snapshot.Config}, "location": location, "current_position": d.CurrentPosition, "live_x_m": d.LiveX, "live_y_m": d.LiveY, "location_reason": d.LocationReason, "last_contact": d.Contact, "desired_config": d.Desired, "config_converged": d.Converged, "config_convergence_evidence": "unauthenticated_v1_echo", "contact_condition": d.ContactCondition, "gnss_condition": d.GNSSCondition, "location_age_s": d.LocationAge, "total_m": d.Total, "durably_received_observations": d.DurableObservations, "field_evidence": d.Evidence, "history": d.History, "history_sessions": d.HistorySessions, "reconstruction": d.Reconstruction}
 	}
 	var recording any
 	if st.Recording != nil {

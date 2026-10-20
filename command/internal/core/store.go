@@ -181,9 +181,23 @@ func Open(path string) (*Store, error) {
 		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 			return nil, err
 		}
+		// Restrict existing credential storage before opening SQLite. The private
+		// VFS also protects newly created database/journal/SHM companions.
+		if err := privateFile(path); err != nil {
+			return nil, err
+		}
+		for _, private := range []string{path, path + "-wal", path + "-shm"} {
+			if err := os.Chmod(private, 0600); err != nil && !os.IsNotExist(err) {
+				return nil, err
+			}
+		}
 	}
 	// SQLite is compiled into embedded WASM and executed by Go's wazero runtime.
-	db, err := sql.Open("sqlite3", path)
+	dsn, err := privateDSN(path)
+	if err != nil {
+		return nil, err
+	}
+	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
 		return nil, err
 	}
@@ -194,6 +208,9 @@ func Open(path string) (*Store, error) {
 		if _, err = db.Exec(q); err != nil {
 			return fail(err)
 		}
+	}
+	if err = s.initControl(); err != nil {
+		return fail(err)
 	}
 	state := State{Authority: id(), Policy: DefaultPolicy(), Devices: map[string]*Device{}, Points: []Point{}, Decisions: []Decision{}}
 	if _, err = db.Exec(`CREATE TABLE IF NOT EXISTS offline_maps (id TEXT PRIMARY KEY, source TEXT NOT NULL, data BLOB NOT NULL, created TEXT NOT NULL)`); err != nil {
@@ -349,20 +366,20 @@ func Open(path string) (*Store, error) {
 	if path != ":memory:" {
 		// A single bounded WAL reader uses the same authoritative database. Cold
 		// dashboard materialization must not hold the ingestion mutex/connection.
-		s.viewDB, err = driver.Open(path, func(c *sqlite3.Conn) error {
+		s.viewDB, err = driver.Open(dsn, func(c *sqlite3.Conn) error {
 			return c.Exec("PRAGMA query_only=ON; PRAGMA busy_timeout=5000")
 		})
 		if err != nil {
 			return fail(err)
 		}
-		s.projectionDB, err = driver.Open(path, func(c *sqlite3.Conn) error {
+		s.projectionDB, err = driver.Open(dsn, func(c *sqlite3.Conn) error {
 			return c.Exec("PRAGMA query_only=ON; PRAGMA busy_timeout=5000")
 		})
 		if err != nil {
 			s.viewDB.Close()
 			return fail(err)
 		}
-		s.liveDB, err = driver.Open(path, func(c *sqlite3.Conn) error { return c.Exec("PRAGMA query_only=ON; PRAGMA busy_timeout=1000") })
+		s.liveDB, err = driver.Open(dsn, func(c *sqlite3.Conn) error { return c.Exec("PRAGMA query_only=ON; PRAGMA busy_timeout=1000") })
 		if err != nil {
 			s.projectionDB.Close()
 			s.viewDB.Close()
@@ -968,7 +985,14 @@ func (s *Store) SetOverride(device string, v *int) error {
 	if v != nil && (*v < 5 || *v > 86400 || *v%5 != 0) {
 		return fmt.Errorf("interval must be 5..86400 in multiples of 5")
 	}
-	return s.change("override_requested", device, func(st *State, _ time.Time, _ *sql.Tx) error {
+	return s.change("override_requested", device, func(st *State, _ time.Time, tx *sql.Tx) error {
+		var enrolled int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM control_enrollment WHERE device=?`, device).Scan(&enrolled); err != nil {
+			return err
+		}
+		if enrolled > 0 {
+			return errors.New("use authenticated Phone controls for this enrolled phone")
+		}
 		d := st.Devices[device]
 		if d == nil {
 			return fmt.Errorf("unknown device")

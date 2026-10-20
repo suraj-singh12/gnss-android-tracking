@@ -58,6 +58,8 @@ fun interface Transport {
     suspend fun postRole(endpoint: String, json: String, role: String): Response =
         post(endpoint, json)
 
+    suspend fun control(endpoint: String, json: String): Response? = null
+
     suspend fun capabilities(endpoint: String): Response? = null
 
     suspend fun history(endpoint: String, json: String): Response = post(endpoint, json)
@@ -85,6 +87,9 @@ class LanTransport(private val network: () -> Network?) : Transport {
 
     override suspend fun postRole(endpoint: String, json: String, role: String) =
         request(endpoint, json, "/api/v1/messages", role)
+
+    override suspend fun control(endpoint: String, json: String) =
+        request(endpoint, json, "/api/v1/control", "control")
 
     override suspend fun capabilities(endpoint: String) =
         request(endpoint, null, "/api/v1/capabilities", "capabilities")
@@ -133,12 +138,13 @@ class LanTransport(private val network: () -> Network?) : Transport {
 
         try {
             val deadlineSeconds =
-                if (role == "history")
+                if (role == "control") 1L
+                else if (role == "history")
                     (6L + (immutableJson?.toByteArray(Charsets.UTF_8)?.size ?: 0) / 262144)
                         .coerceAtMost(14)
                 else 6L
             val boundedClient =
-                if (deadlineSeconds > 6)
+                if (deadlineSeconds != 6L)
                     client!!
                         .newBuilder()
                         .readTimeout(deadlineSeconds, TimeUnit.SECONDS)
@@ -223,6 +229,7 @@ class Sender(
     private val evidence: (DiagnosticEvent, SosEvidence) -> Unit = { _, _ -> },
     private val deliveryEvidence: (DiagnosticEvent, ReportEvidence) -> Unit = { _, _ -> },
     private val prepareLive: () -> Boolean = { true },
+    private val controlStep: suspend () -> Unit = {},
     private val capture: suspend () -> Outbound,
 ) {
     private fun record(kind: DiagnosticEvent, value: SosEvidence) {
@@ -341,11 +348,14 @@ class Sender(
         sosOnly: Boolean = false,
         retainedOnly: Boolean = false,
         pauseHistory: Boolean = false,
-    ) =
+    ) {
         mutex.withLock {
             attemptedLastStep = false
             stepNative(sosOnly, retainedOnly, pauseHistory)
         }
+        // Outside the scheduler lock: execution may request the same Sender drain.
+        if (!sosOnly) controlStep()
+    }
 
     private suspend fun stepNative(sosOnly: Boolean, retainedOnly: Boolean, pauseHistory: Boolean) {
         val historyPaused = pauseHistory || drainPaused
