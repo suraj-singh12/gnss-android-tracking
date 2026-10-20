@@ -122,6 +122,8 @@ async function wait(check) {
   await page.locator("#control-operation").selectOption("tracking_stop");await page.locator("#control-issue").click();
   await wait(async()=>((await (await fetch(local+"/local/control")).json()).commands.length===22));
   await page.locator("#control-history details").first().locator("summary").click();
+  await page.evaluate(()=>refreshControl());
+  assert.equal(await page.locator("#control-history details").first().evaluate(detail=>detail.open),true);
   await page.locator("#control-history details").first().getByText("Cancel safely",{exact:true}).click();
   await wait(async()=>((await (await fetch(local+"/local/control")).json()).commands.some(c=>c.state==="cancelled")));
   await page.locator("#phone-control").evaluate(dialog=>dialog.scrollTop=0);

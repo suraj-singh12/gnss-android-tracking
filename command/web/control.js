@@ -38,12 +38,15 @@ async function refreshControl() {
   }
   if(!devices.length)list.append(el("p","No phones have contacted this Command. Configure its IP:port in Android first."));
   for(const id of controlTargets)if(!controlView.phones[id]?.enabled)controlTargets.delete(id);
-  const history=$("control-history");history.replaceChildren();
+  const history=$("control-history");
+  const expanded=new Set([...history.querySelectorAll("details[open]")].map(detail=>detail.dataset.commandId));
+  history.replaceChildren();
   for(const entry of controlView.commands){
     const detail=el("details"), title=el("summary",`${entry.device} · ${entry.operation} · ${entry.state}`);
+    detail.dataset.commandId=entry.id;detail.open=expanded.has(entry.id);
     const result=entry.result;
     detail.append(title,el("p",`Command ${entry.id} · authority ${entry.authority} · created ${new Date(entry.created).toISOString()} · expires ${new Date(entry.expires).toISOString()}`),el("p",`Requested ${JSON.stringify(entry.payload)} · effective ${result?.effective || "unknown"}`),el("p",result ? `${new Date(result.received).toISOString()} phone durable receipt · ${result.attempted ? "Execution attempted" : "No execution attempt"} · ${result.reason} · authenticated result revision ${result.revision} stored` : "No authenticated Android execution result. Queued, expired or cancelled is not proof of receipt or effect."));
-    if(["queued","sent_unknown"].includes(entry.state)){const cancel=el("button","Cancel safely");cancel.onclick=async()=>{try{if(confirm("Cancel future execution? An already executed effect cannot be undone.")){await controlPost("cancel",{id:entry.id});await refreshControl();}}catch(error){controlError(error);}};detail.append(cancel);}
+    if(["queued","sent_unknown","received"].includes(entry.state)){const cancel=el("button","Cancel safely");cancel.onclick=async()=>{try{if(confirm("Cancel future execution? An already executed effect cannot be undone.")){await controlPost("cancel",{id:entry.id});await refreshControl();}}catch(error){controlError(error);}};detail.append(cancel);}
     const retry=el("button","Review new request");retry.onclick=()=>{controlTargets.clear();controlTargets.add(entry.device);$("control-operation").value=entry.operation;$("control-status").textContent="New request selected. Review values and expiry, then issue deliberately. Automatic delivery retries preserve the original command ID.";};detail.append(retry);history.append(detail);
   }
 }
