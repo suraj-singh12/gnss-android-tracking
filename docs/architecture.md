@@ -390,7 +390,7 @@ at ca7b091e9032ac54e3ddd8d89a6b9ec414fb9f91; only AGENTS.md was transferred.
 
 Control extends the existing configured endpoint, persistent authority UUID, local
 Command browser API, receiver, SQLite, Android enrollment Settings, Room and single
-Sender. See the [normative authenticated extension](../protocol/protocol-v1.md#issue-25-authenticated-control-extension--control-version-1)
+Sender. See the [normative authenticated extension](../protocol/protocol-v1.md)
 for provisioning, cryptographic framing, states and limits. V1 GNSS/SOS remains
 compatible and unauthenticated; legacy clients are explicitly unavailable for
 secure remote operations. Android opens no listening port.
