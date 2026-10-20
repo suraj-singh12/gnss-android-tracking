@@ -448,6 +448,35 @@ class MainActivity : Activity() {
         content = group("Advanced technical evidence", false)
         status = text("Loading saved settings…")
         content = pages.getValue("Tracking")
+        val phoneAlertActions = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        content.addView(phoneAlertActions)
+        scope.launch {
+            app.repository.dao.observeCommands().collect { rows ->
+                phoneAlertActions.removeAllViews()
+                for (row in
+                    rows.filter {
+                        it.trusted &&
+                            it.operation == "alert" &&
+                            it.state in listOf("output_attempted", "alert_blocked", "unknown")
+                    }) {
+                    phoneAlertActions.addView(
+                        TextView(this@MainActivity).apply {
+                            text =
+                                "Command phone alert · ${row.state}\n${runCatching { PhoneAlertSpec.parse(Protocol.parse(row.requested)).message }.getOrDefault("")}\n${row.reason}"
+                        }
+                    )
+                    phoneAlertActions.addView(
+                        Button(this@MainActivity).apply {
+                            text = "Acknowledge / Stop Alert"
+                            minHeight = dp(48)
+                            setOnClickListener {
+                                app.workScope.launch { app.commandControl.acknowledgeAlert(row.id) }
+                            }
+                        }
+                    )
+                }
+            }
+        }
         button("Sync All Now") {
             // A new manual drain gets its own progress baseline. Repeated presses
             // and Pause -> Resume preserve the in-progress baseline.
@@ -782,7 +811,7 @@ class MainActivity : Activity() {
             AlertDialog.Builder(this)
                 .setTitle("Authorize remote control?")
                 .setMessage(
-                    "Only continue after verifying the phone identity and credential directly at your local Command console. Allows reporting, adaptive persistence, sync and OS-permitted tracking controls."
+                    "Only continue after verifying the phone identity and credential directly at your local Command console. Allows reporting, adaptive persistence, sync, phone alerts and OS-permitted tracking controls."
                 )
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Authorize") { _, _ ->
@@ -855,6 +884,20 @@ class MainActivity : Activity() {
                     detail.visibility = if (expand) View.VISIBLE else View.GONE
                 }
                 commandRows.addView(detail)
+                if (
+                    row.operation == "alert" &&
+                        row.trusted &&
+                        row.state in listOf("output_attempted", "alert_blocked", "unknown")
+                ) {
+                    commandRows.addView(
+                        Button(this).apply {
+                            text = "Acknowledge / Stop Alert"
+                            setOnClickListener {
+                                app.workScope.launch { app.commandControl.acknowledgeAlert(row.id) }
+                            }
+                        }
+                    )
+                }
                 commandRows.addView(
                     Button(this).apply {
                         text = if (row.trusted) "Copy command ID" else "Copy security event ID"

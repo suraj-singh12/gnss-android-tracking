@@ -180,7 +180,7 @@ func (s *Store) controlExchange(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		switch res.State {
-		case "received", "applied", "blocked", "failed", "rejected", "expired", "cancelled", "superseded", "unsupported", "unknown", "sync_started", "sync_partial", "sync_complete":
+		case "received", "applied", "blocked", "failed", "rejected", "expired", "cancelled", "superseded", "unsupported", "unknown", "sync_started", "sync_partial", "sync_complete", "output_attempted", "alert_blocked", "recipient_acknowledged":
 		default:
 			failure(w, 400, "invalid_result", errors.New("unknown result state"))
 			return
@@ -193,6 +193,10 @@ func (s *Store) controlExchange(w http.ResponseWriter, r *http.Request) {
 		}
 		var instruction controlInstruction
 		_ = json.Unmarshal([]byte(ins), &instruction)
+		if (res.State == "output_attempted" || res.State == "alert_blocked" || res.State == "recipient_acknowledged") && (instruction.Operation != "alert" || !res.Attempted) {
+			failure(w, 400, "invalid_result", errors.New("alert evidence requires alert execution"))
+			return
+		}
 		if res.Received < instruction.Created-60000 {
 			failure(w, 400, "invalid_result", errors.New("invalid receipt time"))
 			return
@@ -204,7 +208,7 @@ func (s *Store) controlExchange(w http.ResponseWriter, r *http.Request) {
 				failure(w, 503, "storage", errors.New("invalid persisted result"))
 				return
 			}
-			if old.State != "sync_started" && old.State != "sync_partial" && old.State != "received" && res.Revision > old.Revision {
+			if old.State != "sync_started" && old.State != "sync_partial" && old.State != "received" && old.State != "output_attempted" && old.State != "alert_blocked" && !(instruction.Operation == "alert" && old.State == "unknown" && res.State == "recipient_acknowledged") && res.Revision > old.Revision {
 				failure(w, 409, "result_conflict", errors.New("terminal execution result is immutable"))
 				return
 			}
@@ -217,7 +221,7 @@ func (s *Store) controlExchange(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		nextState := res.State
-		if res.State == "received" && deliveryState == "cancel_requested_unknown" {
+		if (res.State == "received" || res.State == "output_attempted" || res.State == "alert_blocked") && deliveryState == "cancel_requested_unknown" {
 			nextState = deliveryState
 		}
 		if _, e = tx.Exec(`UPDATE control_commands SET result=?,state=? WHERE id=?`, string(raw), nextState, res.ID); e != nil {
@@ -234,7 +238,7 @@ func (s *Store) controlExchange(w http.ResponseWriter, r *http.Request) {
 	}
 	instructions := []controlInstruction{}
 	if !req.ResultsOnly {
-		rows, e := tx.Query(`SELECT instruction,state,result FROM control_commands WHERE device=? AND enrollment=? AND (result IS NULL OR state IN ('received','cancel_requested_unknown')) AND state IN ('queued','sent_unknown','received','cancel_requested_unknown') ORDER BY ordering LIMIT 1`, env.Device, enrollment)
+		rows, e := tx.Query(`SELECT instruction,state,result FROM control_commands WHERE device=? AND enrollment=? AND (result IS NULL OR state IN ('received','output_attempted','alert_blocked','cancel_requested_unknown')) AND state IN ('queued','sent_unknown','received','cancel_requested_unknown') ORDER BY CASE WHEN state='cancel_requested_unknown' THEN 0 ELSE 1 END,ordering LIMIT 1`, env.Device, enrollment)
 		if e != nil {
 			failure(w, 503, "storage", e)
 			return
@@ -442,7 +446,7 @@ func (s *Store) controlLocal(w http.ResponseWriter, r *http.Request) bool {
 		enrollment, key := id(), randomControlKey()
 		_, e = tx.Exec(`INSERT INTO control_enrollment(device,enrollment,secret,enabled) VALUES(?,?,?,1) ON CONFLICT(device) DO UPDATE SET enrollment=excluded.enrollment,secret=excluded.secret,enabled=1,last_seen=0`, v.Device, enrollment, key)
 		if e == nil {
-			_, e = tx.Exec(`UPDATE control_commands SET state='revoked_unknown' WHERE device=? AND (result IS NULL OR state IN ('received','cancel_requested_unknown'))`, v.Device)
+			_, e = tx.Exec(`UPDATE control_commands SET state='revoked_unknown' WHERE device=? AND (result IS NULL OR state IN ('received','output_attempted','alert_blocked','cancel_requested_unknown'))`, v.Device)
 		}
 		response = map[string]string{"credential": "gnss1:" + st.Authority + ":" + v.Device + ":" + enrollment + ":" + key}
 	case "/local/control/revoke":
@@ -452,12 +456,12 @@ func (s *Store) controlLocal(w http.ResponseWriter, r *http.Request) bool {
 		}
 		_, e = tx.Exec(`UPDATE control_enrollment SET enabled=0,secret='' WHERE device=?`, v.Device)
 		if e == nil {
-			_, e = tx.Exec(`UPDATE control_commands SET state='revoked_unknown' WHERE device=? AND (result IS NULL OR state IN ('received','cancel_requested_unknown'))`, v.Device)
+			_, e = tx.Exec(`UPDATE control_commands SET state='revoked_unknown' WHERE device=? AND (result IS NULL OR state IN ('received','output_attempted','alert_blocked','cancel_requested_unknown'))`, v.Device)
 		}
 	case "/local/control/cancel":
 		// A sent command might already have executed. Preserve uncertainty and return
 		// cancellation as a disposition; only Android can prove no effect occurred.
-		_, e = tx.Exec(`UPDATE control_commands SET state=CASE WHEN state='queued' THEN 'cancelled' ELSE 'cancel_requested_unknown' END WHERE id=? AND (result IS NULL OR state='received') AND state IN ('queued','sent_unknown','received')`, v.ID)
+		_, e = tx.Exec(`UPDATE control_commands SET state=CASE WHEN state='queued' THEN 'cancelled' ELSE 'cancel_requested_unknown' END WHERE id=? AND (result IS NULL OR state IN ('received','output_attempted','alert_blocked')) AND state IN ('queued','sent_unknown','received','output_attempted','alert_blocked')`, v.ID)
 	case "/local/control/issue":
 		if !v.Confirmed || len(v.Targets) == 0 || v.TTL < 5 || v.TTL > 86400 {
 			e = errors.New("confirm frozen recipients and TTL 5..86400 seconds")
@@ -469,6 +473,16 @@ func (s *Store) controlLocal(w http.ResponseWriter, r *http.Request) bool {
 			break
 		}
 		switch v.Operation {
+		case "alert":
+			mode, mok := payload["mode"].(string)
+			message, sok := payload["message"].(string)
+			durationNumber, dok := payload["duration_s"].(json.Number)
+			repeatNumber, rok := payload["repeat_s"].(json.Number)
+			duration, de := durationNumber.Int64()
+			repeat, re := repeatNumber.Int64()
+			if len(payload) != 4 || !mok || !sok || !dok || !rok || de != nil || re != nil || (mode != "normal" && mode != "urgent") || len([]rune(message)) > 160 || strings.ContainsAny(message, "\r\n") || v.TTL > 3600 || duration < 5 || duration > 120 || repeat < 5 || repeat > 30 || (mode == "normal" && (duration != 5 || repeat != 5)) {
+				e = errors.New("alert requires mode normal/urgent, single-line message <=160 characters, TTL 5..3600s, duration 5..120s and repeat 5..30s; normal uses duration/repeat 5s")
+			}
 		case "reporting":
 			if x, ok := payload["seconds"]; !ok || (x != nil && !interval(x)) {
 				e = errors.New("invalid interval")
@@ -504,7 +518,7 @@ func (s *Store) controlLocal(w http.ResponseWriter, r *http.Request) bool {
 				break
 			}
 			var count int
-			if e = tx.QueryRow(`SELECT COUNT(*) FROM control_commands WHERE device=? AND (result IS NULL OR state IN ('received','cancel_requested_unknown')) AND state IN ('queued','sent_unknown','received','cancel_requested_unknown')`, device).Scan(&count); e != nil {
+			if e = tx.QueryRow(`SELECT COUNT(*) FROM control_commands WHERE device=? AND (result IS NULL OR state IN ('received','output_attempted','alert_blocked','cancel_requested_unknown')) AND state IN ('queued','sent_unknown','received','output_attempted','alert_blocked','cancel_requested_unknown')`, device).Scan(&count); e != nil {
 				break
 			}
 			if count >= 256 {
@@ -521,6 +535,9 @@ func (s *Store) controlLocal(w http.ResponseWriter, r *http.Request) bool {
 			}
 			now := s.Now()
 			ins := controlInstruction{Priority: "normal", ID: id(), Authority: st.Authority, Device: device, Enrollment: enrollment, Operation: v.Operation, Version: 1, Payload: v.Payload, Created: now.UnixMilli(), Expires: now.Add(time.Duration(v.TTL) * time.Second).UnixMilli(), Disposition: "queued"}
+			if v.Operation == "alert" && payload["mode"] == "urgent" {
+				ins.Priority = "urgent"
+			}
 			if v.Operation == "reporting" {
 				d := st.Devices[device]
 				if d == nil || d.Desired.Version >= maxInteger {

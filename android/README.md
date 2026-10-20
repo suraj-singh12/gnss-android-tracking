@@ -502,3 +502,35 @@ matching records; refine the filter for older retained records.
 See the [wire/security contract](../protocol/protocol-v1.md).
 Physical Android background, Keystore/OEM, GNSS and LAN acceptance remain **NOT TESTED**
 by JVM tests; #24 remains OPEN for its deferred physical field checks.
+
+## Command-origin phone alerts (#26)
+
+Enrolled phones receive Normal/Urgent alerts over the same #25 Sender conversation.
+Normal attempts one notification; urgent requests repeated notification sound and
+vibration, default every 10 seconds for at most 60 seconds (configurable 5–30-second
+cadence, 5–120-second duration). Absolute TTL (default 300 seconds, range 5–3600)
+always bounds output. Android/user settings and scheduling decide actual output.
+Separate normal/urgent Android 8+ channels preserve user settings; no volume/DND
+bypass, new service, full-screen launch or wake lock. Notifications are private on
+the lock screen; content may still be visible according to the user's OS settings.
+
+Use the notification **Acknowledge / Stop Alert**, or the in-app Tracking action and the same action on the received
+alert in **Diagnostics → Command Instructions**. The explicit local action is saved
+in the existing Room v6 journal before reporting; Command confirms exact result
+custody later. Notification shown/API success is never human acknowledgement.
+Permission denied/channel disabled is blocked; DND/mute/channel restrictions and
+unknown audible/haptic results remain explicit. Notifications have unique immutable
+per-command actions/tags, independent of SOS. Dismissing a notification is not ACK.
+
+Output repeats require the existing visible Activity, tracking service or transfer
+runtime; receiving an alert does not start background work. Local Stop is durable
+and duplicates/reconnect never restart it. Cold start/reboot reconciles active alerts
+to interrupted/unknown without playback. TTL and monotonic process deadline are
+checked by the app loop; OS timeout bounds notification lifetime if the process
+stops. Scheduling is best effort; no precise wake-up or immediate force-stopped phone
+reachability is promised. Offline Command cancellation is pending until received;
+a remote revocation cannot stop an unreachable phone sooner than its local bound.
+ZIP includes sanitized alert stages and timings, redacting message content. Existing
+Room v6 columns store the validated alert request; no destructive migration/new DB.
+See [physical acceptance](DEVICE-ACCEPTANCE.md); real sound/vibration, DND/mute,
+locked/OEM/Doze behavior remain NOT TESTED without actual hardware.

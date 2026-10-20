@@ -13,7 +13,7 @@ const { chromium } = require(
 const { default: AxeBuilder } = require(
   process.env.GNSS_AXE_MODULE || "@axe-core/playwright",
 );
-const { randomUUID } = require("node:crypto");
+const { randomUUID, randomBytes, createHmac } = require("node:crypto");
 const work = fs.mkdtempSync(path.join(os.tmpdir(), "gnss-ui-")),
   out = process.env.GNSS_SCREENSHOT_DIR || path.join(work, "screenshots");
 fs.mkdirSync(out, { recursive: true });
@@ -64,7 +64,7 @@ async function wait(check) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    assert.equal(r.status, 200, await r.text());
+    const raw=await r.text();assert.equal(r.status, 200, raw);return JSON.parse(raw);
   }
   async function send(body, role) {
     const r = await fetch(phone + "/api/v1/messages", {
@@ -103,11 +103,12 @@ async function wait(check) {
   await page.locator("#open-control").click();
   await page.waitForFunction(()=>document.querySelectorAll("#control-phones label").length===20);
   let provisioningPrompts=0;
-  page.on("dialog",async dialog=>{if(dialog.type()==="prompt"){provisioningPrompts++;assert.match(dialog.defaultValue(),/^gnss1:/);}await dialog.accept();});
+  const credentials=new Map(), confirmations=[];
+  page.on("dialog",async dialog=>{if(dialog.type()==="prompt"){provisioningPrompts++;assert.match(dialog.defaultValue(),/^gnss1:/);credentials.set(dialog.defaultValue().split(":")[2],dialog.defaultValue());}else confirmations.push(dialog.message());await dialog.accept();});
   await page.locator("#control-phones button").first().click();
   await wait(async()=>provisioningPrompts===1);
   // Enroll remaining phones through the same production local API.
-  for(const id of ids){const v=await (await fetch(local+"/local/control")).json();if(!v.phones[id])await post("control/enroll",{device:id,confirmed:true});}
+  for(const id of ids){const v=await (await fetch(local+"/local/control")).json();if(!v.phones[id]){const enrolled=await post("control/enroll",{device:id,confirmed:true});credentials.set(id,enrolled.credential);}}
   await page.locator("#control-all").click();
   await wait(async()=>await page.locator("#control-phones input:checked").count()===20);
   await page.locator("#control-operation").selectOption("sync");
@@ -126,10 +127,50 @@ async function wait(check) {
   assert.equal(await page.locator("#control-history details").first().evaluate(detail=>detail.open),true);
   await page.locator("#control-history details").first().getByText("Cancel safely",{exact:true}).click();
   await wait(async()=>((await (await fetch(local+"/local/control")).json()).commands.some(c=>c.state==="cancelled")));
+  await page.locator("#control-operation").selectOption("alert");
+  await page.locator("#control-alert-mode").selectOption("normal");
+  await page.locator("#control-alert-message").fill("Check in with Command");
+  await page.locator("#control-issue").click();
+  await wait(async()=>((await (await fetch(local+"/local/control")).json()).commands.filter(c=>c.operation==="alert").length===2));
+  await page.locator("#control-all").click();
+  await page.locator("#control-alert-mode").selectOption("urgent");
+  await page.locator("#control-alert-duration").fill("60");
+  await page.locator("#control-alert-repeat").fill("10");
+  await page.locator("#control-issue").click();
+  await wait(async()=>((await (await fetch(local+"/local/control")).json()).commands.filter(c=>c.operation==="alert").length===23));
+  controls=await (await fetch(local+"/local/control")).json();
+  assert.equal(controls.commands.filter(c=>c.priority==="urgent").length,21);
+  assert.ok(controls.commands.filter(c=>c.priority==="urgent").every(c=>c.payload.duration_s===60&&c.payload.repeat_s===10));
+  assert.ok(confirmations.some(text=>text.includes("21 frozen recipients:")&&ids.every(id=>text.includes(id))));
+  // Synthetic authenticated phone evidence goes through the actual control API;
+  // physical output/human action is covered separately, never inferred from UI.
+  const alert=controls.commands.find(c=>c.priority==="urgent"&&credentials.has(c.device));
+  const parts=credentials.get(alert.device).split(":");
+  async function phoneResult(state,revision){
+    const result={id:alert.id,revision,state,reason:state==="recipient_acknowledged"?"Recipient local action (synthetic browser fixture)":"Notification attempted; audible output unknown",effective:state==="recipient_acknowledged"?"Local user action at "+new Date().toISOString():"OS output unknown",received:Date.now(),attempted:true};
+    const data=Buffer.from(JSON.stringify({version:1,authority:parts[1],nonce:randomBytes(32).toString("hex"),at:Date.now(),results:[result],results_only:true})).toString("base64");
+    const mac=createHmac("sha256",Buffer.from(parts[4],"hex")).update(`gnss-control-v1\nphone\n${parts[2]}\n${parts[3]}\n${data}`).digest("hex");
+    const reply=await fetch(phone+"/api/v1/control",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({device:parts[2],enrollment:parts[3],data,mac})});
+    assert.equal(reply.status,200,await reply.text());
+  }
+  await phoneResult("output_attempted",2);
+  await page.evaluate(()=>refreshControl());
+  const alertDetail=page.locator(`#control-history details[data-command-id="${alert.id}"]`);
+  await alertDetail.locator("summary").click();
+  assert.match(await alertDetail.textContent(),/heard\/felt unknown/);
+  await alertDetail.getByText("Cancel safely",{exact:true}).click();
+  await wait(async()=>((await (await fetch(local+"/local/control")).json()).commands.find(c=>c.id===alert.id).state==="cancel_requested_unknown"));
+  await phoneResult("recipient_acknowledged",3);
+  await page.evaluate(()=>refreshControl());
+  assert.match(await alertDetail.textContent(),/Human recipient locally acknowledged/);
+  await post("control/cancel",{id:alert.id});
+  assert.equal((await (await fetch(local+"/local/control")).json()).commands.find(c=>c.id===alert.id).state,"recipient_acknowledged");
+  await alertDetail.scrollIntoViewIfNeeded();
+  await page.screenshot({path:path.join(out,"command-phone-alert-human-ack.png"),fullPage:true});
   await page.locator("#phone-control").evaluate(dialog=>dialog.scrollTop=0);
   await page.screenshot({path:path.join(out,"command-phone-controls.png"),fullPage:true});
   const accessibility=await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa"]).analyze();
   fs.writeFileSync(path.join(out,"control-accessibility.json"),JSON.stringify(accessibility.violations,null,2));
   assert.deepEqual(accessibility.violations.map(v=>v.id),[]);assert.deepEqual(errors,[]);
-  console.log("PASS: real Command browser enrollment, 20 frozen all recipients plus late 21st, selected recipients, guarded tracking request, cancellation, unknown execution and accessible controls.");
+  console.log("PASS: real Command browser enrollment, 20 frozen all recipients plus late 21st, selected recipients, guarded tracking request, normal/urgent alerts to selected/all 21 phones, cancellation, unknown execution and accessible controls.");
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(async()=>{if(browser)await browser.close();if(command&&command.exitCode===null){command.kill("SIGINT");await once(command,"exit");}if(!process.exitCode)fs.rmSync(work,{recursive:true,force:true});});

@@ -1,0 +1,29 @@
+{
+  "normal": {
+    "mode": "normal",
+    "message": "Check in with Command",
+    "duration_s": 5,
+    "repeat_s": 5
+  },
+  "urgent": {
+    "mode": "urgent",
+    "message": "Please check in urgently",
+    "duration_s": 60,
+    "repeat_s": 10
+  },
+  "invalid_duration": {
+    "mode": "urgent",
+    "message": "",
+    "duration_s": 121,
+    "repeat_s": 10
+  },
+  "recipient_result": {
+    "id": "44444444-4444-4444-8444-444444444444",
+    "revision": 3,
+    "state": "recipient_acknowledged",
+    "reason": "Recipient locally acknowledged / stopped alert",
+    "effective": "Local user action at 2026-10-06T12:00:10.000Z; not an SOS acknowledgement",
+    "received": 1791288000000,
+    "attempted": true
+  }
+}

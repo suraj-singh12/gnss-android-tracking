@@ -465,23 +465,31 @@ class DiagnosticJournal(private val directory: File, val limits: Limits = Limits
                 .sortedBy { it.name }
                 .flatMap { it.readLines().mapNotNull(::readEntry) }
                 .filter { it.event in physicalButtonEvents }
-        val clearAt = events.indexOfLast { it.event == DiagnosticEvent.PHYSICAL_BUTTON_TEST_CLEARED }
+        val clearAt =
+            events.indexOfLast { it.event == DiagnosticEvent.PHYSICAL_BUTTON_TEST_CLEARED }
         val retained = events.drop(clearAt + 1)
-        val starts = retained.withIndex().filter { it.value.event == DiagnosticEvent.PHYSICAL_BUTTON_TEST_STARTED }
+        val starts =
+            retained.withIndex().filter {
+                it.value.event == DiagnosticEvent.PHYSICAL_BUTTON_TEST_STARTED
+            }
         val start = starts.lastOrNull()
-        val stop = retained.withIndex().lastOrNull {
-            it.value.event == DiagnosticEvent.PHYSICAL_BUTTON_TEST_STOPPED &&
-                (start == null || it.index > start.index)
-        }
+        val stop =
+            retained.withIndex().lastOrNull {
+                it.value.event == DiagnosticEvent.PHYSICAL_BUTTON_TEST_STOPPED &&
+                    (start == null || it.index > start.index)
+            }
         val testEnd = stop?.index ?: retained.lastIndex
         val testEvents =
             if (start == null) emptyList()
             else retained.subList(start.index + 1, (testEnd + 1).coerceAtLeast(start.index + 1))
         val keyEvents = testEvents.filter { it.event == DiagnosticEvent.PHYSICAL_BUTTON_KEY_EVENT }
-        val interrupted = testEvents.any { it.event == DiagnosticEvent.PHYSICAL_BUTTON_ACTIVITY_PAUSED }
-        val presses = retained.mapNotNull { it.physicalButton }.count {
-            it.action == PhysicalButtonAction.DOWN && it.repeatCount == 0
-        }.toLong()
+        val interrupted =
+            testEvents.any { it.event == DiagnosticEvent.PHYSICAL_BUTTON_ACTIVITY_PAUSED }
+        val presses =
+            retained
+                .mapNotNull { it.physicalButton }
+                .count { it.action == PhysicalButtonAction.DOWN && it.repeatCount == 0 }
+                .toLong()
         val allKeys = retained.filter { it.event == DiagnosticEvent.PHYSICAL_BUTTON_KEY_EVENT }
         val activityResult =
             when {
@@ -502,9 +510,11 @@ class DiagnosticJournal(private val directory: File, val limits: Limits = Limits
             startedAt = start?.value?.at,
             stoppedAt = stop?.value?.at,
             totalPresses = presses,
-            retainedEvents = allKeys.takeLast(PhysicalButtonTestController.MAX_DISPLAY_EVENTS).mapNotNull {
-                entry -> entry.physicalButton?.let { PhysicalButtonLoggedEvent(entry.at, it) }
-            },
+            retainedEvents =
+                allKeys.takeLast(PhysicalButtonTestController.MAX_DISPLAY_EVENTS).mapNotNull { entry
+                    ->
+                    entry.physicalButton?.let { PhysicalButtonLoggedEvent(entry.at, it) }
+                },
             olderEventsOmitted = allKeys.size > PhysicalButtonTestController.MAX_DISPLAY_EVENTS,
             activityResult = activityResult,
             activityReason = reason,
@@ -827,7 +837,29 @@ class DiagnosticJournal(private val directory: File, val limits: Limits = Limits
                 zip.write(bytes)
                 zip.closeEntry()
             }
-            put("command-instructions.json", gson.toJson(commands).toByteArray(Charsets.UTF_8))
+            put(
+                "command-instructions.json",
+                gson
+                    .toJson(
+                        commands.map { row ->
+                            if (row.operation == "alert")
+                                row.copy(
+                                    requested =
+                                        runCatching {
+                                                val payload = Protocol.parse(row.requested)
+                                                payload.addProperty(
+                                                    "message",
+                                                    "[redacted from diagnostics]",
+                                                )
+                                                payload.toString()
+                                            }
+                                            .getOrDefault("alert content redacted")
+                                )
+                            else row
+                        }
+                    )
+                    .toByteArray(Charsets.UTF_8),
+            )
             put(
                 "manifest.json",
                 gson
@@ -1079,10 +1111,12 @@ class DiagnosticRecorder(
                     is PhysicalButtonQuery -> {
                         try {
                             var history =
-                                journal.physicalButtonHistory().copy(
-                                    writerIoFailures = ioFailures,
-                                    diagnosticQueueDroppedTotal = totalLost.get(),
-                                )
+                                journal
+                                    .physicalButtonHistory()
+                                    .copy(
+                                        writerIoFailures = ioFailures,
+                                        diagnosticQueueDroppedTotal = totalLost.get(),
+                                    )
                             if (ioFailures > 0 || totalLost.get() > 0)
                                 history =
                                     history.copy(

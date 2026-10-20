@@ -605,3 +605,53 @@ not fixed or waived by control software verification.
    OS/OEM, source SHA, source IDs, timestamps, latency quantiles, bytes and failure states.
    Native macOS ARM64/Windows AMD64, offline LAN endurance and seven-day fleets need
    their own evidence. Do not label cross-compilation as native acceptance.
+
+## Deferred combined #24/#25/#26 phone-alert acceptance
+
+Status: **NOT TESTED on physical hardware**. #24/#25/#26 remain open; no native
+acceptance is implied by software tests. Use exact PR-source APK and Command assets
+plus their checksum/source manifest. Record phone model, OS/API, OEM/battery policy,
+notification permission/channel settings, DND, volume/vibration, app/runtime state,
+Command OS/browser versions, LAN and timestamped canonical journals (redact content).
+
+1. On Android 8+ and current Android, privately enroll verified identities. With
+   1/5/20 phones (three online/two offline for five), send Normal and Urgent to one,
+   selected and all. Review IDs/count and bounds. Join phone 21 after issuance:
+   it must stay silent for the previous snapshot; issue new alerts to include it.
+2. Test normal once; urgent defaults 60 s / 10 s and boundary 120 s / 5 s. Observe
+   actual sound/vibration independently from notification/API evidence; measure
+   attempts, human action, stop, expiry, cancellation and result custody times.
+   Do not assume an API attempt was audible. Try disabled notification permission,
+   disabled channels/sound/vibration, DND and muted volume. Confirm no volume/DND
+   changes. Record observed/blocked/unknown per output and OS.
+3. Repeat visible, locked, legal background tracking/transfer, Tracking OFF visible,
+   no active runtime, Doze, OEM battery restrictions, process kill, reboot and
+   force-stop. Never start forbidden services. Reopening must reconcile interrupted
+   output without replay. Check private lock-screen content and action accessibility.
+4. Press notification **Acknowledge / Stop Alert** and the Command Instructions
+   action, including blocked notification. Persist one local human event, stop only
+   that alert, then verify authenticated Command custody. Kill between receipt,
+   staging/output, local ACK commit and result confirmation; reconnect/redeliver and
+   restart both apps. No durable human ACK may restart output. Unconfirmed results
+   remain retained; queued-but-never-received instructions have no Android records.
+5. Issue offline TTL 5 s, reconnect after expiry (also days later): no output. Cancel
+   before delivery, during repeats, while offline and racing ACK. Operator Cancel
+   alone must remain pending/unknown after send; only phone cancellation confirms
+   Stop. ACK is never replaced by cancellation. Check max urgent duration and actual
+   expiry, not just disappearance of a notification. Record OS scheduling tolerance.
+6. Revoke/replace enrollment, use wrong-device credential and untrusted server;
+   no unauthorized output. Offline remote revocation cannot deliver Stop; local
+   bounds still hold. Inspect sanitized ZIP for stages/UUID/timings and absence of
+   provisioning keys/MACs/message content. Preserve unresolved journal rows.
+7. During #22 seven-day history drain, fresh LIVE and repeated SOS, sustain alert
+   fleets, independent phone ACKs, cancellation and retry. Measure p50/p95/worst
+   issue→receipt, receipt→attempt, local ACK→custody and expiry/cancel response,
+   plus SOS/LIVE baseline versus alert load. Neither phone ACK nor Stop may ACK,
+   mute or suppress SOS, delay capture or abandon saved GNSS receipts. Repeat LAN
+   outage/rejoin and endurance on actual macOS ARM64 and Windows AMD64; record
+   native launch/restart/SQLite/firewall outcomes separately from cross-builds.
+
+Real sound/vibration; DND/muted behavior; locked-screen/OEM/Doze; native macOS/Windows
+runtime; real offline LAN fleet/endurance: **NOT TESTED until this procedure runs**.
+The inherited separate external Overpass/map-provider CI failure remains visible
+and outside #26; it must not be concealed by these software or field results.

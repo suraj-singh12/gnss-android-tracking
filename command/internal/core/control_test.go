@@ -386,3 +386,95 @@ func TestControlPrivateSQLiteURIPreservesPlatformFilenames(t *testing.T) {
 	ingest(t, s, message(t, 1, 0, 0, 0, 1))
 	controlEnroll(t, s, device)
 }
+
+func TestPhoneAlertDurableLifecycleAndCancellationEvidence(t *testing.T) {
+	s, now, _ := open(t)
+	*now = base
+	ingest(t, s, message(t, 1, 0, 0, 0, 1))
+	a, en, k := controlEnroll(t, s, device)
+	issue := func(mode string) string {
+		v := controlAPI(t, s, "issue", map[string]any{"targets": []string{device}, "operation": "alert", "payload": map[string]any{"mode": mode, "message": "Check in", "duration_s": 5, "repeat_s": 5}, "ttl": 300, "confirmed": true}, 200)
+		var ids []string
+		json.Unmarshal(v["ids"], &ids)
+		return ids[0]
+	}
+	cid := issue("urgent")
+	v, _ := controlPoll(t, s, device, en, k, a, randomControlKey(), nil, 200)
+	var cmds []controlInstruction
+	json.Unmarshal(v["commands"], &cmds)
+	if len(cmds) != 1 || cmds[0].Priority != "urgent" {
+		t.Fatal(cmds)
+	}
+	output := controlResult{cid, 2, "output_attempted", "Notification attempted; heard unknown", "", base.UnixMilli(), true}
+	controlPoll(t, s, device, en, k, a, randomControlKey(), []controlResult{output}, 200)
+	controlAPI(t, s, "cancel", map[string]any{"id": cid}, 200)
+	v, _ = controlPoll(t, s, device, en, k, a, randomControlKey(), []controlResult{output}, 200)
+	json.Unmarshal(v["commands"], &cmds)
+	if len(cmds) != 1 || cmds[0].Disposition != "cancel_requested_unknown" {
+		t.Fatal("cancel custody race", cmds)
+	}
+	ack := controlResult{cid, 3, "recipient_acknowledged", "Local user button", "", base.UnixMilli(), true}
+	controlPoll(t, s, device, en, k, a, randomControlKey(), []controlResult{ack}, 200)
+	controlPoll(t, s, device, en, k, a, randomControlKey(), []controlResult{ack}, 200)
+	controlAPI(t, s, "cancel", map[string]any{"id": cid}, 200)
+	var state string
+	s.db.QueryRow(`SELECT state FROM control_commands WHERE id=?`, cid).Scan(&state)
+	if state != "recipient_acknowledged" {
+		t.Fatal(state)
+	}
+	ack.State = "cancelled"
+	ack.Revision++
+	controlPoll(t, s, device, en, k, a, randomControlKey(), []controlResult{ack}, 409)
+	cid = issue("normal")
+	controlPoll(t, s, device, en, k, a, randomControlKey(), nil, 200)
+	output.ID = cid
+	output.State = "alert_blocked"
+	controlPoll(t, s, device, en, k, a, randomControlKey(), []controlResult{output}, 200)
+	controlAPI(t, s, "cancel", map[string]any{"id": cid}, 200)
+	output.State = "cancelled"
+	output.Revision++
+	controlPoll(t, s, device, en, k, a, randomControlKey(), []controlResult{output}, 200)
+	s.db.QueryRow(`SELECT state FROM control_commands WHERE id=?`, cid).Scan(&state)
+	if state != "cancelled" {
+		t.Fatal(state)
+	}
+}
+
+func TestPhoneAlertPayloadValidation(t *testing.T) {
+	s, now, _ := open(t)
+	*now = base
+	ingest(t, s, message(t, 1, 0, 0, 0, 1))
+	controlEnroll(t, s, device)
+	for _, payload := range []map[string]any{
+		{"mode": "urgent", "message": "x", "duration_s": 121, "repeat_s": 10},
+		{"mode": "urgent", "message": "x", "duration_s": 60, "repeat_s": 0},
+		{"mode": "urgent", "message": "x", "duration_s": 60.5, "repeat_s": 10},
+		{"mode": "normal", "message": strings.Repeat("x", 161), "duration_s": 5, "repeat_s": 5},
+		{"mode": "normal", "message": "x\ny", "duration_s": 5, "repeat_s": 5},
+		{"mode": "unknown", "message": "x", "duration_s": 5, "repeat_s": 5},
+	} {
+		controlAPI(t, s, "issue", map[string]any{"targets": []string{device}, "operation": "alert", "payload": payload, "ttl": 300, "confirmed": true}, 400)
+	}
+}
+
+func TestPhoneAlertSharedFixtures(t *testing.T) {
+	b, e := os.ReadFile("../../../protocol/fixtures/control-v1/alerts.json")
+	if e != nil {
+		t.Fatal(e)
+	}
+	var fixtures map[string]json.RawMessage
+	if e = json.Unmarshal(b, &fixtures); e != nil {
+		t.Fatal(e)
+	}
+	s, now, _ := open(t)
+	*now = base
+	ingest(t, s, message(t, 1, 0, 0, 0, 1))
+	controlEnroll(t, s, device)
+	for _, name := range []string{"normal", "urgent", "invalid_duration"} {
+		want := 200
+		if name == "invalid_duration" {
+			want = 400
+		}
+		controlAPI(t, s, "issue", map[string]any{"targets": []string{device}, "operation": "alert", "payload": fixtures[name], "ttl": 300, "confirmed": true}, want)
+	}
+}

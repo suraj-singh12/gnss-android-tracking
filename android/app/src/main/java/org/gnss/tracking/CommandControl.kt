@@ -184,11 +184,15 @@ class CommandControl(
     private val tracking: suspend (Boolean) -> Pair<String, String>,
     private val adaptiveFallback: () -> String? = { null },
     private val clock: Clock = SystemClock,
+    private val alertOutput: PhoneAlertOutput? = null,
+    private val alertRuntimeAllowed: () -> Boolean = { true },
 ) {
     private val gson = Gson()
     private val mutex = Mutex()
     private var next = 0L
     private var failures = 0
+    private val alertNext = mutableMapOf<String, Long>()
+    private val alertDeadline = mutableMapOf<String, Long>()
     private val dao
         get() = repository.dao
 
@@ -210,6 +214,7 @@ class CommandControl(
             require(repository.state().deviceId == value.device) {
                 "Credential targets a different phone; compare its identity in Command"
             }
+            stopAlerts("Local authorization replaced")
             save()
             repository.edit {
                 it.copy(
@@ -229,6 +234,7 @@ class CommandControl(
 
     suspend fun disable() =
         mutex.withLock {
+            stopAlerts("Remote control disabled locally")
             repository.edit {
                 it.copy(
                     controlAuthority = null,
@@ -242,6 +248,7 @@ class CommandControl(
     suspend fun changeSettings(block: suspend () -> Unit) = mutex.withLock { block() }
 
     suspend fun step() {
+        tickAlerts()
         var flushStopResult = false
         stepOnce(false) { flushStopResult = true }
         // Stop may end the only legal sending lifetime while the Activity is
@@ -481,6 +488,19 @@ class CommandControl(
                 operation.length <= 40
         )
         val old = dao.command(id)
+        if (
+            old != null &&
+                old.operation == "alert" &&
+                old.state in listOf("output_attempted", "alert_blocked") &&
+                ins["disposition"].asString in listOf("cancelled", "cancel_requested_unknown")
+        ) {
+            stopAlert(
+                old,
+                "cancelled",
+                "Authenticated Command cancellation applied; repetition stopped",
+            )
+            return
+        }
         if (old != null && !(old.state == "received" && !old.attempted)) {
             dao.updateCommand(
                 old.event(clock.wallMillis(), "Duplicate ignored; persisted result retained")
@@ -511,7 +531,13 @@ class CommandControl(
                         version = ins["version"].asLong,
                         created = ins["created"].asLong,
                         expires = ins["expires"].asLong,
-                        priority = "normal",
+                        priority =
+                            if (
+                                operation == "alert" &&
+                                    ins["payload"].asJsonObject["mode"]?.asString == "urgent"
+                            )
+                                "urgent"
+                            else "normal",
                         requested = safeRequested(operation, ins["payload"].asJsonObject),
                     )
                     .event(clock.wallMillis(), "Received durably · Authenticated")
@@ -542,7 +568,8 @@ class CommandControl(
             return
         }
         if (
-            operation !in listOf("reporting", "adaptive", "sync", "tracking_start", "tracking_stop")
+            operation !in
+                listOf("reporting", "adaptive", "sync", "tracking_start", "tracking_stop", "alert")
         ) {
             finish(row, "unsupported", "Unsupported instruction")
             return
@@ -551,6 +578,13 @@ class CommandControl(
             runCatching {
                     val payload = ins["payload"].asJsonObject
                     when (operation) {
+                        "alert" -> {
+                            PhoneAlertSpec.parse(payload)
+                            require(
+                                ins["expires"].asLong > ins["created"].asLong &&
+                                    ins["expires"].asLong - ins["created"].asLong <= 3600000
+                            )
+                        }
                         "reporting" -> {
                             require(payload.keySet() == setOf("seconds", "revision"))
                             require(payload["revision"].asLong > 0)
@@ -606,6 +640,23 @@ class CommandControl(
         }
         try {
             when (operation) {
+                "alert" -> {
+                    val spec = PhoneAlertSpec.parse(ins["payload"].asJsonObject)
+                    row =
+                        row.event(
+                            clock.wallMillis(),
+                            "Queued for output; notification and sound/vibration attempt pending",
+                        )
+                    dao.updateCommand(row)
+                    alertDeadline[row.id] =
+                        clock.elapsedMillis() +
+                            minOf(
+                                row.expires - maxOf(clock.wallMillis(), serverAt),
+                                if (spec.mode == "normal") Long.MAX_VALUE
+                                else spec.duration_s * 1000L,
+                            )
+                    attemptAlert(row, spec)
+                }
                 "reporting" ->
                     repository.db.withTransaction {
                         val payload = ins["payload"].asJsonObject
@@ -694,6 +745,7 @@ class CommandControl(
     private fun safeRequested(operation: String, payload: JsonObject): String =
         runCatching {
                 when (operation) {
+                    "alert" -> Gson().toJson(PhoneAlertSpec.parse(payload))
                     "reporting" ->
                         "seconds=" +
                             (if (payload["seconds"].isJsonNull) "local default"
@@ -731,6 +783,113 @@ class CommandControl(
                 .event(clock.wallMillis(), "$state · $reason · Result pending delivery")
         )
     }
+
+    // Called only by Android local UI paths. Persist the human event before stopping/reporting.
+    suspend fun acknowledgeAlert(id: String) =
+        mutex.withLock {
+            val row = dao.command(id) ?: return@withLock
+            if (
+                !row.trusted ||
+                    row.operation != "alert" ||
+                    row.state !in listOf("output_attempted", "alert_blocked", "unknown")
+            )
+                return@withLock
+            finish(
+                row,
+                "recipient_acknowledged",
+                "Recipient locally acknowledged / stopped alert",
+                "Local user action at ${utc(clock.wallMillis())}; not an SOS acknowledgement",
+            )
+            alertOutput?.stop(id)
+            alertNext.remove(id)
+            alertDeadline.remove(id)
+            next = 0
+        }
+
+    private suspend fun stopAlert(row: CommandRecord, state: String, reason: String) {
+        alertOutput?.stop(row.id)
+        alertNext.remove(row.id)
+        alertDeadline.remove(row.id)
+        finish(row, state, reason)
+    }
+
+    private suspend fun stopAlerts(reason: String) {
+        for (row in dao.activeAlerts()) stopAlert(row, "unknown", "$reason; repetition stopped")
+    }
+
+    private suspend fun attemptAlert(row: CommandRecord, spec: PhoneAlertSpec) {
+        val remaining =
+            minOf(
+                row.expires - clock.wallMillis(),
+                (alertDeadline[row.id] ?: clock.elapsedMillis()) - clock.elapsedMillis(),
+            )
+        if (remaining <= 0) {
+            stopAlert(row, "expired", "Actual expiry/duration reached; repetition stopped")
+            return
+        }
+        val result =
+            if (!alertRuntimeAllowed())
+                "alert_blocked" to "No permitted active runtime; output blocked"
+            else
+                try {
+                    alertOutput?.attempt(row, spec, remaining)
+                        ?: ("alert_blocked" to "Notification output unsupported")
+                } catch (_: SecurityException) {
+                    "alert_blocked" to "OS notification/sound/vibration permission denied"
+                }
+        alertNext[row.id] = clock.elapsedMillis() + spec.repeat_s * 1000L
+        finish(
+            row,
+            result.first,
+            result.second,
+            "Attempt at ${utc(row.attemptedAt)}; ${spec.mode}; repetition ${if(spec.mode == "urgent") "started/best effort every ${spec.repeat_s}s" else "disabled"}; duration <=${spec.duration_s}s; expires ${utc(row.expires)}",
+        )
+    }
+
+    // No alarm service, wake lock or autonomous replay. Cold-start effects become unknown.
+    suspend fun tickAlerts() =
+        mutex.withLock {
+            val alerts = dao.activeAlerts()
+            if (alerts.isEmpty()) return@withLock
+            val binding = repository.state()
+            for (row in alerts) {
+                if (row.id !in alertDeadline) {
+                    stopAlert(
+                        row,
+                        "unknown",
+                        "Process interrupted; repetition stopped; output not restarted",
+                    )
+                    continue
+                }
+                if (
+                    binding.controlAuthority != row.authority ||
+                        binding.controlEnrollment != row.enrollment ||
+                        !alertRuntimeAllowed()
+                ) {
+                    stopAlert(row, "unknown", "Authorization/runtime ended; repetition stopped")
+                    continue
+                }
+                if (
+                    row.expires <= clock.wallMillis() ||
+                        clock.elapsedMillis() >= alertDeadline.getValue(row.id)
+                ) {
+                    stopAlert(row, "expired", "Actual expiry/duration reached; repetition stopped")
+                    continue
+                }
+                val spec = PhoneAlertSpec.parse(Protocol.parse(row.requested))
+                if (
+                    spec.mode == "urgent" &&
+                        row.state == "output_attempted" &&
+                        clock.elapsedMillis() >= (alertNext[row.id] ?: Long.MAX_VALUE)
+                ) {
+                    try {
+                        attemptAlert(row, spec)
+                    } catch (_: Exception) {
+                        stopAlert(row, "failed", "Notification repeat failed; repetition stopped")
+                    }
+                }
+            }
+        }
 
     private suspend fun refreshSync(enrollment: String) {
         // Include confirmed starts too: progress is a new result revision requiring

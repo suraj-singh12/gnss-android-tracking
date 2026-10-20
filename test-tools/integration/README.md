@@ -938,3 +938,16 @@ measured combined priority ACK p50 163 ms, p95/p99/worst 287 ms in one run; all 
 original raw identities were accounted for. Another no-control run measured worst
 404 ms under different competing work; these single runs are not an A/B speedup
 claim or field SLA. CI uploads its own exact-source control-priority measurements.
+
+Issue #26 bridge test `phoneAlertsUseRealSenderRoomAndCommandCustodyForFrozenFleets`
+uses production Sender/control transport, file-backed Room, real HTTP handlers and
+Command SQLite for Normal/Urgent, mixed offline 1/5/20 fleets, late join, expiry,
+cancel and local ACK custody/restart. Production notification API calls run in
+Robolectric: this proves attempts/action wiring, **not physical sound/vibration**.
+`PhoneAlertNotificationTest` sends the actual immutable notification PendingIntent;
+`CommandControlTest` checks bounded repeats, durable ACK/dedupe, OS-blocked results
+and interrupted state. `control-ui.cjs` covers normal/urgent selected/all through
+production browser controls with axe. `GNSS_ALERT_LOAD=1` saturation regression
+queues urgent alerts alongside the retained `GNSS_CONTROL_LOAD=1` Sync regression while preserving SOS/LIVE/bulk ingestion priorities.
+Measured logs explicitly label wall-clock versus synthetic scheduling; physical
+latency/output/native runtime acceptance follows android/DEVICE-ACCEPTANCE.md.

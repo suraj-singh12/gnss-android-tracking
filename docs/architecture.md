@@ -419,3 +419,15 @@ sanitized existing ZIP export. Credential material is outside diagnostic models,
 sealed in Android Keystore-backed preferences; Command keys stay outside exported
 State/events. Operator credential transfer is private and deliberate; IP/UUID alone
 cannot bootstrap trust. Authority/credential replacement requires re-enrollment.
+
+Issue #26 adds `alert` to this exact #25 path. Existing SQLite instructions and Room
+v6 journal fields hold per-recipient UUID, validated mode/message/bounds, output
+attempts, local recipient ACK, pending cancellation and result revision/custody.
+No schema migration is required; all v6 data and earlier migrations remain intact.
+Normal and urgent notification channels use independent per-command tags/actions;
+only native local notification/Tracking/Diagnostics buttons write recipient ACK. Existing
+Sender SOS/LIVE/history scheduling, GNSS capture and SOS operator ACK are preserved.
+The permitted app loop owns bounded best-effort repeats; deadlines combine absolute
+TTL and monotonic duration. Restart stops/reconciles uncertain output without replay.
+See protocol/protocol-v1.md for authoritative bounds, uncertainty and cancellation
+races. Diagnostic ZIP redacts message content while retaining canonical alert events.

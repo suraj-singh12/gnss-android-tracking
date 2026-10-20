@@ -273,13 +273,19 @@ func TestFreshPriorityAndLateJoinDuringActualSlowWriterSaturation(t *testing.T) 
 	*now = base.Add(time.Hour)
 	type controlPhone struct{ device, authority, enrollment, key string }
 	controlPhones := []controlPhone{}
-	if os.Getenv("GNSS_CONTROL_LOAD") == "1" {
+	if os.Getenv("GNSS_CONTROL_LOAD") == "1" || os.Getenv("GNSS_ALERT_LOAD") == "1" {
 		for n := 1; n <= 20; n++ {
 			m := message(t, 20000, 0, 0, 0, 1)
 			m.Device = fmt.Sprintf("11111111-1111-4111-8111-%012d", n)
 			ingest(t, s, m)
 			authority, enrollment, key := controlEnroll(t, s, m.Device)
-			controlAPI(t, s, "issue", map[string]any{"targets": []string{m.Device}, "operation": "sync", "payload": map[string]any{}, "ttl": 300, "confirmed": true}, 200)
+			operation := "sync"
+			payload := map[string]any{}
+			if os.Getenv("GNSS_ALERT_LOAD") == "1" {
+				operation = "alert"
+				payload = map[string]any{"mode": "urgent", "message": "Priority test", "duration_s": 60, "repeat_s": 10}
+			}
+			controlAPI(t, s, "issue", map[string]any{"targets": []string{m.Device}, "operation": operation, "payload": payload, "ttl": 300, "confirmed": true}, 200)
 			controlPhones = append(controlPhones, controlPhone{m.Device, authority, enrollment, key})
 		}
 	}

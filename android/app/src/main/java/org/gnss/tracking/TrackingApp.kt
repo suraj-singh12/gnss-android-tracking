@@ -186,6 +186,10 @@ class TrackingApp : Application() {
                 sender.requestDrain()
             },
             tracking = { start -> executeRemoteTracking(start) },
+            alertOutput = NotificationPhoneAlertOutput(this),
+            alertRuntimeAllowed = {
+                activityVisible || operational.value.tracking || operational.value.transferActive
+            },
         )
     }
 
@@ -363,6 +367,7 @@ class TrackingApp : Application() {
         workScope.launch {
             var visibleWifi: android.net.Network? = null
             while (isActive) {
+                runCatching { commandControl.tickAlerts() }
                 if (
                     (activityVisible || operational.value.transferActive) &&
                         !operational.value.tracking

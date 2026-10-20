@@ -145,3 +145,15 @@ OEM/OS, native GNSS or physical field acceptance.
 | Command recording/history | Historical objects and view filters never target phone instructions; quality/distance and recording APIs unchanged. |
 | Legacy GNSS / SOS | Frozen v1 receipt and human SOS ACK retained; unsupported control shown honestly. |
 | Native acceptance | Physical Android background/OEM/Keystore and native Windows/macOS remain NOT TESTED until operator evidence. #24 stays OPEN. |
+
+## Issue #26 alert preservation
+
+| Surface / authority | Behavior / evidence |
+| --- | --- |
+| Command Phone controls | Existing one/selected/all identity snapshot and confirmation; Normal/Urgent, concise message, validated TTL/duration/repeat; no fleet cap. |
+| Command per-phone history | Output attempted/blocked, human recipient ACK, pending Cancel versus phone-confirmed Stop; actual expiry/effective result. Browser control/accessibility suite. |
+| Android notification | Separate normal/urgent channels, unique immutable per-command action/tag; local Acknowledge / Stop Alert. Notification action test is simulated OS evidence only. |
+| Android Command Instructions | Existing filters/details/copy plus local ACK action; durable event/result custody; same sanitized ZIP with message redacted. |
+| Room / SQLite / Sender | Existing v6 schema, enrollment/HMAC/nonces/order/TTL/dedupe/result digests; active alerts excluded from resolved pruning. Real bridge 1/5/20 plus late join. |
+| SOS / LIVE / bulk Sync | Existing authorities/controls/notification IDs unchanged; same Sender priority and bounded control request; saturation/bridge regression. |
+| Physical/native acceptance | Real audio, DND/mute, locked/OEM/Doze, native macOS/Windows and real offline fleet/endurance NOT TESTED until operator session. #24/#25 remain OPEN. |
