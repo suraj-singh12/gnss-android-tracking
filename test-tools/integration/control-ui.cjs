@@ -114,11 +114,10 @@ async function wait(check) {
   await page.locator("#control-operation").selectOption("sync");
   await page.locator("#control-issue").click();
   await wait(async()=>((await (await fetch(local+"/local/control")).json()).commands.length===20));
-  // Hold the real LIVE/inventory responses while a new enrolled phone arrives.
-  // All recipients must come from fresh enrollment, not this intentionally stale browser inventory.
-  let releaseInventory;
-  const inventoryGate=new Promise(resolve=>{releaseInventory=resolve;});
-  const holdInventory=async route=>{await inventoryGate;await route.continue();};
+  // Interrupt real LIVE/inventory requests while a new enrolled phone arrives.
+  // All recipients must come from fresh enrollment, not stale GNSS inventory.
+  // Abort rather than hold these requests beyond the product's 4-second timeout.
+  const holdInventory=async route=>{await route.abort("connectionreset");};
   await page.route("**/local/live",holdInventory);
   await page.route("**/local/state?**",holdInventory);
   const late=structuredClone(fixture);late.device_id=randomUUID();late.message_id=randomUUID();late.observation.observation_id=late.message_id;late.observation.tracking_session_id=randomUUID();await send(late);await post("control/enroll",{device:late.device_id,confirmed:true});
@@ -155,7 +154,6 @@ async function wait(check) {
   await page.unroute("**/local/control");
   assert.match(await page.locator("#control-status").textContent(),/21 enrolled recipients selected/);
   assert.equal(await page.evaluate(()=>Object.keys(state.devices).length),20);
-  releaseInventory();
   await page.unroute("**/local/live");
   await page.unroute("**/local/state?**");
   await page.locator("#control-alert-mode").selectOption("urgent");
