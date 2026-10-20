@@ -58,7 +58,13 @@ async function chooseControlTargets(all) {
 $("open-control").onclick=()=>{$("phone-control").showModal();refreshControl().catch(controlError);};
 $("control-one").onclick=()=>chooseControlTargets(false);
 $("control-all").onclick=()=>chooseControlTargets(true);
-$("control-none").onclick=()=>{controlTargets.clear();refreshControl().catch(controlError);};
+$("control-none").onclick=()=>{
+  controlTargets.clear();
+  // Reflect the selection immediately; a network refresh must not leave checked
+  // boxes whose next click would silently disagree with the frozen target set.
+  for(const input of $("control-phones").querySelectorAll("input"))input.checked=false;
+  refreshControl().catch(controlError);
+};
 $("control-issue").onclick=async()=>{try{
   const targets=[...controlTargets]; // Frozen at the explicit review action.
   const operation=$("control-operation").value;

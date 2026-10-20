@@ -117,6 +117,7 @@ async function wait(check) {
   let controls=await (await fetch(local+"/local/control")).json();assert.equal(controls.commands.some(c=>c.device===late.device_id),false);
   assert.ok(controls.commands.every(c=>c.state==="queued"&&c.result===null));
   await page.locator("#control-none").click();
+  await wait(async()=>await page.locator("#control-phones input:checked").count()===0);
   await page.locator("#control-phones input").nth(0).check();await page.locator("#control-phones input").nth(1).check();
   await page.locator("#control-operation").selectOption("tracking_stop");await page.locator("#control-issue").click();
   await wait(async()=>((await (await fetch(local+"/local/control")).json()).commands.length===22));
