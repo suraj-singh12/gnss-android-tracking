@@ -56,7 +56,10 @@ class CommandControlTest {
                             "authority" to key.authority,
                             "nonce" to body["nonce"].asString,
                             "at" to clock.now,
-                            "commands" to instructions,
+                            "commands" to
+                                (if (body["results_only"]?.asBoolean == true)
+                                    emptyList<Map<String, Any?>>()
+                                else instructions),
                             "confirmed" to confirmations,
                         )
                     )

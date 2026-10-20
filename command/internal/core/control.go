@@ -24,11 +24,12 @@ type controlEnvelope struct {
 	MAC        string `json:"mac"`
 }
 type controlRequest struct {
-	Version   int             `json:"version"`
-	Authority string          `json:"authority"`
-	Nonce     string          `json:"nonce"`
-	At        int64           `json:"at"`
-	Results   []controlResult `json:"results"`
+	Version     int             `json:"version"`
+	Authority   string          `json:"authority"`
+	Nonce       string          `json:"nonce"`
+	At          int64           `json:"at"`
+	Results     []controlResult `json:"results"`
+	ResultsOnly bool            `json:"results_only,omitempty"`
 }
 type controlResult struct {
 	ID        string `json:"id"`
@@ -226,49 +227,51 @@ func (s *Store) controlExchange(w http.ResponseWriter, r *http.Request) {
 		failure(w, 503, "storage", e)
 		return
 	}
-	rows, e := tx.Query(`SELECT instruction,state,result FROM control_commands WHERE device=? AND enrollment=? AND result IS NULL AND state IN ('queued','sent_unknown','cancel_requested_unknown') ORDER BY ordering LIMIT 1`, env.Device, enrollment)
-	if e != nil {
-		failure(w, 503, "storage", e)
-		return
-	}
 	instructions := []controlInstruction{}
-	states := []string{}
-	for rows.Next() {
-		var raw, state string
-		var result sql.NullString
-		if e = rows.Scan(&raw, &state, &result); e != nil {
-			break
-		}
-		var ins controlInstruction
-		if e = json.Unmarshal([]byte(raw), &ins); e != nil {
-			break
-		}
-		if ins.Expires <= now && state == "queued" {
-			states = append(states, ins.ID)
-			continue
-		}
-		ins.Disposition = state
-		instructions = append(instructions, ins)
-	}
-	if er := rows.Err(); er != nil {
-		e = er
-	}
-	rows.Close()
-	if e != nil {
-		failure(w, 503, "storage", e)
-		return
-	}
-	for _, cid := range states {
-		if _, e = tx.Exec(`UPDATE control_commands SET state='expired' WHERE id=?`, cid); e != nil {
+	if !req.ResultsOnly {
+		rows, e := tx.Query(`SELECT instruction,state,result FROM control_commands WHERE device=? AND enrollment=? AND result IS NULL AND state IN ('queued','sent_unknown','cancel_requested_unknown') ORDER BY ordering LIMIT 1`, env.Device, enrollment)
+		if e != nil {
 			failure(w, 503, "storage", e)
 			return
 		}
-	}
-	for _, ins := range instructions {
-		if ins.Disposition == "queued" {
-			if _, e = tx.Exec(`UPDATE control_commands SET state='sent_unknown' WHERE id=?`, ins.ID); e != nil {
+		states := []string{}
+		for rows.Next() {
+			var raw, state string
+			var result sql.NullString
+			if e = rows.Scan(&raw, &state, &result); e != nil {
+				break
+			}
+			var ins controlInstruction
+			if e = json.Unmarshal([]byte(raw), &ins); e != nil {
+				break
+			}
+			if ins.Expires <= now && state == "queued" {
+				states = append(states, ins.ID)
+				continue
+			}
+			ins.Disposition = state
+			instructions = append(instructions, ins)
+		}
+		if er := rows.Err(); er != nil {
+			e = er
+		}
+		rows.Close()
+		if e != nil {
+			failure(w, 503, "storage", e)
+			return
+		}
+		for _, cid := range states {
+			if _, e = tx.Exec(`UPDATE control_commands SET state='expired' WHERE id=?`, cid); e != nil {
 				failure(w, 503, "storage", e)
 				return
+			}
+		}
+		for _, ins := range instructions {
+			if ins.Disposition == "queued" {
+				if _, e = tx.Exec(`UPDATE control_commands SET state='sent_unknown' WHERE id=?`, ins.ID); e != nil {
+					failure(w, 503, "storage", e)
+					return
+				}
 			}
 		}
 	}

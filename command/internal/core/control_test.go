@@ -38,7 +38,7 @@ func controlEnroll(t *testing.T, s *Store, d string) (string, string, string) {
 }
 func controlPoll(t *testing.T, s *Store, d, en, key, authority, nonce string, results []controlResult, want int) (map[string]json.RawMessage, []byte) {
 	t.Helper()
-	req := controlRequest{1, authority, nonce, s.Now().UnixMilli(), results}
+	req := controlRequest{1, authority, nonce, s.Now().UnixMilli(), results, false}
 	data := base64.StdEncoding.EncodeToString(encode(t, req))
 	env := controlEnvelope{d, en, data, controlMAC(key, "phone", d, en, data)}
 	b := encode(t, env)
@@ -276,5 +276,40 @@ func TestControlCredentialDatabaseAndWALArePrivate(t *testing.T) {
 		if info.Mode().Perm() != 0600 {
 			t.Fatalf("credential storage mode %o", info.Mode().Perm())
 		}
+	}
+}
+
+func TestControlStopResultOnlyFlushDoesNotDispatchNextInstruction(t *testing.T) {
+	s, now, _ := open(t)
+	*now = base
+	ingest(t, s, message(t, 1, 0, 0, 0, 1))
+	a, en, k := controlEnroll(t, s, device)
+	issue := func(op string) string {
+		v := controlAPI(t, s, "issue", map[string]any{"targets": []string{device}, "operation": op, "payload": map[string]any{}, "ttl": 300, "confirmed": true}, 200)
+		var ids []string
+		_ = json.Unmarshal(v["ids"], &ids)
+		return ids[0]
+	}
+	stop, next := issue("tracking_stop"), issue("sync")
+	controlPoll(t, s, device, en, k, a, randomControlKey(), nil, 200)
+	result := controlResult{stop, 2, "applied", "Stopped and verified", "", base.UnixMilli(), true}
+	data := base64.StdEncoding.EncodeToString(encode(t, controlRequest{1, a, randomControlKey(), base.UnixMilli(), []controlResult{result}, true}))
+	body := encode(t, controlEnvelope{device, en, data, controlMAC(k, "phone", device, en, data)})
+	w := httptest.NewRecorder()
+	s.IngestHandler().ServeHTTP(w, httptest.NewRequest("POST", "/api/v1/control", bytes.NewReader(body)))
+	if w.Code != 200 {
+		t.Fatal(w.Body)
+	}
+	var response controlEnvelope
+	_ = json.Unmarshal(w.Body.Bytes(), &response)
+	raw, _ := base64.StdEncoding.DecodeString(response.Data)
+	var reply map[string]json.RawMessage
+	_ = json.Unmarshal(raw, &reply)
+	if string(reply["commands"]) != "[]" || string(reply["confirmed"]) == "{}" {
+		t.Fatal("result-only flush dispatched work or lacked custody")
+	}
+	var state string
+	if e := s.db.QueryRow(`SELECT state FROM control_commands WHERE id=?`, next).Scan(&state); e != nil || state != "queued" {
+		t.Fatal("next instruction incorrectly dispatched", state, e)
 	}
 }

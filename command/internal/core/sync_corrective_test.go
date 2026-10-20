@@ -386,7 +386,7 @@ func TestFreshPriorityAndLateJoinDuringActualSlowWriterSaturation(t *testing.T) 
 	}
 	for _, phone := range controlPhones {
 		phone := phone
-		request := controlRequest{1, phone.authority, randomControlKey(), now.UnixMilli(), nil}
+		request := controlRequest{1, phone.authority, randomControlKey(), now.UnixMilli(), nil, false}
 		data := base64.StdEncoding.EncodeToString(encode(t, request))
 		body := encode(t, controlEnvelope{phone.device, phone.enrollment, data, controlMAC(phone.key, "phone", phone.device, phone.enrollment, data)})
 		go func() {

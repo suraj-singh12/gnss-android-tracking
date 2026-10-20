@@ -454,7 +454,9 @@ keys, oversized bodies (64 KiB), mismatched target/authority/enrollment, unsuppo
 versions and invalid MACs. The test-only cross-language vector is
 `fixtures/control-v1/authentication-vector.json`; its key is not a product key.
 
-Phone request data: `{version:1,authority,nonce,at,results}`. `nonce` is 32 random
+Phone request data: `{version:1,authority,nonce,at,results,results_only}`.
+Optional `results_only:true` reconciles results without receiving more instructions
+(the immediate Stop flush uses it); absence/false allows ordinary delivery. `nonce` is 32 random
 bytes encoded hex; `at` is Unix milliseconds. Command persists used nonces in the
 same SQLite transaction as results and rejects replays across restart. Require
 clocks within 60 seconds, retain nonce evidence for 120 seconds, and rate-limit to

@@ -296,6 +296,7 @@ class CommandControl(
                             "nonce" to nonce,
                             "at" to clock.wallMillis(),
                             "results" to pending.map { it.result() },
+                            "results_only" to immediate,
                         )
                     )
                 val data =
