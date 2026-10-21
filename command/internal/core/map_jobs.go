@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -25,6 +26,7 @@ type mapJob struct {
 	Attribution string          `json:"attribution"`
 }
 type chunkEvidence struct {
+	ValidBounds []float64    `json:"valid_dem_cell_bounds,omitempty"`
 	SourceURL   string       `json:"source_url,omitempty"`
 	SourceBytes int64        `json:"observed_transfer_body_bytes,omitempty"`
 	ElapsedMS   float64      `json:"elapsed_ms,omitempty"`
@@ -311,12 +313,22 @@ func (s *Store) acquireMapChunk(ctx context.Context, p *mapProvider, id, key, la
 		report := DEMReport{MapID: id, Revision: BuildRevision(), Bounds: chunk.Bounds, Started: started.UTC().Format(wireTime), Provider: "AWS Open Data Terrain Tiles", Dataset: "Mapzen Skadi composite / WGS84 / EGM96", Components: j.Components, Attempts: []DEMAttempt{}}
 		var g terrainGrid
 		g, err = p.acquireDEMReport(ctx, chunk.Bounds, j.Components, &report, emit)
-		if err == nil {
+		if err == nil || errors.Is(err, errDEMNoData) {
 			for y := 0; y < g.Rows-1; y++ {
 				for x := 0; x < g.Columns-1; x++ {
 					a := y*g.Columns + x
 					if g.Samples[a] != nil && g.Samples[a+1] != nil && g.Samples[a+g.Columns] != nil && g.Samples[a+g.Columns+1] != nil {
 						e.ValidCells++
+						step := g.ArcSeconds / 3600
+						w, n := g.Bounds[0]+float64(x)*step, g.Bounds[3]-float64(y)*step
+						if e.ValidBounds == nil {
+							e.ValidBounds = []float64{w, n - step, w + step, n}
+						} else {
+							e.ValidBounds[0] = math.Min(e.ValidBounds[0], w)
+							e.ValidBounds[1] = math.Min(e.ValidBounds[1], n-step)
+							e.ValidBounds[2] = math.Max(e.ValidBounds[2], w+step)
+							e.ValidBounds[3] = math.Max(e.ValidBounds[3], n)
+						}
 					} else {
 						e.VoidCells++
 					}
@@ -325,7 +337,9 @@ func (s *Store) acquireMapChunk(ctx context.Context, p *mapProvider, id, key, la
 			meta := g
 			meta.Samples = nil
 			e.Metadata = &meta
-			b, err = encodeTerrain(g)
+			if err == nil {
+				b, err = encodeTerrain(g)
+			}
 		}
 		report.ElapsedMS = *milliseconds(time.Since(started))
 		report.Outcome = "complete"
@@ -356,6 +370,9 @@ func (s *Store) acquireMapChunk(ctx context.Context, p *mapProvider, id, key, la
 	}
 	if err != nil {
 		e.Status = "failed; retry safely"
+		if errors.Is(err, errDEMNoData) {
+			e.Status = "source acquired; DEM unavailable (voids)"
+		}
 		e.Error = err.Error()
 		e.Bytes = 0
 		recovery, cancel := context.WithTimeout(context.Background(), 5*time.Second)

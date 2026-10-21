@@ -114,3 +114,9 @@ assert.ok(Math.abs(GeoMap.project(-179.9,0)[0]-GeoMap.project(179.9,0)[0]-22263.
 GeoMap.setWrap(0);
 const datelineGrid={...grid,bounds:[-180,28,-180+2/1200,28+2/1200]};
 assert.ok(Math.abs(Terrain.elevation(datelineGrid,180+1/1200,28+1/1200)-130)<1e-7);
+
+const isolated=Terrain.prepare({...grid,samples:[null,null,null,null,130,null,null,null,null]});
+assert.equal(isolated.shades,null);
+assert.equal(isolated.contour,null);
+assert.match(isolated.hillshade_error,/neighborhood/);
+assert.match(isolated.contour_error,/four-corner/);

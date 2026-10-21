@@ -433,6 +433,10 @@ turn a failed real-provider result into a pass.
 
 Deterministic evidence:
 
+- PASS: a wholly void source crop no longer aborts a valid neighbouring crop;
+  no surface is filled across the void. Entirely void acquisitions persist source
+  evidence and remain unavailable. Contour/hillshade controls reflect valid cell
+  neighborhoods independently. Valid-cell envelopes remain distinct from full bounds.
 - PASS: source-query bounds round outwards rather than omitting border features;
   abandoned cache-publication temporary files are removed on retry/restart.
 - PASS: independent equatorial WGS84 analytic east-distance references; radii

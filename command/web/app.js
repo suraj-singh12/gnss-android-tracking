@@ -1004,7 +1004,7 @@ function updateLayers() {
     const control = $("layer-" + kind),
       available =
         !!terrain?.components[kind] &&
-        !(kind === "contours" && terrain.contour_error);
+        !(kind === "contours" && terrain.contour_error) && !(kind==="hillshade" && terrain.hillshade_error);
     control.disabled = !available;
     control.checked =
       available &&
@@ -1013,8 +1013,10 @@ function updateLayers() {
       ? control.checked
         ? "Downloaded · visible"
         : "Downloaded · hidden"
+      : kind === "hillshade" && terrain?.hillshade_error
+        ? terrain.hillshade_error
       : kind === "contours" && terrain?.contour_error
-        ? "Unavailable: contour complexity limit; choose a smaller area."
+        ? terrain.contour_error
         : "Not downloaded / prepared";
     if(offlineMap?.plan) $("availability-"+kind).textContent = available
       ? `Available in visible DEM chunks · ${control.checked?"visible":"hidden"}; inspect coverage gaps`
@@ -2241,7 +2243,7 @@ function radiusDescription(manifest) {
     complete = (k) => chunks.filter((c) => c[k].status === "complete").length;
   return (
     `Requested centre ${manifest.plan.request.lat}, ${manifest.plan.request.lon}; radius ${manifest.plan.request.radius_m} m.\n` +
-    `Vector acquired ${complete("vector")}/${chunks.length} chunk envelopes (empty features are valid). DEM acquired ${complete("terrain")}/${chunks.length}.\n` +
+    `Vector acquired ${complete("vector")}/${chunks.length} chunk envelopes (empty features are valid). DEM grids saved ${complete("terrain")}/${chunks.length}.\n` +
     `DEM cells with four valid corners: ${chunks.reduce((n, c) => n + (c.terrain.valid_dem_cells || 0), 0)}; cells with void corners: ${chunks.reduce((n, c) => n + (c.terrain.void_dem_cells || 0), 0)}.\n` +
     `Stored asset bytes: ${chunks.reduce((n, c) => n + (c.vector.stored_bytes || 0) + (c.terrain.stored_bytes || 0), 0)}. No geographic percentage inferred from cells. Contours / hillshade require valid DEM neighborhoods and successful browser processing.\n` +
     chunks
@@ -2578,8 +2580,11 @@ function scheduleRadiusView(w, h) {
       const interval = [1, 2, 5, 10]
         .map((v) => v * power)
         .find((v) => v >= wanted);
-      for (let i = 0; i < grids.length; i++)
+      for (let i = 0; i < grids.length; i++) {
         grids[i] = Terrain.prepare(grids[i], interval);
+        await new Promise(requestAnimationFrame);
+        if(version!==radiusViewVersion||activeMapID!==id)return;
+      }
       $("map-detail-status").textContent =
         `Local detail: ${chunks.length} visible chunks, ${grids.length} DEM grids; requested circle in blue; dashed envelopes show acquired/missing coverage.`;
       $("map-warning").textContent = grids
@@ -2607,11 +2612,12 @@ function scheduleRadiusView(w, h) {
           ...grids[0],
           grids,
           contour_error: undefined,
+          hillshade_error: undefined,
           components: Object.fromEntries(
             terrainLayers.map((k) => [
               k,
               grids.some(
-                (g) => g.components[k] && (k !== "contours" || g.contour),
+                (g) => g.components[k] && (k !== "contours" || g.contour) && (k!=="hillshade" || g.shades),
               ),
             ]),
           ),

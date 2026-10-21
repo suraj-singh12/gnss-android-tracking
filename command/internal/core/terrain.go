@@ -32,7 +32,10 @@ type terrainGrid struct {
 	Provenance *demProvenance  `json:"provenance,omitempty"`
 }
 
-func (g terrainGrid) validate() error {
+func (g terrainGrid) validate() error { return g.validateCoverage(false) }
+
+// Void-only source crops may participate in a mosaic; a saved grid still needs real samples.
+func (g terrainGrid) validateCoverage(allowVoid bool) error {
 	b := g.Bounds
 	if math.IsNaN(g.ArcSeconds) || math.IsInf(g.ArcSeconds, 0) {
 		return errors.New("invalid terrain spacing")
@@ -63,7 +66,7 @@ func (g terrainGrid) validate() error {
 			valid = true
 		}
 	}
-	if !selected || !valid {
+	if !selected || (!valid && !allowVoid) {
 		return errors.New("choose a component and non-void DEM coverage")
 	}
 	return nil
@@ -119,7 +122,7 @@ func decodeTerrain(b []byte) (terrainGrid, error) {
 	return g, g.validate()
 }
 
-func importHGT(name string, b []byte, bounds [4]float64, components map[string]bool) (terrainGrid, error) {
+func importHGT(name string, b []byte, bounds [4]float64, components map[string]bool, allowVoid ...bool) (terrainGrid, error) {
 	var g terrainGrid
 	m := hgtName.FindStringSubmatch(name)
 	if m == nil {
@@ -171,7 +174,7 @@ func importHGT(name string, b []byte, bounds [4]float64, components map[string]b
 			}
 		}
 	}
-	return g, g.validate()
+	return g, g.validateCoverage(len(allowVoid) > 0 && allowVoid[0])
 }
 
 func mapAreaBounds(b []byte) ([4]float64, error) {

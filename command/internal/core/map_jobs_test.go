@@ -1,6 +1,8 @@
 package core
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/binary"
 	"encoding/json"
@@ -415,5 +417,77 @@ func TestRadiusVectorEnvelopeRoundsOutwards(t *testing.T) {
 	}
 	if json.Unmarshal(data, &root) != nil || root.ProviderBounds != [4]float64{sent[1], sent[0], sent[3], sent[2]} {
 		t.Fatal("actual source envelope not retained", string(data))
+	}
+}
+
+// Independent missing-data reference: one native tile is wholly void; its
+// neighbour is the existing coordinate-indexed fixture. No surface may bridge it.
+func TestRadiusMosaicRetainsValidNeighbourOfVoidCrop(t *testing.T) {
+	raw := bytes.Repeat([]byte{0x80, 0}, 3601*3601)
+	var compressed bytes.Buffer
+	z := gzip.NewWriter(&compressed)
+	if _, err := z.Write(raw); err != nil {
+		t.Fatal(err)
+	}
+	z.Close()
+	voidTile := compressed.Bytes()
+	validTile := compressedDEM(t, 0, 1)
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "E001") {
+			w.Write(validTile)
+		} else {
+			w.Write(voidTile)
+		}
+	}))
+	defer provider.Close()
+	p := newMapProvider()
+	p.dem = provider.URL
+	g, err := p.acquireDEM(context.Background(), [4]float64{.999, .033, 1.001, .034}, map[string]bool{"elevation": true, "contours": true, "hillshade": true})
+	if err != nil {
+		t.Fatal("void crop blocked valid neighbouring data", err)
+	}
+	missing, valid := 0, 0
+	for y := 0; y < g.Rows; y++ {
+		for x := 0; x < g.Columns; x++ {
+			lon := g.Bounds[0] + float64(x)/3600
+			v := g.Samples[y*g.Columns+x]
+			if lon < 1-1e-10 {
+				if v != nil {
+					t.Fatal("void surface fabricated", lon, *v)
+				}
+				missing++
+			} else {
+				if v == nil {
+					t.Fatal("valid neighbour lost", lon)
+				}
+				valid++
+			}
+		}
+	}
+	if missing == 0 || valid == 0 || len(g.Provenance.Tiles) != 2 {
+		t.Fatal("partial source footprint not preserved", missing, valid)
+	}
+	s, err := Open(filepath.Join(t.TempDir(), "command.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	m, err := s.createMapJob(mapCircle{.033, .033, 373}, map[string]bool{"elevation": true}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j, _ := s.readMapJob(m.ID)
+	err = s.acquireMapChunk(context.Background(), p, m.ID, j.Plan.Chunks[0].Key, "terrain", nil)
+	if !errors.Is(err, errDEMNoData) {
+		t.Fatal("all-void acquired source not distinguished", err)
+	}
+	statuses, err := s.mapChunkStatuses(m.ID, j)
+	if err != nil || !strings.Contains(statuses[0].Terrain.Status, "source acquired") || statuses[0].Terrain.Metadata == nil || statuses[0].Terrain.VoidCells == 0 {
+		t.Fatal("known source void evidence lost", err, statuses[0].Terrain)
+	}
+	var published int
+	s.db.QueryRow(`SELECT count(*) FROM offline_map_chunks WHERE map_id=? AND terrain IS NOT NULL`, m.ID).Scan(&published)
+	if published != 0 {
+		t.Fatal("all-void DEM published as available")
 	}
 }

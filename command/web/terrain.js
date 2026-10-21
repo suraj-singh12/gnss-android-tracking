@@ -3,8 +3,15 @@
 const Terrain = (() => {
   function elevation(g, lon, lat) {
     // The display viewport may use unwrapped Mercator longitudes at the dateline.
-    if(lon>180||lon< -180)lon=((lon+180)%360+360)%360-180;
-    if (g.grids) { for (const grid of g.grids) { const value = elevation(grid,lon,lat); if(value!==null)return value; } return null; }
+    if (lon > 180 || lon < -180)
+      lon = ((((lon + 180) % 360) + 360) % 360) - 180;
+    if (g.grids) {
+      for (const grid of g.grids) {
+        const value = elevation(grid, lon, lat);
+        if (value !== null) return value;
+      }
+      return null;
+    }
     const [w, s, e, n] = g.bounds;
     if (lon < w || lon > e || lat < s || lat > n) return null;
     const x = ((lon - w) / (e - w)) * (g.columns - 1),
@@ -70,7 +77,9 @@ const Terrain = (() => {
     }
     const wanted = Math.max(g.arc_seconds > 1 ? 10 : 5, (high - low) / 12),
       power = 10 ** Math.floor(Math.log10(wanted)),
-      interval = chosenInterval || [1, 2, 5, 10].map((v) => v * power).find((v) => v >= wanted);
+      interval =
+        chosenInterval ||
+        [1, 2, 5, 10].map((v) => v * power).find((v) => v >= wanted);
     const segments = [],
       [w, s, e, n] = g.bounds,
       coord = (x, y) => [
@@ -127,7 +136,21 @@ const Terrain = (() => {
   function prepare(g, interval) {
     let contour = null,
       contour_error = null;
-    if (g.components.contours) {
+    let validCells = 0;
+    for (let y = 0; y < g.rows - 1; y++)
+      for (let x = 0; x < g.columns - 1; x++) {
+        const i = y * g.columns + x;
+        if (
+          [i, i + 1, i + g.columns, i + g.columns + 1].every(
+            (k) => g.samples[k] !== null,
+          )
+        )
+          validCells++;
+      }
+    if (g.components.contours && !validCells)
+      contour_error =
+        "Source has no valid four-corner DEM cells; contours unavailable.";
+    if (g.components.contours && validCells) {
       try {
         contour = contours(g, interval);
       } catch (error) {
@@ -135,9 +158,15 @@ const Terrain = (() => {
         contour_error = error.message;
       }
     }
+    const shades = g.components.hillshade ? hillshade(g) : null;
+    const hasShade = shades?.some((v, i) => i % 4 === 3 && v > 0);
     return {
       ...g,
-      shades: g.components.hillshade ? hillshade(g) : null,
+      shades: hasShade ? shades : null,
+      hillshade_error:
+        g.components.hillshade && !hasShade
+          ? "Source lacks valid 3×3 DEM neighborhoods; hillshade unavailable."
+          : null,
       contour,
       contour_error,
     };
