@@ -3,7 +3,13 @@
 const GeoMap = (() => {
   const radius = 6378137,
     limit = 85.05112878;
+  let wrapCenter = 0;
+  function setWrap(lon) { const previous=wrapCenter; wrapCenter = lon; return previous; }
   function project(lon, lat) {
+    let delta=lon-wrapCenter;
+    if(delta>180)delta-=360*Math.ceil((delta-180)/360);
+    if(delta< -180)delta+=360*Math.ceil((-180-delta)/360);
+    lon=wrapCenter+delta;
     return [
       (radius * lon * Math.PI) / 180,
       radius *
@@ -107,13 +113,17 @@ const GeoMap = (() => {
       geometry(data.geometry);
       for (const shape of shapes) shape.properties = data.properties || {};
     } else geometry(data);
-    if (!count) throw Error("Map has no geographic coordinates.");
-    if (bounds[2] - bounds[0] > 180)
+    if (data.plan || (data.acquisition === "complete" && data.requested_bounds)) {
+      const extent = data.plan?.bounds || data.requested_bounds;
+      bounds.splice(0,4,...extent);
+    } else if (!count) throw Error("Map has no geographic coordinates.");
+    if (!data.plan && data.acquisition !== "complete" && bounds[2] - bounds[0] > 180)
       throw Error(
         "Antimeridian-spanning maps require splitting before import.",
       );
     return {
       source,
+      plan: data.plan,
       shapes,
       bounds,
       count,
@@ -138,6 +148,6 @@ const GeoMap = (() => {
       ? fix.bearing_deg
       : null;
   }
-  return { project, unproject, parse, liveHeading };
+  return { project, unproject, parse, liveHeading, setWrap };
 })();
 if (typeof module !== "undefined") module.exports = GeoMap;

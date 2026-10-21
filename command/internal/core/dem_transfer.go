@@ -36,6 +36,7 @@ type DEMAttempt struct {
 	Error           string   `json:"error,omitempty"`
 }
 type DEMReport struct {
+	CachedTiles  []string        `json:"verified_cached_source_tiles,omitempty"`
 	Revision     Revision        `json:"source_revision"`
 	Provider     string          `json:"provider"`
 	Dataset      string          `json:"dataset"`

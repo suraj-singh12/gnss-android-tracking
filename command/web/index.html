@@ -36,7 +36,7 @@
         <button id="open-quality">Quality settings</button
         ><button id="open-map">Map & layers</button
         ><a href="/local/field-report">Export diagnostics</a>
-        <button id="open-history" aria-label="Open Event History">
+        <button id="open-history" aria-label="Events history">
           Events
         </button>
         <button id="appearance" aria-label="Switch to Night appearance">
@@ -208,7 +208,7 @@
           <div>
             <button
               id="toggle-parties"
-              aria-label="Toggle party sidebar"
+              aria-label="Toggle Parties sidebar"
               aria-expanded="true"
             >
               Parties
@@ -235,6 +235,7 @@
           </div>
         </div>
         <div id="projection-status" role="status"></div>
+        <div id="map-detail-status" role="status"></div>
 
         <dialog id="history-inspection" aria-labelledby="history-inspection-title">
           <form method="dialog"><button aria-label="Close history inspection">Close</button></form>
@@ -399,8 +400,8 @@
               id="map-lat"
               required
               type="number"
-              min="-85"
-              max="85"
+              min="-90"
+              max="90"
               step="any"
               value="28.6139" /></label
           ><label
@@ -414,6 +415,13 @@
               value="77.2090"
           /></label>
         </div>
+        <button id="pick-map-center">Pick centre on current map</button>
+        <label>Coverage shape<select id="map-shape"><option value="circle">Geographic circle</option><option value="rectangle">Legacy rectangle</option></select></label>
+        <div id="radius-fields" class="coordinate-fields">
+          <label>Radius<input id="map-radius" type="number" step="any" required value="373" /></label>
+          <label>Unit<select id="radius-unit"><option value="1">metres</option><option value="1000">kilometres</option></select></label>
+        </div>
+        <div id="legacy-area" hidden>
         <label
           >Area<select id="map-area">
             <option value="500">500 × 500 m</option>
@@ -440,6 +448,7 @@
               value="500"
           /></label>
         </div>
+        </div>
         <fieldset>
           <legend>Optional terrain · automatic offline acquisition</legend>
           <details class="map-provider-notice">
@@ -460,8 +469,9 @@
             data</label
           >
         </fieldset>
+        <label><input type="checkbox" id="confirm-map-cost" /> I reviewed the chunk, source and resource estimate for this request.</label>
         <div class="map-actions">
-          <button id="preview-map">Preview area & features</button
+          <button id="preview-map">Preview requested area</button
           ><button id="download-map" class="primary" disabled>
             Download for Offline Use
           </button>
@@ -538,6 +548,9 @@
               ><input type="checkbox" id="prepare-elevation" /> Elevation</label
             >
           </div>
+          <button id="resume-map" hidden>Resume missing map / terrain chunks</button>
+          <a id="export-manifest" hidden>Save source & coverage manifest</a>
+          <pre id="map-coverage-status" style="white-space:pre-wrap"></pre>
           <button id="download-terrain">
             Download / retry selected terrain
           </button>

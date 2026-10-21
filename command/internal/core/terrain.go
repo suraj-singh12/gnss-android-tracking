@@ -34,6 +34,9 @@ type terrainGrid struct {
 
 func (g terrainGrid) validate() error {
 	b := g.Bounds
+	if math.IsNaN(g.ArcSeconds) || math.IsInf(g.ArcSeconds, 0) {
+		return errors.New("invalid terrain spacing")
+	}
 	if g.Columns < 2 || g.Rows < 2 || g.Columns > 257 || g.Rows > 257 || len(g.Samples) != g.Columns*g.Rows || b[0] >= b[2] || b[1] >= b[3] || math.Abs(b[0]) > 180 || math.Abs(b[2]) > 180 || math.Abs(b[1]) > 85 || math.Abs(b[3]) > 85 || g.ArcSeconds < 1 || g.ArcSeconds > 3 || len(g.Source) > 200 || g.Source == "" || g.Datum != "EGM96" {
 		return errors.New("invalid bounded WGS84/EGM96 terrain grid")
 	}
@@ -214,7 +217,7 @@ func mapAreaBounds(b []byte) ([4]float64, error) {
 		}
 		walk(root)
 	}
-	if result[0] >= result[2] || result[1] >= result[3] || result[2]-result[0] > 180 || math.Abs(result[0]) > 180 || math.Abs(result[2]) > 180 || math.Abs(result[1]) > 85 || math.Abs(result[3]) > 85 {
+	if result[0] >= result[2] || result[1] >= result[3] || result[2]-result[0] > 180 || math.Abs(result[0]) > 180 || math.Abs(result[2]) > 180 || math.Abs(result[1]) > 85.05112878 || math.Abs(result[3]) > 85.05112878 {
 		return result, errors.New("terrain needs a nonempty bounded geographic area")
 	}
 	return result, nil
@@ -285,7 +288,10 @@ func (s *Store) terrainRequest(w http.ResponseWriter, r *http.Request, p *mapPro
 			defer tx.Rollback()
 			_, err = tx.Exec(`DELETE FROM offline_terrain WHERE map_id=?`, mapID)
 			if err == nil {
-				_, err = tx.Exec(`DELETE FROM offline_maps WHERE id=?`, mapID)
+				_, err = tx.Exec(`DELETE FROM offline_map_chunks WHERE map_id=?`, mapID)
+				if err == nil {
+					_, err = tx.Exec(`DELETE FROM offline_maps WHERE id=?`, mapID)
+				}
 			}
 			if err == nil {
 				err = tx.Commit()

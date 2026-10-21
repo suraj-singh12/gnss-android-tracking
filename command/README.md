@@ -5,6 +5,82 @@ local SQLite, deterministic recording/track engine, and embedded offline dashboa
 Field operators need only the executable and a browser already on their laptop.
 No Node, Python, Docker, external WebAssembly runtime or database service is needed.
 
+## Custom-radius maps (Issue #28)
+
+In **Map & layers → Download Map**, choose a centre by exact WGS84 coordinates,
+existing place search, or **Pick centre on current map**. Enter any finite positive
+radius in metres or kilometres; the value is preserved. The old rectangle controls
+remain an explicitly selected compatibility option. Preview is local and displays
+an ellipsoidal WGS84 geodesic circle, centre, radius, conservative geographic/source
+envelope, source tile count and resource bounds. The circle is not a Mercator pixel
+circle. Longitude wraps at the antimeridian. A request reaching the poles or outside
+Web Mercator coverage receives a specific refusal, without truncation.
+
+Review and explicitly confirm multi-chunk/source costs, then Download. Preparation
+sends geographic chunk bounds to Overpass (OSM ways only) and, if selected, uses the
+existing Skadi/HGT adapter. A valid empty OSM response is successfully acquired sparse
+coverage; missing `elements`, incomplete remarks, malformed geometry, timeouts and
+HTTP errors are failures. No alternative provider is silently contacted. Public
+providers have no SLA. HTTP 429/503 Retry-After extends the local cooldown; explicit
+retry is required. Skadi retains the existing bounded three-attempt transient retry,
+CRC/size checks and network/processing deadlines. Provider outages do not erase assets.
+
+The existing SQLite `offline_maps` row owns the request. Additive
+`offline_map_chunks` child rows contain validated GeoJSON and unchanged GTERR001
+native crops; legacy `offline_terrain` maps/imports remain supported. Each 240-arc-second
+chunk plus sample halo fits the existing 257² decoder. Regions may use more than four
+source tiles; the four-tile bound applies only to an individual halo crop. Cells are
+never upsampled. Source bounds, EGM96 datum, 1-arc-second native spacing, attribution,
+hashes and actual transfer attempts remain in each saved DEM's metadata/evidence.
+The horizontal CRS is WGS84; source resolution/accuracy varies and is not survey grade.
+Retain OSM ODbL and the complete Skadi multi-source notice when redistributing.
+
+Budgets are explicit: 2,048 plan chunks, 256 MiB total chunk assets, 20 MiB/100,000
+coordinates per vector chunk, 257² samples per terrain crop, four verified full HGT
+source files (about 99 MiB) in `<database>.map-cache`, and a 128 MiB free-disk reserve
+plus 40 MiB working allowance before each acquisition. A large envelope exceeding
+plan/DEM storage bounds is refused with the actual chunk count; there is no preset
+radius substitution. Source transfer sizes are unknown until observed; the preview
+shows per-chunk source-request upper bounds (including possible cache eviction), not invented sizes or ETAs. The disposable cache validates
+SHA-256 and HGT byte count before reuse; validated map products remain in SQLite.
+Keep the SQLite DB/backups private and on a writable local filesystem. Removing the
+disposable source cache while Command is stopped cannot remove saved map products.
+
+One network/decode/save task runs at a time. Network and raster work hold no receiver
+mutex. Each SQLite asset/evidence update is a short atomic transaction with a five-second
+context. Cancel aborts the active request; completed chunks remain usable. **Saved Maps
+→ Acquire or import terrain → Resume missing map / terrain chunks** retries missing
+work, including after restart or lost responses. Identical centre/radius requests
+resolve to one deterministic saved-map identity. Selecting additional terrain products
+updates that entry; validated native DEM samples are reused without provider calls. Completed chunks are immutable on
+retry. An interrupted request is not labelled complete; a failed replacement cannot
+replace earlier validated assets. A physical full disk may prevent even error evidence
+from being saved; existing SQLite transactions retain earlier data.
+
+**Save source & coverage manifest** exposes requested geometry separately from actual
+vector/DEM chunk envelopes, errors, attempts, timestamps, bytes, source metadata and
+valid/void cell counts. Cell counts include sampling halos and are not percentages
+of the circle. No geographic percentage is invented from sparse OSM features or DEM
+samples. Unsupported DEM latitude chunks remain explicit gaps while vectors operate.
+Contours/hillshade require valid cell neighborhoods and successful browser processing;
+the Layers controls and rendering warnings report their availability independently.
+Source acquired does not prove that a product rendered successfully.
+
+Offline reopening reads only stored assets. The same geographic renderer positions
+vectors, DEM, contours, hillshade and original GNSS/SOS. Coverage outlines show the
+requested circle and acquired/missing chunk envelopes. Adjacent visible DEM chunks
+share contour levels and clip sampling halos at their authoritative core bounds.
+Void neighborhoods stay transparent. At most eight visible chunks and 100,000 vector
+coordinates load into the browser; zoom in when the visible envelope exceeds this
+budget. This bounds display work without claiming missing overview detail is acquired
+terrain. Pan/zoom loads other stored chunks locally. Each raw chunk remains accessible
+through `/local/maps/{id}/chunks/{key}?layer=vector` or `layer=terrain`; adding
+`format=gterrain` to terrain exports the existing binary format.
+
+Issue #28 acceptance evidence is recorded in `docs/ui-acceptance.md`. Linux cross-builds
+and synthetic browser surfaces are not native macOS/Windows or real-provider acceptance.
+
+
 ## Build and run
 
 Development requires Go 1.24.7 or newer. From `command`:
@@ -223,7 +299,7 @@ WGS84/EPSG:4326, EGM96 integer metre heights, north-first rows, big-endian int16
 (E/W narrows with latitude); [composite source resolution/accuracy varies](https://github.com/tilezen/joerd/blob/master/docs/data-sources.md).
 Grid spacing is not surveyed accuracy or uniform bare-earth detail. No voids are
 fabricated; an adjacent valid seam sample at the same geographic node may be used.
-Automatic coverage is conservatively limited to 56°S–60°N; no antimeridian crossing.
+Automatic coverage is conservatively limited to 56°S–60°N. Legacy rectangle requests do not cross the antimeridian; custom-radius requests split it into geographic chunks.
 Cross-tile stitching is supported automatically, not by manual multi-file upload.
 A 500 m area still downloads full source tiles: the verified Mussoorie tile is
 18,131,689 compressed bytes / 25,934,402 decoded bytes. Full tiles are not persisted.
@@ -234,13 +310,13 @@ provider, UTC acquisition timestamp, exact tile URLs and decoded SHA-256 hashes
 are retained in terrain metadata/export and shown in Layers. Retain these notices
 when redistributing. No EGM2008 conversion, mandatory credentials or paid dependency.
 
-Select a location/coordinate **centre**, default 500×500 m, choose optional terrain,
+For the legacy rectangle option, select a location/coordinate **centre**, default 500×500 m, choose optional terrain,
 Preview, then Download for Offline Use. Vectors commit first, independently of DEM
 success. A terrain failure warns and retains vectors and any previous terrain.
 Select that saved map, open **Acquire or import terrain for this saved map**, select
 components and press **Download / retry selected terrain**; no duplicate vector map
 is created. No manual HGT is needed. Unchecked terrain makes no DEM request.
-Local HGT/`.gterrain` import remains available. Loopback-only same-origin JSON
+Local HGT/`.gterrain` import remains available for legacy single-grid maps. Loopback-only same-origin JSON
 `POST /local/maps/{id}/terrain-download` takes `components`; bounds come from the
 saved map. Network I/O never holds the Store lock. Storage/schema/GTERR001 remain
 compatible; optional provenance metadata is additive. The previous format limits

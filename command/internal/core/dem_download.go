@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -16,8 +18,12 @@ import (
 const demAttribution = "Mapzen Terrain Tiles. ArcticDEM: DigitalGlobe imagery, NSF awards 1043681, 1559691, 1542736; Australia © Commonwealth of Australia (Geoscience Australia) 2017; Austria © offene Daten Österreichs – DGM Österreich; Canada: Open Government Licence – Canada; Europe: Copernicus data funded by European Union – EU-DEM; ETOPO1: U.S. NOAA; Mexico: INEGI, Continental relief, 2016; New Zealand © 2011 Crown copyright, Land Information New Zealand and New Zealand Government (All rights reserved); Norway © Kartverket; United Kingdom © Environment Agency copyright/database right 2015 (All rights reserved); United States 3DEP and global GMTED2010/SRTM courtesy of U.S. Geological Survey."
 
 type demTileEvidence struct {
-	URL    string `json:"url"`
-	SHA256 string `json:"decoded_sha256"`
+	URL          string `json:"url"`
+	SHA256       string `json:"decoded_sha256"`
+	DecodedBytes int    `json:"decoded_bytes"`
+	Columns      int    `json:"source_columns"`
+	Rows         int    `json:"source_rows"`
+	Acquired     string `json:"source_acquired_at"`
 }
 type demProvenance struct {
 	Provider    string            `json:"provider"`
@@ -100,7 +106,7 @@ func (p *mapProvider) acquireDEMReport(ctx context.Context, b [4]float64, compon
 		for lon := west; lon <= east; lon++ {
 			name := tileName(lat, lon)
 			address := p.dem + "/" + name[:3] + "/" + name + ".gz"
-			raw, err := p.downloadDEMTile(ctx, name, address, report, emit)
+			raw, err := p.cachedDEMTile(ctx, name, address, report, emit)
 			if err != nil {
 				return g, err
 			}
@@ -111,7 +117,13 @@ func (p *mapProvider) acquireDEMReport(ctx context.Context, b [4]float64, compon
 				return g, fmt.Errorf("decoded elevation data invalid: %w", err)
 			}
 			hash := sha256.Sum256(raw)
-			g.Provenance.Tiles = append(g.Provenance.Tiles, demTileEvidence{address, hex.EncodeToString(hash[:])})
+			acquired := time.Now().UTC().Format(time.RFC3339)
+			if p.demCache != "" {
+				if stat, e := os.Stat(filepath.Join(p.demCache, name)); e == nil {
+					acquired = stat.ModTime().UTC().Format(time.RFC3339)
+				}
+			}
+			g.Provenance.Tiles = append(g.Provenance.Tiles, demTileEvidence{URL: address, SHA256: hex.EncodeToString(hash[:]), DecodedBytes: len(raw), Columns: 3601, Rows: 3601, Acquired: acquired})
 			for y := 0; y < crop.Rows; y++ {
 				for x := 0; x < crop.Columns; x++ {
 					gx := int(math.Round(crop.Bounds[0]*3600)) + x - w

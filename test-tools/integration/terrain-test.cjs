@@ -108,3 +108,9 @@ assert.equal(
 console.log(
   "PASS: synthetic DEM Horn hillshade, marching-square contours, spacing, bilinear elevation/void/coverage and existing projection alignment. Not real provider acceptance.",
 );
+
+GeoMap.setWrap(180);
+assert.ok(Math.abs(GeoMap.project(-179.9,0)[0]-GeoMap.project(179.9,0)[0]-22263.89815865)<1e-5);
+GeoMap.setWrap(0);
+const datelineGrid={...grid,bounds:[-180,28,-180+2/1200,28+2/1200]};
+assert.ok(Math.abs(Terrain.elevation(datelineGrid,180+1/1200,28+1/1200)-130)<1e-7);

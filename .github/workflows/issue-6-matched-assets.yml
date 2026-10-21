@@ -57,6 +57,14 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/gnss-dem-browser" playwright
           "$RUNNER_TEMP/gnss-dem-browser/node_modules/.bin/playwright" install --with-deps chromium
           node test-tools/integration/dem-offline-acceptance.cjs
+      - name: Real non-preset radius cases and independent raw HGT samples
+        if: always()
+        env:
+          GNSS_COMMAND_BINARY: ${{ runner.temp }}/gnss-dem-command
+          GNSS_RADIUS_PROVIDER_REPORT: ${{ runner.temp }}/dem-evidence/radius-real-provider.json
+        run: |
+          (cd command && go build -o "$RUNNER_TEMP/gnss-dem-command" ./cmd/party-tracker)
+          node test-tools/integration/map-radius-online.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -187,6 +195,7 @@ jobs:
           node test-tools/integration/history-dashboard.cjs
           GNSS_STABILITY_REPORT="$RUNNER_TEMP/gnss-assets/windows-stability.json" node test-tools/integration/windows-stability.cjs
           node test-tools/integration/map-download-ui.cjs
+          node test-tools/integration/map-radius-ui.cjs
           export GNSS_SYNC_REPORT="$RUNNER_TEMP/gnss-test-reports/sync-process-browser.json"
           (cd command && go test -c -o "$RUNNER_TEMP/gnss-sync-reference" ./internal/core)
           export GNSS_SYNC_REFERENCE_BINARY="$RUNNER_TEMP/gnss-sync-reference"

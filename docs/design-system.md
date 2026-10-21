@@ -185,3 +185,13 @@ same canonical Room journal for chronological stages, filter/expand/copy and ZIP
 Security-denied attempts carry local event IDs; absent offline commands have no
 invented phone record. Existing Tracking and SOS geometry/behavior stays intact;
 #39 may later polish Settings/Diagnostics independently.
+
+### Radius acquisition in the existing map workflow
+
+Geographic circle is the default requested coverage shape. Radius input is always
+editable, with metres/km and no compulsory preset; the legacy rectangle is explicit.
+Preview labels the ellipsoidal requested circle and conservative source envelope.
+Saved Maps reports chunk-specific source availability and offers resumable partial
+acquisition. Coverage outlines and processing errors do not alter original GNSS
+coordinates. At overview scales exceeding the visible detail budget, explain the
+required zoom instead of presenting a partial detail set as complete coverage.

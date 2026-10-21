@@ -28,7 +28,7 @@ function applyAppearance() {
     "aria-label",
     `Switch to ${night ? "Day" : "Night"} appearance`,
   );
-  if (terrain) terrain.image = undefined;
+  if (terrain) { terrain.image = undefined; for (const g of terrain.grids || []) g.image = undefined; }
   draw();
 }
 $("appearance").onclick = () => {
@@ -239,7 +239,7 @@ function renderSOS() {
   $("open-sos").classList.toggle("active", pending > 0);
   $("open-sos").setAttribute(
     "aria-label",
-    `${pending} unacknowledged SOS emergencies`,
+    `SOS ${pending} unacknowledged emergencies`,
   );
   let arrived = 0;
   for (const a of alerts) {
@@ -944,7 +944,7 @@ async function refreshMaps(selected) {
       el(
         "small",
         `${m.bounds ? m.bounds.map((v) => v.toFixed(4)).join(", ") : "Imported geographic coverage"} · ${
-          Object.entries(m.components || {})
+          m.chunks ? `Vector ${m.chunks.vector}/${m.chunks.requested} · DEM ${m.chunks.terrain}/${m.chunks.requested} chunks; render availability in Layers` : Object.entries(m.components || {})
             .filter(([, v]) => v)
             .map(([k]) => k)
             .join(", ") || "Vectors only"
@@ -960,7 +960,14 @@ async function refreshMaps(selected) {
   if (selected) $("saved-maps").value = selected;
 }
 function useMap(text, source, id) {
-  const parsed = GeoMap.parse(text, source);
+  const job = JSON.parse(text).plan;
+  const previousWrap=GeoMap.setWrap(job?.request.lon || 0);
+  let parsed;
+  try {parsed=GeoMap.parse(text,source);} catch(e){GeoMap.setWrap(previousWrap);throw e;}
+  radiusManifest=undefined;radiusViewKey=undefined;radiusViewVersion++;
+  globalThis.radiusGrids=undefined;
+  $("resume-map").hidden=true;$("export-manifest").hidden=true;
+  $("map-coverage-status").textContent="";$("map-detail-status").textContent="";
   offlineMap = parsed;
   activeMapID = id;
   $("current-map-name").textContent = source;
@@ -987,6 +994,7 @@ async function loadSavedMap(id) {
   const source =
     $("saved-maps").selectedOptions[0]?.textContent || "Saved offline map";
   useMap(await response.text(), source, id);
+  if (offlineMap?.plan) { await loadRadiusManifest(id); return; }
   await loadTerrain(id);
   await readDownloadReport(id);
 }
@@ -1008,19 +1016,24 @@ function updateLayers() {
       : kind === "contours" && terrain?.contour_error
         ? "Unavailable: contour complexity limit; choose a smaller area."
         : "Not downloaded / prepared";
+    if(offlineMap?.plan) $("availability-"+kind).textContent = available
+      ? `Available in visible DEM chunks · ${control.checked?"visible":"hidden"}; inspect coverage gaps`
+      : "Unavailable in current view; inspect saved source / render status";
   }
   $("current-map-layers").textContent = terrain
     ? "Available: " +
       terrainLayers.filter((k) => terrain.components[k]).join(", ") +
       " · visibility via Layers"
-    : "Vectors only · no terrain downloaded";
+    : offlineMap?.plan ? "Radius map · inspect source manifest and current viewport layer availability" : "Vectors only · no terrain downloaded";
   for (const id of ["delete-map", "prepare-terrain", "download-terrain"])
     $(id).disabled = !activeMapID || !!downloadAbort;
+  if(offlineMap?.plan) {$("prepare-terrain").disabled=true;$("prepare-terrain").title="Local single-grid import is for legacy maps; use Resume for radius maps";}
+  else $("prepare-terrain").removeAttribute("title");
   $("export-map").setAttribute("aria-disabled", String(!activeMapID));
   $("terrain-metadata").textContent = terrain
     ? `${terrain.source} · ${terrain.arc_seconds} arc sec (~${Math.round((terrain.arc_seconds / 3600) * 111320)} m north–south) · ${terrain.vertical_datum} · interpolated, not survey-grade${terrain.contour ? " · contours " + terrain.contour.interval + " m" : ""}${terrain.provenance ? " · " + terrain.provenance.attribution : ""}`
     : "No terrain for this map. Download / retry terrain or import a DEM in Map & layers.";
-  $("export-terrain").hidden = !terrain;
+  $("export-terrain").hidden = !terrain || !!offlineMap?.plan;
   if (terrain)
     $("export-terrain").href =
       `/local/maps/${encodeURIComponent(activeMapID)}/terrain-file`;
@@ -1253,6 +1266,13 @@ async function downloadTerrain(id, components) {
   await refreshMaps(id);
 }
 $("download-terrain").onclick = async () => {
+ if(offlineMap?.plan){
+  try {
+   await mapPost("map-jobs",{...offlineMap.plan.request,components:Object.fromEntries(terrainLayers.map(k=>[k,$("prepare-"+k).checked])),confirmed:true});
+   await resumeRadius();
+  }catch(e){$("terrain-status").textContent=e.message;}
+  return;
+ }
   if (!activeMapID) {
     $("terrain-status").textContent = "Save/select a vector map first.";
     return;
@@ -1354,6 +1374,7 @@ $("map-area").onchange = () => {
 };
 $("custom-map-dimensions").hidden = $("map-area").value !== "custom";
 $("preview-map").onclick = async () => {
+  if ($("map-shape").value === "circle") { await previewRadius(); return; }
   invalidatePreparation();
   for (const id of ["map-lat", "map-lon", "map-width", "map-height"])
     if (!$(id).reportValidity()) return;
@@ -1429,6 +1450,7 @@ $("preview-map").onclick = async () => {
 };
 $("download-map").onclick = async () => {
   if (!preparedMap) return;
+  if(preparedMap.plan) { await startRadiusDownload(); return; }
   const candidate = preparedMap;
   $("download-map").disabled = true;
   try {
@@ -1541,6 +1563,7 @@ $("zoom-in").onclick = () => zoom(1.5);
 $("zoom-out").onclick = () => zoom(1 / 1.5);
 let drag;
 $("tracks").onpointerdown = (e) => {
+  if (pickingMapCenter && viewport) { pickRadiusCenter(e); return; }
   if (e.target.closest?.('[role="button"]') || e.button !== 0 || !viewport)
     return;
   drag = { x: e.clientX, y: e.clientY, cx: viewport.cx, cy: viewport.cy };
@@ -1696,6 +1719,8 @@ function drawMap() {
   const xy = (p) => xyCoord(geo(p));
   root.setAttribute("viewBox", `0 0 ${w} ${h}`);
   const mapVisible = offlineMap && $("map-mode").value === "offline";
+  globalThis.legacyTerrainForDraw = terrain;
+  if (offlineMap?.plan) scheduleRadiusView(w,h);
   const terrainVisible = mapVisible && terrain;
   const layerOn = (kind) => terrainVisible && $("layer-" + kind).checked;
   const night = document.documentElement.dataset.appearance === "night";
@@ -1736,6 +1761,7 @@ function drawMap() {
       $("hover").textContent += terrainReadout(p.fix.longitude, p.fix.latitude);
   }
   if (!reuseHistory) {
+  for (const terrain of (globalThis.radiusGrids || [globalThis.legacyTerrainForDraw]).filter(Boolean)) {
   if (layerOn("hillshade") && terrain.shades) {
     if (!terrain.image) {
       const c = document.createElement("canvas");
@@ -1779,6 +1805,7 @@ function drawMap() {
     root.append(
       svg("image", {
         "data-layer": "hillshade",
+        "clip-path": radiusClip(root, terrain, xyCoord),
         href: terrain.image,
         // Raster pixels cover cells; their centres must coincide with DEM nodes.
         // Horn's unsupported outer border is transparent, not invented coverage.
@@ -1791,6 +1818,7 @@ function drawMap() {
         "pointer-events": "none",
       }),
     );
+  }
   }
   $("map-mode-label").textContent = mapVisible
     ? "Offline geographic map"
@@ -1869,9 +1897,11 @@ function drawMap() {
       ? "Some GNSS observations are outside map coverage. Tracks remain available."
       : projectionStatus;
   }
+  for (const terrain of (globalThis.radiusGrids || [globalThis.legacyTerrainForDraw]).filter(Boolean)) {
   if (layerOn("contours") && terrain.contour) {
     const lines = svg("g", {
       "data-layer": "contours",
+      "clip-path": radiusClip(root, terrain, xyCoord),
       "pointer-events": "none",
     });
     for (const [i, segment] of terrain.contour.segments.entries()) {
@@ -1902,6 +1932,8 @@ function drawMap() {
     }
     root.append(lines);
   }
+  }
+  if (mapVisible && offlineMap.plan) drawRadiusCoverage(root,xyCoord);
   const overlay = svg("g", { "data-layer": "tracks" });
   root.append(overlay);
   const segments = new Map();
@@ -2169,3 +2201,423 @@ $("export-runtime").onclick = async () => {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   } catch(e) { showError(e); }
 };
+
+// Radius acquisitions remain in the existing library and geographic renderer.
+let radiusManifest,
+  radiusViewKey,
+  radiusViewTimer,
+  radiusViewVersion = 0;
+let pickingMapCenter = false;
+$("map-shape").onchange = () => {
+  $("radius-fields").hidden = $("map-shape").value !== "circle";
+  $("legacy-area").hidden = $("map-shape").value === "circle";
+  invalidatePreparation();
+};
+for (const id of ["map-radius", "radius-unit"])
+  $(id).oninput = invalidatePreparation;
+$("pick-map-center").onclick = () => {
+  pickingMapCenter = true;
+  $("map-settings").close();
+  $("hover").textContent =
+    "Click the geographic map to choose the requested centre.";
+};
+function pickRadiusCenter(e) {
+  const root = $("tracks"),
+    rect = root.getBoundingClientRect();
+  const [lon, lat] = GeoMap.unproject(
+    viewport.cx +
+      (e.clientX - rect.left - root.clientWidth / 2) / viewport.scale,
+    viewport.cy -
+      (e.clientY - rect.top - root.clientHeight / 2) / viewport.scale,
+  );
+  $("map-lat").value = lat;
+  $("map-lon").value = ((lon + 540) % 360) - 180;
+  pickingMapCenter = false;
+  invalidatePreparation();
+  $("open-map").click();
+}
+function radiusDescription(manifest) {
+  const chunks = manifest.chunks || [],
+    complete = (k) => chunks.filter((c) => c[k].status === "complete").length;
+  return (
+    `Requested centre ${manifest.plan.request.lat}, ${manifest.plan.request.lon}; radius ${manifest.plan.request.radius_m} m.\n` +
+    `Vector acquired ${complete("vector")}/${chunks.length} chunk envelopes (empty features are valid). DEM acquired ${complete("terrain")}/${chunks.length}.\n` +
+    `DEM cells with four valid corners: ${chunks.reduce((n, c) => n + (c.terrain.valid_dem_cells || 0), 0)}; cells with void corners: ${chunks.reduce((n, c) => n + (c.terrain.void_dem_cells || 0), 0)}.\n` +
+    `Stored asset bytes: ${chunks.reduce((n, c) => n + (c.vector.stored_bytes || 0) + (c.terrain.stored_bytes || 0), 0)}. No geographic percentage inferred from cells. Contours / hillshade require valid DEM neighborhoods and successful browser processing.\n` +
+    chunks
+      .filter((c) => c.vector.error || c.terrain.error)
+      .map((c) => `${c.key}: ${c.vector.error || ""} ${c.terrain.error || ""}`)
+      .join("\n")
+  );
+}
+async function loadRadiusManifest(id) {
+  const r = await fetch(`/local/maps/${encodeURIComponent(id)}/manifest`);
+  if (!r.ok) throw Error("Saved coverage manifest unavailable");
+  const manifest = await r.json();
+  if (activeMapID !== id) return;
+  radiusManifest = manifest;
+  radiusViewKey = undefined;
+  radiusViewVersion++;
+  globalThis.radiusGrids = [];
+  terrain = undefined;
+  $("resume-map").hidden = false;
+  $("export-manifest").hidden = false;
+  $("export-manifest").href = `/local/maps/${encodeURIComponent(id)}/manifest`;
+  $("export-manifest").download = "map-source-coverage.json";
+  $("map-coverage-status").textContent = radiusDescription(manifest);
+  $("map-metadata").textContent = radiusDescription(manifest);
+  updateLayers();
+  draw();
+}
+async function previewRadius() {
+  invalidatePreparation();
+  for (const id of ["map-lat", "map-lon", "map-radius"])
+    if (!$(id).reportValidity()) return;
+  const request = {
+    lat: Number($("map-lat").value),
+    lon: Number($("map-lon").value),
+    radius_m: Number($("map-radius").value) * Number($("radius-unit").value),
+  };
+  const revision = preparationRevision;
+  try {
+    const plan = await mapPost("map-plan", request);
+    if (revision !== preparationRevision) return;
+    preparedMap = {
+      plan,
+      components: Object.fromEntries(
+        terrainLayers.map((k) => [k, $("download-" + k).checked]),
+      ),
+    };
+    $("confirm-map-cost").checked = false;
+    $("map-preparation-status").textContent =
+      `WGS84 centre ${request.lat}, ${request.lon}; radius ${request.radius_m} m; approximate ellipsoidal area ${(plan.approximate_ellipsoidal_area_m2 / 1000000).toFixed(6)} km² (sampled boundary). Ellipsoidal geodesic circle. Envelope W/S/E/N ${plan.bounds.map((v) => v.toFixed(7)).join(", ")}. ${plan.chunks.length} chunks; ${plan.source_tiles.length} possible native source tiles including sampling halo; ${plan.maximum_source_requests_before_retries} maximum source requests before cache/retries. DEM transfer ≤ ${(plan.maximum_compressed_dem_bytes / 1048576).toFixed(1)} MiB before bounded retries (compressed sizes unknown). Vector sizes unknown, ≤20 MiB/chunk. DEM ≤${(plan.maximum_terrain_bytes / 1048576).toFixed(1)} MiB; chunk library budget 256 MiB; source cache 99 MiB; disk reserve 128 MiB; one network/decode at a time. Provider cooldown 10 s/vector request. ${plan.dem_unsupported || "DEM adapter: 56°S–60°N, WGS84/EGM96, native 1 arc sec; source accuracy varies."} ${plan.unsupported || "Confirm estimate, then acquire available layers. Coverage gaps remain explicit."}`;
+    $("map-preview").replaceChildren();
+    if (plan.circle?.length) {
+      const pts = plan.circle.map((p) => {
+        const x = ((p[0] * Math.PI) / 180) * 6378137,
+          y = GeoMap.project(0, p[1])[1];
+        return [x, y];
+      });
+      const xs = pts.map((p) => p[0]),
+        ys = pts.map((p) => p[1]),
+        cx = (Math.min(...xs) + Math.max(...xs)) / 2,
+        cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+      const scale = Math.min(
+        380 / Math.max(1, Math.max(...xs) - Math.min(...xs)),
+        160 / Math.max(1, Math.max(...ys) - Math.min(...ys)),
+      );
+      $("map-preview").append(
+        svg("polygon", {
+          points: pts
+            .map(
+              (p) => `${200 + (p[0] - cx) * scale},${90 - (p[1] - cy) * scale}`,
+            )
+            .join(" "),
+          fill: "#4084aa22",
+          stroke: "#2677a8",
+          "stroke-width": 2,
+          "data-requested-circle": "true",
+        }),
+      );
+    }
+    $("download-map").disabled = !!plan.unsupported;
+  } catch (e) {
+    $("map-preparation-status").textContent = e.message;
+  }
+}
+async function startRadiusDownload() {
+  const candidate = preparedMap;
+  if (candidate.plan.requires_confirmation && !$("confirm-map-cost").checked) {
+    $("map-preparation-status").textContent +=
+      " Explicit cost confirmation is required.";
+    return;
+  }
+  $("download-map").disabled = true;
+  try {
+    const saved = await mapPost("map-jobs", {
+      ...candidate.plan.request,
+      components: candidate.components,
+      confirmed: $("confirm-map-cost").checked,
+    });
+    preparedMap = undefined;
+    await refreshMaps(saved.id);
+    await loadSavedMap(saved.id);
+    await resumeRadius();
+  } catch (e) {
+    $("map-preparation-status").textContent = e.message;
+    $("download-map").disabled = false;
+  }
+}
+$("resume-map").onclick = () => resumeRadius().catch(showError);
+async function resumeRadius() {
+  if (downloadAbort) throw Error("Map acquisition already active");
+  const id = activeMapID,
+    controller = new AbortController();
+  downloadAbort = controller;
+  $("cancel-download").hidden = false;
+  $("resume-map").disabled = true;
+  let failure;
+  try {
+    await loadRadiusManifest(id);
+    const manifest = radiusManifest;
+    const layers = [
+      "vector",
+      ...(Object.values(manifest.components).some(Boolean) ? ["terrain"] : []),
+    ];
+    for (const layer of layers) {
+      try {
+        for (const [chunkIndex, c] of manifest.chunks.entries()) {
+          const needsProducts =
+            layer === "terrain" &&
+            Object.entries(manifest.components).some(
+              ([k, v]) => v && !c.terrain.dem_metadata?.components?.[k],
+            );
+          if (c[layer].status === "complete" && !needsProducts) continue;
+          if (layer === "terrain" && (c.bounds[1] < -56 || c.bounds[3] > 60))
+            continue;
+          if (controller.signal.aborted)
+            throw Error(
+              "Cancelled; validated chunks retained. Resume missing chunks safely.",
+            );
+          $("map-preparation-status").textContent =
+            `Acquiring ${layer} chunk ${c.key}; ${manifest.chunks.filter((x) => x[layer].status === "complete").length}/${manifest.chunks.length} already committed. Cancel retains partial results.`;
+          const response = await fetch(
+            `/local/maps/${encodeURIComponent(id)}/chunks/${c.key}`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Accept: "application/x-ndjson",
+              },
+              body: JSON.stringify({ layer }),
+              signal: controller.signal,
+            },
+          );
+          if (!response.ok) throw Error(await response.text());
+          const reader = response.body.getReader(),
+            decoder = new TextDecoder();
+          let pending = "",
+            doneEvent = false;
+          for (;;) {
+            const { value, done } = await reader.read();
+            pending += decoder.decode(value, { stream: !done });
+            const lines = pending.split("\n");
+            pending = lines.pop();
+            for (const line of lines) {
+              if (!line) continue;
+              const event = JSON.parse(line);
+              $("download-progress").textContent =
+                `${layer} ${c.key}: ${event.stage}; ${event.received_bytes ?? "not measured"} observed bytes ${event.error || ""}`;
+              if (event.stage === "failed") throw Error(event.error);
+              if (event.stage === "complete") doneEvent = true;
+            }
+            if (done) break;
+          }
+          if (!doneEvent)
+            throw Error(
+              "Response lost; reload manifest and resume safely (committed chunks are reused).",
+            );
+          c[layer].status = "complete";
+          if (
+            layer === "vector" &&
+            manifest.chunks
+              .slice(chunkIndex + 1)
+              .some((c) => c.vector.status !== "complete")
+          )
+            await new Promise((resolve, reject) => {
+              const aborted = () => {
+                clearTimeout(timer);
+                reject(Error("Cancelled; partial results retained"));
+              };
+              const timer = setTimeout(() => {
+                controller.signal.removeEventListener("abort", aborted);
+                resolve();
+              }, 10050);
+              controller.signal.addEventListener("abort", aborted, {
+                once: true,
+              });
+            });
+        }
+      } catch (e) {
+        failure = e;
+        if (controller.signal.aborted) throw e;
+        // Stop this provider's queue after one failure; try the independent layer.
+      }
+    }
+  } catch (e) {
+    failure = e;
+  } finally {
+    downloadAbort = undefined;
+    $("cancel-download").hidden = true;
+    $("resume-map").disabled = false;
+    if (activeMapID === id) await loadRadiusManifest(id);
+  }
+  $("map-preparation-status").textContent = failure
+    ? `${failure.message} · Saved partial map retained. Resume missing map / terrain chunks.`
+    : "Saved locally · acquired chunks available after restart without internet; inspect source & coverage manifest for known voids and layer availability.";
+}
+function radiusClip(root, g, xy) {
+  if (!g.core_bounds) return "none";
+  const id = "clip-" + g.chunk_key;
+  if (root.querySelector(`[id="${id}"]`)) return `url(#${id})`;
+  const clip = svg("clipPath", { id }),
+    a = xy(GeoMap.project(g.core_bounds[0], g.core_bounds[3])),
+    b = xy(GeoMap.project(g.core_bounds[2], g.core_bounds[1]));
+  clip.append(
+    svg("rect", { x: a[0], y: a[1], width: b[0] - a[0], height: b[1] - a[1] }),
+  );
+  root.append(clip);
+  return `url(#${id})`;
+}
+function drawRadiusCoverage(root, xy) {
+  if (!radiusManifest) return;
+  const group = svg("g", {
+    "data-layer": "coverage",
+    "pointer-events": "none",
+  });
+  for (const c of radiusManifest.chunks) {
+    const a = xy(GeoMap.project(c.bounds[0], c.bounds[3])),
+      b = xy(GeoMap.project(c.bounds[2], c.bounds[1]));
+    group.append(
+      svg("rect", {
+        x: a[0],
+        y: a[1],
+        width: b[0] - a[0],
+        height: b[1] - a[1],
+        fill: "none",
+        stroke: c.vector.status === "complete" ? "#3c9373" : "#c78431",
+        "stroke-width": 0.7,
+        "stroke-dasharray": "3 4",
+      }),
+    );
+  }
+  group.append(
+    svg("polygon", {
+      points: offlineMap.plan.circle
+        .map((p) => xy(GeoMap.project(...p)).join(","))
+        .join(" "),
+      fill: "none",
+      stroke: "#277bb8",
+      "stroke-width": 2,
+    }),
+  );
+  root.append(group);
+}
+function scheduleRadiusView(w, h) {
+  if (!radiusManifest || !viewport) return;
+  const id = activeMapID,
+    key = JSON.stringify([id, viewport, w, h]);
+  if (key === radiusViewKey) return;
+  radiusViewKey = key;
+  clearTimeout(radiusViewTimer);
+  const version = ++radiusViewVersion;
+  const a = GeoMap.unproject(
+      viewport.cx - w / 2 / viewport.scale,
+      viewport.cy - h / 2 / viewport.scale,
+    ),
+    b = GeoMap.unproject(
+      viewport.cx + w / 2 / viewport.scale,
+      viewport.cy + h / 2 / viewport.scale,
+    );
+  const center = offlineMap.plan.request.lon,
+    unwrap = (x) => center + ((x - center + 540) % 360) - 180;
+  const chunks = radiusManifest.chunks.filter(
+    (c) =>
+      unwrap(c.bounds[2]) >= a[0] &&
+      unwrap(c.bounds[0]) <= b[0] &&
+      c.bounds[3] >= a[1] &&
+      c.bounds[1] <= b[1],
+  );
+  radiusViewTimer = setTimeout(async () => {
+    const shapes = [],
+      grids = [];
+    let count = 0;
+    const generationStarted = performance.now();
+    try {
+      if (chunks.length > 8)
+        throw Error(
+          `${chunks.length} visible chunk envelopes: zoom in to load geographic detail within the 8-chunk browser budget. Coverage outline remains visible.`,
+        );
+      for (const c of chunks) {
+        if (version !== radiusViewVersion || activeMapID !== id) return;
+        if (c.vector.status === "complete") {
+          const r = await fetch(
+            `/local/maps/${encodeURIComponent(id)}/chunks/${c.key}?layer=vector`,
+          );
+          if (!r.ok) throw Error("Saved vector chunk read failed");
+          const parsed = GeoMap.parse(await r.text(), "OSM");
+          count += parsed.count;
+          if (count > 100000)
+            throw Error(
+              "Visible vectors exceed 100,000 coordinates; zoom in for detail",
+            );
+          shapes.push(...parsed.shapes);
+        }
+        if (c.terrain.status === "complete") {
+          const r = await fetch(
+            `/local/maps/${encodeURIComponent(id)}/chunks/${c.key}?layer=terrain`,
+          );
+          if (!r.ok) throw Error("Saved DEM chunk read failed");
+          const grid = await r.json();
+          grid.core_bounds = c.bounds;
+          grid.chunk_key = c.key;
+          grids.push(grid);
+        }
+      }
+      if (version !== radiusViewVersion || activeMapID !== id) return;
+      let low = Infinity,
+        high = -Infinity;
+      for (const grid of grids)
+        for (const v of grid.samples)
+          if (v !== null) {
+            low = Math.min(low, v);
+            high = Math.max(high, v);
+          }
+      const wanted = Math.max(5, (high - low) / 24),
+        power = 10 ** Math.floor(Math.log10(wanted));
+      const interval = [1, 2, 5, 10]
+        .map((v) => v * power)
+        .find((v) => v >= wanted);
+      for (let i = 0; i < grids.length; i++)
+        grids[i] = Terrain.prepare(grids[i], interval);
+      $("map-detail-status").textContent =
+        `Local detail: ${chunks.length} visible chunks, ${grids.length} DEM grids; requested circle in blue; dashed envelopes show acquired/missing coverage.`;
+      $("map-warning").textContent = grids
+        .filter((g) => g.contour_error)
+        .map((g) => `${g.chunk_key}: contours unavailable: ${g.contour_error}`)
+        .join("; ");
+    } catch (e) {
+      if (version !== radiusViewVersion) return;
+      shapes.length = 0;
+      grids.length = 0;
+      $("map-warning").textContent = e.message;
+      $("map-detail-status").textContent = e.message;
+    }
+    if (version !== radiusViewVersion || activeMapID !== id) return;
+    terrainGeneration = {
+      id,
+      ms: performance.now() - generationStarted,
+      visible_chunks: chunks.length,
+      coordinates: count,
+    };
+    offlineMap = { ...offlineMap, shapes };
+    globalThis.radiusGrids = grids;
+    terrain = grids.length
+      ? {
+          ...grids[0],
+          grids,
+          contour_error: undefined,
+          components: Object.fromEntries(
+            terrainLayers.map((k) => [
+              k,
+              grids.some(
+                (g) => g.components[k] && (k !== "contours" || g.contour),
+              ),
+            ]),
+          ),
+        }
+      : undefined;
+    updateLayers();
+    draw();
+  }, 120);
+}

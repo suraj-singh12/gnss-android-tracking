@@ -95,6 +95,7 @@ async function port() {
   await page.locator("#map-preparation > summary").click();
   await page.locator("#map-lat").fill(String(lat));
   await page.locator("#map-lon").fill(String(lon));
+  await page.locator("#map-shape").selectOption("rectangle");
   await page.locator("#map-area").selectOption("1000");
   assert.equal(await page.locator("#map-width").inputValue(), "1000");
   assert.equal(await page.locator("#map-height").inputValue(), "1000");

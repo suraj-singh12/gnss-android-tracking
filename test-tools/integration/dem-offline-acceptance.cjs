@@ -92,6 +92,7 @@ async function wait(f) {
     size = String(process.env.GNSS_DEM_SIZE || 500);
   await page.locator("#map-lat").fill(String(lat));
   await page.locator("#map-lon").fill(String(lon));
+  await page.locator("#map-shape").selectOption("rectangle");
   await page.locator("#map-area").selectOption(size);
   for (const k of ["hillshade", "contours", "elevation"])
     await page.locator("#download-" + k).check();
