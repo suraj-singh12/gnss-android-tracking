@@ -1086,7 +1086,9 @@ function updateLayers() {
         ? "Available: " +
           terrainLayers.filter((k) => terrain.components[k]).join(", ") +
           " · visibility via Layers"
-        : "Vectors only · no terrain downloaded";
+        : offlineMap
+          ? "Vectors only · no terrain downloaded"
+          : "No offline map selected.";
   for (const id of ["delete-map", "prepare-terrain", "download-terrain"])
     $(id).disabled = !activeMapID || !!downloadAbort;
   if (offlineMap?.plan) {
@@ -1094,7 +1096,7 @@ function updateLayers() {
     $("prepare-terrain").title =
       "Local single-grid import is for legacy maps; use Resume for radius maps";
   } else $("prepare-terrain").removeAttribute("title");
-  $("export-map").hidden = false;
+  $("export-map").hidden = !activeMapID;
   $("export-map").setAttribute("aria-disabled", String(!activeMapID));
   $("terrain-metadata").textContent = terrain
     ? `${terrain.source} · ${terrain.arc_seconds} arc sec (~${Math.round((terrain.arc_seconds / 3600) * 111320)} m north–south) · ${terrain.vertical_datum} · interpolated, not survey-grade${terrain.contour ? " · contours " + terrain.contour.interval + " m" : ""}${terrain.provenance ? " · " + terrain.provenance.attribution : ""}`
@@ -1380,6 +1382,22 @@ $("delete-map").onclick = async () => {
     await mapPost(`maps/${encodeURIComponent(activeMapID)}/delete`, {});
     offlineMap = terrain = undefined;
     activeMapID = undefined;
+    radiusManifest = undefined;
+    radiusViewKey = undefined;
+    radiusViewVersion++;
+    clearTimeout(radiusViewTimer);
+    globalThis.radiusGrids = [];
+    for (const id of [
+      "resume-map",
+      "save-use-map",
+      "approve-transfer",
+      "export-manifest",
+      "download-progress",
+    ])
+      $(id).hidden = true;
+    $("current-map-name").textContent = "Blank canvas · no saved map selected";
+    $("map-detail-status").textContent = "";
+    $("map-coverage-status").textContent = "";
     localStorage.removeItem("gnss-map-id");
     $("map-mode").value = "blank";
     localStorage.setItem("gnss-map-mode", "blank");
@@ -2700,7 +2718,9 @@ async function resumeRadius() {
   }
   if (failure)
     $("download-report-text").textContent =
-      radiusDescription(radiusManifest) +
+      (radiusManifest
+        ? radiusDescription(radiusManifest)
+        : "Saved manifest unavailable; reload Saved Maps.") +
       "\nLast operation: " +
       failure.message;
   $("map-preparation-status").textContent = failure

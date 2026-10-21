@@ -331,6 +331,26 @@ async function wait(f) {
     await fetch(local + `/local/maps/${maps[0].id}/manifest`)
   ).json();
   report.elapsed_browser_ms = await page.evaluate(() => performance.now());
+  await page.locator("#saved-maps").selectOption(maps[0].id);
+  page.once("dialog", (d) => d.dismiss());
+  await page.locator("#delete-map").click();
+  assert.equal((await (await fetch(local + "/local/maps")).json()).length, 3);
+  page.once("dialog", (d) => d.accept());
+  await page.locator("#delete-map").click();
+  await wait(
+    async () =>
+      (await (await fetch(local + "/local/maps")).json()).length === 2,
+  );
+  await wait(async () =>
+    (await page.locator("#current-map-name").textContent()).includes(
+      "Blank canvas",
+    ),
+  );
+  assert.equal(await page.locator("#resume-map").isVisible(), false);
+  assert.equal(await page.locator("#save-use-map").isVisible(), false);
+  assert.deepEqual(errors, []);
+  report.confirmed_delete_and_cancel = "PASS";
+
   console.log(
     JSON.stringify({
       passed: report.passed,
