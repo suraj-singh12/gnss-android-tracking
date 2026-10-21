@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -305,16 +306,33 @@ func (s *Store) discoverRegion(ctx context.Context, p *mapProvider, b [4]float64
 	if cooling {
 		return osmSource{}, errors.New("regional publisher cooldown active; retry missing later")
 	}
-	req, e := http.NewRequestWithContext(ctx, "GET", address, nil)
-	if e != nil {
-		return osmSource{}, e
-	}
-	req.Header.Set("User-Agent", "GNSS-Command/0.1 bounded regional preparation")
+	downloadCtx, cancelDownload := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancelDownload()
 	client := *p.client
 	client.Timeout = 5 * time.Minute
-	resp, e := mapHTTPClient(ctx, &client).Do(req)
-	if e != nil {
-		return osmSource{}, e
+	var resp *http.Response
+	for hop := 0; hop < 3; hop++ {
+		req, err := http.NewRequestWithContext(downloadCtx, "GET", address, nil)
+		if err != nil {
+			return osmSource{}, err
+		}
+		req.Header.Set("User-Agent", "GNSS-Command/0.1 bounded regional preparation")
+		resp, e = mapHTTPClient(downloadCtx, &client).Do(req)
+		if e != nil {
+			return osmSource{}, e
+		}
+		if resp.StatusCode != 301 && resp.StatusCode != 302 && resp.StatusCode != 303 && resp.StatusCode != 307 && resp.StatusCode != 308 {
+			break
+		}
+		next, err := regionalRedirect(address, resp.Header.Get("Location"))
+		resp.Body.Close()
+		if err != nil {
+			return osmSource{}, err
+		}
+		if hop == 2 {
+			return osmSource{}, errors.New("regional redirect limit exceeded (2)")
+		}
+		address = next
 	}
 	defer resp.Body.Close()
 	pause := time.Minute
@@ -591,4 +609,38 @@ func (s *Store) reuseTerrain(ctx context.Context, id string, c mapChunk, compone
 		return b, evidence, nil
 	}
 	return nil, chunkEvidence{}, rows.Err()
+}
+
+// Authenticated publisher redirects may select a dated snapshot or its download
+// mirror, not a different region, arbitrary host, query credential or local service.
+func regionalRedirect(from, location string) (string, error) {
+	old, e := url.Parse(from)
+	if e != nil {
+		return "", errors.New("invalid regional redirect origin")
+	}
+	target, e := url.Parse(location)
+	if e != nil {
+		return "", errors.New("invalid regional redirect")
+	}
+	target = old.ResolveReference(target)
+	approved := target.Scheme == "https" && target.Port() == "" && (target.Hostname() == "download.geofabrik.de" || strings.HasPrefix(target.Hostname(), "download-") && strings.HasSuffix(target.Hostname(), ".geofabrik.de"))
+	if old.Hostname() == "127.0.0.1" {
+		approved = target.Host == old.Host && target.Scheme == old.Scheme
+	}
+	if !approved || target.User != nil || target.RawQuery != "" || target.Fragment != "" || path.Dir(target.Path) != path.Dir(old.Path) {
+		return "", errors.New("regional redirect outside approved publisher/dataset path")
+	}
+	before, after := path.Base(old.Path), path.Base(target.Path)
+	if before != after {
+		stem := strings.TrimSuffix(before, "-latest.osm.pbf")
+		date := strings.TrimSuffix(strings.TrimPrefix(after, stem+"-"), ".osm.pbf")
+		digits := len(date) == 6 || len(date) == 8
+		for _, c := range date {
+			digits = digits && c >= '0' && c <= '9'
+		}
+		if stem == before || !strings.HasPrefix(after, stem+"-") || !strings.HasSuffix(after, ".osm.pbf") || !digits {
+			return "", errors.New("regional redirect changes dataset identity")
+		}
+	}
+	return target.String(), nil
 }

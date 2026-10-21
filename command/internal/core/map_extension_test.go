@@ -552,3 +552,67 @@ func TestPortableMapDoesNotTransferOperatorNetworkConsent(t *testing.T) {
 		t.Fatal("export reset original logical job", original)
 	}
 }
+
+func TestRegionalRedirectIdentityAndTransferConsent(t *testing.T) {
+	origin := "https://download.geofabrik.de/europe/andorra-latest.osm.pbf"
+	for _, target := range []string{"andorra-261021.osm.pbf", "https://download-mirror.geofabrik.de/europe/andorra-latest.osm.pbf"} {
+		if _, e := regionalRedirect(origin, target); e != nil {
+			t.Fatal("publisher snapshot/mirror refused", e)
+		}
+	}
+	for _, target := range []string{"http://download.geofabrik.de/europe/andorra-latest.osm.pbf", "https://attacker.invalid/europe/andorra-latest.osm.pbf", "https://download.geofabrik.de/europe/france-latest.osm.pbf", "https://download.geofabrik.de/other/andorra-latest.osm.pbf", "https://user:secret@download.geofabrik.de/europe/andorra-latest.osm.pbf", "https://download.geofabrik.de/europe/andorra-latest.osm.pbf?token=secret"} {
+		if _, e := regionalRedirect(origin, target); e == nil {
+			t.Fatal("unsafe redirect accepted", target)
+		}
+	}
+	for _, large := range []bool{false, true} {
+		t.Run(fmt.Sprint("large=", large), func(t *testing.T) {
+			s := extensionStore(t)
+			var address string
+			var attempts atomic.Int32
+			provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/overpass":
+					w.WriteHeader(502)
+				case "/index":
+					json.NewEncoder(w).Encode(map[string]any{"features": []any{map[string]any{"properties": map[string]any{"name": "fixture region", "urls": map[string]string{"pbf": address + "/region-latest.osm.pbf"}}, "geometry": json.RawMessage(`{"type":"Polygon","coordinates":[[[0,0],[0.2,0],[0.2,0.2],[0,0.2],[0,0]]]}`)}}})
+				case "/region-latest.osm.pbf":
+					attempts.Add(1)
+					w.Header().Set("Location", "/region-261021.osm.pbf")
+					w.WriteHeader(307)
+				case "/region-261021.osm.pbf":
+					attempts.Add(1)
+					if large {
+						w.Header().Set("Content-Length", "200000000")
+					} else {
+						w.Write(fixturePBF(t, false))
+					}
+				default:
+					w.WriteHeader(404)
+				}
+			}))
+			defer provider.Close()
+			address = provider.URL
+			p := newMapProvider()
+			p.overpass = address + "/overpass"
+			p.catalog = address + "/index"
+			m, _ := s.createMapJob(mapCircle{.1, .1, 373}, nil, true)
+			j, _ := s.readMapJob(m.ID)
+			e := s.acquireMapChunk(context.Background(), p, m.ID, j.Plan.Chunks[0].Key, "vector", nil)
+			if attempts.Load() != 2 {
+				t.Fatal("redirect attempts", attempts.Load(), e)
+			}
+			if large {
+				if !errors.Is(e, errMapConsent) {
+					t.Fatal("redirect bypassed large transfer gate", e)
+				}
+				state, _ := s.transferState(m.ID)
+				if state.Required < 200000000 || state.Received > mapConsentBytes {
+					t.Fatal(state)
+				}
+			} else if e != nil {
+				t.Fatal(e)
+			}
+		})
+	}
+}

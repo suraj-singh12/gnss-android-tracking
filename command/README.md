@@ -92,7 +92,9 @@ read-ahead; they are not a wire-level meter. Budgeted preparation uses HTTP/1, a
 4 KiB HTTP read buffer and a requested 128 KiB socket receive buffer (OS effective
 size/accounting can differ; Linux commonly doubles this to 256 KiB per connection), disables automatic decompression and connection reuse,
 and avoids unaccounted HTTP/2 stream-window buffering. Native wire-level limits
-remain part of field acceptance. Redirects are refused, and no response
+remain part of field acceptance. Unverified redirects are refused. Regional latest-file redirects are limited to
+two authenticated publisher download hosts with the same dataset path/identity
+(or its dated snapshot); the same cumulative gate applies on every hop. No response
 is drained past consent. Known large fallback announces its **cumulative** required
 allowance; the operator must approve it before retry. Unknown lengths stop at the
 approved cap and request another bounded increase. No fake aggregate percentage or
