@@ -191,6 +191,55 @@ async function wait(f) {
     path: path.join(out, "radius-offline-reopened-fixture.png"),
     fullPage: true,
   });
+  await page.route("**/local/maps/*/chunks/*?layer=terrain", (route) =>
+    route.fulfill({ status: 503, body: "injected saved terrain read failure" }),
+  );
+  await page.reload();
+  await wait(async () =>
+    (await page.locator("#map-detail-status").textContent()).includes(
+      "DEM not rendered",
+    ),
+  );
+  assert.ok(
+    (await page.locator('[data-layer="offline-map"] polyline').count()) > 0,
+    "terrain read failure hid validated vectors",
+  );
+  assert.equal(await page.locator('[data-layer="contours"]').count(), 0);
+  await page.screenshot({
+    path: path.join(
+      out,
+      "radius-terrain-read-failure-vectors-retained-fixture.png",
+    ),
+    fullPage: true,
+  });
+  await page.unroute("**/local/maps/*/chunks/*?layer=terrain");
+  await page.reload();
+  await wait(
+    async () =>
+      (await page.locator('[data-layer="contours"] polyline').count()) > 0,
+  );
+  report.terrain_failure_preserves_vectors = true;
+  await page.route("**/local/maps/*/chunks/*?layer=vector", (route) =>
+    route.fulfill({ status: 503, body: "injected saved vector read failure" }),
+  );
+  await page.reload();
+  await wait(async () =>
+    (await page.locator("#map-detail-status").textContent()).includes(
+      "vector not rendered",
+    ),
+  );
+  assert.ok(
+    (await page.locator('[data-layer="contours"] polyline').count()) > 0,
+    "vector read failure hid validated terrain",
+  );
+  await page.unroute("**/local/maps/*/chunks/*?layer=vector");
+  await page.reload();
+  await wait(
+    async () =>
+      (await page.locator('[data-layer="offline-map"] polyline').count()) > 0,
+  );
+  report.vector_failure_preserves_terrain = true;
+
   assert.deepEqual(errors, []);
   report.passed = true;
   report.browser_render = await page.evaluate(() => terrainGeneration);

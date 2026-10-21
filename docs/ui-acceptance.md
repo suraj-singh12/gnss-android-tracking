@@ -453,6 +453,8 @@ Deterministic evidence:
   Additional contour/hillshade selections reuse the saved native source and map ID.
   SQLite trigger-injected disk-write failure rolls back replacement bytes. This is
   transactional fault injection, not physical disk exhaustion or OS crash testing.
+- PASS: injected saved-terrain read failure retains validated vectors; injected
+  vector read failure retains terrain. Source and rendering failures remain distinct.
 - PASS: actual Chromium/SQLite fixture screenshots for requested circle, vectors,
   contours+hillshade, each independent switch, void transparency and offline restart.
   `map-radius-ui.cjs` reports zero axe violations. Its georeferenced hill/valley is

@@ -2532,8 +2532,10 @@ function scheduleRadiusView(w, h) {
   );
   radiusViewTimer = setTimeout(async () => {
     const shapes = [],
-      grids = [];
-    let count = 0;
+      grids = [],
+      detailWarnings = [];
+    let count = 0,
+      vectorBudgetExceeded = false;
     const generationStarted = performance.now();
     try {
       if (chunks.length > 8)
@@ -2542,28 +2544,53 @@ function scheduleRadiusView(w, h) {
         );
       for (const c of chunks) {
         if (version !== radiusViewVersion || activeMapID !== id) return;
-        if (c.vector.status === "complete") {
-          const r = await fetch(
-            `/local/maps/${encodeURIComponent(id)}/chunks/${c.key}?layer=vector`,
-          );
-          if (!r.ok) throw Error("Saved vector chunk read failed");
-          const parsed = GeoMap.parse(await r.text(), "OSM");
-          count += parsed.count;
-          if (count > 100000)
-            throw Error(
-              "Visible vectors exceed 100,000 coordinates; zoom in for detail",
+        if (c.vector.status === "complete" && !vectorBudgetExceeded) {
+          try {
+            const r = await fetch(
+              `/local/maps/${encodeURIComponent(id)}/chunks/${c.key}?layer=vector`,
             );
-          shapes.push(...parsed.shapes);
+            if (!r.ok) throw Error("Saved vector chunk read failed");
+            const parsed = GeoMap.parse(await r.text(), "OSM");
+            count += parsed.count;
+            if (count > 100000)
+              throw Error(
+                "Visible vectors exceed 100,000 coordinates; zoom in for detail",
+              );
+            shapes.push(...parsed.shapes);
+          } catch (error) {
+            detailWarnings.push(
+              `${c.key}: vector not rendered: ${error.message}`,
+            );
+            if (count > 100000) {
+              vectorBudgetExceeded = true;
+              shapes.length = 0;
+            }
+          }
         }
         if (c.terrain.status === "complete") {
-          const r = await fetch(
-            `/local/maps/${encodeURIComponent(id)}/chunks/${c.key}?layer=terrain`,
-          );
-          if (!r.ok) throw Error("Saved DEM chunk read failed");
-          const grid = await r.json();
-          grid.core_bounds = c.bounds;
-          grid.chunk_key = c.key;
-          grids.push(grid);
+          try {
+            const r = await fetch(
+              `/local/maps/${encodeURIComponent(id)}/chunks/${c.key}?layer=terrain`,
+            );
+            if (!r.ok) throw Error("Saved DEM chunk read failed");
+            const grid = await r.json();
+            if (
+              !Array.isArray(grid.samples) ||
+              !Number.isInteger(grid.columns) ||
+              !Number.isInteger(grid.rows) ||
+              grid.columns < 2 ||
+              grid.columns > 257 ||
+              grid.rows < 2 ||
+              grid.rows > 257 ||
+              grid.samples.length !== grid.columns * grid.rows
+            )
+              throw Error("Invalid saved DEM grid");
+            grid.core_bounds = c.bounds;
+            grid.chunk_key = c.key;
+            grids.push(grid);
+          } catch (error) {
+            detailWarnings.push(`${c.key}: DEM not rendered: ${error.message}`);
+          }
         }
       }
       if (version !== radiusViewVersion || activeMapID !== id) return;
@@ -2580,17 +2607,31 @@ function scheduleRadiusView(w, h) {
       const interval = [1, 2, 5, 10]
         .map((v) => v * power)
         .find((v) => v >= wanted);
-      for (let i = 0; i < grids.length; i++) {
-        grids[i] = Terrain.prepare(grids[i], interval);
+      const prepared = [];
+      for (const grid of grids) {
+        try {
+          prepared.push(Terrain.prepare(grid, interval));
+        } catch (error) {
+          detailWarnings.push(
+            `${grid.chunk_key}: DEM processing failed: ${error.message}`,
+          );
+        }
         await new Promise(requestAnimationFrame);
-        if(version!==radiusViewVersion||activeMapID!==id)return;
+        if (version !== radiusViewVersion || activeMapID !== id) return;
       }
+      grids.splice(0, grids.length, ...prepared);
       $("map-detail-status").textContent =
         `Local detail: ${chunks.length} visible chunks, ${grids.length} DEM grids; requested circle in blue; dashed envelopes show acquired/missing coverage.`;
-      $("map-warning").textContent = grids
-        .filter((g) => g.contour_error)
-        .map((g) => `${g.chunk_key}: contours unavailable: ${g.contour_error}`)
-        .join("; ");
+      detailWarnings.push(
+        ...grids
+          .filter((g) => g.contour_error || g.hillshade_error)
+          .map(
+            (g) => `${g.chunk_key}: ${g.contour_error || g.hillshade_error}`,
+          ),
+      );
+      $("map-warning").textContent = detailWarnings.join("; ");
+      if (detailWarnings.length)
+        $("map-detail-status").textContent += " " + detailWarnings.join("; ");
     } catch (e) {
       if (version !== radiusViewVersion) return;
       shapes.length = 0;
@@ -2617,7 +2658,10 @@ function scheduleRadiusView(w, h) {
             terrainLayers.map((k) => [
               k,
               grids.some(
-                (g) => g.components[k] && (k !== "contours" || g.contour) && (k!=="hillshade" || g.shades),
+                (g) =>
+                  g.components[k] &&
+                  (k !== "contours" || g.contour) &&
+                  (k !== "hillshade" || g.shades),
               ),
             ]),
           ),
