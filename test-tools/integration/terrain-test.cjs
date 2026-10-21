@@ -120,3 +120,14 @@ assert.equal(isolated.shades,null);
 assert.equal(isolated.contour,null);
 assert.match(isolated.hillshade_error,/neighborhood/);
 assert.match(isolated.contour_error,/four-corner/);
+
+const crossingLeft={...grid,bounds:[180-2/1200,28,180,28+2/1200],samples:[98,99,100,98,99,100,98,99,100]};
+const crossingRight={...grid,bounds:[-180,28,-180+2/1200,28+2/1200],samples:[100,101,102,100,101,102,100,101,102]};
+const border=Terrain.hillshade(crossingLeft,[crossingLeft,crossingRight]);
+const expectedBorder=Terrain.hillshade({...grid,samples:[99,100,101,99,100,101,99,100,101]});
+assert.equal(border[5*4+3],255,"native neighbor supports dateline hillshade");
+assert.equal(border[5*4],expectedBorder[4*4],"same authoritative eastward slope at dateline");
+assert.equal(Terrain.hillshade(crossingLeft)[5*4+3],0,"unacquired neighbor cannot invent a gradient");
+
+assert.equal(Terrain.elevation(crossingRight,180,28+1/1200),100,"+180 aliases the acquired -180 native node");
+assert.equal(Terrain.elevation(crossingLeft,-180,28+1/1200),100,"-180 aliases the acquired +180 native node");

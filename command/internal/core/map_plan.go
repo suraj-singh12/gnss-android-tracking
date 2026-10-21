@@ -10,6 +10,8 @@ import (
 	"github.com/pymaxion/geographiclib-go/geodesic"
 )
 
+const mapMercatorLimit = 85.05112878
+
 const mapChunkStep = 240.0 / 3600 // aligned native nodes; each crop plus halo fits GTERR001
 const maxMapChunks = 2048         // <= 1 MiB plan metadata and 256 MiB encoded DEM, not a radius cap
 
@@ -99,8 +101,8 @@ func planCircle(c mapCircle) (mapPlan, error) {
 	if p.Bounds[1] < -56 || p.Bounds[3] > 60 {
 		p.DEMUnsupported = "Skadi adapter has verified source support only within 56°S–60°N; unsupported chunks remain gaps"
 	}
-	west, east := int(math.Floor(p.Bounds[0]/mapChunkStep)), int(math.Floor(p.Bounds[2]/mapChunkStep))
-	south, north := int(math.Floor(p.Bounds[1]/mapChunkStep)), int(math.Floor(p.Bounds[3]/mapChunkStep))
+	west, east := int(math.Floor(p.Bounds[0]/mapChunkStep)), int(math.Ceil(p.Bounds[2]/mapChunkStep))-1
+	south, north := int(math.Floor(p.Bounds[1]/mapChunkStep)), int(math.Ceil(p.Bounds[3]/mapChunkStep))-1
 	count := int64(east-west+1) * int64(north-south+1)
 	p.MaximumTerrainBytes = count * 132 * 1024
 	p.MaximumVectorBytes = count * mapLimit
@@ -112,7 +114,10 @@ func planCircle(c mapCircle) (mapPlan, error) {
 	for y := south; y <= north; y++ {
 		for x := west; x <= east; x++ {
 			wx := ((x+2700)%5400+5400)%5400 - 2700
-			b := [4]float64{float64(wx) * mapChunkStep, float64(y) * mapChunkStep, float64(wx+1) * mapChunkStep, float64(y+1) * mapChunkStep}
+			// Intersect the grid with the requested envelope, so a tiny local circle
+			// never acquires a whole 7 km vector cell or an unnecessarily large crop.
+			shift := float64(x-wx) * mapChunkStep
+			b := [4]float64{math.Max(p.Bounds[0], float64(x)*mapChunkStep) - shift, math.Max(p.Bounds[1], float64(y)*mapChunkStep), math.Min(p.Bounds[2], float64(x+1)*mapChunkStep) - shift, math.Min(p.Bounds[3], float64(y+1)*mapChunkStep)}
 			// Every envelope chunk is retained: conservative coverage, never omit boundary cells.
 			p.Chunks = append(p.Chunks, mapChunk{fmt.Sprintf("%d_%d", wx, y), b})
 			if b[1] >= -56 && b[3] <= 60 {

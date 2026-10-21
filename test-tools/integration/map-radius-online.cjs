@@ -28,16 +28,10 @@ async function port() {
 }
 (async () => {
   const local = `http://127.0.0.1:${await port()}`;
+  const ingest = `127.0.0.1:${await port()}`;
   command = spawn(
     process.env.GNSS_COMMAND_BINARY,
-    [
-      "-db",
-      db,
-      "-dashboard-listen",
-      local.slice(7),
-      "-ingest-listen",
-      `127.0.0.1:${await port()}`,
-    ],
+    ["-db", db, "-dashboard-listen", local.slice(7), "-ingest-listen", ingest],
     { stdio: "ignore" },
   );
   for (let i = 0; i < 100; i++) {
@@ -109,6 +103,20 @@ async function port() {
               ).json();
               assert.equal(g.arc_seconds, 1);
               assert.equal(g.vertical_datum, "EGM96");
+              const savedBytes = await (
+                await fetch(
+                  local +
+                    `/local/maps/${saved.id}/chunks/${chunk.key}?layer=terrain&format=gterrain`,
+                )
+              ).arrayBuffer();
+              fs.mkdirSync(path.dirname(out), { recursive: true });
+              fs.writeFileSync(
+                path.join(
+                  path.dirname(out),
+                  `real-${c.name.replaceAll(" ", "-")}-${chunk.key}.gterrain`,
+                ),
+                Buffer.from(savedBytes),
+              );
               const tiles = g.provenance.tiles.map((t) => {
                 const name = t.url.split("/").pop().replace(".gz", ""),
                   match = /([NS])(\d+)([EW])(\d+)\.hgt/.exec(name),
@@ -157,8 +165,172 @@ async function port() {
     evidence.elapsed_ms = Date.now() - start;
     await new Promise((resolve) => setTimeout(resolve, 10050));
   }
-  report.passed = report.cases.every((c) =>
-    ["vector", "terrain"].every((k) => c.layers[k]?.status === "PASS"),
+
+  if (process.platform === "linux") {
+    report.command_memory_after_preparation = fs
+      .readFileSync(`/proc/${command.pid}/status`, "utf8")
+      .split("\n")
+      .filter((line) => /^Vm(HWM|RSS):/.test(line));
+  }
+  report.stored_database_bytes = fs.statSync(db).size;
+  report.source_cache_bytes = fs.existsSync(db + ".map-cache")
+    ? fs
+        .readdirSync(db + ".map-cache")
+        .reduce(
+          (n, f) => n + fs.statSync(path.join(db + ".map-cache", f)).size,
+          0,
+        )
+    : 0;
+  await realVisualAcceptance(local, ingest);
+
+  async function realVisualAcceptance(local, ingest) {
+    for (const c of report.cases)
+      c.visual = { status: "NOT TESTED", reason: "no stored DEM acquired" };
+    const cases = report.cases.filter((c) => c.layers.terrain?.completed > 0);
+    if (!cases.length) return;
+    let browser;
+    try {
+      const { chromium } = require(
+        process.env.GNSS_PLAYWRIGHT_MODULE || "playwright",
+      );
+      if (command.exitCode === null) {
+        command.kill("SIGTERM");
+        await once(command, "exit");
+      }
+      command = spawn(
+        process.env.GNSS_COMMAND_BINARY,
+        [
+          "-db",
+          db,
+          "-dashboard-listen",
+          local.slice(7),
+          "-ingest-listen",
+          ingest,
+        ],
+        {
+          stdio: "ignore",
+          env: {
+            ...process.env,
+            HTTP_PROXY: "http://127.0.0.1:9",
+            HTTPS_PROXY: "http://127.0.0.1:9",
+          },
+        },
+      );
+      for (let i = 0; i < 100; i++) {
+        try {
+          if ((await fetch(local + "/local/maps")).ok) break;
+        } catch {}
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      browser = await chromium.launch({
+        headless: true,
+        executablePath: process.env.GNSS_CHROMIUM || undefined,
+        args: ["--no-sandbox"],
+      });
+      const images =
+        process.env.GNSS_SCREENSHOT_DIR ||
+        path.join(path.dirname(out), "real-radius-visual");
+      fs.mkdirSync(images, { recursive: true });
+      for (const c of cases) {
+        let context;
+        try {
+          context = await browser.newContext({
+            viewport: { width: 1440, height: 900 },
+          });
+          await context.route("**/*", (r) =>
+            r.request().url().startsWith(local) ? r.continue() : r.abort(),
+          );
+          const page = await context.newPage(),
+            errors = [];
+          page.on("pageerror", (e) => errors.push(e.message));
+          await page.goto(local);
+          await page.locator("#open-map").click();
+          await page.waitForFunction(
+            (id) =>
+              Array.from(document.querySelector("#saved-maps").options).some(
+                (o) => o.value === id,
+              ),
+            c.id,
+          );
+          await page.locator("#saved-maps").selectOption(c.id);
+          await page.locator('[data-close="map-settings"]').click();
+          const prefix = c.name.replaceAll(" ", "-");
+          await page.screenshot({
+            path: path.join(
+              images,
+              prefix + "-real-source-coverage-offline.png",
+            ),
+            fullPage: true,
+          });
+          for (let i = 0; i < 5; i++) {
+            await new Promise((r) => setTimeout(r, 800));
+            if (!(await page.locator("#layer-hillshade").isDisabled())) break;
+            await page.locator("#zoom-in").click();
+          }
+          await page.waitForFunction(
+            () => !document.querySelector("#layer-hillshade").disabled,
+            null,
+            { timeout: 30000 },
+          );
+          await page.locator("#open-layers").click();
+          await page.locator("#layer-hillshade").check();
+          if (!(await page.locator("#layer-contours").isDisabled()))
+            await page.locator("#layer-contours").check();
+          await page.locator('[data-close="layers"]').click();
+          assert.ok(
+            (await page.locator('[data-layer="hillshade"]').count()) > 0,
+            "stored real DEM did not render",
+          );
+          c.visual = {
+            status: "PASS",
+            offline_restarted: true,
+            contour_segments: await page
+              .locator('[data-layer="contours"] polyline')
+              .count(),
+            warnings: await page.locator("#map-detail-status").textContent(),
+            screenshots: images,
+          };
+          await page.screenshot({
+            path: path.join(images, prefix + "-real-terrain-offline.png"),
+            fullPage: true,
+          });
+          await page.locator("#open-layers").click();
+          await page.locator("#layer-hillshade").uncheck();
+          await page.locator('[data-close="layers"]').click();
+          assert.equal(
+            await page.locator('[data-layer="hillshade"]').count(),
+            0,
+          );
+          await page.screenshot({
+            path: path.join(images, prefix + "-real-hillshade-off.png"),
+            fullPage: true,
+          });
+          await page.locator("#open-layers").click();
+          if (!(await page.locator("#layer-contours").isDisabled()))
+            await page.locator("#layer-contours").uncheck();
+          await page.locator('[data-close="layers"]').click();
+          assert.equal(
+            await page.locator('[data-layer="contours"]').count(),
+            0,
+          );
+          assert.deepEqual(errors, []);
+        } catch (error) {
+          c.visual = { status: "FAIL", error: String(error) };
+        } finally {
+          await context?.close();
+        }
+      }
+    } catch (error) {
+      for (const c of cases)
+        c.visual = { status: "FAIL", error: String(error) };
+    } finally {
+      await browser?.close();
+    }
+  }
+  report.passed = report.cases.every(
+    (c) =>
+      ["vector", "terrain"].every((k) => c.layers[k]?.status === "PASS") &&
+      c.visual?.status === "PASS",
   );
   if (!report.passed) process.exitCode = 1;
 })()

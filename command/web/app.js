@@ -1031,6 +1031,7 @@ function updateLayers() {
     $(id).disabled = !activeMapID || !!downloadAbort;
   if(offlineMap?.plan) {$("prepare-terrain").disabled=true;$("prepare-terrain").title="Local single-grid import is for legacy maps; use Resume for radius maps";}
   else $("prepare-terrain").removeAttribute("title");
+  $("export-map").hidden=!!offlineMap?.plan;
   $("export-map").setAttribute("aria-disabled", String(!activeMapID));
   $("terrain-metadata").textContent = terrain
     ? `${terrain.source} · ${terrain.arc_seconds} arc sec (~${Math.round((terrain.arc_seconds / 3600) * 111320)} m north–south) · ${terrain.vertical_datum} · interpolated, not survey-grade${terrain.contour ? " · contours " + terrain.contour.interval + " m" : ""}${terrain.provenance ? " · " + terrain.provenance.attribution : ""}`
@@ -2245,6 +2246,7 @@ function radiusDescription(manifest) {
     `Requested centre ${manifest.plan.request.lat}, ${manifest.plan.request.lon}; radius ${manifest.plan.request.radius_m} m.\n` +
     `Vector acquired ${complete("vector")}/${chunks.length} chunk envelopes (empty features are valid). DEM grids saved ${complete("terrain")}/${chunks.length}.\n` +
     `DEM cells with four valid corners: ${chunks.reduce((n, c) => n + (c.terrain.valid_dem_cells || 0), 0)}; cells with void corners: ${chunks.reduce((n, c) => n + (c.terrain.void_dem_cells || 0), 0)}.\n` +
+    `${manifest.plan.dem_unsupported||""}\n` +
     `Stored asset bytes: ${chunks.reduce((n, c) => n + (c.vector.stored_bytes || 0) + (c.terrain.stored_bytes || 0), 0)}. No geographic percentage inferred from cells. Contours / hillshade require valid DEM neighborhoods and successful browser processing.\n` +
     chunks
       .filter((c) => c.vector.error || c.terrain.error)
@@ -2610,7 +2612,7 @@ function scheduleRadiusView(w, h) {
       const prepared = [];
       for (const grid of grids) {
         try {
-          prepared.push(Terrain.prepare(grid, interval));
+          prepared.push(Terrain.prepare(grid, interval,grids));
         } catch (error) {
           detailWarnings.push(
             `${grid.chunk_key}: DEM processing failed: ${error.message}`,

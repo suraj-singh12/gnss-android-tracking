@@ -38,6 +38,11 @@ func TestRadiusEllipsoidGeometry(t *testing.T) {
 		if math.Abs(east[0]-want) > 1e-10 || math.Abs(east[1]) > 1e-10 {
 			t.Fatal("ellipsoidal east reference", east, want)
 		}
+		for _, c := range p.Chunks {
+			if c.Bounds[0] < p.Bounds[0]-1e-10 || c.Bounds[1] < p.Bounds[1]-1e-10 || c.Bounds[2] > p.Bounds[2]+1e-10 || c.Bounds[3] > p.Bounds[3]+1e-10 {
+				t.Fatal("source chunk overfetches beyond requested envelope", c.Bounds, p.Bounds)
+			}
+		}
 		for _, v := range p.Circle {
 			covered := false
 			for _, c := range p.Chunks {
@@ -296,10 +301,26 @@ func TestRadiusBrowserFixture(t *testing.T) {
 		if e != nil {
 			t.Fatal(e)
 		}
-		e = s.writeChunk(context.Background(), m.ID, c.Key, "terrain", b, chunkEvidence{Status: "complete", Bytes: len(b), Attempts: 1})
+		meta := g
+		meta.Samples = nil
+		evidence := chunkEvidence{Status: "complete", Bytes: len(b), Attempts: 1, Metadata: &meta}
+		for y := 0; y < g.Rows-1; y++ {
+			for x := 0; x < g.Columns-1; x++ {
+				i := y*g.Columns + x
+				if g.Samples[i] != nil && g.Samples[i+1] != nil && g.Samples[i+g.Columns] != nil && g.Samples[i+g.Columns+1] != nil {
+					evidence.ValidCells++
+				} else {
+					evidence.VoidCells++
+				}
+			}
+		}
+		e = s.writeChunk(context.Background(), m.ID, c.Key, "terrain", b, evidence)
 		if e != nil {
 			t.Fatal(e)
 		}
+	}
+	if _, err := s.db.Exec(`UPDATE offline_maps SET source=? WHERE id=?`, "Synthetic hill/void fixture · NOT real provider", m.ID); err != nil {
+		t.Fatal(err)
 	}
 	t.Log(m.ID)
 }
@@ -310,6 +331,7 @@ func TestRadiusCancelNoncontiguousRecoveryAndFleet(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer s.Close()
+	s.Now = func() time.Time { return base.Add(time.Second) }
 	m, e := s.createMapJob(mapCircle{.1, .1, 12345}, map[string]bool{"elevation": true}, true)
 	if e != nil {
 		t.Fatal(e)
@@ -344,6 +366,17 @@ func TestRadiusCancelNoncontiguousRecoveryAndFleet(t *testing.T) {
 		ingest(t, s, sos)
 	}
 	state := snapshot(t, s)
+	liveResponse := httptest.NewRecorder()
+	s.LocalHandler(http.NotFoundHandler()).ServeHTTP(liveResponse, httptest.NewRequest("GET", "/local/live", nil))
+	var live State
+	if liveResponse.Code != 200 || json.Unmarshal(liveResponse.Body.Bytes(), &live) != nil || len(live.Devices) != 21 {
+		t.Fatal("LIVE unavailable during provider stall", liveResponse.Code, liveResponse.Body.String())
+	}
+	for _, party := range live.Devices {
+		if !party.CurrentPosition {
+			t.Fatal("fresh original GNSS not presented LIVE during provider stall")
+		}
+	}
 	elapsed := time.Since(start)
 	if len(state.Devices) != 21 || len(state.Alerts) != 21 {
 		t.Fatal("fleet/SOS lost", len(state.Devices), len(state.Alerts))
@@ -490,4 +523,136 @@ func TestRadiusMosaicRetainsValidNeighbourOfVoidCrop(t *testing.T) {
 	if published != 0 {
 		t.Fatal("all-void DEM published as available")
 	}
+}
+
+func TestRadiusProjectionEdgeClipsEnvelopeNotCircle(t *testing.T) {
+	for _, lat := range []float64{-85.05, 85.05} {
+		p, err := planCircle(mapCircle{lat, .033, 1})
+		if err != nil || p.Unsupported != "" || p.Request.Radius != 1 {
+			t.Fatal("valid projection-edge circle refused or changed", err, p.Unsupported)
+		}
+		for _, c := range p.Chunks {
+			if c.Bounds[1] < -mapMercatorLimit || c.Bounds[3] > mapMercatorLimit {
+				t.Fatal("source envelope exceeds supported projection", c.Bounds)
+			}
+		}
+		for _, v := range p.Circle {
+			covered := false
+			for _, c := range p.Chunks {
+				covered = covered || (v[0] >= c.Bounds[0] && v[0] <= c.Bounds[2] && v[1] >= c.Bounds[1] && v[1] <= c.Bounds[3])
+			}
+			if !covered {
+				t.Fatal("projection edge clipped requested circle", v)
+			}
+		}
+	}
+}
+
+func TestRadiusEquivalentDatelineCentresDeduplicate(t *testing.T) {
+	s, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	a, err := s.createMapJob(mapCircle{.1, 180, 373}, nil, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.createMapJob(mapCircle{.1, -180, 373}, nil, true)
+	if err != nil || a.ID != b.ID || a.Created != b.Created || a.Source != b.Source {
+		t.Fatal("equivalent longitude created another map or changed provenance", a, b, err)
+	}
+	j, err := s.readMapJob(a.ID)
+	if err != nil || b.Bounds[0] != j.Plan.Bounds[0] {
+		t.Fatal("idempotent reply differs from stored request", b, err)
+	}
+}
+
+func TestRadiusMoreThanFourNativeSourceTilesPersistWithBoundedCache(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "command.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	saved, err := s.createMapJob(mapCircle{0, 0, 151731}, map[string]bool{"elevation": true}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	job, _ := s.readMapJob(saved.ID)
+	var calls atomic.Int32
+	var transferred atomic.Int64
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		name := filepath.Base(strings.TrimSuffix(r.URL.Path, ".gz"))
+		if len(name) != 11 {
+			t.Error("unexpected HGT source name", name)
+			http.NotFound(w, r)
+			return
+		}
+		lat, _ := strconv.Atoi(name[1:3])
+		lon, _ := strconv.Atoi(name[4:7])
+		if name[0] == 'S' {
+			lat = -lat
+		}
+		if name[3] == 'W' {
+			lon = -lon
+		}
+		data := compressedDEM(t, lat, lon)
+		calls.Add(1)
+		transferred.Add(int64(len(data)))
+		w.Write(data)
+	}))
+	defer provider.Close()
+	p := newMapProvider()
+	p.dem = provider.URL
+	selected := map[[2]int]bool{}
+	started := time.Now()
+	for _, chunk := range job.Plan.Chunks {
+		lon := int(math.Floor((chunk.Bounds[0] + chunk.Bounds[2]) / 2))
+		lat := int(math.Floor((chunk.Bounds[1] + chunk.Bounds[3]) / 2))
+		tile := [2]int{lon, lat}
+		if selected[tile] || chunk.Bounds[0] < float64(lon)+.001 || chunk.Bounds[2] > float64(lon+1)-.001 || chunk.Bounds[1] < float64(lat)+.001 || chunk.Bounds[3] > float64(lat+1)-.001 {
+			continue
+		}
+		if err = s.acquireMapChunk(context.Background(), p, saved.ID, chunk.Key, "terrain", nil); err != nil {
+			t.Fatal("multi-source job failed", chunk.Key, err)
+		}
+		var data []byte
+		s.db.QueryRow(`SELECT terrain FROM offline_map_chunks WHERE map_id=? AND chunk_key=?`, saved.ID, chunk.Key).Scan(&data)
+		g, err := decodeTerrain(data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wx, wy := int(math.Round(g.Bounds[0]*3600)), int(math.Round(g.Bounds[3]*3600))
+		want := float64(1000 + (wx+wy)%1000)
+		if g.Samples[0] == nil || *g.Samples[0] != want {
+			t.Fatal("saved cross-source native sample is misgeoreferenced", tile, want, g.Samples[0])
+		}
+		selected[tile] = true
+	}
+	if len(selected) != 16 || calls.Load() != 16 {
+		t.Fatal("old four-tile region bound or unexpected transfers", len(selected), calls.Load())
+	}
+	var complete int
+	var stored int64
+	s.db.QueryRow(`SELECT count(*),sum(length(terrain)) FROM offline_map_chunks WHERE map_id=? AND terrain IS NOT NULL`, saved.ID).Scan(&complete, &stored)
+	if complete != 16 {
+		t.Fatal("partial multi-source library lost chunks", complete)
+	}
+	entries, err := os.ReadDir(p.demCache)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourceFiles := 0
+	var bytes int64
+	for _, entry := range entries {
+		if strings.HasSuffix(entry.Name(), ".hgt") {
+			info, _ := entry.Info()
+			sourceFiles++
+			bytes += info.Size()
+		}
+	}
+	if sourceFiles > 4 || bytes > mapSourceCacheBudget {
+		t.Fatal("source cache exceeded real disk budget", sourceFiles, bytes)
+	}
+	t.Logf("16-source fixture: requests=%d transferred=%d stored=%d elapsed=%s cache_files=%d cache_raw_bytes=%d; 16/%d chunks complete, not whole-circle coverage", calls.Load(), transferred.Load(), stored, time.Since(started), sourceFiles, bytes, len(job.Plan.Chunks))
 }

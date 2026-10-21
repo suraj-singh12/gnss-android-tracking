@@ -82,7 +82,15 @@ func (s *Store) createMapJob(c mapCircle, components map[string]bool, confirmed 
 		return savedMap{}, err
 	}
 	// Same request and selections always resolve to the same saved map after response loss.
-	identity, _ := json.Marshal(c)
+	canonical := c
+	canonical.Lon = wrapLongitude(c.Lon)
+	if canonical.Lon == 0 {
+		canonical.Lon = 0
+	}
+	if canonical.Lat == 0 {
+		canonical.Lat = 0
+	}
+	identity, _ := json.Marshal(canonical)
 	h := sha256.Sum256(identity)
 	mapID := "radius-" + hex.EncodeToString(h[:16])
 	m := savedMap{ID: mapID, Source: fmt.Sprintf("OSM %.7f, %.7f · %g m radius", c.Lat, c.Lon, c.Radius), Created: s.Now().UTC().Format(wireTime), Bytes: len(b), Bounds: p.Bounds[:]}
@@ -102,7 +110,7 @@ func (s *Store) createMapJob(c mapCircle, components map[string]bool, confirmed 
 		return m, errors.New("map library full (64 maps); existing maps retained")
 	}
 	var existing []byte
-	previousErr := tx.QueryRow(`SELECT data FROM offline_maps WHERE id=?`, mapID).Scan(&existing)
+	previousErr := tx.QueryRow(`SELECT data,source,created FROM offline_maps WHERE id=?`, mapID).Scan(&existing, &m.Source, &m.Created)
 	if previousErr == nil {
 		var saved mapJob
 		if err = json.Unmarshal(existing, &saved); err != nil {
@@ -116,7 +124,9 @@ func (s *Store) createMapJob(c mapCircle, components map[string]bool, confirmed 
 				saved.Components[kind] = true
 			}
 		}
+		m.Bounds = saved.Plan.Bounds[:]
 		b, err = json.Marshal(saved)
+		m.Bytes = len(b)
 		if err != nil {
 			return m, err
 		}

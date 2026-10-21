@@ -437,6 +437,14 @@ Deterministic evidence:
   no surface is filled across the void. Entirely void acquisitions persist source
   evidence and remain unavailable. Contour/hillshade controls reflect valid cell
   neighborhoods independently. Valid-cell envelopes remain distinct from full bounds.
+- PASS: one saved job persists native crops from 16 separate source tiles while
+  keeping four source files (103,737,608 raw bytes) in cache. The fixture transferred
+  2,575,766 compressed bytes and stored 1,485,904 bytes in 4.37 s. This is explicitly
+  16/1,764 chunks, not whole-circle completeness or a public-provider pass.
+- PASS: antimeridian hillshade uses only acquired native neighbour nodes; ±180°
+  elevation lookup and saved-request identity share the same geographic position.
+- PASS: partial edge chunks intersect the exact requested envelope rather than
+  overfetching full grid cells. Valid circles at ±85.05° retain their whole coverage.
 - PASS: source-query bounds round outwards rather than omitting border features;
   abandoned cache-publication temporary files are removed on retry/restart.
 - PASS: independent equatorial WGS84 analytic east-distance references; radii
@@ -460,8 +468,8 @@ Deterministic evidence:
   `map-radius-ui.cjs` reports zero axe violations. Its georeferenced hill/valley is
   explicitly synthetic. It is not a real mountainous-source visual comparison.
 - Measured non-race native fixture: one 156,608-byte compressed source, 25,934,402
-  decoded bytes, 59,049 saved samples / 119,553 encoded bytes; acquisition+save
-  187 ms, reload+decode 1.16 ms in one Linux run. Times vary with environment/cache.
+  decoded bytes, 841 saved samples / 3,100 encoded bytes; acquisition+save
+  180 ms, reload+decode 0.148 ms in one Linux run. Times vary with environment/cache.
   One Chromium visible-chunk fetch/processing run measured 306 ms. These are not
   native-platform capacity guarantees or peak-memory measurements.
 - PASS: stalled provider while 21 devices durably submit GNSS and SOS (162 ms in

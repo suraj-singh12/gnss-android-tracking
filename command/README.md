@@ -75,7 +75,10 @@ coordinates load into the browser; zoom in when the visible envelope exceeds thi
 budget. This bounds display work without claiming missing overview detail is acquired
 terrain. Pan/zoom loads other stored chunks locally. Each raw chunk remains accessible
 through `/local/maps/{id}/chunks/{key}?layer=vector` or `layer=terrain`; adding
-`format=gterrain` to terrain exports the existing binary format.
+`format=gterrain` to terrain exports the existing binary format. The single-file
+GeoJSON/terrain export controls remain for legacy single-grid maps; radius maps use
+the source manifest and these native chunk downloads. No recording export package
+is created here.
 
 Issue #28 acceptance evidence is recorded in `docs/ui-acceptance.md`. Linux cross-builds
 and synthetic browser surfaces are not native macOS/Windows or real-provider acceptance.

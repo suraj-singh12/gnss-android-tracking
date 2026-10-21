@@ -534,8 +534,8 @@ func (p *mapProvider) areaBounds(ctx context.Context, bounds [4]float64) ([]byte
 		return nil, err
 	}
 	// Round source envelopes outwards; nearest-decimal formatting can omit border features.
-	providerBounds := [4]float64{math.Floor(bounds[0]*1e7) / 1e7, math.Floor(bounds[1]*1e7) / 1e7, math.Ceil(bounds[2]*1e7) / 1e7, math.Ceil(bounds[3]*1e7) / 1e7}
-	bbox := fmt.Sprintf("%.7f,%.7f,%.7f,%.7f", providerBounds[1], providerBounds[0], providerBounds[3], providerBounds[2])
+	providerBounds := [4]float64{math.Floor(bounds[0]*1e10) / 1e10, math.Max(-mapMercatorLimit, math.Floor(bounds[1]*1e10)/1e10), math.Ceil(bounds[2]*1e10) / 1e10, math.Min(mapMercatorLimit, math.Ceil(bounds[3]*1e10)/1e10)}
+	bbox := fmt.Sprintf("%.10f,%.10f,%.10f,%.10f", providerBounds[1], providerBounds[0], providerBounds[3], providerBounds[2])
 	query := fmt.Sprintf(`[out:json][timeout:20][maxsize:20000000];(way["highway"](%s);way["building"](%s);way["waterway"](%s);way["natural"](%s);way["landuse"](%s););out geom;`, bbox, bbox, bbox, bbox, bbox)
 	b, err := p.request(ctx, "POST", p.overpass, url.Values{"data": {query}}.Encode())
 	if err != nil {

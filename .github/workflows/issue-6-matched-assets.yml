@@ -62,6 +62,8 @@ jobs:
         env:
           GNSS_COMMAND_BINARY: ${{ runner.temp }}/gnss-dem-command
           GNSS_RADIUS_PROVIDER_REPORT: ${{ runner.temp }}/dem-evidence/radius-real-provider.json
+          GNSS_PLAYWRIGHT_MODULE: ${{ runner.temp }}/gnss-dem-browser/node_modules/playwright
+          GNSS_SCREENSHOT_DIR: ${{ runner.temp }}/dem-evidence/radius-visual
         run: |
           (cd command && go build -o "$RUNNER_TEMP/gnss-dem-command" ./cmd/party-tracker)
           node test-tools/integration/map-radius-online.cjs
