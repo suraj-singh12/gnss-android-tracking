@@ -140,7 +140,9 @@ Import validates every declared entry/CRC/hash, version, geometry/terrain, canon
 plan and missing-layer disclosure before publication. It rejects traversal, symlinks,
 duplicate/undeclared/missing entries, unsupported formats, oversized entries/archives
 and bombs. Limits: 256 MiB expanded assets, 20 MiB per chunk, 2 MiB manifest. Staging
-is local and bounded; failed publication rolls back atomically. Identical portable
+is local and bounded; failed publication rolls back atomically. Portable imports start a fresh 5 MB network allowance; they never inherit another
+installation’s approval or charge its historical source bytes as new transfer.
+Original source evidence remains provenance. Identical portable
 imports resolve to the same map identity and cannot overwrite existing maps. Package
 checksums establish byte integrity, **not creator authenticity**. This is operational
 map portability; #38 owns frozen map revisions inside evidence recordings.

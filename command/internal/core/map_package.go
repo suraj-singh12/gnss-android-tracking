@@ -71,12 +71,7 @@ func (s *Store) exportMapPackage(ctx context.Context, id string, f *os.File) err
 	if e != nil {
 		return e
 	}
-	var portable mapJob
-	if json.Unmarshal(raw, &portable) == nil && len(portable.Plan.Chunks) > 0 {
-		portable.SourceID = ""
-		portable.Transfer = mapTransfer{}
-		raw = mustJSON(portable)
-	}
+	raw = portableMapData(raw)
 	p := mapPackage{Version: 1, Format: "GNSS-Command-map", Source: source, Map: raw, Assets: []mapPackageAsset{}, Attribution: "© OpenStreetMap contributors · ODbL; DEM: " + demAttribution, Derivation: "GTERR001 native DEM; compatible Command Horn hillshade/marching-square contours; voids transparent. Checksums show byte integrity, not publisher authenticity."}
 	j, e := validatePortableJob(raw)
 	if e != nil {
@@ -354,6 +349,7 @@ func (s *Store) importMapPackage(ctx context.Context, f *os.File, size int64) (s
 	if partial != p.Partial {
 		return fail(errors.New("inconsistent missing-layer disclosure"))
 	}
+	p.Map = portableMapData(p.Map)
 	id := "portable-" + shaMap(mustJSON(p))[:32]
 	m := savedMap{ID: id, Source: p.Source, Created: s.Now().UTC().Format(wireTime), Bytes: len(p.Map)}
 	s.mu.Lock()
@@ -377,11 +373,7 @@ func (s *Store) importMapPackage(ctx context.Context, f *os.File, size int64) (s
 	if count >= 64 || int64(total)+int64(expanded) > mapAssetBudget {
 		return fail(errors.New("map library capacity exceeded"))
 	}
-	if len(j.Plan.Chunks) > 0 {
-		j.SourceID = ""
-		j.Transfer = mapTransfer{}
-		p.Map = mustJSON(j)
-	}
+
 	if _, e = tx.Exec(`INSERT INTO offline_maps(id,source,data,created) VALUES(?,?,?,?)`, id, m.Source, []byte(p.Map), m.Created); e != nil {
 		return fail(e)
 	}
@@ -474,4 +466,16 @@ func mapBoundsEqual(a, b [4]float64) bool {
 		}
 	}
 	return true
+}
+
+// Copying a local map never carries another installation's network consent.
+// Original source transfer evidence remains provenance; local import costs zero.
+func portableMapData(raw []byte) []byte {
+	var root map[string]json.RawMessage
+	if json.Unmarshal(raw, &root) != nil {
+		return raw
+	}
+	root["transfer"] = mustJSON(mapTransfer{Allowance: mapConsentBytes})
+	delete(root, "source_id")
+	return mustJSON(root)
 }

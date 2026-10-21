@@ -521,3 +521,34 @@ func TestMapProductSelectionPreservesFullExtentAndTransfer(t *testing.T) {
 		t.Fatal("product request replaced source/transfer/coverage", saved, e)
 	}
 }
+
+func TestPortableMapDoesNotTransferOperatorNetworkConsent(t *testing.T) {
+	s := extensionStore(t)
+	var raw map[string]any
+	json.Unmarshal([]byte(validOfflineMap), &raw)
+	raw["transfer"] = mapTransfer{Allowance: 200000000, Received: 4000000, Charged: 4000000}
+	raw["source_bytes"] = 4000000
+	m, e := s.saveMap("Legacy source with previous consent", mustJSON(raw))
+	if e != nil {
+		t.Fatal(e)
+	}
+	f, _ := os.CreateTemp(t.TempDir(), "map-*.zip")
+	defer f.Close()
+	if e = s.exportMapPackage(context.Background(), m.ID, f); e != nil {
+		t.Fatal(e)
+	}
+	stat, _ := f.Stat()
+	other := extensionStore(t)
+	copied, e := other.importMapPackage(context.Background(), f, stat.Size())
+	if e != nil {
+		t.Fatal(e)
+	}
+	state, e := other.transferState(copied.ID)
+	if e != nil || state.Allowance != mapConsentBytes || state.Received != 0 || state.Charged != 0 {
+		t.Fatal("portable import carried remote consent/accounting", state, e)
+	}
+	original, _ := s.transferState(m.ID)
+	if original.Allowance != 200000000 || original.Received != 4000000 {
+		t.Fatal("export reset original logical job", original)
+	}
+}
