@@ -210,6 +210,21 @@ func TestRadiusNativeDEMCacheAndSavedSamples(t *testing.T) {
 	if err = s.acquireMapChunk(context.Background(), p, m.ID, j.Plan.Chunks[0].Key, "terrain", nil); err != nil || calls.Load() != 1 {
 		t.Fatal("saved DEM products redownloaded source", err)
 	}
+	// A separately owned portable copy reuses the exact verified saved envelope,
+	// even if the disposable raw cache is absent. No new source transfer is needed.
+	current, _ := s.readMapJob(m.ID)
+	copy, copyErr := s.publishJob("verified-grid-copy", "Copied coverage", mustJSON(current))
+	if copyErr != nil {
+		t.Fatal(copyErr)
+	}
+	if copyErr = s.acquireMapChunk(context.Background(), p, copy.ID, current.Plan.Chunks[0].Key, "terrain", nil); copyErr != nil {
+		t.Fatal(copyErr)
+	}
+	copied, _ := s.mapChunkStatuses(copy.ID, current)
+	if !copied[0].Terrain.Reused || calls.Load() != 1 {
+		t.Fatal("saved DEM product was not reused", copied, calls.Load())
+	}
+
 	var updated []byte
 	s.db.QueryRow(`SELECT terrain FROM offline_map_chunks WHERE map_id=?`, m.ID).Scan(&updated)
 	derived, err := decodeTerrain(updated)
@@ -260,6 +275,11 @@ func TestRadiusNativeDEMCacheAndSavedSamples(t *testing.T) {
 // Opt-in deterministic seed for the real-server browser acceptance. This is a
 // synthetic surface, explicitly separate from real public-provider evidence.
 func TestRadiusBrowserFixture(t *testing.T) {
+	if fixture := os.Getenv("GNSS_PBF_FIXTURE_PATH"); fixture != "" {
+		if e := os.WriteFile(fixture, fixturePBF(t, false), 0600); e != nil {
+			t.Fatal(e)
+		}
+	}
 	path := os.Getenv("GNSS_MAP_FIXTURE_DB")
 	if path == "" {
 		t.Skip("browser fixture seed not requested")

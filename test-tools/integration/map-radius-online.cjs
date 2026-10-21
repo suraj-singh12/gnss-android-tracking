@@ -252,6 +252,7 @@ async function port() {
               ),
             c.id,
           );
+          await page.locator("#choose-saved-map").click();
           await page.locator("#saved-maps").selectOption(c.id);
           await page.locator('[data-close="map-settings"]').click();
           const prefix = c.name.replaceAll(" ", "-");

@@ -5,7 +5,9 @@ go 1.24.7
 require (
 	github.com/ncruces/go-sqlite3 v0.28.0
 	github.com/pymaxion/geographiclib-go v1.1.0
+	github.com/qedus/osmpbf v1.2.0
 	golang.org/x/sys v0.35.0
+	google.golang.org/protobuf v1.26.0
 )
 
 require (

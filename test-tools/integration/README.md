@@ -959,3 +959,12 @@ big-endian raw HGT node comparisons). The latter exits nonzero for provider fail
 `GNSS_RADIUS_PROVIDER_REPORT` names its JSON evidence. Both reuse existing
 `GNSS_COMMAND_BINARY`/browser environment conventions. Existing legacy rectangle
 acceptance is retained explicitly, not replaced by synthetic radius success.
+
+
+The #28 `map-radius-ui.cjs` fixture now also exports/imports a standalone terrain
+map and imports/opens a full-extent local PBF through the real server/SQLite APIs,
+with offline geographic rendering and axe. The existing Go map extension suite
+covers cumulative transfer consent, fallback HTTP fixtures, source boundaries,
+streaming PBF integrity/resource limits and malicious portable packages. None of
+these synthetic sources is public-provider or native OS acceptance. The unchanged
+real-provider workflow reports its failures separately; do not waive it.

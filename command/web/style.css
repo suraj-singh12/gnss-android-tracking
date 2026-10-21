@@ -1020,3 +1020,7 @@ fieldset {
   pointer-events: none;
 }
 #map-detail-status:empty { display: none; }
+
+.map-lifecycle { display:flex; gap:8px; flex-wrap:wrap; margin:16px 0; }
+#map-settings > details { margin-block:12px; }
+#map-import-status { overflow-wrap:anywhere; }

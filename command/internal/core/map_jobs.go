@@ -19,6 +19,8 @@ import (
 const mapAssetBudget = 256 * 1024 * 1024
 
 type mapJob struct {
+	Transfer    mapTransfer     `json:"transfer,omitempty"`
+	SourceID    string          `json:"source_id,omitempty"`
 	Type        string          `json:"type"`
 	Features    []any           `json:"features"`
 	Plan        mapPlan         `json:"plan"`
@@ -26,19 +28,21 @@ type mapJob struct {
 	Attribution string          `json:"attribution"`
 }
 type chunkEvidence struct {
-	ValidBounds []float64    `json:"valid_dem_cell_bounds,omitempty"`
-	SourceURL   string       `json:"source_url,omitempty"`
-	SourceBytes int64        `json:"observed_transfer_body_bytes,omitempty"`
-	ElapsedMS   float64      `json:"elapsed_ms,omitempty"`
-	Status      string       `json:"status"`
-	Attempts    int          `json:"attempts"`
-	Bytes       int          `json:"stored_bytes"`
-	At          string       `json:"acquired_at,omitempty"`
-	Error       string       `json:"error,omitempty"`
-	ValidCells  int          `json:"valid_dem_cells,omitempty"`
-	VoidCells   int          `json:"void_dem_cells,omitempty"`
-	Metadata    *terrainGrid `json:"dem_metadata,omitempty"`
-	Report      *DEMReport   `json:"transfer,omitempty"`
+	Reused         bool               `json:"reused_verified_product,omitempty"`
+	SourceAttempts []mapSourceAttempt `json:"source_attempts,omitempty"`
+	ValidBounds    []float64          `json:"valid_dem_cell_bounds,omitempty"`
+	SourceURL      string             `json:"source_url,omitempty"`
+	SourceBytes    int64              `json:"observed_transfer_body_bytes,omitempty"`
+	ElapsedMS      float64            `json:"elapsed_ms,omitempty"`
+	Status         string             `json:"status"`
+	Attempts       int                `json:"attempts"`
+	Bytes          int                `json:"stored_bytes"`
+	At             string             `json:"acquired_at,omitempty"`
+	Error          string             `json:"error,omitempty"`
+	ValidCells     int                `json:"valid_dem_cells,omitempty"`
+	VoidCells      int                `json:"void_dem_cells,omitempty"`
+	Metadata       *terrainGrid       `json:"dem_metadata,omitempty"`
+	Report         *DEMReport         `json:"transfer,omitempty"`
 }
 type chunkStatus struct {
 	mapChunk
@@ -76,7 +80,7 @@ func (s *Store) createMapJob(c mapCircle, components map[string]bool, confirmed 
 			return savedMap{}, errors.New("unknown terrain component")
 		}
 	}
-	j := mapJob{"FeatureCollection", []any{}, p, components, "© OpenStreetMap contributors · ODbL; DEM: " + demAttribution}
+	j := mapJob{Type: "FeatureCollection", Features: []any{}, Plan: p, Components: components, Attribution: "© OpenStreetMap contributors · ODbL; DEM: " + demAttribution}
 	b, err := json.Marshal(j)
 	if err != nil {
 		return savedMap{}, err
@@ -225,6 +229,9 @@ func (s *Store) writeChunk(ctx context.Context, mapID, key, layer string, b []by
 	return err
 }
 func (s *Store) acquireMapChunk(ctx context.Context, p *mapProvider, id, key, layer string, emit demObserver) error {
+	budget := &mapBudget{s: s, id: id, emit: emit}
+	ctx = context.WithValue(ctx, mapBudgetKey{}, budget)
+	beforeTransfer, _ := s.transferState(id)
 	j, err := s.readMapJob(id)
 	if err != nil {
 		return err
@@ -292,6 +299,16 @@ func (s *Store) acquireMapChunk(ctx context.Context, p *mapProvider, id, key, la
 	if err = ctx.Err(); err != nil {
 		return err
 	}
+	if layer == "terrain" {
+		cached, proof, e := s.reuseTerrain(ctx, id, *chunk, j.Components)
+		if e != nil {
+			return e
+		}
+		if cached != nil {
+			emitDEM(emit, DEMProgress{Stage: "reusing verified saved DEM and deriving selected products"})
+			return s.writeChunk(ctx, id, key, layer, cached, proof)
+		}
+	}
 	if err = mapDiskReserve(s.path, 168*1024*1024); err != nil {
 		return err
 	}
@@ -303,7 +320,7 @@ func (s *Store) acquireMapChunk(ctx context.Context, p *mapProvider, id, key, la
 	var b []byte
 	if layer == "vector" {
 		e.SourceURL = p.overpass
-		b, err = p.areaBounds(ctx, chunk.Bounds)
+		b, err = s.acquireVector(ctx, p, id, *chunk, emit)
 		if err == nil {
 			var source struct {
 				Provider string `json:"provider"`
@@ -365,6 +382,9 @@ func (s *Store) acquireMapChunk(ctx context.Context, p *mapProvider, id, key, la
 			}
 		}
 	}
+	e.SourceAttempts = budget.attempts
+	afterTransfer, _ := s.transferState(id)
+	e.SourceBytes = afterTransfer.Received - beforeTransfer.Received
 	e.ElapsedMS = float64(time.Since(started)) / float64(time.Millisecond)
 	if err == nil {
 		err = ctx.Err()
@@ -374,6 +394,7 @@ func (s *Store) acquireMapChunk(ctx context.Context, p *mapProvider, id, key, la
 		e.Error = ""
 		e.At = s.Now().UTC().Format(wireTime)
 		e.Bytes = len(b)
+		emitDEM(emit, DEMProgress{Stage: "validating and saving verified " + layer + " chunk"})
 		saveCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		err = s.writeChunk(saveCtx, id, key, layer, b, e)
 		cancel()
@@ -411,7 +432,7 @@ func (s *Store) mapJobRequest(w http.ResponseWriter, r *http.Request, p *mapProv
 			if err != nil {
 				failure(w, 503, "storage_unavailable", err)
 			} else {
-				respond(w, 200, map[string]any{"plan": j.Plan, "components": j.Components, "chunks": chunks, "attribution": j.Attribution, "coverage_note": "Chunk envelopes are conservative. No geographic percentage inferred from cells or sparse features. DEM valid cells exclude voids; contour/hillshade rendering availability is reported by the browser."})
+				respond(w, 200, map[string]any{"transfer": j.Transfer, "plan": j.Plan, "components": j.Components, "chunks": chunks, "attribution": j.Attribution, "coverage_note": "Chunk envelopes are conservative. No geographic percentage inferred from cells or sparse features. DEM valid cells exclude voids; contour/hillshade rendering availability is reported by the browser."})
 			}
 			return true
 		}
@@ -508,8 +529,8 @@ func (s *Store) mapJobRequest(w http.ResponseWriter, r *http.Request, p *mapProv
 	}
 	defer terrainPreparation.Unlock()
 	controller := http.NewResponseController(w)
-	_ = controller.SetWriteDeadline(time.Now().Add(demOverallBudget + 30*time.Second))
-	ctx, cancel := context.WithCancel(r.Context())
+	_ = controller.SetWriteDeadline(time.Now().Add(10*time.Minute + 30*time.Second))
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
 	defer cancel()
 	stream := strings.Contains(r.Header.Get("Accept"), "application/x-ndjson")
 	emit := func(progress DEMProgress) {

@@ -459,3 +459,31 @@ The existing browser renderer lazily loads up to eight visible chunk grids and
 bounds and preserves void transparency. All overlays share its authoritative WGS84
 positions. Source/coverage metadata and render availability remain separate. See the
 Command README for API/resource/operator details and UI acceptance for evidence limits.
+
+
+### Issue #28 automatic acquisition and standalone map portability
+
+The existing radius map job is the sole acquisition owner. Its JSON transfer ledger
+persists cumulative approved/reserved/received body bytes across all providers and
+retries; no second queue, renderer or map library is introduced. The initial 5 MB
+allowance cannot silently escalate. HTTP bodies reserve bounded bytes before reads,
+and announced large fallback requires explicit additional approval. See Command
+README for exact accounting and resource limits.
+
+Exact verified chunks and covering source indexes precede Overpass. Failure triggers
+bounded machine-readable Geofabrik discovery with polygon/hole checks and a single
+regional attempt. Publisher-declared PBF extent/revision/ways-only scope is distinct
+from actual saved chunk envelopes and browser terrain derivation. Streaming PBF
+framing uses the published generated OSM protobuf schema; bounded two-pass indexing
+writes disposable source rows into additive `offline_osm_sources/nodes/ways` tables
+in the same SQLite file. Only completed source rows are reused; unpromoted index
+rows are cleaned on startup/retry. Original GNSS/SOS tables are never modified by map
+operations. Node writes yield every 256 rows; way lookup/geometry work uses the
+existing read connection outside the receiver mutex.
+
+Standalone `.gmap.zip` validates bounded entries, canonical requested coverage,
+asset checksums/formats and missing-layer disclosure before atomic map-library
+publication. Verified chunks/GTERR001 and compatible terrain derivation remain the
+operational assets. This archive is not frozen recording evidence; #38 retains that
+separate ownership. UI uses one Map & Layers dialog with Download New Map, Use
+Existing Map and Import Map, existing Saved Maps selection and Layers controls.

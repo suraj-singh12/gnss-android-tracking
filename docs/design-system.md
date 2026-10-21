@@ -195,3 +195,12 @@ Saved Maps reports chunk-specific source availability and offers resumable parti
 acquisition. Coverage outlines and processing errors do not alter original GNSS
 coordinates. At overview scales exceeding the visible detail budget, explain the
 required zoom instead of presenting a partial detail set as complete coverage.
+
+
+The #28 extension presents three progressively disclosed choices in the existing
+Map & Layers dialog: Download New Map, Use Existing Map, Import Map. Active map and
+actual completeness stay above them. The existing selector activates a saved map;
+there is no per-row Use or Reuse button. Network/resource details are expandable,
+while approval amounts and missing coverage remain visible. Retry Missing,
+Save & Use and Cancel preserve verified data. The toolbar Layers dialog remains
+independent and distinguishes available/hidden/visible/processing failure.

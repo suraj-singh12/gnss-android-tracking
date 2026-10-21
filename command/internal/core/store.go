@@ -225,6 +225,9 @@ func Open(path string) (*Store, error) {
  PRIMARY KEY(map_id,chunk_key))`); err != nil {
 		return fail(err)
 	}
+	if err = sourceSchema(&Store{db: db}); err != nil {
+		return fail(err)
+	}
 	b, _ := json.Marshal(state)
 	if _, err = db.Exec("INSERT OR IGNORE INTO state(id,data) VALUES(1,?)", string(b)); err != nil {
 		return fail(err)

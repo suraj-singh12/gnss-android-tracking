@@ -38,6 +38,7 @@ type savedMap struct {
 type mapProvider struct {
 	client               *http.Client
 	search, overpass     string
+	catalog              string
 	dem                  string
 	demCache             string
 	demClient            *http.Client
@@ -48,6 +49,7 @@ type mapProvider struct {
 	preparedAt           time.Time
 	mu                   sync.Mutex
 	nextSearch, nextArea time.Time
+	nextRegion           time.Time
 }
 
 func newMapProvider() *mapProvider {
@@ -57,7 +59,7 @@ func newMapProvider() *mapProvider {
 	transport.TLSHandshakeTimeout = 10 * time.Second
 	transport.ResponseHeaderTimeout = 20 * time.Second
 	transport.DisableCompression = true
-	return &mapProvider{client: &http.Client{Timeout: 25 * time.Second}, demClient: &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, search: "https://nominatim.openstreetmap.org/search", overpass: "https://overpass-api.de/api/interpreter", dem: "https://elevation-tiles-prod.s3.amazonaws.com/skadi"}
+	return &mapProvider{client: &http.Client{Timeout: 25 * time.Second}, demClient: &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, catalog: "https://download.geofabrik.de/index-v1.json", search: "https://nominatim.openstreetmap.org/search", overpass: "https://overpass-api.de/api/interpreter", dem: "https://elevation-tiles-prod.s3.amazonaws.com/skadi"}
 }
 func (p *mapProvider) reserve(search bool) error {
 	p.mu.Lock()
@@ -82,7 +84,7 @@ func (p *mapProvider) request(ctx context.Context, method, address, body string)
 	if method == "POST" {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
-	resp, err := p.client.Do(req)
+	resp, err := mapHTTPClient(ctx, p.client).Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("map provider request failed: %w", err)
 	}
@@ -110,9 +112,16 @@ func (p *mapProvider) request(ctx context.Context, method, address, body string)
 		}
 		return nil, fmt.Errorf("map provider returned HTTP %d; geographic coverage not acquired; existing chunks retained", resp.StatusCode)
 	}
-	b, err := io.ReadAll(io.LimitReader(resp.Body, mapLimit+1))
-	if len(b) > mapLimit {
-		return nil, errors.New("provider data exceeds 20 MB")
+	limit := int64(mapLimit)
+	if ctx.Value(mapBudgetKey{}) == nil {
+		limit = mapConsentBytes
+		if resp.ContentLength > limit {
+			return nil, errors.New("legacy preview exceeds 5 MB; use automatic radius acquisition with explicit transfer approval")
+		}
+	}
+	b, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+	if int64(len(b)) > limit {
+		return nil, errors.New("provider response exceeds the bounded transfer allowance; use automatic radius acquisition")
 	}
 	return b, err
 }
@@ -402,6 +411,9 @@ func (s *Store) saveMap(source string, b []byte) (savedMap, error) {
 	return m, tx.Commit()
 }
 func (s *Store) mapRequest(w http.ResponseWriter, r *http.Request, p *mapProvider) bool {
+	if s.mapPackageRequest(w, r) || s.mapSourceRequest(w, r, p) {
+		return true
+	}
 	if s.mapJobRequest(w, r, p) {
 		return true
 	}

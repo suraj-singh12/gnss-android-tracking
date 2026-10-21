@@ -111,7 +111,7 @@ func (p *mapProvider) downloadDEMTile(ctx context.Context, name, address string,
 			return nil, err
 		}
 		req.Header.Set("User-Agent", "GNSS-Command/0.1 (bounded DEM acquisition; https://github.com/suraj-singh12/gnss-android-tracking)")
-		resp, err := client.Do(req)
+		resp, err := mapHTTPClient(ctx, client).Do(req)
 		retry, pause := false, backoff*time.Duration(1<<(number-1))
 		var compressed []byte
 		if err == nil {
@@ -166,7 +166,7 @@ func (p *mapProvider) downloadDEMTile(ctx context.Context, name, address string,
 		}
 		if err != nil {
 			var ne net.Error
-			if errors.Is(err, context.Canceled) || ctx.Err() != nil {
+			if errors.Is(err, errMapConsent) || errors.Is(err, context.Canceled) || ctx.Err() != nil {
 				retry = false
 			}
 			if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &ne) && ne.Timeout()) {

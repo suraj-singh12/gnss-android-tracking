@@ -16,12 +16,9 @@ envelope, source tile count and resource bounds. The circle is not a Mercator pi
 circle. Longitude wraps at the antimeridian. A request reaching the poles or outside
 Web Mercator coverage receives a specific refusal, without truncation.
 
-Review and explicitly confirm multi-chunk/source costs, then Download. Preparation
-sends geographic chunk bounds to Overpass (OSM ways only) and, if selected, uses the
-existing Skadi/HGT adapter. A valid empty OSM response is successfully acquired sparse
+Review coverage/resource estimates, then Download Map. The cumulative network allowance starts at **5,000,000 bytes per logical job**, across vectors, DEM, source discovery, errors, retries and fallback. Actual sizes may be unknown; an oversized announced response stops before its body is read, and unknown responses stop at the allowance. Additional explicit approval is required before escalation. Preparation automatically reuses verified exact geographic chunks and covering indexed sources, then tries bounded Overpass (OSM ways only) and independent Skadi/HGT terrain. A valid empty OSM response is successfully acquired sparse
 coverage; missing `elements`, incomplete remarks, malformed geometry, timeouts and
-HTTP errors are failures. No alternative provider is silently contacted. Public
-providers have no SLA. HTTP 429/503 Retry-After extends the local cooldown; explicit
+HTTP errors are failures. On Overpass failure, Command automatically discovers the smallest single covering Geofabrik regional polygon from its machine-readable index and tries its supported `.osm.pbf` extract. Polygon holes/boundaries are checked, not merely overlapping bounding boxes. A larger parent region may be necessary at borders. Unsupported boundary/dateline geometries remain gaps rather than invented coverage. Public providers have no SLA. HTTP 429/503 Retry-After extends the local cooldown; explicit
 retry is required. Skadi retains the existing bounded three-attempt transient retry,
 CRC/size checks and network/processing deadlines. Provider outages do not erase assets.
 
@@ -48,8 +45,7 @@ disposable source cache while Command is stopped cannot remove saved map product
 
 One network/decode/save task runs at a time. Network and raster work hold no receiver
 mutex. Each SQLite asset/evidence update is a short atomic transaction with a five-second
-context. Cancel aborts the active request; completed chunks remain usable. **Saved Maps
-→ Acquire or import terrain → Resume missing map / terrain chunks** retries missing
+context. Cancel aborts the active request; completed chunks remain usable. **Retry Missing** retries missing
 work, including after restart or lost responses. Identical centre/radius requests
 resolve to one deterministic saved-map identity. Selecting additional terrain products
 updates that entry; validated native DEM samples are reused without provider calls. Completed chunks are immutable on
@@ -75,10 +71,79 @@ coordinates load into the browser; zoom in when the visible envelope exceeds thi
 budget. This bounds display work without claiming missing overview detail is acquired
 terrain. Pan/zoom loads other stored chunks locally. Each raw chunk remains accessible
 through `/local/maps/{id}/chunks/{key}?layer=vector` or `layer=terrain`; adding
-`format=gterrain` to terrain exports the existing binary format. The single-file
-GeoJSON/terrain export controls remain for legacy single-grid maps; radius maps use
-the source manifest and these native chunk downloads. No recording export package
-is created here.
+`format=gterrain` to terrain exports the existing binary format. **Export Map** produces a standalone `.gmap.zip` for both custom-radius and legacy maps, including verified vectors, GTERR001 DEM, deterministic compatible terrain derivation, provenance and missing-layer disclosure. No recording package is created here.
+
+### Automatic sources, transfer consent and recovery
+
+The main Map & Layers dialog shows the active map/completeness and three choices:
+**Download New Map**, **Use Existing Map**, **Import Map**. Selecting the existing
+Saved Maps selector activates the map. Retry Missing, Export and confirmed Delete
+use that same selection. There is no Reuse button. Legacy rectangles/GeoJSON/DEM
+and provider details remain in disclosures; the Layers toolbar keeps visibility
+independent of availability. Save & Use activates durably committed partial data;
+Cancel stops the current request and retains every verified asset.
+
+The logical-job transfer ledger lives in the existing `offline_maps.data` and
+survives browser loss, retries and Command restart. It reserves at most 32 KiB
+before each body read; a crash can conservatively overcharge one read. Measured
+received body bytes and reserved/approved bytes are separate. These are application
+response-body measurements, excluding protocol overhead and transport/socket
+read-ahead; they are not a wire-level meter. Redirects are refused, and no response
+is drained past consent. Known large fallback announces its **cumulative** required
+allowance; the operator must approve it before retry. Unknown lengths stop at the
+approved cap and request another bounded increase. No fake aggregate percentage or
+ETA. Legacy online previews are limited to 5 MB; use the primary radius path for
+larger approved acquisition. Subsequent legacy DEM uses the same saved-map ledger,
+including its recorded vector source bytes.
+
+Geofabrik discovery caches a hash/address-validated index for 24 hours. One regional
+attempt is made per unresolved chunk; failed attempts end and expose Retry Missing.
+Regional download has a five-minute limit and a one-minute publisher cooldown,
+extended by Retry-After. Overpass retains its ten-second cooldown; Skadi retains
+three bounded attempts and its independent six-minute/processing limits. Chunk
+requests/import indexing have a ten-minute deadline. These extensions apply only
+to local preparation routes, not GNSS ingestion. Regional transfer/indexing requires
+3 GB free-space admission, at most 1 GB total source input, eight verified source
+revisions, five million indexed nodes and 512 MiB supported-way geometry; oversized
+regions are refused. A source is published only after both bounded passes validate
+its nodes and selected-way references. Its checksum/revision and source scope remain
+in the acquired chunks. Different source snapshots are disclosed per chunk, not
+claimed as a coherent global OSM revision. Existing maps are never evicted.
+
+### Import Map and standalone portability (format 1)
+
+Import supports existing GeoJSON and terrain, local `.osm.pbf`, and `.gmap.zip`.
+PBF offers **Extract Centre + Radius** or **Use Full Supported Coverage**. Full
+coverage means the file's declared supported non-wrapping extent, bounded to 2,048
+chunks; unsupported larger extents require a crop. The importer supports the same
+tagged-way scope as Overpass, including sparse/dense nodes and referenced ways;
+relations, routing, history/change PBF and unsupported compression are rejected or
+explicitly outside its feature scope. It does not assert publisher completeness
+from feature density. On-disk source indexes use the existing Command SQLite file;
+node batches yield the receiver writer every 256 rows. Geographic extraction and
+viewport loading use the existing GeoJSON chunks and eight-visible-chunk renderer.
+At large overview scales, zoom in for detail; no enormous region is loaded into RAM.
+PBF block sizes are bounded to 32 MiB encoded / 16 MiB expanded. Importing a local
+file performs no network transfer. Verified indexed datasets are reused automatically.
+
+The ZIP contains `manifest.json` with `format: GNSS-Command-map`, `version: 1`,
+`name`, the canonical saved `map` request/coverage, `partial`, attribution/derivation
+notes and `assets` (`path`, `sha256`, `bytes`, chunk/layer and original evidence).
+Assets are `chunks/<key>.vector`, `chunks/<key>.terrain`, or legacy
+`terrain.gterrain`; a legacy vector is embedded in `map`. Missing chunks/layers
+remain missing. GTERR001 plus the compatible built-in Horn hillshade/marching-square
+contour algorithms regenerate selected terrain locally. OSM ODbL and complete Skadi
+attribution travel with the package. There are no source-cache regional datasets,
+GNSS originals, recordings, credentials or phone controls in this format.
+
+Import validates every declared entry/CRC/hash, version, geometry/terrain, canonical
+plan and missing-layer disclosure before publication. It rejects traversal, symlinks,
+duplicate/undeclared/missing entries, unsupported formats, oversized entries/archives
+and bombs. Limits: 256 MiB expanded assets, 20 MiB per chunk, 2 MiB manifest. Staging
+is local and bounded; failed publication rolls back atomically. Identical portable
+imports resolve to the same map identity and cannot overwrite existing maps. Package
+checksums establish byte integrity, **not creator authenticity**. This is operational
+map portability; #38 owns frozen map revisions inside evidence recordings.
 
 Issue #28 acceptance evidence is recorded in `docs/ui-acceptance.md`. Linux cross-builds
 and synthetic browser surfaces are not native macOS/Windows or real-provider acceptance.

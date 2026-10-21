@@ -170,3 +170,11 @@ OEM/OS, native GNSS or physical field acceptance.
 
 No Android Settings (#39), recording export packages (#38), GNSS quality/distance,
 recording/Travel Back or remote-control authority changes belong to this extension.
+
+
+| #28 extension surface | Existing owner reused | Verification |
+| --- | --- | --- |
+| Automatic fallback and 5 MB cumulative consent | Map job/chunk persistence and bounded provider clients | Known/unknown lengths, 4+4 MB, 200 MB fallback gate, timeout/429/502/503/504 and restart tests |
+| PBF crop/full extent and source cache | Same SQLite, GeoJSON chunks and viewport renderer | Sparse/dense nodes, missing references, full extent, polygon holes, cache reuse and bounded index/fleet test |
+| Standalone map package | Existing saved vectors/GTERR001 and terrain algorithms | Partial round trip to clean DB, idempotence, corrupt/malicious archive and write-failure rollback |
+| Simplified map lifecycle | Same Map & Layers/Saved Maps/Layers controls | Chromium package/PBF/import/terrain/offline restart and axe; existing dashboard/SOS/control regressions |

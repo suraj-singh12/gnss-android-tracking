@@ -25,6 +25,7 @@ type mapChunk struct {
 	Bounds [4]float64 `json:"bounds"`
 }
 type mapPlan struct {
+	FullExtent          bool         `json:"full_extent,omitempty"`
 	AreaM2              float64      `json:"approximate_ellipsoidal_area_m2"`
 	Request             mapCircle    `json:"request"`
 	Circle              [][2]float64 `json:"circle"` // lon,lat; render as geodesic polygon, not screen circle

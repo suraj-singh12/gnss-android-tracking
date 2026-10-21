@@ -40,7 +40,11 @@ async function wait(f) {
     ],
     {
       cwd: path.join(__dirname, "../../command"),
-      env: { ...process.env, GNSS_MAP_FIXTURE_DB: db },
+      env: {
+        ...process.env,
+        GNSS_MAP_FIXTURE_DB: db,
+        GNSS_PBF_FIXTURE_PATH: path.join(work, "fixture.osm.pbf"),
+      },
       stdio: "pipe",
     },
   );
@@ -116,6 +120,7 @@ async function wait(f) {
     path: path.join(out, "radius-requested-circle-fixture.png"),
     fullPage: true,
   });
+  await page.locator("#confirm-map-cost").check();
   await page.locator("#download-map").click();
   await wait(async () =>
     (await page.locator("#map-preparation-status").textContent()).includes(
@@ -124,6 +129,7 @@ async function wait(f) {
   );
   const maps = await (await fetch(local + "/local/maps")).json();
   assert.equal(maps.length, 1);
+  await page.locator("#choose-saved-map").click();
   await page.locator("#saved-maps").selectOption(maps[0].id);
   await wait(async () => !(await page.locator("#layer-contours").isDisabled()));
   await page.locator("#map-preparation").evaluate((e) => (e.open = true));
@@ -240,6 +246,84 @@ async function wait(f) {
   );
   report.vector_failure_preserves_terrain = true;
 
+  await page.locator("#open-map").click();
+  await page.locator("#choose-saved-map").click();
+  assert.match(
+    await page.locator("#export-map").getAttribute("href"),
+    /\/export$/,
+  );
+  const packageResponse = await fetch(
+    local + `/local/maps/${maps[0].id}/export`,
+  );
+  assert.equal(packageResponse.status, 200);
+  const packagePath = path.join(work, "portable.gmap.zip");
+  fs.writeFileSync(
+    packagePath,
+    Buffer.from(await packageResponse.arrayBuffer()),
+  );
+  await page.locator("#open-map-import").click();
+  await page.locator("#source-map-file").setInputFiles(packagePath);
+  await page.locator("#import-map-source").click();
+  await wait(async () => {
+    report.importStatus = await page
+      .locator("#map-import-status")
+      .textContent();
+    return report.importStatus.includes("Stored in Saved Maps");
+  });
+  assert.ok(
+    (await (await fetch(local + "/local/maps")).json()).some((m) =>
+      m.id.startsWith("portable-"),
+    ),
+  );
+  await page.screenshot({
+    path: path.join(out, "map-portable-imported-fixture.png"),
+    fullPage: true,
+  });
+  await page
+    .locator("#source-map-file")
+    .setInputFiles(path.join(work, "fixture.osm.pbf"));
+  await page.locator("#source-map-mode").selectOption("full");
+  await page.locator("#import-map-source").click();
+  await wait(async () => {
+    report.importStatus = await page
+      .locator("#map-import-status")
+      .textContent();
+    return report.importStatus.includes("Stored in Saved Maps");
+  });
+  assert.match(
+    await page.locator("#current-map-name").textContent(),
+    /Local OSM PBF/,
+  );
+  const full = await (await fetch(local + "/local/maps")).json();
+  assert.equal(full.find((m) => m.id.startsWith("import-")).chunks.vector, 9);
+  await page.locator('[data-close="map-settings"]').click();
+  for (let i = 0; i < 6; i++) {
+    if ((await page.locator('[data-layer="offline-map"] polyline').count()) > 0)
+      break;
+    await page.locator("#zoom-in").click();
+    await page.waitForTimeout(350);
+  }
+  await wait(
+    async () =>
+      (await page.locator('[data-layer="offline-map"] polyline').count()) > 0,
+  );
+  await page.screenshot({
+    path: path.join(out, "map-pbf-full-extent-offline-render.png"),
+    fullPage: true,
+  });
+  await page.locator("#open-map").click();
+  await page.screenshot({
+    path: path.join(out, "map-pbf-full-extent-fixture.png"),
+    fullPage: true,
+  });
+  const panelAxe = await new Axe({ page }).analyze();
+  assert.deepEqual(
+    panelAxe.violations.map((v) => v.id),
+    [],
+  );
+  report.portable_package_and_full_pbf = "PASS (local fixture, no providers)";
+  await page.locator("#choose-saved-map").click();
+  await page.locator("#saved-maps").selectOption(maps[0].id);
   assert.deepEqual(errors, []);
   report.passed = true;
   report.browser_render = await page.evaluate(() => terrainGeneration);

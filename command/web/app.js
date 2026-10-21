@@ -6,8 +6,9 @@ let state, policyRevision;
 let liveConnection = "Connecting to Command…";
 const uiTimings = {};
 function uiTiming(stage, started, failed = false) {
-  const t = uiTimings[stage] ??= {count: 0, errors: 0, recent_ms: []};
-  t.count++; t.errors += Number(failed);
+  const t = (uiTimings[stage] ??= { count: 0, errors: 0, recent_ms: [] });
+  t.count++;
+  t.errors += Number(failed);
   t.recent_ms.push(performance.now() - started);
   if (t.recent_ms.length > 128) t.recent_ms.shift();
 }
@@ -28,7 +29,10 @@ function applyAppearance() {
     "aria-label",
     `Switch to ${night ? "Day" : "Night"} appearance`,
   );
-  if (terrain) { terrain.image = undefined; for (const g of terrain.grids || []) g.image = undefined; }
+  if (terrain) {
+    terrain.image = undefined;
+    for (const g of terrain.grids || []) g.image = undefined;
+  }
   draw();
 }
 $("appearance").onclick = () => {
@@ -362,7 +366,11 @@ function renderSOS() {
 }
 function render() {
   const started = performance.now();
-  try { renderDashboard(); } finally { uiTiming("render", started); }
+  try {
+    renderDashboard();
+  } finally {
+    uiTiming("render", started);
+  }
 }
 function renderDashboard() {
   renderSOS();
@@ -373,9 +381,13 @@ function renderDashboard() {
       ? "Projection catching up — displayed history is not fully synchronized"
       : "";
   $("connection").textContent = liveConnection;
-  $("connection").classList.toggle("unavailable", liveConnection.includes("unavailable"));
+  $("connection").classList.toggle(
+    "unavailable",
+    liveConnection.includes("unavailable"),
+  );
   if (state.history_sampled)
-    $("projection-status").textContent += " · Map preview only (bounded points); use Inspect selected history for every full-resolution point and original observation. Distance remains full resolution.";
+    $("projection-status").textContent +=
+      " · Map preview only (bounded points); use Inspect selected history for every full-resolution point and original observation. Distance remains full resolution.";
   const recording = state.recording;
   $("recording").textContent = recording
     ? recording.active
@@ -480,7 +492,10 @@ function renderDashboard() {
           "div",
           d.snapshot.config_state.effective_reporting_interval_s +
             " s reporting · " +
-            (d.config_converged ? "reported settings match" : "reported settings differ") + " · execution evidence in Phone controls",
+            (d.config_converged
+              ? "reported settings match"
+              : "reported settings differ") +
+            " · execution evidence in Phone controls",
         ),
       );
       if (d.field_evidence) {
@@ -500,17 +515,38 @@ function renderDashboard() {
         const r = d.reconstruction;
         status.append(
           el("div", reconstructionLabel(d)),
-          el("div", `GNSS durably received: ${r.durably_received} · eligible: ${r.eligible} · outside boundaries: ${r.excluded_by_boundaries}`),
-          el("div", `Projection: ${r.projection} · processed: ${r.projected} · accepted: ${r.accepted} · rejected: ${r.rejected}`),
-          el("div", `Earliest received measurement: ${r.earliest_received_observed_at ? time(r.earliest_received_observed_at) : "unknown until history arrives"}`),
-          el("div", `Known missing sequences: ${r.known_missing_sequences} · reported unresolved: ${r.reported_unresolved} · reported collection loss: ${r.reported_collection_loss}`),
+          el(
+            "div",
+            `GNSS durably received: ${r.durably_received} · eligible: ${r.eligible} · outside boundaries: ${r.excluded_by_boundaries}`,
+          ),
+          el(
+            "div",
+            `Projection: ${r.projection} · processed: ${r.projected} · accepted: ${r.accepted} · rejected: ${r.rejected}`,
+          ),
+          el(
+            "div",
+            `Earliest received measurement: ${r.earliest_received_observed_at ? time(r.earliest_received_observed_at) : "unknown until history arrives"}`,
+          ),
+          el(
+            "div",
+            `Known missing sequences: ${r.known_missing_sequences} · reported unresolved: ${r.reported_unresolved} · reported collection loss: ${r.reported_collection_loss}`,
+          ),
           el("div", r.inventory_scope),
         );
-        const drawing = el("div", "Qualified geometry available; drawing status updating…");
+        const drawing = el(
+          "div",
+          "Qualified geometry available; drawing status updating…",
+        );
         drawing.setAttribute("data-drawing-device", d.device_id);
         status.append(drawing);
         if (r.projection_error) status.append(el("div", r.projection_error));
-        if (r.clock_uncertain) status.append(el("div", `${r.clock_uncertain} observations have clock uncertainty; original times are unchanged.`));
+        if (r.clock_uncertain)
+          status.append(
+            el(
+              "div",
+              `${r.clock_uncertain} observations have clock uncertainty; original times are unchanged.`,
+            ),
+          );
         for (const [reason, count] of Object.entries(r.rejection_reasons ?? {}))
           status.append(el("div", `${reason.replaceAll("_", " ")}: ${count}`));
       }
@@ -567,7 +603,11 @@ function renderDashboard() {
       form.append(input, set, clear);
       const remote = el("button", "Phone controls");
       remote.type = "button";
-      remote.onclick = () => { selectParty(d.device_id); $("open-control").click(); $("control-one").click(); };
+      remote.onclick = () => {
+        selectParty(d.device_id);
+        $("open-control").click();
+        $("control-one").click();
+      };
       card.append(remote);
       card.append(
         el("small", "Reporting interval override · seconds"),
@@ -738,16 +778,18 @@ function gnssLabel(d) {
 function reconstructionLabel(d) {
   const r = d.reconstruction;
   if (!r) return "Route status unavailable";
-  const condition = {
-    no_recording: "No recording selected",
-    no_observations_received: "No GNSS observations received",
-    excluded_by_recording_boundaries: "History outside recording boundaries",
-    quality_filtered: "All eligible history rejected by quality rules",
-    projection_pending: "Route reconstruction pending",
-    projection_failed: "Route reconstruction failed — retrying",
-    projection_inconsistent: "Route projection inconsistent — export diagnostics",
-    qualified_geometry: `${r.qualified_points} qualified points / ${r.qualified_segments} sections`,
-  }[r.route_condition] || "Route status unknown";
+  const condition =
+    {
+      no_recording: "No recording selected",
+      no_observations_received: "No GNSS observations received",
+      excluded_by_recording_boundaries: "History outside recording boundaries",
+      quality_filtered: "All eligible history rejected by quality rules",
+      projection_pending: "Route reconstruction pending",
+      projection_failed: "Route reconstruction failed — retrying",
+      projection_inconsistent:
+        "Route projection inconsistent — export diagnostics",
+      qualified_geometry: `${r.qualified_points} qualified points / ${r.qualified_segments} sections`,
+    }[r.route_condition] || "Route status unknown";
   return condition;
 }
 function historyLabel(d) {
@@ -882,8 +924,11 @@ async function readDownloadReport(id, since = 0) {
   }
   return false;
 }
-$("choose-saved-map").onclick = () => {
+$("choose-saved-map").onclick = (event) => {
+  event.preventDefault();
   $("maps-library").open = true;
+  $("map-preparation").open = false;
+  $("map-import").open = false;
   $("saved-maps").focus();
 };
 $("cancel-download").onclick = () => downloadAbort?.abort();
@@ -933,21 +978,19 @@ async function refreshMaps(selected) {
       new Option(`${m.source} · ${(m.bytes / 1024).toFixed(1)} KB`, m.id),
     );
     const row = el("div", undefined, "saved-map-row");
-    const select = el("button", m.source);
-    select.onclick = () => {
-      $("saved-maps").value = m.id;
-      loadSavedMap(m.id).catch(showError);
-    };
+    const select = el("strong", m.source);
     row.dataset.mapId = m.id;
     row.append(
       select,
       el(
         "small",
         `${m.bounds ? m.bounds.map((v) => v.toFixed(4)).join(", ") : "Imported geographic coverage"} · ${
-          m.chunks ? `Vector ${m.chunks.vector}/${m.chunks.requested} · DEM ${m.chunks.terrain}/${m.chunks.requested} chunks; render availability in Layers` : Object.entries(m.components || {})
-            .filter(([, v]) => v)
-            .map(([k]) => k)
-            .join(", ") || "Vectors only"
+          m.chunks
+            ? `Vector ${m.chunks.vector}/${m.chunks.requested} · DEM ${m.chunks.terrain}/${m.chunks.requested} chunks; render availability in Layers`
+            : Object.entries(m.components || {})
+                .filter(([, v]) => v)
+                .map(([k]) => k)
+                .join(", ") || "Vectors only"
         }`,
       ),
     );
@@ -961,13 +1004,22 @@ async function refreshMaps(selected) {
 }
 function useMap(text, source, id) {
   const job = JSON.parse(text).plan;
-  const previousWrap=GeoMap.setWrap(job?.request.lon || 0);
+  const previousWrap = GeoMap.setWrap(job?.request.lon || 0);
   let parsed;
-  try {parsed=GeoMap.parse(text,source);} catch(e){GeoMap.setWrap(previousWrap);throw e;}
-  radiusManifest=undefined;radiusViewKey=undefined;radiusViewVersion++;
-  globalThis.radiusGrids=undefined;
-  $("resume-map").hidden=true;$("export-manifest").hidden=true;
-  $("map-coverage-status").textContent="";$("map-detail-status").textContent="";
+  try {
+    parsed = GeoMap.parse(text, source);
+  } catch (e) {
+    GeoMap.setWrap(previousWrap);
+    throw e;
+  }
+  radiusManifest = undefined;
+  radiusViewKey = undefined;
+  radiusViewVersion++;
+  globalThis.radiusGrids = undefined;
+  $("resume-map").hidden = true;
+  $("export-manifest").hidden = true;
+  $("map-coverage-status").textContent = "";
+  $("map-detail-status").textContent = "";
   offlineMap = parsed;
   activeMapID = id;
   $("current-map-name").textContent = source;
@@ -980,8 +1032,8 @@ function useMap(text, source, id) {
   $("map-metadata").textContent =
     `Source: ${source} · WGS84 / EPSG:4326 · Display EPSG:3857 · Coverage ${parsed.bounds.map((n) => n.toFixed(5)).join(", ")} · ${parsed.count} coordinates · saved locally`;
   $("map-attribution").textContent = parsed.attribution;
-  $("export-map").href = "/local/maps/" + encodeURIComponent(id);
-  $("export-map").setAttribute("download", "offline-map.geojson");
+  $("export-map").href = "/local/maps/" + encodeURIComponent(id) + "/export";
+  $("export-map").setAttribute("download", "offline-map.gmap.zip");
   localStorage.setItem("gnss-map-id", id);
   viewport = undefined;
   draw();
@@ -994,7 +1046,10 @@ async function loadSavedMap(id) {
   const source =
     $("saved-maps").selectedOptions[0]?.textContent || "Saved offline map";
   useMap(await response.text(), source, id);
-  if (offlineMap?.plan) { await loadRadiusManifest(id); return; }
+  if (offlineMap?.plan) {
+    await loadRadiusManifest(id);
+    return;
+  }
   await loadTerrain(id);
   await readDownloadReport(id);
 }
@@ -1004,7 +1059,8 @@ function updateLayers() {
     const control = $("layer-" + kind),
       available =
         !!terrain?.components[kind] &&
-        !(kind === "contours" && terrain.contour_error) && !(kind==="hillshade" && terrain.hillshade_error);
+        !(kind === "contours" && terrain.contour_error) &&
+        !(kind === "hillshade" && terrain.hillshade_error);
     control.disabled = !available;
     control.checked =
       available &&
@@ -1015,23 +1071,30 @@ function updateLayers() {
         : "Downloaded · hidden"
       : kind === "hillshade" && terrain?.hillshade_error
         ? terrain.hillshade_error
-      : kind === "contours" && terrain?.contour_error
-        ? terrain.contour_error
-        : "Not downloaded / prepared";
-    if(offlineMap?.plan) $("availability-"+kind).textContent = available
-      ? `Available in visible DEM chunks · ${control.checked?"visible":"hidden"}; inspect coverage gaps`
-      : "Unavailable in current view; inspect saved source / render status";
+        : kind === "contours" && terrain?.contour_error
+          ? terrain.contour_error
+          : "Not downloaded / prepared";
+    if (offlineMap?.plan)
+      $("availability-" + kind).textContent = available
+        ? `Available in visible DEM chunks · ${control.checked ? "visible" : "hidden"}; inspect coverage gaps`
+        : "Unavailable in current view; inspect saved source / render status";
   }
-  $("current-map-layers").textContent = terrain
-    ? "Available: " +
-      terrainLayers.filter((k) => terrain.components[k]).join(", ") +
-      " · visibility via Layers"
-    : offlineMap?.plan ? "Radius map · inspect source manifest and current viewport layer availability" : "Vectors only · no terrain downloaded";
+  $("current-map-layers").textContent =
+    offlineMap?.plan && radiusManifest
+      ? radiusSummary(radiusManifest)
+      : terrain
+        ? "Available: " +
+          terrainLayers.filter((k) => terrain.components[k]).join(", ") +
+          " · visibility via Layers"
+        : "Vectors only · no terrain downloaded";
   for (const id of ["delete-map", "prepare-terrain", "download-terrain"])
     $(id).disabled = !activeMapID || !!downloadAbort;
-  if(offlineMap?.plan) {$("prepare-terrain").disabled=true;$("prepare-terrain").title="Local single-grid import is for legacy maps; use Resume for radius maps";}
-  else $("prepare-terrain").removeAttribute("title");
-  $("export-map").hidden=!!offlineMap?.plan;
+  if (offlineMap?.plan) {
+    $("prepare-terrain").disabled = true;
+    $("prepare-terrain").title =
+      "Local single-grid import is for legacy maps; use Resume for radius maps";
+  } else $("prepare-terrain").removeAttribute("title");
+  $("export-map").hidden = false;
   $("export-map").setAttribute("aria-disabled", String(!activeMapID));
   $("terrain-metadata").textContent = terrain
     ? `${terrain.source} · ${terrain.arc_seconds} arc sec (~${Math.round((terrain.arc_seconds / 3600) * 111320)} m north–south) · ${terrain.vertical_datum} · interpolated, not survey-grade${terrain.contour ? " · contours " + terrain.contour.interval + " m" : ""}${terrain.provenance ? " · " + terrain.provenance.attribution : ""}`
@@ -1269,13 +1332,19 @@ async function downloadTerrain(id, components) {
   await refreshMaps(id);
 }
 $("download-terrain").onclick = async () => {
- if(offlineMap?.plan){
-  try {
-   await mapPost("map-jobs",{...offlineMap.plan.request,components:Object.fromEntries(terrainLayers.map(k=>[k,$("prepare-"+k).checked])),confirmed:true});
-   await resumeRadius();
-  }catch(e){$("terrain-status").textContent=e.message;}
-  return;
- }
+  if (offlineMap?.plan) {
+    try {
+      await mapPost(`maps/${encodeURIComponent(activeMapID)}/products`, {
+        components: Object.fromEntries(
+          terrainLayers.map((k) => [k, $("prepare-" + k).checked]),
+        ),
+      });
+      await resumeRadius();
+    } catch (e) {
+      $("terrain-status").textContent = e.message;
+    }
+    return;
+  }
   if (!activeMapID) {
     $("terrain-status").textContent = "Save/select a vector map first.";
     return;
@@ -1377,7 +1446,10 @@ $("map-area").onchange = () => {
 };
 $("custom-map-dimensions").hidden = $("map-area").value !== "custom";
 $("preview-map").onclick = async () => {
-  if ($("map-shape").value === "circle") { await previewRadius(); return; }
+  if ($("map-shape").value === "circle") {
+    await previewRadius();
+    return;
+  }
   invalidatePreparation();
   for (const id of ["map-lat", "map-lon", "map-width", "map-height"])
     if (!$(id).reportValidity()) return;
@@ -1453,7 +1525,10 @@ $("preview-map").onclick = async () => {
 };
 $("download-map").onclick = async () => {
   if (!preparedMap) return;
-  if(preparedMap.plan) { await startRadiusDownload(); return; }
+  if (preparedMap.plan) {
+    await startRadiusDownload();
+    return;
+  }
   const candidate = preparedMap;
   $("download-map").disabled = true;
   try {
@@ -1566,7 +1641,10 @@ $("zoom-in").onclick = () => zoom(1.5);
 $("zoom-out").onclick = () => zoom(1 / 1.5);
 let drag;
 $("tracks").onpointerdown = (e) => {
-  if (pickingMapCenter && viewport) { pickRadiusCenter(e); return; }
+  if (pickingMapCenter && viewport) {
+    pickRadiusCenter(e);
+    return;
+  }
   if (e.target.closest?.('[role="button"]') || e.button !== 0 || !viewport)
     return;
   drag = { x: e.clientX, y: e.clientY, cx: viewport.cx, cy: viewport.cy };
@@ -1653,7 +1731,11 @@ function terrainReadout(lon, lat) {
 function draw() {
   if (!state) return;
   const started = performance.now();
-  try { drawMap(); } finally { uiTiming("draw", started); }
+  try {
+    drawMap();
+  } finally {
+    uiTiming("draw", started);
+  }
 }
 function drawMap() {
   const root = $("tracks"),
@@ -1723,7 +1805,7 @@ function drawMap() {
   root.setAttribute("viewBox", `0 0 ${w} ${h}`);
   const mapVisible = offlineMap && $("map-mode").value === "offline";
   globalThis.legacyTerrainForDraw = terrain;
-  if (offlineMap?.plan) scheduleRadiusView(w,h);
+  if (offlineMap?.plan) scheduleRadiusView(w, h);
   const terrainVisible = mapVisible && terrain;
   const layerOn = (kind) => terrainVisible && $("layer-" + kind).checked;
   const night = document.documentElement.dataset.appearance === "night";
@@ -1748,13 +1830,32 @@ function drawMap() {
       };
   // Retain immutable history/map nodes across LIVE and unchanged history polls.
   // Explicit pan/zoom, selection, style, layer and geometry changes invalidate it.
-  const key = JSON.stringify([points, raw, selectedParty, viewport, w, h, night,
-    $("map-mode").value, $("map-opacity").value,
-    ["hillshade", "contours", "elevation"].map(k => $("layer-" + k).checked),
-    Object.values(state.devices).map(d => [d.device_id, d.snapshot.party.id, d.track_color, d.track_dash])]);
-  const reuseHistory = key === historyDrawKey && offlineMap === historyDrawMap && terrain === historyDrawTerrain;
+  const key = JSON.stringify([
+    points,
+    raw,
+    selectedParty,
+    viewport,
+    w,
+    h,
+    night,
+    $("map-mode").value,
+    $("map-opacity").value,
+    ["hillshade", "contours", "elevation"].map((k) => $("layer-" + k).checked),
+    Object.values(state.devices).map((d) => [
+      d.device_id,
+      d.snapshot.party.id,
+      d.track_color,
+      d.track_dash,
+    ]),
+  ]);
+  const reuseHistory =
+    key === historyDrawKey &&
+    offlineMap === historyDrawMap &&
+    terrain === historyDrawTerrain;
   if (reuseHistory) {
-    root.querySelectorAll('[data-layer="live"], [data-layer="located-sos"]').forEach(n => n.remove());
+    root
+      .querySelectorAll('[data-layer="live"], [data-layer="located-sos"]')
+      .forEach((n) => n.remove());
   } else root.replaceChildren();
   function inspect(p) {
     inspectedPoint = p;
@@ -1764,245 +1865,277 @@ function drawMap() {
       $("hover").textContent += terrainReadout(p.fix.longitude, p.fix.latitude);
   }
   if (!reuseHistory) {
-  for (const terrain of (globalThis.radiusGrids || [globalThis.legacyTerrainForDraw]).filter(Boolean)) {
-  if (layerOn("hillshade") && terrain.shades) {
-    if (!terrain.image) {
-      const c = document.createElement("canvas");
-      c.width = terrain.columns;
-      c.height = terrain.rows;
-      const context = c.getContext("2d"),
-        image = context.createImageData(c.width, c.height);
-      const [west, south, east, north] = terrain.bounds,
-        pyNorth = GeoMap.project(west, north)[1],
-        pySouth = GeoMap.project(west, south)[1];
-      // Resample north-up rows to the existing Mercator projection, not a new CRS.
-      for (let y = 0; y < c.height; y++) {
-        const py = pyNorth - (y / (c.height - 1)) * (pyNorth - pySouth);
-        const lat = GeoMap.unproject(0, py)[1];
-        const row = Math.max(
-          0,
-          Math.min(
-            c.height - 1,
-            Math.round(((north - lat) / (north - south)) * (c.height - 1)),
-          ),
+    for (const terrain of (
+      globalThis.radiusGrids || [globalThis.legacyTerrainForDraw]
+    ).filter(Boolean)) {
+      if (layerOn("hillshade") && terrain.shades) {
+        if (!terrain.image) {
+          const c = document.createElement("canvas");
+          c.width = terrain.columns;
+          c.height = terrain.rows;
+          const context = c.getContext("2d"),
+            image = context.createImageData(c.width, c.height);
+          const [west, south, east, north] = terrain.bounds,
+            pyNorth = GeoMap.project(west, north)[1],
+            pySouth = GeoMap.project(west, south)[1];
+          // Resample north-up rows to the existing Mercator projection, not a new CRS.
+          for (let y = 0; y < c.height; y++) {
+            const py = pyNorth - (y / (c.height - 1)) * (pyNorth - pySouth);
+            const lat = GeoMap.unproject(0, py)[1];
+            const row = Math.max(
+              0,
+              Math.min(
+                c.height - 1,
+                Math.round(((north - lat) / (north - south)) * (c.height - 1)),
+              ),
+            );
+            for (let x = 0; x < c.width; x++) {
+              const a = (y * c.width + x) * 4,
+                b = (row * c.width + x) * 4;
+              const shade = terrain.shades[b];
+              image.data[a] =
+                image.data[a + 1] =
+                image.data[a + 2] =
+                  night ? Math.round(25 + shade * 0.32) : shade;
+              image.data[a + 3] = terrain.shades[b + 3];
+            }
+          }
+          context.putImageData(image, 0, 0);
+          terrain.image = c.toDataURL("image/png");
+        }
+        const [west, south, east, north] = terrain.bounds,
+          tl = xyCoord(GeoMap.project(west, north)),
+          br = xyCoord(GeoMap.project(east, south)),
+          cellWidth = (br[0] - tl[0]) / (terrain.columns - 1),
+          cellHeight = (br[1] - tl[1]) / (terrain.rows - 1);
+        root.append(
+          svg("image", {
+            "data-layer": "hillshade",
+            "clip-path": radiusClip(root, terrain, xyCoord),
+            href: terrain.image,
+            // Raster pixels cover cells; their centres must coincide with DEM nodes.
+            // Horn's unsupported outer border is transparent, not invented coverage.
+            x: tl[0] - cellWidth / 2,
+            y: tl[1] - cellHeight / 2,
+            width: cellWidth * terrain.columns,
+            height: cellHeight * terrain.rows,
+            preserveAspectRatio: "none",
+            opacity: night ? 0.8 : 0.5,
+            "pointer-events": "none",
+          }),
         );
-        for (let x = 0; x < c.width; x++) {
-          const a = (y * c.width + x) * 4,
-            b = (row * c.width + x) * 4;
-          const shade = terrain.shades[b];
-          image.data[a] =
-            image.data[a + 1] =
-            image.data[a + 2] =
-              night ? Math.round(25 + shade * 0.32) : shade;
-          image.data[a + 3] = terrain.shades[b + 3];
+      }
+    }
+    $("map-mode-label").textContent = mapVisible
+      ? "Offline geographic map"
+      : "Blank canvas";
+    const outsideView = points.some((p) => {
+      const [x, y] = xy(p);
+      return x < 0 || x > w || y < 0 || y > h;
+    });
+    const projectionStatus = state.projection_error
+      ? "Projection failed: " + state.projection_error
+      : state.projection_pending
+        ? "History reconstruction in progress…"
+        : outsideView
+          ? "Historical geometry extends beyond this view — use Fit parties."
+          : "";
+    $("projection-status").textContent = projectionStatus;
+    if (mapVisible) {
+      const layer = svg("g", {
+        "data-layer": "offline-map",
+        opacity: $("map-opacity").value,
+      });
+      for (const shape of offlineMap.shapes) {
+        if (shape.type === "polygon")
+          layer.append(
+            svg("path", {
+              d: shape.rings
+                .map(
+                  (r) =>
+                    "M" + r.map((c) => xyCoord(c).join(",")).join("L") + "Z",
+                )
+                .join(" "),
+              fill:
+                shape.properties?.natural === "water" || shape.properties?.water
+                  ? mapColors.water
+                  : shape.properties?.building
+                    ? mapColors.building
+                    : mapColors.land,
+              stroke: mapColors.border,
+              "fill-rule": "evenodd",
+              "stroke-width": 1,
+            }),
+          );
+        else if (shape.type === "line")
+          layer.append(
+            svg("polyline", {
+              points: shape.coordinates
+                .map((c) => xyCoord(c).join(","))
+                .join(" "),
+              fill: "none",
+              stroke: shape.properties?.waterway
+                ? mapColors.river
+                : shape.properties?.highway
+                  ? mapColors.road
+                  : mapColors.other,
+              "stroke-width": shape.properties?.highway ? 3 : 2,
+              "stroke-dasharray": ["path", "footway", "track"].includes(
+                shape.properties?.highway,
+              )
+                ? "4 3"
+                : "",
+            }),
+          );
+        else {
+          const [x, y] = xyCoord(shape.coordinates[0]);
+          layer.append(svg("circle", { cx: x, cy: y, r: 3, fill: "#81958c" }));
         }
       }
-      context.putImageData(image, 0, 0);
-      terrain.image = c.toDataURL("image/png");
+      root.append(layer);
+      const outside = all.some(
+        (p) =>
+          p.fix.longitude < offlineMap.bounds[0] ||
+          p.fix.longitude > offlineMap.bounds[2] ||
+          p.fix.latitude < offlineMap.bounds[1] ||
+          p.fix.latitude > offlineMap.bounds[3],
+      );
+      $("projection-status").textContent = outside
+        ? "Some GNSS observations are outside map coverage. Tracks remain available."
+        : projectionStatus;
     }
-    const [west, south, east, north] = terrain.bounds,
-      tl = xyCoord(GeoMap.project(west, north)),
-      br = xyCoord(GeoMap.project(east, south)),
-      cellWidth = (br[0] - tl[0]) / (terrain.columns - 1),
-      cellHeight = (br[1] - tl[1]) / (terrain.rows - 1);
-    root.append(
-      svg("image", {
-        "data-layer": "hillshade",
-        "clip-path": radiusClip(root, terrain, xyCoord),
-        href: terrain.image,
-        // Raster pixels cover cells; their centres must coincide with DEM nodes.
-        // Horn's unsupported outer border is transparent, not invented coverage.
-        x: tl[0] - cellWidth / 2,
-        y: tl[1] - cellHeight / 2,
-        width: cellWidth * terrain.columns,
-        height: cellHeight * terrain.rows,
-        preserveAspectRatio: "none",
-        opacity: night ? 0.8 : 0.5,
-        "pointer-events": "none",
-      }),
-    );
-  }
-  }
-  $("map-mode-label").textContent = mapVisible
-    ? "Offline geographic map"
-    : "Blank canvas";
-  const outsideView = points.some((p) => {
-    const [x, y] = xy(p);
-    return x < 0 || x > w || y < 0 || y > h;
-  });
-  const projectionStatus = state.projection_error
-    ? "Projection failed: " + state.projection_error
-    : state.projection_pending
-      ? "History reconstruction in progress…"
-      : outsideView
-        ? "Historical geometry extends beyond this view — use Fit parties."
-        : "";
-  $("projection-status").textContent = projectionStatus;
-  if (mapVisible) {
-    const layer = svg("g", {
-      "data-layer": "offline-map",
-      opacity: $("map-opacity").value,
-    });
-    for (const shape of offlineMap.shapes) {
-      if (shape.type === "polygon")
-        layer.append(
-          svg("path", {
-            d: shape.rings
-              .map(
-                (r) => "M" + r.map((c) => xyCoord(c).join(",")).join("L") + "Z",
-              )
-              .join(" "),
-            fill:
-              shape.properties?.natural === "water" || shape.properties?.water
-                ? mapColors.water
-                : shape.properties?.building
-                  ? mapColors.building
-                  : mapColors.land,
-            stroke: mapColors.border,
-            "fill-rule": "evenodd",
-            "stroke-width": 1,
-          }),
-        );
-      else if (shape.type === "line")
-        layer.append(
-          svg("polyline", {
-            points: shape.coordinates
-              .map((c) => xyCoord(c).join(","))
-              .join(" "),
-            fill: "none",
-            stroke: shape.properties?.waterway
-              ? mapColors.river
-              : shape.properties?.highway
-                ? mapColors.road
-                : mapColors.other,
-            "stroke-width": shape.properties?.highway ? 3 : 2,
-            "stroke-dasharray": ["path", "footway", "track"].includes(
-              shape.properties?.highway,
-            )
-              ? "4 3"
-              : "",
-          }),
-        );
-      else {
-        const [x, y] = xyCoord(shape.coordinates[0]);
-        layer.append(svg("circle", { cx: x, cy: y, r: 3, fill: "#81958c" }));
+    for (const terrain of (
+      globalThis.radiusGrids || [globalThis.legacyTerrainForDraw]
+    ).filter(Boolean)) {
+      if (layerOn("contours") && terrain.contour) {
+        const lines = svg("g", {
+          "data-layer": "contours",
+          "clip-path": radiusClip(root, terrain, xyCoord),
+          "pointer-events": "none",
+        });
+        for (const [i, segment] of terrain.contour.segments.entries()) {
+          const coords = segment.points.map((p) =>
+            xyCoord(GeoMap.project(...p)),
+          );
+          lines.append(
+            svg("polyline", {
+              points: coords.map((p) => p.join(",")).join(" "),
+              fill: "none",
+              stroke: night ? "#c4ab82" : "#79603d",
+              "stroke-width": 1,
+              opacity: 0.75,
+            }),
+          );
+          if (
+            i % 100 === 0 &&
+            Math.hypot(
+              coords[1][0] - coords[0][0],
+              coords[1][1] - coords[0][1],
+            ) > 35
+          ) {
+            const label = svg("text", {
+              x: coords[0][0],
+              y: coords[0][1] - 3,
+              fill: night ? "#ecd1a8" : "#614723",
+              "font-size": 10,
+            });
+            label.textContent = segment.level + " m";
+            lines.append(label);
+          }
+        }
+        root.append(lines);
       }
     }
-    root.append(layer);
-    const outside = all.some(
-      (p) =>
-        p.fix.longitude < offlineMap.bounds[0] ||
-        p.fix.longitude > offlineMap.bounds[2] ||
-        p.fix.latitude < offlineMap.bounds[1] ||
-        p.fix.latitude > offlineMap.bounds[3],
-    );
-    $("projection-status").textContent = outside
-      ? "Some GNSS observations are outside map coverage. Tracks remain available."
-      : projectionStatus;
-  }
-  for (const terrain of (globalThis.radiusGrids || [globalThis.legacyTerrainForDraw]).filter(Boolean)) {
-  if (layerOn("contours") && terrain.contour) {
-    const lines = svg("g", {
-      "data-layer": "contours",
-      "clip-path": radiusClip(root, terrain, xyCoord),
-      "pointer-events": "none",
-    });
-    for (const [i, segment] of terrain.contour.segments.entries()) {
-      const coords = segment.points.map((p) => xyCoord(GeoMap.project(...p)));
-      lines.append(
+    if (mapVisible && offlineMap.plan) drawRadiusCoverage(root, xyCoord);
+    const overlay = svg("g", { "data-layer": "tracks" });
+    root.append(overlay);
+    const segments = new Map();
+    for (const p of points) {
+      const k = p.device_id + "/" + p.segment_id;
+      if (!segments.has(k)) segments.set(k, []);
+      segments.get(k).push(p);
+    }
+    for (const group of segments.values()) {
+      const first = group[0],
+        stroke = color(first.device_id),
+        provisional = first.segment_reason === "provisional";
+      overlay.append(
         svg("polyline", {
-          points: coords.map((p) => p.join(",")).join(" "),
+          "data-device": first.device_id,
+          "data-segment": first.segment_id,
+          "data-qualified-points": raw ? "" : group.length,
+          points: group.map((p) => xy(p).join(",")).join(" "),
           fill: "none",
-          stroke: night ? "#c4ab82" : "#79603d",
-          "stroke-width": 1,
-          opacity: 0.75,
+          stroke,
+          "stroke-width": selectedParty === first.device_id ? 2.5 : 1.5,
+          opacity: raw ? 0.45 : 0.6,
+          "stroke-dasharray": raw
+            ? "2 4"
+            : provisional
+              ? "6 5"
+              : dash(first.device_id),
         }),
       );
-      if (
-        i % 100 === 0 &&
-        Math.hypot(coords[1][0] - coords[0][0], coords[1][1] - coords[0][1]) >
-          35
-      ) {
-        const label = svg("text", {
-          x: coords[0][0],
-          y: coords[0][1] - 3,
-          fill: night ? "#ecd1a8" : "#614723",
-          "font-size": 10,
-        });
-        label.textContent = segment.level + " m";
-        lines.append(label);
+      for (const p of group) {
+        if (!p.dot && !raw) continue;
+        const [x, y] = xy(p),
+          circle = svg("circle", {
+            cx: x,
+            cy: y,
+            r: 5,
+            fill: "white",
+            stroke,
+            "stroke-width": 2,
+            tabindex: 0,
+            role: "button",
+            "data-point-key": p.device_id + "/" + p.fix.observed_at,
+            "aria-label": `${state.devices[p.device_id].snapshot.party.id} observation ${p.fix.latitude}, ${p.fix.longitude}`,
+          });
+        circle.onmouseenter =
+          circle.onfocus =
+          circle.onclick =
+            () => inspect(p);
+        circle.onkeydown = (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            circle.onclick();
+          }
+        };
+        overlay.append(circle);
       }
     }
-    root.append(lines);
-  }
-  }
-  if (mapVisible && offlineMap.plan) drawRadiusCoverage(root,xyCoord);
-  const overlay = svg("g", { "data-layer": "tracks" });
-  root.append(overlay);
-  const segments = new Map();
-  for (const p of points) {
-    const k = p.device_id + "/" + p.segment_id;
-    if (!segments.has(k)) segments.set(k, []);
-    segments.get(k).push(p);
-  }
-  for (const group of segments.values()) {
-    const first = group[0],
-      stroke = color(first.device_id),
-      provisional = first.segment_reason === "provisional";
-    overlay.append(
-      svg("polyline", {
-        "data-device": first.device_id,
-        "data-segment": first.segment_id,
-        "data-qualified-points": raw ? "" : group.length,
-        points: group.map((p) => xy(p).join(",")).join(" "),
-        fill: "none",
-        stroke,
-        "stroke-width": selectedParty === first.device_id ? 2.5 : 1.5,
-        opacity: raw ? 0.45 : 0.6,
-        "stroke-dasharray": raw
-          ? "2 4"
-          : provisional
-            ? "6 5"
-            : dash(first.device_id),
-      }),
-    );
-    for (const p of group) {
-      if (!p.dot && !raw) continue;
-      const [x, y] = xy(p),
-        circle = svg("circle", {
-          cx: x,
-          cy: y,
-          r: 5,
-          fill: "white",
-          stroke,
-          "stroke-width": 2,
-          tabindex: 0,
-          role: "button",
-          "data-point-key": p.device_id + "/" + p.fix.observed_at,
-          "aria-label": `${state.devices[p.device_id].snapshot.party.id} observation ${p.fix.latitude}, ${p.fix.longitude}`,
-        });
-      circle.onmouseenter = circle.onfocus = circle.onclick = () => inspect(p);
-      circle.onkeydown = (e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          circle.onclick();
-        }
-      };
-      overlay.append(circle);
-    }
-  }
-  historyDrawKey = key;
-  historyDrawMap = offlineMap;
-  historyDrawTerrain = terrain;
+    historyDrawKey = key;
+    historyDrawMap = offlineMap;
+    historyDrawTerrain = terrain;
   }
   for (const label of document.querySelectorAll("[data-drawing-device]")) {
     const device = label.getAttribute("data-drawing-device");
-    if (hidden.has(device)) label.textContent = "Drawing hidden by operator · qualified geometry retained";
-    else if (raw) label.textContent = "Unfiltered diagnostic drawing selected · qualified geometry retained";
+    if (hidden.has(device))
+      label.textContent =
+        "Drawing hidden by operator · qualified geometry retained";
+    else if (raw)
+      label.textContent =
+        "Unfiltered diagnostic drawing selected · qualified geometry retained";
     else {
-      const sections = [...root.querySelectorAll("polyline[data-qualified-points]")].filter(e => e.getAttribute("data-device") === device);
-      const count = sections.reduce((n,e) => n + Number(e.getAttribute("data-qualified-points")), 0);
-      label.textContent = `Qualified drawing: ${count} points / ${sections.length} sections` + (points.some(p => p.device_id === device && (() => {const [x,y]=xy(p);return x<0||x>w||y<0||y>h;})()) ? " · outside this view; use Fit parties" : "");
+      const sections = [
+        ...root.querySelectorAll("polyline[data-qualified-points]"),
+      ].filter((e) => e.getAttribute("data-device") === device);
+      const count = sections.reduce(
+        (n, e) => n + Number(e.getAttribute("data-qualified-points")),
+        0,
+      );
+      label.textContent =
+        `Qualified drawing: ${count} points / ${sections.length} sections` +
+        (points.some(
+          (p) =>
+            p.device_id === device &&
+            (() => {
+              const [x, y] = xy(p);
+              return x < 0 || x > w || y < 0 || y > h;
+            })(),
+        )
+          ? " · outside this view; use Fit parties"
+          : "");
     }
   }
   const liveLayer = svg("g", { "data-layer": "live" });
@@ -2096,16 +2229,27 @@ async function inspectHistory(cursor = "") {
   $("inspection-status").textContent = "Loading a bounded page…";
   try {
     const layer = $("inspection-layer").value;
-    const response = await fetch(`/local/history?device_id=${encodeURIComponent(device)}&layer=${layer}&cursor=${encodeURIComponent(cursor)}`, {signal: AbortSignal.timeout(4000)});
+    const response = await fetch(
+      `/local/history?device_id=${encodeURIComponent(device)}&layer=${layer}&cursor=${encodeURIComponent(cursor)}`,
+      { signal: AbortSignal.timeout(4000) },
+    );
     const page = await response.json();
     if (!response.ok) throw Error(page.message || "History unavailable");
     inspectionCursor = page.next_cursor || "";
     $("inspection-next").disabled = !inspectionCursor;
     $("inspection-data").textContent = JSON.stringify(page, null, 2);
-    $("inspection-status").textContent = layer === "raw" ? "Original capture/envelope and Command receipt times; transport sequence order. No distance derived here." : "Full-resolution qualified points and decisions; cumulative distances remain authoritative. Generation changes require First page.";
-  } catch (e) { $("inspection-status").textContent = e.message; }
+    $("inspection-status").textContent =
+      layer === "raw"
+        ? "Original capture/envelope and Command receipt times; transport sequence order. No distance derived here."
+        : "Full-resolution qualified points and decisions; cumulative distances remain authoritative. Generation changes require First page.";
+  } catch (e) {
+    $("inspection-status").textContent = e.message;
+  }
 }
-$("inspect-history").onclick = () => { $("history-inspection").showModal(); inspectHistory(); };
+$("inspect-history").onclick = () => {
+  $("history-inspection").showModal();
+  inspectHistory();
+};
 $("inspection-restart").onclick = () => inspectHistory();
 $("inspection-next").onclick = () => inspectHistory(inspectionCursor);
 $("inspection-layer").onchange = () => inspectHistory();
@@ -2118,7 +2262,9 @@ async function pollLive() {
   const started = performance.now();
   let failed = false;
   try {
-    const response = await fetch("/local/live", {signal: AbortSignal.timeout(4000)});
+    const response = await fetch("/local/live", {
+      signal: AbortSignal.timeout(4000),
+    });
     if (!response.ok) throw Error("LIVE/SOS status unavailable");
     const b = await response.json();
     liveConnection = "● Command Connected";
@@ -2129,9 +2275,19 @@ async function pollLive() {
     }
     latestLive = b;
     latestLiveStarted = started;
-    const changed = state && (state.policy.revision !== b.policy.revision ||
-      state.projection_version !== b.projection_version || state.recording?.recording_id !== b.recording?.recording_id || state.recording?.active !== b.recording?.active);
-    state = {...state, ...b, points: changed ? [] : state?.points ?? [], raw_points: changed ? [] : state?.raw_points ?? [], history_sampled: state?.history_sampled};
+    const changed =
+      state &&
+      (state.policy.revision !== b.policy.revision ||
+        state.projection_version !== b.projection_version ||
+        state.recording?.recording_id !== b.recording?.recording_id ||
+        state.recording?.active !== b.recording?.active);
+    state = {
+      ...state,
+      ...b,
+      points: changed ? [] : (state?.points ?? []),
+      raw_points: changed ? [] : (state?.raw_points ?? []),
+      history_sampled: state?.history_sampled,
+    };
     renderSOS(); // emergency notification precedes map work
     render();
   } catch (e) {
@@ -2140,7 +2296,10 @@ async function pollLive() {
     $("connection").textContent = liveConnection;
     $("connection").classList.add("unavailable");
     if (!state) showError(e);
-  } finally { livePolling = false; uiTiming("live_fetch", started, failed); }
+  } finally {
+    livePolling = false;
+    uiTiming("live_fetch", started, failed);
+  }
 }
 async function poll() {
   if (polling) return;
@@ -2149,30 +2308,64 @@ async function poll() {
   let failed = false;
   try {
     const response = await fetch(
-      "/local/state?dot_interval_s=" + encodeURIComponent($("dots").value) + ($("all-observations").checked ? "&include_raw=true" : ""),
-      {signal: AbortSignal.timeout(4000)},
+      "/local/state?dot_interval_s=" +
+        encodeURIComponent($("dots").value) +
+        ($("all-observations").checked ? "&include_raw=true" : ""),
+      { signal: AbortSignal.timeout(4000) },
     );
     const b = await response.json();
     if (!response.ok) throw Error(b.message || "Command unavailable");
     if (b.history_sampled && $("all-observations").checked) {
       const device = selectedParty || Object.keys(b.devices)[0];
       if (device) {
-        const raw = await fetch(`/local/history?device_id=${encodeURIComponent(device)}&layer=raw`, {signal: AbortSignal.timeout(4000)});
+        const raw = await fetch(
+          `/local/history?device_id=${encodeURIComponent(device)}&layer=raw`,
+          { signal: AbortSignal.timeout(4000) },
+        );
         if (!raw.ok) throw Error("Raw history page unavailable");
         b.raw_points = (await raw.json()).points;
       }
     }
     state = b;
-    if (latestLive && (latestLive.receipt_version > b.receipt_version || (latestLive.receipt_version === b.receipt_version && latestLiveStarted >= started))) {
-      const compatible = b.policy.revision === latestLive.policy.revision && b.projection_version === latestLive.projection_version && b.recording?.recording_id === latestLive.recording?.recording_id && b.recording?.active === latestLive.recording?.active;
-      state = {...b, ...latestLive, points: compatible ? b.points : [], raw_points: compatible ? b.raw_points : [], provisional_points: compatible ? b.provisional_points : [], history_sampled: b.history_sampled};
+    if (
+      latestLive &&
+      (latestLive.receipt_version > b.receipt_version ||
+        (latestLive.receipt_version === b.receipt_version &&
+          latestLiveStarted >= started))
+    ) {
+      const compatible =
+        b.policy.revision === latestLive.policy.revision &&
+        b.projection_version === latestLive.projection_version &&
+        b.recording?.recording_id === latestLive.recording?.recording_id &&
+        b.recording?.active === latestLive.recording?.active;
+      state = {
+        ...b,
+        ...latestLive,
+        points: compatible ? b.points : [],
+        raw_points: compatible ? b.raw_points : [],
+        provisional_points: compatible ? b.provisional_points : [],
+        history_sampled: b.history_sampled,
+      };
       if (compatible && latestLive.receipt_version === b.receipt_version) {
         // A history reader may finish later while holding an older read snapshot.
         // Its projection can advance without replacing fresher LIVE/contact fields.
-        state.devices = Object.fromEntries(Object.entries(latestLive.devices).map(([id, live]) => {
-          const history = b.devices[id];
-          return [id, history ? {...live, total_m: history.total_m, reconstruction: history.reconstruction, history: history.history, history_sessions: history.history_sessions} : live];
-        }));
+        state.devices = Object.fromEntries(
+          Object.entries(latestLive.devices).map(([id, live]) => {
+            const history = b.devices[id];
+            return [
+              id,
+              history
+                ? {
+                    ...live,
+                    total_m: history.total_m,
+                    reconstruction: history.reconstruction,
+                    history: history.history,
+                    history_sessions: history.history_sessions,
+                  }
+                : live,
+            ];
+          }),
+        );
         state.projection_pending = b.projection_pending;
         state.projection_error = b.projection_error;
       }
@@ -2196,13 +2389,30 @@ setInterval(poll, 2000);
 
 $("export-runtime").onclick = async () => {
   try {
-    const response = await fetch("/local/runtime-diagnostics", {signal: AbortSignal.timeout(4000)});
+    const response = await fetch("/local/runtime-diagnostics", {
+      signal: AbortSignal.timeout(4000),
+    });
     if (!response.ok) throw Error("Runtime diagnostics unavailable");
-    const report = {command: await response.json(), browser: {timings: uiTimings, live_connection: liveConnection, history_pending: state?.projection_pending, displayed_points: state?.points?.length ?? 0}};
-    const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], {type: "application/json"}));
-    const a = document.createElement("a"); a.href = url; a.download = "gnss-runtime-diagnostics.json"; a.click();
+    const report = {
+      command: await response.json(),
+      browser: {
+        timings: uiTimings,
+        live_connection: liveConnection,
+        history_pending: state?.projection_pending,
+        displayed_points: state?.points?.length ?? 0,
+      },
+    };
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }),
+    );
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "gnss-runtime-diagnostics.json";
+    a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-  } catch(e) { showError(e); }
+  } catch (e) {
+    showError(e);
+  }
 };
 
 // Radius acquisitions remain in the existing library and geographic renderer.
@@ -2239,14 +2449,28 @@ function pickRadiusCenter(e) {
   invalidatePreparation();
   $("open-map").click();
 }
+function radiusSummary(manifest) {
+  const n = manifest.chunks.length,
+    count = (k) =>
+      manifest.chunks.filter((c) => c[k].status === "complete").length,
+    requested = Object.values(manifest.components || {}).some(Boolean),
+    voids = manifest.chunks.some((c) => c.terrain.void_dem_cells > 0),
+    partial =
+      count("vector") < n || (requested && (count("terrain") < n || voids));
+  return `${partial ? "Partial map · known geographic/layer gaps" : "Verified selected source coverage"} · vectors ${count("vector")}/${n} · DEM ${count("terrain")}/${n}${requested ? (voids ? " (void gaps)" : "") : " (not requested)"}. Product visibility and processing failures in Layers.`;
+}
+
 function radiusDescription(manifest) {
   const chunks = manifest.chunks || [],
     complete = (k) => chunks.filter((c) => c[k].status === "complete").length;
   return (
-    `Requested centre ${manifest.plan.request.lat}, ${manifest.plan.request.lon}; radius ${manifest.plan.request.radius_m} m.\n` +
+    (manifest.plan.full_extent
+      ? "Imported declared full source extent.\n"
+      : `Requested centre ${manifest.plan.request.lat}, ${manifest.plan.request.lon}; radius ${manifest.plan.request.radius_m} m.\n`) +
+    `Actual cumulative received bytes: ${manifest.transfer?.received_bytes || 0}; allowance ${manifest.transfer?.approved_bytes || 5000000} bytes.\n` +
     `Vector acquired ${complete("vector")}/${chunks.length} chunk envelopes (empty features are valid). DEM grids saved ${complete("terrain")}/${chunks.length}.\n` +
     `DEM cells with four valid corners: ${chunks.reduce((n, c) => n + (c.terrain.valid_dem_cells || 0), 0)}; cells with void corners: ${chunks.reduce((n, c) => n + (c.terrain.void_dem_cells || 0), 0)}.\n` +
-    `${manifest.plan.dem_unsupported||""}\n` +
+    `${manifest.plan.dem_unsupported || ""}\n` +
     `Stored asset bytes: ${chunks.reduce((n, c) => n + (c.vector.stored_bytes || 0) + (c.terrain.stored_bytes || 0), 0)}. No geographic percentage inferred from cells. Contours / hillshade require valid DEM neighborhoods and successful browser processing.\n` +
     chunks
       .filter((c) => c.vector.error || c.terrain.error)
@@ -2268,6 +2492,10 @@ async function loadRadiusManifest(id) {
   $("export-manifest").hidden = false;
   $("export-manifest").href = `/local/maps/${encodeURIComponent(id)}/manifest`;
   $("export-manifest").download = "map-source-coverage.json";
+  $("save-use-map").hidden = false;
+  $("approve-transfer").hidden = !manifest.transfer?.approval_required_bytes;
+  $("approve-transfer").textContent =
+    `Approve cumulative ${((manifest.transfer?.approval_required_bytes || 0) / 1000000).toFixed(2)} MB transfer`;
   $("map-coverage-status").textContent = radiusDescription(manifest);
   $("map-metadata").textContent = radiusDescription(manifest);
   updateLayers();
@@ -2293,8 +2521,10 @@ async function previewRadius() {
       ),
     };
     $("confirm-map-cost").checked = false;
+    $("map-plan-details").textContent =
+      `Additional network transfer: unknown. Initial cumulative allowance: 5 MB, shared by vectors, DEM, source discovery and retries. Large fallback requires additional approval before transfer. Disk: ≤256 MiB saved chunks, ≤1 GB source cache plus bounded on-disk index and 3 GB free-space admission for regional processing. WGS84 centre ${request.lat}, ${request.lon}; radius ${request.radius_m} m; approximate ellipsoidal area ${(plan.approximate_ellipsoidal_area_m2 / 1000000).toFixed(6)} km² (sampled boundary). Ellipsoidal geodesic circle. Envelope W/S/E/N ${plan.bounds.map((v) => v.toFixed(7)).join(", ")}. ${plan.chunks.length} chunks; ${plan.source_tiles.length} possible native source tiles including sampling halo; ${plan.maximum_source_requests_before_retries} maximum source requests before cache/retries. DEM transfer ≤ ${(plan.maximum_compressed_dem_bytes / 1048576).toFixed(1)} MiB before bounded retries (compressed sizes unknown). Vector sizes unknown, ≤20 MiB/chunk. DEM ≤${(plan.maximum_terrain_bytes / 1048576).toFixed(1)} MiB; chunk library budget 256 MiB; source cache 99 MiB; disk reserve 128 MiB; one network/decode at a time. Provider cooldown 10 s/vector request. ${plan.dem_unsupported || "DEM adapter: 56°S–60°N, WGS84/EGM96, native 1 arc sec; source accuracy varies."} ${plan.unsupported || "Confirm estimate, then acquire available layers. Coverage gaps remain explicit."}`;
     $("map-preparation-status").textContent =
-      `WGS84 centre ${request.lat}, ${request.lon}; radius ${request.radius_m} m; approximate ellipsoidal area ${(plan.approximate_ellipsoidal_area_m2 / 1000000).toFixed(6)} km² (sampled boundary). Ellipsoidal geodesic circle. Envelope W/S/E/N ${plan.bounds.map((v) => v.toFixed(7)).join(", ")}. ${plan.chunks.length} chunks; ${plan.source_tiles.length} possible native source tiles including sampling halo; ${plan.maximum_source_requests_before_retries} maximum source requests before cache/retries. DEM transfer ≤ ${(plan.maximum_compressed_dem_bytes / 1048576).toFixed(1)} MiB before bounded retries (compressed sizes unknown). Vector sizes unknown, ≤20 MiB/chunk. DEM ≤${(plan.maximum_terrain_bytes / 1048576).toFixed(1)} MiB; chunk library budget 256 MiB; source cache 99 MiB; disk reserve 128 MiB; one network/decode at a time. Provider cooldown 10 s/vector request. ${plan.dem_unsupported || "DEM adapter: 56°S–60°N, WGS84/EGM96, native 1 arc sec; source accuracy varies."} ${plan.unsupported || "Confirm estimate, then acquire available layers. Coverage gaps remain explicit."}`;
+      `${request.radius_m} m radius · ${plan.chunks.length} geographic chunks. Additional transfer unknown; initially limited to 5 MB. Regional sources require up to 3 GB free disk space. ${plan.unsupported || "Review coverage and resource limits, then Download Map."}`;
     $("map-preview").replaceChildren();
     if (plan.circle?.length) {
       const pts = plan.circle.map((p) => {
@@ -2331,7 +2561,7 @@ async function previewRadius() {
 }
 async function startRadiusDownload() {
   const candidate = preparedMap;
-  if (candidate.plan.requires_confirmation && !$("confirm-map-cost").checked) {
+  if (!$("confirm-map-cost").checked) {
     $("map-preparation-status").textContent +=
       " Explicit cost confirmation is required.";
     return;
@@ -2354,12 +2584,14 @@ async function startRadiusDownload() {
 }
 $("resume-map").onclick = () => resumeRadius().catch(showError);
 async function resumeRadius() {
+  const started = performance.now();
   if (downloadAbort) throw Error("Map acquisition already active");
   const id = activeMapID,
     controller = new AbortController();
   downloadAbort = controller;
   $("cancel-download").hidden = false;
   $("resume-map").disabled = true;
+  $("approve-transfer").disabled = true;
   let failure;
   try {
     await loadRadiusManifest(id);
@@ -2401,6 +2633,7 @@ async function resumeRadius() {
           const reader = response.body.getReader(),
             decoder = new TextDecoder();
           let pending = "",
+            attemptedOverpass = false,
             doneEvent = false;
           for (;;) {
             const { value, done } = await reader.read();
@@ -2410,8 +2643,11 @@ async function resumeRadius() {
             for (const line of lines) {
               if (!line) continue;
               const event = JSON.parse(line);
+              if (event.stage === "bounded Overpass request")
+                attemptedOverpass = true;
+              $("download-progress").hidden = false;
               $("download-progress").textContent =
-                `${layer} ${c.key}: ${event.stage}; ${event.received_bytes ?? "not measured"} observed bytes ${event.error || ""}`;
+                `${layer} ${c.key}: ${event.stage}; ${((performance.now() - started) / 1000).toFixed(1)} s elapsed; ${event.received_bytes ?? "not measured"} observed bytes ${event.error || ""}`;
               if (event.stage === "failed") throw Error(event.error);
               if (event.stage === "complete") doneEvent = true;
             }
@@ -2424,6 +2660,7 @@ async function resumeRadius() {
           c[layer].status = "complete";
           if (
             layer === "vector" &&
+            attemptedOverpass &&
             manifest.chunks
               .slice(chunkIndex + 1)
               .some((c) => c.vector.status !== "complete")
@@ -2454,7 +2691,12 @@ async function resumeRadius() {
     downloadAbort = undefined;
     $("cancel-download").hidden = true;
     $("resume-map").disabled = false;
+    $("approve-transfer").disabled = false;
     if (activeMapID === id) await loadRadiusManifest(id);
+  }
+  if (radiusManifest?.plan) {
+    $("download-progress").textContent =
+      `${radiusSummary(radiusManifest)} Received ${radiusManifest.transfer?.received_bytes || 0} body bytes; saved ${radiusManifest.chunks.reduce((n, c) => n + (c.vector.stored_bytes || 0) + (c.terrain.stored_bytes || 0), 0)} verified asset bytes.`;
   }
   $("map-preparation-status").textContent = failure
     ? `${failure.message} · Saved partial map retained. Resume missing map / terrain chunks.`
@@ -2497,7 +2739,14 @@ function drawRadiusCoverage(root, xy) {
   }
   group.append(
     svg("polygon", {
-      points: offlineMap.plan.circle
+      points: (
+        offlineMap.plan.circle || [
+          [offlineMap.plan.bounds[0], offlineMap.plan.bounds[1]],
+          [offlineMap.plan.bounds[2], offlineMap.plan.bounds[1]],
+          [offlineMap.plan.bounds[2], offlineMap.plan.bounds[3]],
+          [offlineMap.plan.bounds[0], offlineMap.plan.bounds[3]],
+        ]
+      )
         .map((p) => xy(GeoMap.project(...p)).join(","))
         .join(" "),
       fill: "none",
@@ -2612,7 +2861,7 @@ function scheduleRadiusView(w, h) {
       const prepared = [];
       for (const grid of grids) {
         try {
-          prepared.push(Terrain.prepare(grid, interval,grids));
+          prepared.push(Terrain.prepare(grid, interval, grids));
         } catch (error) {
           detailWarnings.push(
             `${grid.chunk_key}: DEM processing failed: ${error.message}`,
@@ -2623,7 +2872,7 @@ function scheduleRadiusView(w, h) {
       }
       grids.splice(0, grids.length, ...prepared);
       $("map-detail-status").textContent =
-        `Local detail: ${chunks.length} visible chunks, ${grids.length} DEM grids; requested circle in blue; dashed envelopes show acquired/missing coverage.`;
+        `Local detail: ${chunks.length} visible chunks, ${grids.length} DEM grids; ${offlineMap.plan.full_extent ? "declared source extent" : "requested circle"} in blue; dashed envelopes show acquired/missing coverage.`;
       detailWarnings.push(
         ...grids
           .filter((g) => g.contour_error || g.hillshade_error)
@@ -2673,3 +2922,99 @@ function scheduleRadiusView(w, h) {
     draw();
   }, 120);
 }
+
+$("new-map").onclick = (event) => {
+  event.preventDefault();
+  $("map-preparation").open = true;
+  $("maps-library").open = false;
+  $("map-import").open = false;
+  $("map-lat").focus();
+};
+$("open-map-import").onclick = (event) => {
+  event.preventDefault();
+  $("map-import").open = true;
+  $("maps-library").open = false;
+  $("map-preparation").open = false;
+  $("source-map-file").focus();
+};
+$("save-use-map").onclick = async () => {
+  if (downloadAbort) downloadAbort.abort();
+  if (activeMapID) {
+    await loadSavedMap(activeMapID);
+    $("map-settings").close();
+  }
+};
+$("approve-transfer").onclick = async () => {
+  try {
+    const n = radiusManifest?.transfer?.approval_required_bytes;
+    if (!n || !activeMapID) return;
+    if (
+      !confirm(
+        `Approve cumulative network transfer up to ${(n / 1000000).toFixed(2)} MB for this map job, including bytes already received? Regional sources may require up to 3 GB free disk space. Further escalation will require approval.`,
+      )
+    )
+      return;
+    await mapPost(`maps/${encodeURIComponent(activeMapID)}/approve-transfer`, {
+      approved_bytes: n,
+    });
+    await resumeRadius();
+  } catch (e) {
+    $("map-preparation-status").textContent = e.message;
+  }
+};
+$("import-map-source").onclick = async () => {
+  const file = $("source-map-file").files[0];
+  if (!file) return;
+  $("import-map-source").disabled = true;
+  $("map-import-status").textContent =
+    `Validating local ${file.name} (${file.size.toLocaleString()} bytes). No network transfer. Existing maps remain available.`;
+  try {
+    let saved;
+    if (/\.(geojson|json)$/i.test(file.name)) {
+      if (file.size > 20 * 1024 * 1024) throw Error("GeoJSON exceeds 20 MiB");
+      saved = await mapPost("maps", {
+        source: file.name,
+        data: JSON.parse(await file.text()),
+      });
+    } else {
+      const zip = /\.zip$/i.test(file.name);
+      if (file.size > (zip ? 256 * 1024 * 1024 : 1000000000))
+        throw Error("Input exceeds supported resource limit");
+      const query = new URLSearchParams({
+        mode: $("source-map-mode").value,
+        lat: $("import-map-lat").value,
+        lon: $("import-map-lon").value,
+        radius_m: $("import-map-radius").value,
+      });
+      const r = await fetch(
+        zip ? "/local/map-package" : "/local/map-import?" + query,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/octet-stream" },
+          body: file,
+        },
+      );
+      saved = await r.json();
+      if (!r.ok) throw Error(saved.message || "Import rejected");
+    }
+    await refreshMaps(saved.id);
+    await loadSavedMap(saved.id);
+    if (!/\.zip$/i.test(file.name) && offlineMap?.plan) await resumeRadius();
+    $("map-import-status").textContent =
+      "Stored in Saved Maps and active. Unavailable coverage remains explicit.";
+  } catch (e) {
+    $("map-import-status").textContent = e.message;
+  } finally {
+    $("import-map-source").disabled = false;
+  }
+};
+
+$("source-map-mode").onchange = () => {
+  $("import-crop-fields").hidden = $("source-map-mode").value === "full";
+};
+
+$("source-map-file").onchange = () => {
+  $("regional-import-options").hidden = !/\.pbf$/i.test(
+    $("source-map-file").files[0]?.name || "",
+  );
+};

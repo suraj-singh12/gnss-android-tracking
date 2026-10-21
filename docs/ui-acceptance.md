@@ -528,3 +528,37 @@ executed explicitly by the browser runner. Earlier renderer smoke/fixture failur
 were corrected before final verification; no assertions were weakened. Exact final
 source/checksum/CI identifiers are reported in the issue PR, avoiding self-referential
 commit hashes in this document.
+
+
+### Issue #28 automatic-map extension acceptance (continuation of PR #43)
+
+Software evidence is separate from public-provider and native acceptance. The owning
+Command README documents transfer consent/accounting, provider/source/PBF limits and
+the version-1 standalone map archive. Deterministic tests exercise timeout and
+429/502/503/504 fallback, polygon holes and boundaries, exact-source reuse, 4+4 MB
+cumulative consent, unknown sizes, 200 MB fallback escalation, persistent allowances,
+PBF node/reference validation, partial package parity/idempotence, malicious archives
+and injected database publication failure. Browser evidence covers local full-extent
+PBF, portable terrain round trip, offline restart, independent layer failures,
+three viewports/two themes and accessibility. See PR #43 for exact tested SHA and
+final CI/artifact results rather than treating earlier runs as extension evidence.
+
+A Linux 192,000-node / 32-block PBF fixture (2,681,751 bytes) indexed during real HTTP
+receipt of 21 parties' LIVE and 21 SOS messages. One race-instrumented run took
+4.13 s, sampled process heap peak 9,716,352 bytes; 42 durable HTTP ACK p50 8.93 ms,
+p95 11.89 ms, worst 17.38 ms. This finite fixture is not a 1 GB country-file, native
+memory ceiling or field SLA. Preserve exact-run logs and use CI for final revisions.
+
+Future native/provider procedure: choose a small non-preset circle, a hilly boundary
+circle and a larger regional request. Record original centre/radius, preview/source
+polygons, approved cumulative transfer and actual bytes; force Overpass failure,
+approve a known regional size, cancel/restart/retry and verify only missing work.
+Repeat with unknown length and refused escalation. Import a real regional PBF in
+crop and supported-full modes; pan/zoom while 20+late-21st phones send GNSS/SOS.
+Export a complete and a partial map, transfer to a clean macOS ARM64 and Windows
+AMD64 Command with network disabled, compare vector/DEM samples/layers/provenance,
+then test corrupt archives, disk pressure and interruption without losing prior maps.
+Record source revisions/licenses, bytes, wall time, process RSS, ACK p50/p95/worst
+and screenshots. Physical macOS/Windows/Android, native disk/power-loss endurance and
+historical thin-terrain reproduction remain NOT TESTED until this is done. Public
+provider failures must remain visible independently of passing fixtures.

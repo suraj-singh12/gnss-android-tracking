@@ -25,6 +25,7 @@ func (s *Store) downloadTerrainResponse(w http.ResponseWriter, r *http.Request, 
 	_ = controller.SetWriteDeadline(started.Add(demOverallBudget + 30*time.Second))
 	var streamErr error
 	ctx, cancel := context.WithTimeout(r.Context(), demOverallBudget)
+	ctx = context.WithValue(ctx, mapBudgetKey{}, &mapBudget{s: s, id: id, emit: nil})
 	defer cancel()
 	emit := func(event DEMProgress) {
 		report.Stage = event.Stage
