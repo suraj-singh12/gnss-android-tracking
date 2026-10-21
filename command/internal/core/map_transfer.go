@@ -4,12 +4,15 @@ package core
 // a process interruption may overcharge one 32 KiB read, never grant extra bytes.
 import (
 	"context"
+	"crypto/tls"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"time"
 )
 
 const mapConsentBytes int64 = 5_000_000
@@ -194,15 +197,53 @@ func (b *mapBudgetBody) Read(dst []byte) (int, error) {
 }
 func mapHTTPClient(ctx context.Context, c *http.Client) *http.Client {
 	budget, _ := ctx.Value(mapBudgetKey{}).(*mapBudget)
-	if budget == nil {
-		return c
-	}
+
 	copy := *c
 	base := copy.Transport
 	if base == nil {
 		base = http.DefaultTransport
 	}
-	copy.Transport = mapBudgetTransport{base, budget}
+	// HTTP/1 avoids HTTP/2 stream-window read-ahead outside the application
+	// allowance. Bound the HTTP buffer and request a small socket receive buffer;
+	// OS protocol/kernel accounting remains separate from delivered body bytes.
+	if transport, ok := base.(*http.Transport); ok {
+		bounded := transport.Clone()
+		bounded.DisableCompression = true
+		bounded.DisableKeepAlives = true
+		bounded.ForceAttemptHTTP2 = false
+		bounded.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
+		if bounded.TLSClientConfig == nil {
+			bounded.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		} else {
+			bounded.TLSClientConfig = bounded.TLSClientConfig.Clone()
+		}
+		bounded.TLSClientConfig.NextProtos = []string{"http/1.1"}
+		bounded.ReadBufferSize = 4096
+		bounded.MaxResponseHeaderBytes = 32768
+		dial := bounded.DialContext
+		if dial == nil {
+			d := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
+			dial = d.DialContext
+		}
+		bounded.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+			conn, e := dial(ctx, network, address)
+			if e == nil {
+				if tcp, ok := conn.(*net.TCPConn); ok {
+					if e = tcp.SetReadBuffer(16384); e != nil {
+						conn.Close()
+						return nil, e
+					}
+				}
+			}
+			return conn, e
+		}
+		base = bounded
+	}
+	if budget != nil {
+		copy.Transport = mapBudgetTransport{base, budget}
+	} else {
+		copy.Transport = base
+	}
 	copy.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return &copy
 }
