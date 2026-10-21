@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -17,6 +18,17 @@ const mapSourceCacheBudget = 4 * demRawSize
 
 func (p *mapProvider) cachedDEMTile(ctx context.Context, name, address string, report *DEMReport, emit demObserver) ([]byte, error) {
 	path := filepath.Join(p.demCache, name)
+	cacheWritable := true
+	if p.demCache != "" {
+		entries, _ := os.ReadDir(p.demCache)
+		for _, entry := range entries {
+			if strings.HasSuffix(entry.Name(), ".tmp") && hgtName.MatchString(strings.TrimSuffix(entry.Name(), ".tmp")) {
+				if os.Remove(filepath.Join(p.demCache, entry.Name())) != nil {
+					cacheWritable = false
+				}
+			}
+		}
+	}
 	if p.demCache != "" {
 		var raw []byte
 		stat, e := os.Stat(path)
@@ -45,7 +57,7 @@ func (p *mapProvider) cachedDEMTile(ctx context.Context, name, address string, r
 		_ = os.Remove(path + ".sha256")
 	}
 	raw, err := p.downloadDEMTile(ctx, name, address, report, emit)
-	if err != nil || p.demCache == "" {
+	if err != nil || p.demCache == "" || !cacheWritable {
 		return raw, err
 	}
 	if err = ctx.Err(); err != nil {

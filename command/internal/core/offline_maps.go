@@ -533,7 +533,9 @@ func (p *mapProvider) areaBounds(ctx context.Context, bounds [4]float64) ([]byte
 	if err := p.reserve(false); err != nil {
 		return nil, err
 	}
-	bbox := fmt.Sprintf("%.7f,%.7f,%.7f,%.7f", bounds[1], bounds[0], bounds[3], bounds[2])
+	// Round source envelopes outwards; nearest-decimal formatting can omit border features.
+	providerBounds := [4]float64{math.Floor(bounds[0]*1e7) / 1e7, math.Floor(bounds[1]*1e7) / 1e7, math.Ceil(bounds[2]*1e7) / 1e7, math.Ceil(bounds[3]*1e7) / 1e7}
+	bbox := fmt.Sprintf("%.7f,%.7f,%.7f,%.7f", providerBounds[1], providerBounds[0], providerBounds[3], providerBounds[2])
 	query := fmt.Sprintf(`[out:json][timeout:20][maxsize:20000000];(way["highway"](%s);way["building"](%s);way["waterway"](%s);way["natural"](%s);way["landuse"](%s););out geom;`, bbox, bbox, bbox, bbox, bbox)
 	b, err := p.request(ctx, "POST", p.overpass, url.Values{"data": {query}}.Encode())
 	if err != nil {
@@ -580,7 +582,7 @@ func (p *mapProvider) areaBounds(ctx context.Context, bounds [4]float64) ([]byte
 		features = append(features, map[string]any{"type": "Feature", "id": fmt.Sprintf("way/%d", e.ID), "properties": e.Tags, "geometry": map[string]any{"type": typ, "coordinates": geometry}})
 	}
 
-	data, err := json.Marshal(map[string]any{"type": "FeatureCollection", "features": features, "attribution": "© OpenStreetMap contributors · ODbL", "source": "OpenStreetMap via Overpass (ways only)", "prepared_at": time.Now().UTC().Format(wireTime), "requested_bounds": bounds, "acquisition": "complete", "provider": p.overpass, "source_bytes": len(b)})
+	data, err := json.Marshal(map[string]any{"type": "FeatureCollection", "features": features, "attribution": "© OpenStreetMap contributors · ODbL", "source": "OpenStreetMap via Overpass (ways only)", "prepared_at": time.Now().UTC().Format(wireTime), "requested_bounds": bounds, "acquisition": "complete", "provider": p.overpass, "source_bytes": len(b), "provider_bounds": providerBounds})
 	if err == nil {
 		err = validateMap(data)
 	}

@@ -433,6 +433,8 @@ turn a failed real-provider result into a pass.
 
 Deterministic evidence:
 
+- PASS: source-query bounds round outwards rather than omitting border features;
+  abandoned cache-publication temporary files are removed on retry/restart.
 - PASS: independent equatorial WGS84 analytic east-distance references; radii
   373 / 12,345 / 151,731 m produce conservative envelopes of 4 / 16 / 1,764 chunks
   and 4 / 4 / 16 possible source tiles at centre 0°,0°. No four-tile region truncation.

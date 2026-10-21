@@ -12,6 +12,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -207,9 +209,16 @@ func TestRadiusNativeDEMCacheAndSavedSamples(t *testing.T) {
 	if err != nil || !derived.Components["contours"] || !derived.Components["hillshade"] {
 		t.Fatal("saved source product upgrade", err)
 	}
+	tmp := filepath.Join(p.demCache, "N00E000.hgt.tmp")
+	if err = os.WriteFile(tmp, []byte("interrupted cache publication"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	p.prepared = nil
 	if _, e = p.acquireDEM(context.Background(), j.Plan.Chunks[0].Bounds, j.Components); e != nil || calls.Load() != 1 {
 		t.Fatal("verified cache was not reused", e, calls.Load())
+	}
+	if _, err = os.Stat(tmp); !os.IsNotExist(err) {
+		t.Fatal("crash temporary cache entry was not removed", err)
 	}
 	// Analytically georeferenced signed elevation / void fixture, independent decoder.
 	source := make([]byte, 1201*1201*2)
@@ -368,5 +377,43 @@ func TestRadiusCancelNoncontiguousRecoveryAndFleet(t *testing.T) {
 	s.db.QueryRow(`SELECT vector FROM offline_map_chunks WHERE map_id=? AND chunk_key=?`, m.ID, j.Plan.Chunks[0].Key).Scan(&original)
 	if string(original) != validOfflineMap {
 		t.Fatal("failed save destroyed valid map")
+	}
+}
+
+func TestRadiusVectorEnvelopeRoundsOutwards(t *testing.T) {
+	bounds := [4]float64{77.012345678, 28.012345678, 77.066666667, 28.066666667}
+	var query string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		query = r.Form.Get("data")
+		w.Write([]byte(`{"elements":[]}`))
+	}))
+	defer server.Close()
+	p := newMapProvider()
+	p.overpass = server.URL
+	data, err := p.areaBounds(context.Background(), bounds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	match := regexp.MustCompile(`way\["highway"\]\(([^)]+)\)`).FindStringSubmatch(query)
+	if len(match) != 2 {
+		t.Fatal(query)
+	}
+	fields := strings.Split(match[1], ",")
+	var sent [4]float64
+	for i, v := range fields {
+		sent[i], err = strconv.ParseFloat(v, 64)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if sent[0] > bounds[1] || sent[1] > bounds[0] || sent[2] < bounds[3] || sent[3] < bounds[2] {
+		t.Fatal("provider rounding truncated requested coverage", bounds, sent)
+	}
+	var root struct {
+		ProviderBounds [4]float64 `json:"provider_bounds"`
+	}
+	if json.Unmarshal(data, &root) != nil || root.ProviderBounds != [4]float64{sent[1], sent[0], sent[3], sent[2]} {
+		t.Fatal("actual source envelope not retained", string(data))
 	}
 }
