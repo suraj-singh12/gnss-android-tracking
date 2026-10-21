@@ -12,6 +12,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
+	"path"
 	"time"
 )
 
@@ -189,7 +191,11 @@ func (b *mapBudgetBody) Read(dst []byte) (int, error) {
 		}
 		return nil
 	})
-	emitDEM(b.budget.emit, DEMProgress{Stage: "receiving — cumulative logical job", Bytes: state.Received})
+	label := state.Source
+	if u, e := url.Parse(label); e == nil {
+		label = u.Host + " / " + path.Base(u.Path)
+	}
+	emitDEM(b.budget.emit, DEMProgress{Stage: "receiving " + label + " — cumulative logical job", Bytes: state.Received})
 	if err != nil {
 		return got, err
 	}

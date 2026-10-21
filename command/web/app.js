@@ -2485,7 +2485,7 @@ function radiusDescription(manifest) {
     (manifest.plan.full_extent
       ? "Imported declared full source extent.\n"
       : `Requested centre ${manifest.plan.request.lat}, ${manifest.plan.request.lon}; radius ${manifest.plan.request.radius_m} m.\n`) +
-    `Actual cumulative received bytes: ${manifest.transfer?.received_bytes || 0}; allowance ${manifest.transfer?.approved_bytes || 5000000} bytes.\n` +
+    `Actual cumulative received bytes: ${manifest.transfer?.received_bytes || 0}; allowance ${manifest.transfer?.approved_bytes || 5000000} bytes.\nCurrent/last source: ${manifest.transfer?.current_source || "local verified data / not contacted"}.\n` +
     `Vector acquired ${complete("vector")}/${chunks.length} chunk envelopes (empty features are valid). DEM grids saved ${complete("terrain")}/${chunks.length}.\n` +
     `DEM cells with four valid corners: ${chunks.reduce((n, c) => n + (c.terrain.valid_dem_cells || 0), 0)}; cells with void corners: ${chunks.reduce((n, c) => n + (c.terrain.void_dem_cells || 0), 0)}.\n` +
     `${manifest.plan.dem_unsupported || ""}\n` +
@@ -2975,7 +2975,7 @@ $("approve-transfer").onclick = async () => {
     if (!n || !activeMapID) return;
     if (
       !confirm(
-        `Approve cumulative network transfer up to ${(n / 1000000).toFixed(2)} MB for this map job, including bytes already received? Regional sources may require up to 3 GB free disk space. Further escalation will require approval.`,
+        `Source: ${radiusManifest.transfer.current_source || "unknown"}. Already received ${(radiusManifest.transfer.received_bytes / 1000000).toFixed(2)} MB. Approve cumulative network transfer up to ${(n / 1000000).toFixed(2)} MB for this map job, including bytes already received? Regional sources may require up to 3 GB free disk space. Further escalation will require approval.`,
       )
     )
       return;
