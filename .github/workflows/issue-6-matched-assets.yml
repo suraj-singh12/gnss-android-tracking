@@ -126,7 +126,7 @@ jobs:
           cp -R app/build/reports app/build/test-results "$RUNNER_TEMP/gnss-test-reports/android-full/"
       - name: Go tests and protocol checks
         run: |
-          (cd command && go test -race ./... && go vet ./...)
+          (cd command && go test -race -v ./... | tee "$RUNNER_TEMP/gnss-test-reports/command-race.txt" && go vet ./...)
           (cd test-tools && go test -race ./... && go vet ./...)
           node test-tools/integration/map-test.cjs
           node test-tools/integration/sos-alarm-test.cjs
