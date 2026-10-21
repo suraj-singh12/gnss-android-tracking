@@ -59,6 +59,9 @@ func (s *Store) readMapJob(id string) (mapJob, error) {
 	if err == nil {
 		err = json.Unmarshal(b, &j)
 	}
+	if err == nil {
+		j.Transfer, err = s.transferState(id)
+	}
 	if err == nil && len(j.Plan.Chunks) == 0 {
 		err = errors.New("saved map is not a chunked radius acquisition")
 	}

@@ -2698,8 +2698,13 @@ async function resumeRadius() {
     $("download-progress").textContent =
       `${radiusSummary(radiusManifest)} Received ${radiusManifest.transfer?.received_bytes || 0} body bytes; saved ${radiusManifest.chunks.reduce((n, c) => n + (c.vector.stored_bytes || 0) + (c.terrain.stored_bytes || 0), 0)} verified asset bytes.`;
   }
+  if (failure)
+    $("download-report-text").textContent =
+      radiusDescription(radiusManifest) +
+      "\nLast operation: " +
+      failure.message;
   $("map-preparation-status").textContent = failure
-    ? `${failure.message} · Saved partial map retained. Resume missing map / terrain chunks.`
+    ? `Partial map retained. ${radiusManifest?.transfer?.approval_required_bytes ? "Additional transfer approval is required." : "Some requested coverage or layers remain unavailable."} Retry Missing or Save & Use. Details explains the cause.`
     : "Saved locally · acquired chunks available after restart without internet; inspect source & coverage manifest for known voids and layer availability.";
 }
 function radiusClip(root, g, xy) {

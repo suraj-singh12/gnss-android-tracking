@@ -463,7 +463,7 @@ Command README for API/resource/operator details and UI acceptance for evidence 
 
 ### Issue #28 automatic acquisition and standalone map portability
 
-The existing radius map job is the sole acquisition owner. Its JSON transfer ledger
+The existing radius map job is the sole acquisition owner. Its map-owned child transfer ledger
 persists cumulative approved/reserved/received body bytes across all providers and
 retries; no second queue, renderer or map library is introduced. The initial 5 MB
 allowance cannot silently escalate. HTTP bodies reserve bounded bytes before reads,

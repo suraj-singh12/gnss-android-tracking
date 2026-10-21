@@ -83,7 +83,7 @@ and provider details remain in disclosures; the Layers toolbar keeps visibility
 independent of availability. Save & Use activates durably committed partial data;
 Cancel stops the current request and retains every verified asset.
 
-The logical-job transfer ledger lives in the existing `offline_maps.data` and
+The logical-job transfer ledger is an additive `offline_map_transfers` child of the existing map library and
 survives browser loss, retries and Command restart. It reserves at most 32 KiB
 before each body read; a crash can conservatively overcharge one read. Measured
 received body bytes and reserved/approved bytes are separate. These are application

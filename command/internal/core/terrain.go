@@ -293,6 +293,9 @@ func (s *Store) terrainRequest(w http.ResponseWriter, r *http.Request, p *mapPro
 			if err == nil {
 				_, err = tx.Exec(`DELETE FROM offline_map_chunks WHERE map_id=?`, mapID)
 				if err == nil {
+					_, err = tx.Exec(`DELETE FROM offline_map_transfers WHERE map_id=?`, mapID)
+				}
+				if err == nil {
 					_, err = tx.Exec(`DELETE FROM offline_maps WHERE id=?`, mapID)
 				}
 			}

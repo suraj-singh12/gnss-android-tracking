@@ -225,6 +225,9 @@ func Open(path string) (*Store, error) {
  PRIMARY KEY(map_id,chunk_key))`); err != nil {
 		return fail(err)
 	}
+	if _, err = db.Exec(`CREATE TABLE IF NOT EXISTS offline_map_transfers(map_id TEXT PRIMARY KEY REFERENCES offline_maps(id),data TEXT NOT NULL)`); err != nil {
+		return fail(err)
+	}
 	if err = sourceSchema(&Store{db: db}); err != nil {
 		return fail(err)
 	}

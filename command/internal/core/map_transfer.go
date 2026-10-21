@@ -4,6 +4,7 @@ package core
 // a process interruption may overcharge one 32 KiB read, never grant extra bytes.
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -37,13 +38,36 @@ type mapBudget struct {
 	emit     demObserver
 }
 
-func (s *Store) transferState(id string) (mapTransfer, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	var b []byte
-	err := s.db.QueryRow(`SELECT coalesce(json_extract(data,'$.transfer'),'{}') FROM offline_maps WHERE id=?`, id).Scan(&b)
+// Called under the Store mutex. Child metadata preserves byte-identical legacy
+// GeoJSON and avoids rewriting a potentially large geographic plan on every read.
+func (s *Store) readTransferLocked(id string) (mapTransfer, error) {
 	var t mapTransfer
-	if err == nil {
+	var b []byte
+	err := s.db.QueryRow(`SELECT data FROM offline_map_transfers WHERE map_id=?`, id).Scan(&b)
+	if err == sql.ErrNoRows {
+		var raw map[string]json.RawMessage
+		err = s.db.QueryRow(`SELECT data FROM offline_maps WHERE id=?`, id).Scan(&b)
+		if err != nil {
+			return t, err
+		}
+		if err = json.Unmarshal(b, &raw); err != nil {
+			return t, err
+		}
+		if v := raw["transfer"]; len(v) > 0 {
+			if err = json.Unmarshal(v, &t); err != nil {
+				return t, err
+			}
+		}
+		// Compatibility with an acquisition started before the child-ledger migration.
+		if t.Allowance == 0 {
+			var received int64
+			_ = json.Unmarshal(raw["source_bytes"], &received)
+			if received > 0 && received <= mapConsentBytes {
+				t.Received = received
+				t.Charged = received
+			}
+		}
+	} else if err == nil {
 		err = json.Unmarshal(b, &t)
 	}
 	if t.Allowance == 0 {
@@ -51,39 +75,20 @@ func (s *Store) transferState(id string) (mapTransfer, error) {
 	}
 	return t, err
 }
+func (s *Store) transferState(id string) (mapTransfer, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.readTransferLocked(id)
+}
 func (s *Store) changeTransfer(id string, f func(*mapTransfer) error) (mapTransfer, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var raw map[string]json.RawMessage
-	var b []byte
-	var t mapTransfer
-	err := s.db.QueryRow(`SELECT data FROM offline_maps WHERE id=?`, id).Scan(&b)
+	t, err := s.readTransferLocked(id)
 	if err != nil {
 		return t, err
 	}
-	if err = json.Unmarshal(b, &raw); err != nil {
-		return t, err
-	}
-	if v := raw["transfer"]; len(v) > 0 {
-		if err = json.Unmarshal(v, &t); err != nil {
-			return t, err
-		}
-	}
-	if t.Allowance == 0 {
-		t.Allowance = mapConsentBytes
-		var received int64
-		_ = json.Unmarshal(raw["source_bytes"], &received)
-		if received > 0 && received <= mapConsentBytes {
-			t.Received = received
-			t.Charged = received
-		}
-	}
 	decision := f(&t)
-	raw["transfer"] = mustJSON(t)
-	b, err = json.Marshal(raw)
-	if err == nil {
-		_, err = s.db.Exec(`UPDATE offline_maps SET data=? WHERE id=?`, b, id)
-	}
+	_, err = s.db.Exec(`INSERT INTO offline_map_transfers(map_id,data) VALUES(?,?) ON CONFLICT(map_id) DO UPDATE SET data=excluded.data`, id, string(mustJSON(t)))
 	if err != nil {
 		return t, err
 	}
