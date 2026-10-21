@@ -89,8 +89,8 @@ before each body read; a crash can conservatively overcharge one read. Measured
 received body bytes and reserved/approved bytes are separate. These are application
 response-body measurements, excluding protocol overhead and transport/socket
 read-ahead; they are not a wire-level meter. Budgeted preparation uses HTTP/1, a
-4 KiB HTTP read buffer and a requested 16 KiB socket receive buffer (OS effective
-size/accounting can differ), disables automatic decompression and connection reuse,
+4 KiB HTTP read buffer and a requested 128 KiB socket receive buffer (OS effective
+size/accounting can differ; Linux commonly doubles this to 256 KiB per connection), disables automatic decompression and connection reuse,
 and avoids unaccounted HTTP/2 stream-window buffering. Native wire-level limits
 remain part of field acceptance. Redirects are refused, and no response
 is drained past consent. Known large fallback announces its **cumulative** required

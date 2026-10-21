@@ -235,7 +235,7 @@ func mapHTTPClient(ctx context.Context, c *http.Client) *http.Client {
 			conn, e := dial(ctx, network, address)
 			if e == nil {
 				if tcp, ok := conn.(*net.TCPConn); ok {
-					if e = tcp.SetReadBuffer(16384); e != nil {
+					if e = tcp.SetReadBuffer(128 * 1024); e != nil {
 						conn.Close()
 						return nil, e
 					}
