@@ -45,7 +45,33 @@ class UiNavigationVisualTest {
     @Test
     fun navigationAndOperationalStatesRenderAtCompactLargeAndScaledSizes() = runBlocking {
         val app = ApplicationProvider.getApplicationContext<TrackingApp>()
-        withContext(Dispatchers.IO) { app.repository.state() }
+        withContext(Dispatchers.IO) {
+            val state = app.repository.state()
+            // Synthetic journal fixtures for presentation only; never installed in production.
+            for ((index, outcome) in listOf("blocked", "applied", "expired").withIndex()) {
+                app.repository.dao.insertCommand(
+                    CommandRecord(
+                        Protocol.newId(),
+                        "test-command-identity",
+                        state.deviceId,
+                        "test-enrollment",
+                        "reporting",
+                        index.toLong(),
+                        1761000000000L - index * 1000L,
+                        state = outcome,
+                        reason =
+                            if (outcome == "blocked") "Needs local interaction; open Settings"
+                            else "Recorded $outcome result",
+                        attempted = true,
+                        requested = "{\"seconds\":20}",
+                        effective = if (outcome == "applied") "20 s" else "",
+                        events =
+                            if (outcome == "applied") "Duplicate ignored; persisted result retained"
+                            else "Result pending delivery",
+                    )
+                )
+            }
+        }
         shadowOf(app)
             .grantPermissions(
                 Manifest.permission.ACCESS_FINE_LOCATION,
@@ -62,6 +88,10 @@ class UiNavigationVisualTest {
                 RenderCase(360, 800, 1f, true),
                 RenderCase(480, 960, 1f, true),
                 RenderCase(360, 800, 1.5f, true),
+                RenderCase(480, 960, 1.5f, false),
+                RenderCase(480, 960, 1.5f, true),
+                RenderCase(800, 360, 1f, false),
+                RenderCase(960, 480, 1.5f, true),
             )) {
             app.getSharedPreferences("appearance", 0).edit().putBoolean("night", night).commit()
             app.physicalButtonTest.clearResults()
@@ -257,7 +287,7 @@ class UiNavigationVisualTest {
                     all.filterIsInstance<Button>().single { it.text == destination }.performClick()
                     settle()
                     capture("nav-" + destination.lowercase())
-                    if (destination == "Settings") {
+                    if (destination == "Settings" && height > width) {
                         val appearance = activity.get().findViewById<Button>(R.id.appearance)
                         val bounds =
                             android.graphics.Rect(0, 0, appearance.width, appearance.height)
@@ -392,10 +422,14 @@ class UiNavigationVisualTest {
                                     .single { it.text == "Adaptive GNSS persistence" }
                                     .isChecked
                             )
-                            val adaptiveChoice = all.filterIsInstance<android.widget.CheckBox>().single {
-                                it.text == "Adaptive GNSS persistence"
-                            }
-                            assertTrue("Adaptive control must retain a 48 dp touch target", adaptiveChoice.height >= (48 * density).toInt())
+                            val adaptiveChoice =
+                                all.filterIsInstance<android.widget.CheckBox>().single {
+                                    it.text == "Adaptive GNSS persistence"
+                                }
+                            assertTrue(
+                                "Adaptive control must retain a 48 dp touch target",
+                                adaptiveChoice.height >= (48 * density).toInt(),
+                            )
                             capture("settings-gnss-persistence")
                             (root as ViewGroup).let { view ->
                                 descendants(view)
@@ -410,6 +444,28 @@ class UiNavigationVisualTest {
                             .single { it.text == "Diagnostics" }
                             .performClick()
                         settle()
+                        val console =
+                            descendants(root).filterIsInstance<Button>().single {
+                                it.text.startsWith("Command Instructions  ")
+                            }
+                        console.performClick()
+                        settle()
+                        reveal(console)
+                        capture("diagnostics-command-filters")
+                        val commandRow =
+                            descendants(root).filterIsInstance<Button>().first {
+                                it.contentDescription?.contains("Tap to expand details") == true
+                            }
+                        assertTrue(commandRow.isFocusable)
+                        assertTrue(
+                            commandRow.performAccessibilityAction(
+                                android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK,
+                                null,
+                            )
+                        )
+                        settle()
+                        reveal(commandRow)
+                        capture("diagnostics-command-stages")
                         all.filterIsInstance<Button>()
                             .single { it.text.startsWith("Advanced technical evidence") }
                             .performClick()

@@ -573,3 +573,31 @@ Record source revisions/licenses, bytes, wall time, process RSS, ACK p50/p95/wor
 and screenshots. Physical macOS/Windows/Android, native disk/power-loss endurance and
 historical thin-terrain reproduction remain NOT TESTED until this is done. Public
 provider failures must remain visible independently of passing fixtures.
+
+## Issue #39 Settings/Diagnostics acceptance
+
+Starting integration: `39f5593dfc1d428995b393446b5caf9fa3c31848` (accepted #43).
+Guidance matches `3b60b6d6228ca208df75765e2008c9b9abba8a69`.
+
+Software checks use the actual native Activity/Room flows. SettingsDiagnosticsTest
+covers unsaved form refresh/recreation/focus, Cancel, invalid Save, successful local
+Save without service start, journal filtering/pagination/recreation and truthful
+request/applied/trust/result formatting. Existing #24/#25/#26, SOS, persistence,
+Sender, lifecycle, ZIP and bridge tests remain the owning regression gates.
+UiNavigationVisualTest covers 360×800 and 480×960 dp, 1×/1.5×, Day/Night, plus
+800×360 Day and 960×480 Night/1.5× landscape renders. Screenshots are emitted through
+the existing GNSS_SCREENSHOT_DIR and integrated workflow visual artifact.
+Baseline/final Tracking images are compared independently; redesigned pages require
+visual inspection, not a screenshot-only success assertion.
+
+Native acceptance **outstanding**: install exact-source APK; use TalkBack/keyboard
+through every field, disclosure, filter, page, row detail and copy action; rotate with
+focused dirty edits and an open keyboard, navigate/back and recreate, cancel then
+save; confirm failed local writes never show Saved. Exercise unenrolled/offline,
+identity mismatch, rejected/expired/duplicate instructions, blocked alert output,
+local acknowledgement, pending cancellation/result custody and process restart.
+Compare Tracking controls, protected SOS, actual GNSS originals, Room queue/Sender,
+foreground lifetime and exports during ongoing sync with 20 phones plus a late
+21st. Real audible/haptic delivery, OEM/Doze/locked-screen and physical storage/power
+fault behavior require devices. Linux Skia/JVM tests do not establish these outcomes.
+External provider gates remain independent and are never weakened for this UI work.

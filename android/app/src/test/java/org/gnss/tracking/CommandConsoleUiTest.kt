@@ -80,7 +80,13 @@ class CommandConsoleUiTest {
                 views(root).filterIsInstance<TextView>().first {
                     it.contentDescription?.toString()?.contains("Tap to expand details") == true
                 }
-            title.performClick()
+            assertTrue("Command row must be keyboard focusable", title.isFocusable)
+            assertTrue(
+                title.performAccessibilityAction(
+                    android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK,
+                    null,
+                )
+            )
             assertTrue(
                 views(root).filterIsInstance<TextView>().any {
                     it.visibility == View.VISIBLE && it.text.toString().contains(id)

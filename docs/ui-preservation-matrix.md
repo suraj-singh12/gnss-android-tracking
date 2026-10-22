@@ -178,3 +178,16 @@ recording/Travel Back or remote-control authority changes belong to this extensi
 | PBF crop/full extent and source cache | Same SQLite, GeoJSON chunks and viewport renderer | Sparse/dense nodes, missing references, full extent, polygon holes, cache reuse and bounded index/fleet test |
 | Standalone map package | Existing saved vectors/GTERR001 and terrain algorithms | Partial round trip to clean DB, idempotence, corrupt/malicious archive and write-failure rollback |
 | Simplified map lifecycle | Same Map & Layers/Saved Maps/Layers controls | Chromium package/PBF/import/terrain/offline restart and axe; existing dashboard/SOS/control regressions |
+
+## Issue #39 · Android Settings and Diagnostics
+
+| Surface/contract | Change and preserved authority | Software evidence |
+| --- | --- | --- |
+| Tracking / SOS dock / service | Existing layout, controls, hold, sync and operational rendering preserved | Baseline/final native-render comparison; full startup/SOS/lifecycle suite |
+| Settings editing | Drafts survive refresh/recreation, selection/focus retained; Save after transaction; Cancel reloads persisted form | SettingsDiagnosticsTest; existing startup/appearance tests |
+| Reporting/adaptive | Local/requested/outcome/applied/revision shown separately; same immediate saved OFF-default #24 switch | SettingsDiagnosticsTest, AdaptiveSettingsTest, existing policy tests |
+| Command trust | Existing endpoint, binding, private enrollment and confirmed re-enrollment; unknown contact stays unknown | CommandPresentation assertions, existing CommandControlTest |
+| Health | Separate fix/Room/ACK/sync/SOS/storage/trust and recovery text | Native render matrix; unchanged persistence/Sender regressions |
+| Command console / phone alerts | Same journal, actual duplicate stages, filters/pages, expandable native controls, local ACK | CommandConsoleUiTest, SettingsDiagnosticsTest, existing #25/#26 tests |
+| Retry/export/Physical Button Test | Existing tools and confirmation/sanitization preserved in Advanced Diagnostics | Existing export/physical-button tests and native renders |
+| Device acceptance | No native/physical success inferred from software evidence | Real TalkBack, keyboard/rotation/OS/OEM and LAN endurance remain outstanding |

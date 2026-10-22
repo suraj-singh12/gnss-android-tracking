@@ -184,7 +184,7 @@ visible phone UUID and local Disable. Diagnostics → Command Instructions uses 
 same canonical Room journal for chronological stages, filter/expand/copy and ZIP.
 Security-denied attempts carry local event IDs; absent offline commands have no
 invented phone record. Existing Tracking and SOS geometry/behavior stays intact;
-#39 may later polish Settings/Diagnostics independently.
+#39 refines Settings/Diagnostics as documented below.
 
 ### Radius acquisition in the existing map workflow
 
@@ -204,3 +204,22 @@ there is no per-row Use or Reuse button. Network/resource details are expandable
 while approval amounts and missing coverage remain visible. Retry Missing,
 Save & Use and Cancel preserve verified data. The toolbar Layers dialog remains
 independent and distinguishes available/hidden/visible/processing failure.
+
+## Issue #39 Settings and Diagnostics refinement
+
+Tracking remains the visual/behavior baseline with unchanged geometry and controls.
+Settings retains native Day/Night sections: Party & Command, Tracking & GNSS Policy,
+field readiness, and appearance/emergency preferences. Save/Cancel edits and explicit
+immediate adaptive Apply distinguish local durability from remote effectiveness.
+Trust provisioning is collapsed and protected; configured endpoint, binding,
+last authenticated evidence and current availability retain distinct meanings.
+
+Diagnostics uses text-labelled Current Health facts, with evidence and recovery
+instructions per subsystem. No aggregate green connection indicator substitutes for
+GNSS freshness, authenticated control, Room durability, sync or human acknowledgement.
+Phone Alerts and Command Instructions lead to canonical stages; native 48 dp command
+row buttons expose expandable, selectable details. Twenty-record pages and combined
+type/outcome/time/search filters bound view construction. Advanced Diagnostics keeps
+tools discoverable and raw technical/SOS evidence collapsed. Native disclosure,
+filter, page and form draft state survives recreation; private provisioning text is
+never included in saved instance state.

@@ -487,3 +487,15 @@ publication. Verified chunks/GTERR001 and compatible terrain derivation remain t
 operational assets. This archive is not frozen recording evidence; #38 retains that
 separate ownership. UI uses one Map & Layers dialog with Download New Map, Use
 Existing Map and Import Map, existing Saved Maps selection and Layers controls.
+
+### Issue #39 Android presentation boundary
+
+Settings/Diagnostics adapt existing Installation, FieldPreflight, #24 policy,
+Operational/queue flows and #25/#26 command journal only. CommandPresentation contains
+pure explanation/formatting functions, not an execution or persistence authority.
+Drafts and disclosure/filter/page selections use Activity saved instance state;
+credentials remain excluded. Canonical journal retention/query bounds are unchanged;
+only 20 matching rows render, deferred while hidden, with ordering work off the main
+thread. No schema, Sender, service, authentication, result custody, GNSS/SOS or
+Tracking layout changes are introduced. A retained instruction/result timestamp is
+labelled as evidence, not substituted for an unrecorded empty-poll contact time.

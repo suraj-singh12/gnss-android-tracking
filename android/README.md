@@ -496,8 +496,8 @@ control responses are sanitized security events with local event IDs. Offline
 commands never received are absent, not fabricated rejects. Pending/unconfirmed
 results survive restart and bounded history pruning. Existing Export diagnostics
 adds `command-instructions.json` without keys/MACs/raw instruction bodies. No console
-operation deletes GNSS/SOS or pending control state. The UI shows the newest 100
-matching records; refine the filter for older retained records.
+operation deletes GNSS/SOS or pending control state. The UI shows 20 matching records per page, newest first; use filters or older/newer
+pages to inspect retained records.
 
 See the [wire/security contract](../protocol/protocol-v1.md).
 Physical Android background, Keystore/OEM, GNSS and LAN acceptance remain **NOT TESTED**
@@ -534,3 +534,39 @@ ZIP includes sanitized alert stages and timings, redacting message content. Exis
 Room v6 columns store the validated alert request; no destructive migration/new DB.
 See [physical acceptance](DEVICE-ACCEPTANCE.md); real sound/vibration, DND/mute,
 locked/OEM/Doze behavior remain NOT TESTED without actual hardware.
+
+## Settings and Diagnostics field presentation (#39)
+
+Settings groups Party/Command, Tracking & GNSS Policy, field readiness and existing
+appearance/emergency preferences. Party, endpoint and interval edits remain drafts
+until **Save settings** succeeds locally; **Cancel edits** restores persisted values.
+Draft text/focus/selection and disclosures survive Activity recreation and data
+refresh. The adaptive switch is explicitly an immediate Apply of #24's existing
+policy, OFF by default, affecting future stored observations only. Local cadence,
+latest retained Command request/outcome, active override and applied cadence/revision
+are distinct. Configuration never starts GNSS by navigation or recreation.
+
+Enrollment remains the protected #25 workflow. Wi-Fi, message ACK and authenticated
+control contact are distinct. Enrollment details show the current authority and
+actual retained authenticated instruction/result timestamps. Empty authenticated
+polls have no historical journal record: when current contact is lost, the last
+successful poll time is honestly unknown rather than inferred from Wi-Fi or ACK.
+System permission/location/notification/battery actions retain the existing visible
+Start preflight. Android/OEM background execution and audible/haptic output are not
+guaranteed.
+
+Diagnostics begins with Current Health: fix accuracy/age, Room commit failures and
+queue, transport ACK, sync/backlog/unresolved records, SOS delivery versus Command
+operator ACK, device storage and remote-control trust. Phone Alerts separately
+exposes received/output/blocked/local ACK/cancellation evidence without claiming an
+alert was heard. **Advanced Diagnostics** retains SOS evidence, technical details,
+Physical Button Test, confirmed retry and sanitized ZIP export.
+
+Command Instructions still reads only the canonical bounded Room journal. Type,
+outcome and received-time selectors combine with UUID/reason/stage/UTC-date search.
+Duplicate filters include the actual duplicate stage while preserving the original
+outcome. Pages show 20 newest-first matching records; open stages, filters and page
+survive recreation. Rendering is deferred while the console is collapsed or another
+destination is selected. Keys, transport, database schema, command execution and
+result custody are unchanged. Physical Android/TalkBack/OEM acceptance remains
+separate from JVM native-render tests.
