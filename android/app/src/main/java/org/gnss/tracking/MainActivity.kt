@@ -1010,6 +1010,8 @@ class MainActivity : Activity() {
         val commandRows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         content.addView(commandRows)
         var commandHistory = emptyList<CommandRecord>()
+        var renderedWindow: List<CommandRecord>? = null
+        var renderedSelection: List<Any>? = null
 
         fun renderCommands() {
             if (destination != "Diagnostics" || commandGroup.visibility != View.VISIBLE) return
