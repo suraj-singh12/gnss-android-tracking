@@ -625,8 +625,14 @@ class MainActivity : Activity() {
 
         button("Save settings") { save() }
         button("Cancel edits") {
-            savedInstallation?.let { restoreSettings(it) }
-            settingsFeedback.text = "Edits canceled · showing locally persisted settings"
+            val saved = savedInstallation
+            if (saved == null) {
+                settingsFeedback.text =
+                    "Cannot cancel before saved settings are available · draft retained."
+            } else {
+                restoreSettings(saved)
+                settingsFeedback.text = "Edits canceled · showing locally persisted settings"
+            }
         }
         settingsFeedback =
             text(
@@ -1573,9 +1579,9 @@ class MainActivity : Activity() {
     override fun onBackPressed() {
         val saved = savedInstallation
         val dirty =
-            initialized &&
-                saved != null &&
-                (partyId.text.toString() != saved.partyId ||
+            settingsDraftLoaded &&
+                (saved == null ||
+                    partyId.text.toString() != saved.partyId ||
                     partyName.text.toString() != saved.partyName ||
                     endpoint.text.toString() != saved.endpoint ||
                     interval.text.toString() != saved.localInterval.toString())
