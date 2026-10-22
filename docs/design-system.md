@@ -231,8 +231,8 @@ Cards have restrained 1 dp edges, 16 dp corners, 14–16 dp inner padding and a
 Tracking groups the party identity separately from state pills, GNSS and two balanced
 Room/ACK metrics. Sync/Start/Stop retain one order across states; contextual alert
 content follows the facts. The protected 1.2-second SOS dock stays above equal-width
-text navigation. At large text and short landscape sizes, the same action row is
-kept above the dock while facts scroll. Native status, lifecycle and queue data drive
+text navigation. Large text keeps the same action row above SOS while facts scroll; landscape shares
+a compact actions/SOS footer and keeps urgent acknowledgement reachable. Native status, lifecycle and queue data drive
 all labels; there are no demonstration values in production.
 
 Settings has five calm destination rows. Configuration, trust, readiness, policy,

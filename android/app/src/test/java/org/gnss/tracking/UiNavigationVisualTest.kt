@@ -166,6 +166,8 @@ class UiNavigationVisualTest {
                 for ((name, op) in
                     listOf(
                         "tracking-stopped" to Operational(),
+                        "tracking-stopped-last-fix" to
+                            Operational(gnss = "fix", accuracy = 3.0, ageMillis = 1000),
                         "tracking-active" to
                             Operational(
                                 tracking = true,
@@ -204,6 +206,20 @@ class UiNavigationVisualTest {
                             .filter { it.isShown }
                             .joinToString(" ") { it.text }
                     assertTrue(visible.contains(if (op.tracking) "Tracking on" else "Tracking off"))
+                    if (!op.tracking && op.ageMillis != null) {
+                        assertTrue(visible.contains("Last known fix"))
+                        assertFalse(
+                            "A stopped snapshot must not imply a current fresh fix",
+                            visible.contains("Fresh fix"),
+                        )
+                    }
+                    assertTrue(
+                        "Tracking action agrees with displayed state",
+                        nativeViews(root).filterIsInstance<Button>().any {
+                            it.isShown &&
+                                it.text == (if (op.tracking) "Stop Tracking" else "Start Tracking")
+                        },
+                    )
                 }
                 // Real persisted SOS fixture, never a production demonstration transaction.
                 withContext(Dispatchers.IO) {
@@ -235,6 +251,28 @@ class UiNavigationVisualTest {
                 settle()
                 capture("tracking-urgent-alert")
                 assertEquals("Urgent alert retains core actions", stableActions, actionBounds())
+                val urgentAck =
+                    nativeViews(root).filterIsInstance<Button>().first {
+                        it.isShown && it.text == "Acknowledge / Stop Alert"
+                    }
+                val ackBounds =
+                    android.graphics.Rect(0, 0, urgentAck.width, urgentAck.height).apply {
+                        root.offsetDescendantRectToMyCoords(urgentAck, this)
+                    }
+                val scrollViewport =
+                    nativeViews(root).filterIsInstance<android.widget.ScrollView>().first()
+                val viewportBounds =
+                    android.graphics.Rect(0, 0, scrollViewport.width, scrollViewport.height).apply {
+                        root.offsetDescendantRectToMyCoords(scrollViewport, this)
+                    }
+                val pinned = font > 1.25f || width > height
+                assertTrue(
+                    "Urgent acknowledgement is fully reachable at $width × $height / $font: $ackBounds within $viewportBounds",
+                    ackBounds.top >= 0 &&
+                        ackBounds.bottom <=
+                            (if (pinned) actionBounds().top else viewportBounds.bottom),
+                )
+
                 nativeViews(root)
                     .filterIsInstance<Button>()
                     .first { it.isShown && it.text == "Acknowledge / Stop Alert" }

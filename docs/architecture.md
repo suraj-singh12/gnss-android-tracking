@@ -501,7 +501,9 @@ store or journal is introduced.
 Draft text/caret/focus, route, selected records, filter and page state use Activity
 saved instance state. Credentials remain excluded. Only 20 matching journal/SOS rows
 render per page; journal ordering remains off-main, list controls are retained for
-unchanged data, and list rendering is deferred outside its destinations. Alert menus
+unchanged data, and list rendering is deferred outside its destinations. Tracking
+snapshots the existing Operational state after suspended diagnostic reads and uses
+that same snapshot for its status, fix and control labels. Alert menus
 are rebuilt only when canonical alert records change. Diagnostic rendering/exports do
 not block GNSS acquisition, SOS, Sender or database commits. Existing journal query
 and retention bounds remain authoritative.

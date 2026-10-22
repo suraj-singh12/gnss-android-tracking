@@ -191,7 +191,7 @@ adaptations. Command web and the wire contract remain unchanged.
 | --- | --- | --- |
 | Tracking | App/party hierarchy, independent pills, fresh/stale fix, balanced Room/ACK metrics, stable action order, contextual alerts | Original acquisition/session identity, queue/progress projection; startup/GNSS/lifecycle tests |
 | SOS | Anchored subdued dock, same 1.2 s hold, chronological history/details | Original SosHoldGesture/engine/durable outbox; separate delivery and Command operator ACK; SOS regressions |
-| Large text / landscape | Facts scroll; Sync/Start/Stop stay accessible above the protected dock | Native matrix, SOS bounds, scalable text and equal text navigation |
+| Large text / landscape | Facts scroll; the compact responsive footer keeps Sync/Start/Stop, SOS and urgent ACK reachable | Native matrix, SOS bounds, scalable text and equal text navigation |
 | Settings | Five destinations, focused Save/Cancel forms, parent Back retains drafts | Existing Installation transaction and Activity draft/caret/focus restoration; lifecycle tests |
 | Reporting / adaptive | Separate local/requested/applied/revision, native ON/OFF Switch | Existing #24 policy, OFF default, originals unchanged; policy tests |
 | Trust / enrollment | Current/draft endpoint, contact evidence, confirmed re-enrollment/disable | Same private credential binding and #25 authorization; credential excluded from saved state/export |

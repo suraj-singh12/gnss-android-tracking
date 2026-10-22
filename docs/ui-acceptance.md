@@ -639,7 +639,9 @@ refresh, real alert ACK and sanitized export. AdaptiveSettingsTest verifies OFF/
 persistence through immediate recreation without starting GNSS. Notification tests
 verify immutable action identity, correct existing handlers, no GNSS from Sync,
 protected Stop and no action replay. Semantic text/surface pairs meet 4.5:1 in both
-themes. Native layout tests check navigation label fit and protected SOS reachability.
+themes. Native layout tests check navigation label fit, protected SOS and urgent ACK reachability,
+stable action bounds and matching Tracking state/action snapshots. Stopped GNSS is
+labelled last-known with age at the last update; it never implies continuing freshness.
 Existing acquisition, original-observation identity, Room/Sender/SOS, service lifetime,
 phone-alert and command result-custody regressions remain gates.
 

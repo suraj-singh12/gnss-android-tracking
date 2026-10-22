@@ -547,7 +547,7 @@ components. Command browser UI and protocol are unchanged.
 - **Tracking:** prominent party identity, independent tracking/Command pills, real
   GNSS quality/age, balanced saved-observation metrics and ACK progress, one Sync Now
   and Start/Stop action row, contextual alerts, anchored protected SOS dock. Large
-  text/short landscape keeps actions accessible while facts scroll. The moon/sun
+  text/landscape keeps actions, deliberate SOS and urgent ACK accessible while facts scroll. The moon/sun
   control is icon-only and uses the existing persisted appearance preference.
 - **Settings:** five destination rows open Party & Command, Tracking & GNSS, Field
   readiness, Appearance & SOS and Advanced settings. Nested editors have explicit

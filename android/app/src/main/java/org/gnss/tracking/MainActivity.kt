@@ -120,6 +120,8 @@ class MainActivity : Activity() {
     private var initialized = false
     private lateinit var syncNowButton: Button
     private lateinit var trackingActions: LinearLayout
+    private lateinit var trackingAlerts: LinearLayout
+    private var activePhoneAlerts = false
     private var showTracking: (() -> Unit)? = null
     private lateinit var startButton: Button
     private lateinit var readiness: TextView
@@ -283,6 +285,7 @@ class MainActivity : Activity() {
             scroll.scrollTo(0, 0)
             if (destination == "Diagnostics") refreshConsole?.invoke()
             if (name == "Physical Button Test") refreshPhysicalButtonHistory()
+            refreshTrackingBanners()
         }
         navigateTo = ::navigate
         selectedInstruction = savedInstanceState?.getString("selectedInstruction")
@@ -614,35 +617,58 @@ class MainActivity : Activity() {
         content = group("Advanced technical evidence", false)
         status = text("Loading saved settings…")
         content = pages.getValue("Tracking")
-        val phoneAlertActions = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val phoneAlertActions =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                visibility = View.GONE
+                setPadding(dp(10), dp(2), dp(10), dp(2))
+                background = NativeUi(this@MainActivity).surface(R.color.emergency_surface)
+            }
+        trackingAlerts = phoneAlertActions
         content.addView(phoneAlertActions)
         scope.launch {
             app.repository.dao.observeCommands().collect { rows ->
                 phoneAlertActions.removeAllViews()
-                for (row in
+                val active =
                     rows.filter {
                         it.trusted &&
                             it.operation == "alert" &&
                             it.state in listOf("output_attempted", "alert_blocked", "unknown")
-                    }) {
-                    phoneAlertActions.addView(
-                        TextView(this@MainActivity).apply {
-                            setTextColor(getColor(R.color.danger))
-                            text =
-                                "Command alert · ${commandStateLabel(row.state)}\n${runCatching { PhoneAlertSpec.parse(Protocol.parse(row.requested)).message }.getOrDefault("")}"
-                        }
+                    }
+                activePhoneAlerts = active.isNotEmpty()
+                val alertUi = NativeUi(this@MainActivity)
+                for (row in active) {
+                    val spec =
+                        runCatching { PhoneAlertSpec.parse(Protocol.parse(row.requested)) }
+                            .getOrNull()
+                    val heading = if (spec?.mode == "urgent") "Urgent alert" else "Command alert"
+                    val state =
+                        if (row.state == "unknown") " · Output unconfirmed"
+                        else if (row.state == "alert_blocked") " · Output blocked" else ""
+                    alertUi.add(
+                        phoneAlertActions,
+                        alertUi.label(
+                            "$heading$state · ${spec?.message.orEmpty()}",
+                            13f,
+                            bold = true,
+                        ),
                     )
-                    phoneAlertActions.addView(
-                        Button(this@MainActivity).apply {
-                            text = "Acknowledge / Stop Alert"
-                            setTextColor(getColor(R.color.danger))
-                            minHeight = dp(48)
-                            setOnClickListener {
+                    alertUi.add(
+                        phoneAlertActions,
+                        alertUi
+                            .button("Acknowledge / Stop Alert") {
                                 app.workScope.launch { app.acknowledgePhoneAlert(row.id) }
                             }
-                        }
+                            .apply {
+                                backgroundTintList =
+                                    android.content.res.ColorStateList.valueOf(
+                                        getColor(R.color.emergency_action)
+                                    )
+                                setTextColor(android.graphics.Color.WHITE)
+                            },
                     )
                 }
+                refreshTrackingBanners()
             }
         }
         syncNowButton =
@@ -1479,12 +1505,15 @@ class MainActivity : Activity() {
                     app.repository.dao.blockedError(),
                     app.operational,
                     app.persistencePolicy.updates,
-                ) { state, queues, blockedError, op, localPolicy ->
+                ) { state, queues, blockedError, _, localPolicy ->
                     if (state != null) {
                         val oldestPending =
                             withContext(Dispatchers.IO) {
                                 app.repository.dao.oldestPendingCapturedMillis()?.let { utc(it) }
                             }
+                        // The diagnostic query suspends. Snapshot current operational state once
+                        // afterwards, so the fix, Tracking pill and controls describe one instant.
+                        val op = app.operational.value
                         savedInstallation = state
                         refreshTrust?.invoke()
 
@@ -1492,7 +1521,7 @@ class MainActivity : Activity() {
                             if (!settingsDraftLoaded) restoreSettings(state)
                             settingsDraftLoaded = true
                             initialized = true
-                            updateStartControls()
+                            updateStartControls(op)
                             dispatchNotificationAction()
                             attemptStart()
                         }
@@ -1525,6 +1554,8 @@ class MainActivity : Activity() {
                             if (trackingError.text.isEmpty()) View.GONE else View.VISIBLE
                         gnssSummary.text =
                             when {
+                                !op.tracking ->
+                                    if (op.ageMillis != null) "Last known fix" else "No current fix"
                                 op.gnss == "fix" &&
                                     op.ageMillis != null &&
                                     op.ageMillis in 0..30000 -> "Fresh fix"
@@ -1535,7 +1566,13 @@ class MainActivity : Activity() {
                             op.accuracy?.let { "± %.1f m".format(java.util.Locale.ROOT, it) }
                                 ?: "— m"
                         fixAge.text =
-                            op.ageMillis?.let { "${it / 1000} s old" } ?: "Waiting for GNSS"
+                            when {
+                                !op.tracking ->
+                                    op.ageMillis?.let { "At last update · ${it / 1000} s" }
+                                        ?: "Age unavailable · Tracking off"
+                                else ->
+                                    op.ageMillis?.let { "${it / 1000} s old" } ?: "Waiting for GNSS"
+                            }
                         // Tracking state has its own pill; fix age never changes the card height.
                         val connection =
                             if (app.sender.commandReachable == true) "Command Connected"
@@ -1626,17 +1663,24 @@ class MainActivity : Activity() {
                             )
                         )
                         val fresh =
-                            op.gnss == "fix" && op.ageMillis != null && op.ageMillis in 0..30000
+                            op.tracking &&
+                                op.gnss == "fix" &&
+                                op.ageMillis != null &&
+                                op.ageMillis in 0..30000
                         healthRows
                             .getValue("GNSS")
                             .update(
-                                if (fresh) "Fresh fix"
+                                if (!op.tracking && op.ageMillis != null) "Last known"
+                                else if (fresh) "Fresh fix"
                                 else if (op.ageMillis != null) "Stale / unknown" else "No fix",
                                 listOfNotNull(
                                         op.accuracy?.let {
                                             "%.1f m".format(java.util.Locale.ROOT, it)
                                         },
-                                        op.ageMillis?.let { "${it / 1000} s old" },
+                                        op.ageMillis?.let {
+                                            if (op.tracking) "${it / 1000} s old"
+                                            else "${it / 1000} s at last update"
+                                        },
                                     )
                                     .joinToString(" · ")
                                     .ifEmpty { "Accuracy unavailable" },
@@ -1848,7 +1892,8 @@ class MainActivity : Activity() {
                                 appendLine("Attention: $it")
                             }
                         }
-                        updateStartControls()
+                        updateStartControls(op)
+                        refreshTrackingBanners()
                     }
                 }
                 .catch { e ->
@@ -2610,7 +2655,7 @@ class MainActivity : Activity() {
             }
         ui.add(tracking, trackingContext, 12)
         ui.add(tracking, trackingError, 8)
-        ui.add(tracking, phoneAlertActions, 8)
+        ui.add(tracking, phoneAlertActions, 6)
         // Read-only extra telemetry belongs to Diagnostics, never the routine dashboard.
         ui.add(routes.getValue("Advanced logs"), readiness)
         ui.add(routes.getValue("Advanced logs"), batterySummary)
@@ -2619,17 +2664,21 @@ class MainActivity : Activity() {
         ui.add(routes.getValue("Command trust"), diagnosticTrust)
         ui.add(routes.getValue("Policy details"), reportingPolicy)
         emergencyDock.background = null
-        emergencyDock.setPadding(dp(20), dp(8), dp(20), dp(12))
+        emergencyDock.setPadding(dp(20), dp(6), dp(20), dp(8))
         val dockChildren = (0 until emergencyDock.childCount).map { emergencyDock.getChildAt(it) }
         emergencyDock.removeAllViews()
         val dock = ui.card(emergencyDock, 0, R.color.emergency_surface)
+        dock.setPadding(dp(14), dp(10), dp(14), dp(10))
         ui.add(
             dock,
-            ui.label("SOS", 16f, bold = true).apply { setTextColor(getColor(R.color.danger)) },
+            ui.label("SOS", 16f, bold = true).apply {
+                setTextColor(getColor(R.color.danger))
+                setPadding(0, 0, 0, 0)
+            },
         )
         sosStatus.textSize = 12f
-        sosStatus.minHeight = dp(if (resources.configuration.fontScale > 1.25f) 52 else 28)
-        sosStatus.setPadding(0, 0, 0, dp(6))
+        sosStatus.minHeight = dp(if (resources.configuration.fontScale > 1.25f) 52 else 20)
+        sosStatus.setPadding(0, 0, 0, dp(2))
         dockChildren.forEach { ui.add(dock, it) }
         (dockChildren.last().layoutParams as LinearLayout.LayoutParams).height = dp(2)
         tabs.forEach { (name, tab) ->
@@ -2667,7 +2716,79 @@ class MainActivity : Activity() {
                     bottomMargin = dp(4)
                 },
             )
+            if (
+                resources.configuration.orientation ==
+                    android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            ) {
+                // Share a single short footer in landscape so alerts, tracking actions and
+                // deliberate SOS remain reachable without consuming the entire viewport.
+                val footer =
+                    LinearLayout(this).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
+                detach(actions)
+                detach(emergencyDock)
+                root.addView(
+                    footer,
+                    root.indexOfChild(navigation),
+                    LinearLayout.LayoutParams(-1, -2),
+                )
+                footer.addView(
+                    actions,
+                    LinearLayout.LayoutParams(0, -2, 1f).apply {
+                        leftMargin = dp(20)
+                        rightMargin = dp(6)
+                    },
+                )
+                footer.addView(emergencyDock, LinearLayout.LayoutParams(0, -2, 1f))
+                emergencyDock.setPadding(dp(6), dp(6), dp(10), dp(8))
+                val title = dock.getChildAt(0)
+                val sosButton = dockChildren[1]
+                val progress = dockChildren[2]
+                listOf(title, sosStatus, sosButton, progress).forEach(::detach)
+                dock.orientation = LinearLayout.HORIZONTAL
+                dock.gravity = android.view.Gravity.CENTER_VERTICAL
+                sosStatus.minHeight = dp(if (resources.configuration.fontScale > 1.25f) 72 else 48)
+                dock.addView(
+                    ui.column().apply {
+                        ui.add(this, title)
+                        ui.add(this, sosStatus)
+                    },
+                    LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = dp(10) },
+                )
+                dock.addView(
+                    ui.column().apply {
+                        ui.add(this, sosButton)
+                        ui.add(this, progress)
+                        progress.layoutParams.height = dp(2)
+                    },
+                    LinearLayout.LayoutParams(0, -2, 1f),
+                )
+            }
+            detach(trackingAlerts)
+            root.addView(
+                trackingAlerts,
+                (if (actions.parent === root) root.indexOfChild(actions)
+                else root.indexOfChild(actions.parent as View)),
+                LinearLayout.LayoutParams(-1, -2).apply {
+                    leftMargin = dp(20)
+                    rightMargin = dp(20)
+                    topMargin = dp(4)
+                    bottomMargin = dp(4)
+                },
+            )
         }
+    }
+
+    private fun refreshTrackingBanners() {
+        if (!::trackingContext.isInitialized || !::trackingAlerts.isInitialized) return
+        val showAlert = destination == "Tracking" && activePhoneAlerts
+        trackingAlerts.visibility = if (showAlert) View.VISIBLE else View.GONE
+        // One contextual priority; all retained details remain available in Diagnostics.
+        trackingError.visibility =
+            if (!showAlert && trackingError.text.isNotEmpty()) View.VISIBLE else View.GONE
+        trackingContext.visibility =
+            if (!showAlert && trackingError.text.isEmpty() && trackingContext.text.isNotEmpty())
+                View.VISIBLE
+            else View.GONE
     }
 
     @Suppress("DEPRECATION")
@@ -2813,9 +2934,8 @@ class MainActivity : Activity() {
         if (start) startSave = saveJob
     }
 
-    private fun updateStartControls() {
+    private fun updateStartControls(op: Operational = app.operational.value) {
         if (!::startButton.isInitialized) return
-        val op = app.operational.value
         startButton.isEnabled = initialized && !pendingStart && !op.starting && !op.stopping
         cancelStartButton.visibility = if (pendingStart || op.starting) View.VISIBLE else View.GONE
         NativeUi(this).style(startButton, primary = !op.tracking, danger = op.tracking)
