@@ -1010,11 +1010,17 @@ class MainActivity : Activity() {
         val commandRows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         content.addView(commandRows)
         var commandHistory = emptyList<CommandRecord>()
+        var commandHistoryLoaded = false
         var renderedWindow: List<CommandRecord>? = null
         var renderedSelection: List<Any>? = null
 
         fun renderCommands() {
-            if (destination != "Diagnostics" || commandGroup.visibility != View.VISIBLE) return
+            if (
+                destination != "Diagnostics" ||
+                    commandGroup.visibility != View.VISIBLE ||
+                    !commandHistoryLoaded
+            )
+                return
             val filter = commandFilter.text.toString().lowercase()
             val matching =
                 commandHistory.filter {
@@ -1225,6 +1231,7 @@ class MainActivity : Activity() {
                             withContext(Dispatchers.Default) {
                                 it.sortedByDescending { row -> row.received }
                             }
+                        commandHistoryLoaded = true
                         refreshTrust?.invoke()
                         renderCommands()
                     }
