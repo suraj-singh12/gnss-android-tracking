@@ -574,7 +574,35 @@ and screenshots. Physical macOS/Windows/Android, native disk/power-loss enduranc
 historical thin-terrain reproduction remain NOT TESTED until this is done. Public
 provider failures must remain visible independently of passing fixtures.
 
-## Issue #39 Settings/Diagnostics acceptance
+## Issue #39 full Android acceptance status
+
+The operator-approved full-app scope supersedes the earlier Tracking visual
+preservation rule. Review V3 has 44 Day/Night references; those references could
+not be read because Figma context, screenshot and plugin inspection all report
+"You've reached the Figma MCP tool call limit on the Starter plan". The direct
+Figma URL is blocked by environment network policy; local exports are absent.
+**Full Figma fidelity and the complete redesign are not accepted or claimed.**
+
+The four independent written V4 corrections are implemented and tested: pause UI
+removed, functional foreground-notification Sync/confirmed Stop, accessible persisted
+icon-only theme toggle, and restrained coordinated emergency colors. Tests check
+notification action routing, no GNSS from Sync, stop cancellation, recreation,
+retained alert ACK action identity and theme colors, and emergency contrast. Native
+notification RemoteViews are rendered across both sizes/themes/font scales. These
+are framework-content renders, not physical Android notification-shade screenshots.
+The notification renderer configures OS Day/Night as well as the app preference;
+Android owns the surface/actions layout. Captures with only the app palette changed
+are not evidence of a dark system notification shade.
+
+V4 correction evidence: [Tracking Day](evidence/issue-39/v4-tracking-day.png),
+[Tracking Night / 1.5×](evidence/issue-39/v4-tracking-night-large-text.png),
+[native Tracking notification Day](evidence/issue-39/v4-notification-day.png),
+[native Tracking notification Night / 1.5×](evidence/issue-39/v4-notification-night-large-text.png),
+[urgent notification Day](evidence/issue-39/v4-urgent-notification-day.png) and
+[urgent notification Night / 1.5×](evidence/issue-39/v4-urgent-notification-night-large-text.png).
+No Figma-side comparison is available.
+
+### Existing Settings/Diagnostics baseline evidence
 
 Starting integration: `39f5593dfc1d428995b393446b5caf9fa3c31848` (accepted #43).
 Guidance matches `3b60b6d6228ca208df75765e2008c9b9abba8a69`.
@@ -595,8 +623,8 @@ sanitized export and stable native focus on unchanged refreshes.
 UiNavigationVisualTest renders 360×800 and 480×960 dp, 1×/1.5×, Day/Night, plus
 800×360 Day and 960×480 Night/1.5× landscape. It captures default screens,
 instructions, filters/stages, policy/readiness and advanced tools through the existing
-GNSS_SCREENSHOT_DIR workflow artifact. Tracking source and baseline renders are
-compared separately. Screenshots are visual evidence, not physical acceptance. Representative checked-in
+GNSS_SCREENSHOT_DIR workflow artifact. Historical source/pixel preservation comparisons refer to `60cd98c`; V4 now
+authorizes presentation changes to Tracking. Behavioral regression tests remain. Screenshots are visual evidence, not physical acceptance. Representative checked-in
 renders: [Settings](evidence/issue-39/settings.png),
 [Diagnostics](evidence/issue-39/diagnostics.png),
 [Night / 1.5×](evidence/issue-39/diagnostics-night-large-text.png) and

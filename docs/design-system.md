@@ -9,7 +9,10 @@ controls and Command uses accessible HTML controls.
 
 Neutral surfaces `#F3F5F4`, white cards, ink `#24343B`, secondary ink `#607077`,
 borders `#DCE3DF`, primary action `#17654C`. Amber denotes degraded conditions;
-red `#A51621` is reserved for SOS and critical errors. Offline contact uses neutral
+Command red `#A51621` is reserved for SOS and critical errors. Android uses the
+restrained V4 burgundy family: Day text `#843E4B`, action `#71333F`, tint `#F6E9EC`;
+Night text `#D5A6B0`, action `#77434E`, tint `#38252D`. White emergency-action labels
+exceed 7:1 contrast; emergency text on its tint exceeds 6:1. Offline contact uses neutral
 text rather than an emergency colour. Stable party colours come from Command's
 existing device-ID palette; they do not encode health. Provisional paths are dashed,
 qualified history muted, fresh GNSS filled, last-known GNSS hollow and labelled.
@@ -54,7 +57,7 @@ Backend contact grace periods follow each device's effective reporting interval.
 
 Three persistent destinations: **Tracking · Settings · Diagnostics**. Tracking shows
 large lifecycle state, one Start/Stop control, GNSS accuracy/age, application contact
-and last ACK, concise GNSS queue state, battery and a protected hold-to-activate SOS dock that stays visible above navigation. Tracking also exposes local Sync All Now and Pause history sync. Saved-history automatic delivery is available while visible with Tracking OFF. User-started manual drain also has a bounded dataSync foreground lifetime; neither action starts collection. The History card separates pending, durable ACK and unresolved counts, with reconstruction explicitly Command-owned.
+and last ACK, concise GNSS queue state, battery and a protected hold-to-activate SOS dock that stays visible above navigation. Tracking exposes local Sync Now. History-pause UI and notification actions are removed; internal OS/lifecycle pause mechanisms remain. Saved-history automatic delivery is available while visible with Tracking OFF. User-started manual drain also has a bounded dataSync foreground lifetime; neither action starts collection. The History card separates pending, durable ACK and unresolved counts, with reconstruction explicitly Command-owned.
 Check setup opens Settings in one interaction. Settings starts with the Party and
 Command form, then expandable emergency and permissions/battery sections. It contains field readiness
 and permission/system-setting actions, identity labels, receiver address, reporting
@@ -205,9 +208,25 @@ while approval amounts and missing coverage remain visible. Retry Missing,
 Save & Use and Cancel preserve verified data. The toolbar Layers dialog remains
 independent and distinguishes available/hidden/visible/processing failure.
 
-## Issue #39 Settings and Diagnostics
+## Issue #39 full Android redesign status
 
-Tracking remains the visual and behavioral baseline. Settings uses two restrained
+The operator-approved target is Figma Review V3 (44 frames) plus four written V4
+corrections. The old restriction against changing Tracking visuals is superseded.
+Figma references are currently unavailable (Starter quota; direct view blocked;
+no exports). Full screen structure, nested navigation and Figma fidelity remain
+**pending**, rather than an invented replacement visual language.
+
+V4 implemented independently: icon-only 48 dp minimum Tracking theme target; native
+notification actions for Sync Now and confirmed Stop Tracking; no exposed pause;
+and one restrained emergency palette across existing native views/notification ink.
+System notification geometry belongs to Android. Native RemoteViews render tests
+check both action labels remain inside their notification in Day/Night at both
+sizes and font scales. Current screenshots are evidence of these corrections,
+not a comparison against unavailable Figma frames.
+
+### Current Settings/Diagnostics baseline
+
+Settings currently uses two restrained
 native surfaces: a configuration form and tracking policy. Identity fields share a
 row; a filled Save action and quiet Cancel action establish priority. Appearance
 stays in the title row. Policy shows applied cadence and concise request state;
@@ -222,5 +241,5 @@ outcome and time; filters and stage/copy controls expand on demand. Flat disclos
 rows replace outlined header buttons, and repeated explanations are removed.
 
 Use the existing Day/Night palette, native typography, 48 dp action targets and one
-spacing rhythm. Large text wraps and scrolls naturally. No Tracking, Command web,
-protocol or execution changes are part of this presentation refinement.
+spacing rhythm. Large text wraps and scrolls naturally. Command web and protocol remain unchanged. Tracking now includes the V4 presentation
+corrections; GNSS/SOS and existing service execution remain authoritative.

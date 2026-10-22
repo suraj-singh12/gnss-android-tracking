@@ -6,8 +6,10 @@
     <color name="line">#DCE3DF</color>
     <color name="control_line">#B2C2BC</color>
     <color name="accent">#17654C</color>
-    <color name="danger">#A51621</color>
+    <color name="danger">#843E4B</color>
     <color name="warning">#80590C</color>
     <color name="disabled_ink">#829189</color>
     <color name="ripple">#3317654C</color>
+    <color name="emergency_action">#71333F</color>
+    <color name="emergency_surface">#F6E9EC</color>
 </resources>

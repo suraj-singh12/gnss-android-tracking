@@ -2,4 +2,5 @@
 <resources>
     <item name="diagnostic_tools" type="id" />
     <item name="appearance" type="id" />
+    <item name="tracking_appearance" type="id" />
 </resources>

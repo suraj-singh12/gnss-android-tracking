@@ -472,9 +472,11 @@ class TrackingLifecycleTest {
             val buttons =
                 descendants(activity.get().findViewById(android.R.id.content))
                     .filterIsInstance<android.widget.Button>()
-            buttons.single { it.text == "Pause history sync" }.performClick()
+            assertTrue(buttons.none { it.text.contains("Pause history", ignoreCase = true) })
+            // Internal pause remains a lifecycle/recovery mechanism, not a UI action.
+            app.pauseHistory()
             assertTrue(app.operational.value.historyPaused)
-            buttons.single { it.text == "Sync All Now" }.performClick()
+            buttons.single { it.text == "Sync Now" }.performClick()
             assertFalse(app.operational.value.historyPaused)
             repeat(20) {
                 shadowOf(Looper.getMainLooper()).idle()
@@ -523,6 +525,7 @@ class TrackingLifecycleTest {
             )
             assertEquals(22, shadowOf(service).lastForegroundNotificationId)
             assertNotNull(shadowOf(service).lastForegroundNotification)
+            assertTrue(shadowOf(service).lastForegroundNotification.actions.isNullOrEmpty())
             assertTrue(shadowOf(manager).getLocationUpdateListeners().isEmpty())
             assertFalse(app.repository.state().tracking)
             service.onStartCommand(

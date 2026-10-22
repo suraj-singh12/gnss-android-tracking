@@ -201,3 +201,20 @@ recording/Travel Back or remote-control authority changes belong to this extensi
 | Instructions | Concise rows; optional filters/stages/copy; stable focus and saved page | Same bounded authenticated journal, outcomes and result custody |
 | Tools | Advanced contains health/SOS/technical evidence, retry, export and Physical Button Test | Existing confirmation, sanitization, key/SOS suppression and recovery behavior |
 | Tracking / Command web | No visual or functional redesign | Existing layout, controls, GNSS/SOS/Room/Sender/service/protocol authorities |
+
+
+### Issue #39 replacement scope — V4 progress and visual-source blocker
+
+This supersedes prior #39 rows claiming Tracking visuals must remain unchanged.
+The entire app is now authorized for Figma Review V3 redesign. The 44 reference
+frames are inaccessible (Starter quota and blocked direct view; no local exports),
+so full Figma fidelity/navigation/screen acceptance remains pending.
+
+| Area | Implemented V4 correction | Preserved owner / evidence |
+| --- | --- | --- |
+| Tracking header | Accessible moon/sun toggle, existing saved preference | Draft/recreation and no automatic GNSS start tests |
+| Emergency family | Shared Day/Night burgundy text, action and surface tokens | Original 1.2 s hold and SOS engine; contrast/native renders |
+| History UI | Remove exposed pause controls and transfer notification Pause | Existing queue, retry, data retention and OS/lifecycle budgets |
+| Tracking notification | Native Sync Now / Stop Tracking actions | Existing visible sync and confirmed stop; immutable intents, no GNSS from Sync, no replay on recreation |
+| Phone-alert notifications | Coordinated color; retained ACK identity and timeout | Original output/cancel/ACK journal and receiver; no new acknowledgement |
+| Remaining full-app Figma work | Blocked pending visual references | No claim that 44 frames were inspected or matched |

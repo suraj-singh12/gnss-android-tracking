@@ -543,23 +543,7 @@ class TrackingService : Service() {
         }
     }
 
-    private fun notification(): Notification {
-        val open =
-            PendingIntent.getActivity(
-                this,
-                0,
-                Intent(this, MainActivity::class.java),
-                PendingIntent.FLAG_IMMUTABLE,
-            )
-        return Notification.Builder(this, CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_menu_mylocation)
-            .setContentTitle("GNSS tracking active")
-            .setContentText("Collecting location. Open to view status or stop tracking.")
-            .setContentIntent(open)
-            .setOngoing(true)
-            .setCategory(Notification.CATEGORY_SERVICE)
-            .build()
-    }
+    private fun notification(): Notification = TrackingNotification.build(this)
 
     override fun onDestroy() {
         scope.cancel()

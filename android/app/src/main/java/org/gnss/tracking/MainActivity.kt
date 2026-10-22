@@ -79,7 +79,10 @@ class MainActivity : Activity() {
     private var refreshTrust: (() -> Unit)? = null
     private val consoleFilters = linkedMapOf<String, Spinner>()
     private val expandedCommandIds = mutableSetOf<String>()
+    private var consumedNotificationAction = false
     private var initialized = false
+    private lateinit var syncNowButton: Button
+    private var showTracking: (() -> Unit)? = null
     private lateinit var startButton: Button
     private lateinit var readiness: TextView
     private lateinit var locationAction: Button
@@ -154,6 +157,13 @@ class MainActivity : Activity() {
         val night = getSharedPreferences("appearance", MODE_PRIVATE).getBoolean("night", false)
         setTheme(if (night) R.style.AppThemeNight else R.style.AppTheme)
         super.onCreate(savedInstanceState)
+        consumedNotificationAction =
+            savedInstanceState?.getBoolean("consumedNotificationAction") ?: false
+        if (
+            consumedNotificationAction &&
+                intent.action in listOf(TrackingNotification.SYNC, TrackingNotification.STOP)
+        )
+            setIntent(Intent(intent).setAction(null))
         draftState = savedInstanceState?.getBundle("settingsDraft")
         instructionPage = savedInstanceState?.getInt("instructionPage") ?: 0
         expandedCommandIds.addAll(
@@ -226,6 +236,7 @@ class MainActivity : Activity() {
             scroll.scrollTo(0, 0)
             if (name == "Diagnostics") refreshConsole?.invoke()
         }
+        showTracking = { navigate("Tracking") }
         for (name in pages.keys) {
             val tab =
                 Button(this).apply {
@@ -372,7 +383,37 @@ class MainActivity : Activity() {
                     LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) },
                 )
             }
-        text("GNSS Tracker", 24f)
+        val trackingTitle = text("GNSS Tracker", 24f)
+        content.removeView(trackingTitle)
+        content.addView(
+            LinearLayout(this).apply {
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                addView(trackingTitle, LinearLayout.LayoutParams(0, -2, 1f))
+                addView(
+                    Button(this@MainActivity).apply {
+                        id = R.id.tracking_appearance
+                        text = if (night) "☀" else "☾"
+                        contentDescription =
+                            if (night) "Switch to Day mode" else "Switch to Night mode"
+                        styleQuiet(this)
+                        textSize = 24f
+                        gravity = android.view.Gravity.CENTER
+                        minHeight = dp(48)
+                        minWidth = dp(48)
+                        setOnClickListener {
+                            getSharedPreferences("appearance", MODE_PRIVATE)
+                                .edit()
+                                .putBoolean("night", !night)
+                                .apply()
+                            NotificationAppearance.refresh(this@MainActivity)
+                            recreate()
+                        }
+                    },
+                    LinearLayout.LayoutParams(dp(48), -2),
+                )
+            },
+            0,
+        )
         trackingSummary = text("STOPPED", 32f)
         trackingSummary.accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         trackingError =
@@ -434,7 +475,7 @@ class MainActivity : Activity() {
             }
         sosButton.setTextColor(android.graphics.Color.WHITE)
         sosButton.backgroundTintList =
-            android.content.res.ColorStateList.valueOf(0xffa51621.toInt())
+            android.content.res.ColorStateList.valueOf(getColor(R.color.emergency_action))
         sosButton.minHeight = dp(64)
         val holdProgress =
             ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
@@ -453,7 +494,8 @@ class MainActivity : Activity() {
             LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(dp(20), dp(8), dp(20), dp(8))
-                setBackgroundColor(getColor(R.color.surface))
+                setBackgroundColor(getColor(R.color.emergency_surface))
+                sosStatus.setTextColor(getColor(R.color.danger))
                 addView(sosStatus, LinearLayout.LayoutParams(-1, -2))
                 addView(sosButton, LinearLayout.LayoutParams(-1, -2))
                 addView(holdProgress, LinearLayout.LayoutParams(-1, dp(4)))
@@ -575,6 +617,7 @@ class MainActivity : Activity() {
                     }) {
                     phoneAlertActions.addView(
                         TextView(this@MainActivity).apply {
+                            setTextColor(getColor(R.color.danger))
                             text =
                                 "Command phone alert · ${row.state}\n${runCatching { PhoneAlertSpec.parse(Protocol.parse(row.requested)).message }.getOrDefault("")}\n${row.reason}"
                         }
@@ -582,6 +625,7 @@ class MainActivity : Activity() {
                     phoneAlertActions.addView(
                         Button(this@MainActivity).apply {
                             text = "Acknowledge / Stop Alert"
+                            setTextColor(getColor(R.color.danger))
                             minHeight = dp(48)
                             setOnClickListener {
                                 app.workScope.launch { app.acknowledgePhoneAlert(row.id) }
@@ -591,26 +635,28 @@ class MainActivity : Activity() {
                 }
             }
         }
-        button("Sync All Now") {
-            // A new manual drain gets its own progress baseline. Repeated presses
-            // and Pause -> Resume preserve the in-progress baseline.
-            val op = app.operational.value
-            if (!app.sender.aggressive && !op.drainStarting && !op.historyPaused)
-                historyProgressStartDelivered = currentQueueCounts?.deliveredGnss?.toLong()
-            app.syncAllNow()
-            if (!app.operational.value.tracking) {
-                try {
-                    startForegroundService(Intent(this, RetainedTransferService::class.java))
-                } catch (e: RuntimeException) {
-                    app.operational.update {
-                        it.copy(error = "Background transfer unavailable; keep this app visible")
+        syncNowButton =
+            button("Sync Now") {
+                // A new manual drain gets its own progress baseline. Repeated presses
+                // preserve the in-progress baseline while a drain is already active.
+                val op = app.operational.value
+                if (!app.sender.aggressive && !op.drainStarting && !op.historyPaused)
+                    historyProgressStartDelivered = currentQueueCounts?.deliveredGnss?.toLong()
+                app.syncAllNow()
+                if (!app.operational.value.tracking) {
+                    try {
+                        startForegroundService(Intent(this, RetainedTransferService::class.java))
+                    } catch (e: RuntimeException) {
+                        app.operational.update {
+                            it.copy(
+                                error = "Background transfer unavailable; keep this app visible"
+                            )
+                        }
                     }
                 }
             }
-        }
-        button("Pause history sync") { app.pauseHistory() }
         text(
-            "Sync All Now uses a visible transfer notification, including with Tracking OFF, without collecting GNSS. Android may stop it; reopen after process death or reboot. Pause retains data; an in-flight receipt may finish."
+            "Sync Now sends saved data without starting GNSS. Android may limit background transfer."
         )
         button("Check setup / permissions") { navigate("Settings") }
         content = pages.getValue("Settings")
@@ -753,6 +799,7 @@ class MainActivity : Activity() {
                                 .edit()
                                 .putBoolean("night", choice == 1)
                                 .apply()
+                            NotificationAppearance.refresh(this@MainActivity)
                             recreate()
                         }
                         dialog.dismiss()
@@ -1230,6 +1277,7 @@ class MainActivity : Activity() {
                             minHeight = dp(48)
                             isAllCaps = false
                             styleSecondary(this)
+                            setTextColor(getColor(R.color.danger))
                             setOnClickListener {
                                 app.workScope.launch { app.acknowledgePhoneAlert(row.id) }
                             }
@@ -1475,6 +1523,7 @@ class MainActivity : Activity() {
                             settingsDraftLoaded = true
                             initialized = true
                             updateStartControls()
+                            dispatchNotificationAction()
                             attemptStart()
                         }
                         trackingSummary.text =
@@ -1970,6 +2019,10 @@ class MainActivity : Activity() {
         val op = app.operational.value
         startButton.isEnabled = initialized && !pendingStart && !op.starting && !op.stopping
         cancelStartButton.visibility = if (pendingStart || op.starting) View.VISIBLE else View.GONE
+        startButton.backgroundTintList =
+            android.content.res.ColorStateList.valueOf(
+                if (op.tracking) getColor(R.color.emergency_action) else 0xff17654c.toInt()
+            )
         startButton.text =
             when {
                 !initialized -> "Loading settings…"
@@ -2114,6 +2167,26 @@ class MainActivity : Activity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        consumedNotificationAction = false
+        setIntent(intent)
+        dispatchNotificationAction()
+    }
+
+    private fun dispatchNotificationAction() {
+        if (!resumed || !initialized) return
+        val action = intent.action
+        if (action != TrackingNotification.SYNC && action != TrackingNotification.STOP) return
+        // Consume before dispatch so rotation/resume never repeats the action.
+        setIntent(Intent(intent).setAction(null))
+        consumedNotificationAction = true
+        showTracking?.invoke()
+        if (action == TrackingNotification.SYNC) syncNowButton.performClick()
+        else if (app.operational.value.tracking || app.operational.value.starting) stopTracking()
+        else Toast.makeText(this, "Tracking is already stopped", Toast.LENGTH_SHORT).show()
+    }
+
     override fun onResume() {
         super.onResume()
         resumed = true
@@ -2126,6 +2199,7 @@ class MainActivity : Activity() {
         )
         refreshPreflight()
         promptMissingPermissions()
+        dispatchNotificationAction()
         attemptStart()
     }
 
@@ -2139,6 +2213,7 @@ class MainActivity : Activity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("consumedNotificationAction", consumedNotificationAction)
         outState.putString("destination", destination)
         outState.putBundle(
             "settingsDraft",

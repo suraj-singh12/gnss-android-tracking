@@ -42,7 +42,7 @@ and GPS enabled and Battery Saver off; notification refusal needs Settings befor
 that preserved Start intent can continue. Android itself allows an FGS without
 notification permission, but that is not healthy field setup.
 Start Tracking is a visible user action. Stop Tracking requires confirmation and
-stops collection. Saved messages automatically synchronize while the app is visible, without restarting GNSS. The Tracking view's Saved GNSS sync bar uses current Room queue counts: acknowledgements since the view/manual-drain baseline divided by those acknowledgements plus **all currently pending GNSS**. If more observations are recorded while sending, the total increases and the percentage can fall; unresolved saved GNSS remains pending. The percentage refers to Android-local durable delivery, **not** Command's completed history reconstruction or any offline phone inventory. No estimated finish time is asserted. **Sync All Now** preserves learned capacity and accelerates the payload ramp using the same Sender; **Pause history sync** stops selecting new history requests, retaining every row. An in-flight request may still finish. SOS and live tracking remain independently eligible. Reopening
+stops collection. Saved messages automatically synchronize while the app is visible, without restarting GNSS. The Tracking view's Saved GNSS sync bar uses current Room queue counts: acknowledgements since the view/manual-drain baseline divided by those acknowledgements plus **all currently pending GNSS**. If more observations are recorded while sending, the total increases and the percentage can fall; unresolved saved GNSS remains pending. The percentage refers to Android-local durable delivery, **not** Command's completed history reconstruction or any offline phone inventory. No estimated finish time is asserted. **Sync Now** preserves learned capacity and accelerates the payload ramp using the same Sender; The internal pause mechanism remains for OS/lifecycle budgets; user-facing pause controls are removed. An in-flight request may still finish. SOS and live tracking remain independently eligible. Reopening
 the Activity does not restart or stop tracking. Reboot and force-stop require
 another explicit Start Tracking. Sticky service recreation can recover tracking
 and outbox after process death when Android permits it; it is not a bypass of
@@ -401,7 +401,7 @@ the retained outbox. Sender completion uses an indexed existence check, not a re
 
 The same Sender/outbox implements both policies. Automatic delivery starts with one
 observation, then targets 500/1000/2000/4000/8000/16000/20000/32000/64000 decimal bytes.
-It needs one history ACK through 2000 and two thereafter. Manual **Sync All Now**
+It needs one history ACK through 2000 and two thereafter. Manual **Sync Now**
 coalesces repeated presses, preserves the healthy ramp and advances two ladder
 levels per healthy ACK (RTT ≤1500 ms), prioritizing history over routine status while
 always retaining SOS and fresh LIVE opportunities. Neither policy waits to fill a
@@ -446,8 +446,8 @@ Command raw receipt and reconstruction remain separate; no global completion is
 inferred from unknown/offline phone inventory.
 
 With Tracking OFF, visible-app automatic transfer collects **zero new fixes**.
-User-started Sync All Now also starts a `dataSync` foreground-service lifetime,
-with a transfer notification/Pause action and bounded wakelock. The service owns no
+User-started Sync Now also starts a `dataSync` foreground-service lifetime,
+with a transfer notification and bounded wakelock. The service owns no
 provider, queue or second Sender. It can continue after backgrounding/screen lock,
 subject to Android/OEM/Doze restrictions, permission/start restrictions and Android
 15's aggregate six-hour dataSync budget. It stops on completion, unresolved setup,
@@ -535,7 +535,26 @@ Room v6 columns store the validated alert request; no destructive migration/new 
 See [physical acceptance](DEVICE-ACCEPTANCE.md); real sound/vibration, DND/mute,
 locked/OEM/Doze behavior remain NOT TESTED without actual hardware.
 
-## Settings and Diagnostics (#39)
+## Android redesign (#39)
+
+The updated operator scope is the full Android application, using [Figma Review V3](https://www.figma.com/design/Wv08fsbGaVCC6rg7KYaRjR?node-id=8-2)
+plus four written V4 corrections. **The complete Figma-led redesign is blocked:** the
+Figma Starter tool quota rejects context/screenshots/file inspection, direct file
+access is denied by the environment network policy, and no visual exports are
+available locally. The current layout is not certified against the 44 frames.
+
+The independently specified V4 corrections are implemented: no exposed history-pause
+control (including the retained-transfer notification), native Tracking notification
+Sync Now and protected Stop Tracking actions, a coordinated burgundy emergency
+palette, and an accessible icon-only Tracking theme toggle. The toggle uses the same
+appearance preference as Settings and preserves drafts through recreation. Android
+owns notification surfaces; app colors update without changing channel settings or
+acknowledgement state. Actions enter the visible existing Activity workflows; Sync
+never starts GNSS and Stop still asks for confirmation. Action consumption survives
+recreation so reopening a notification does not replay an already consumed action.
+
+The following describes the existing Settings/Diagnostics baseline, not completed
+Figma fidelity:
 
 Settings has one compact Party/Command form for identity, endpoint and local reporting
 interval. **Save settings** confirms local persistence; **Cancel** restores saved
@@ -564,5 +583,6 @@ optional type/outcome/time filters, expandable stages and Copy ID. Duplicate-sta
 filtering retains the original outcome. Native row identity/focus remains stable
 when canonical data is unchanged; filters, page and expanded IDs survive recreation.
 No queue, database schema, Sender, service, authentication or result-custody authority
-changes. Tracking and the Command web interface are untouched. Real TalkBack,
+changes. Command web remains untouched. Tracking presentation now includes the V4
+corrections above; acquisition and SOS behavior remain owned by existing mechanisms. Real TalkBack,
 keyboard/system dialogs, OEM/Doze and physical field acceptance remain outstanding.

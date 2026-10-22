@@ -498,6 +498,13 @@ canonical state.
 Drafts and disclosure/filter/page selections use Activity saved instance state;
 credentials remain excluded. Canonical journal retention/query bounds are unchanged;
 only 20 matching rows render, deferred while hidden, with ordering work off the main
-thread. No schema, Sender, service, authentication, result custody, GNSS/SOS or
-Tracking layout changes are introduced. A retained instruction/result timestamp is
+thread. No schema, Sender scheduling, authentication, result custody or GNSS/SOS engine
+changes are introduced. TrackingNotification builds native actions that enter the
+existing visible MainActivity Sync/confirmed Stop handlers. The consumed action is
+saved across recreation. NotificationAppearance reads the existing preference,
+retains notification identity/actions and remaining timeout, and recolors with
+only-alert-once; it is not an execution or acknowledgement authority. Native
+Tracking/transfer services retain their existing lifetimes. User-facing pause is
+removed while internal OS/lifecycle pause remains. The full Figma-led presentation
+rebuild is pending access to the mandatory Review V3 references. A retained instruction/result timestamp is
 labelled as evidence, not substituted for an unrecorded empty-poll contact time.
