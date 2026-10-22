@@ -67,7 +67,7 @@ class CommandConsoleUiTest {
             }
             val filter =
                 views(root).filterIsInstance<EditText>().single {
-                    it.hint?.toString()?.startsWith("Filter outcome") == true
+                    it.hint?.toString()?.startsWith("Search instructions") == true
                 }
             filter.setText("reporting")
             assertTrue(
@@ -89,7 +89,7 @@ class CommandConsoleUiTest {
             )
             assertTrue(
                 views(root).filterIsInstance<TextView>().any {
-                    it.visibility == View.VISIBLE && it.text.toString().contains(id)
+                    it.isShown && it.text.toString().contains(id)
                 }
             )
             app.repository.dao.updateCommand(
@@ -100,8 +100,7 @@ class CommandConsoleUiTest {
             withTimeout(10000) {
                 while (
                     views(root).filterIsInstance<TextView>().none {
-                        it.visibility == View.VISIBLE &&
-                            it.text.toString().contains("Result pending delivery")
+                        it.isShown && it.text.toString().contains("Result pending delivery")
                     }
                 ) {
                     shadowOf(Looper.getMainLooper()).idle()

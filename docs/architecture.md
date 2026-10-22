@@ -493,6 +493,8 @@ Existing Map and Import Map, existing Saved Maps selection and Layers controls.
 Settings/Diagnostics adapt existing Installation, FieldPreflight, #24 policy,
 Operational/queue flows and #25/#26 command journal only. CommandPresentation contains
 pure explanation/formatting functions, not an execution or persistence authority.
+OperationalUi supplies read-only native health rows; expanded evidence reads the same
+canonical state.
 Drafts and disclosure/filter/page selections use Activity saved instance state;
 credentials remain excluded. Canonical journal retention/query bounds are unchanged;
 only 20 matching rows render, deferred while hidden, with ordering work off the main

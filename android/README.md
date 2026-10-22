@@ -67,7 +67,7 @@ SSID/BSSID/MAC access is required.
 ## Optional adaptive GNSS persistence (Issue #24)
 
 **OFF is the default**, for fresh installs, upgrades and absent/unreadable policy.
-Settings → GNSS persistence → Adaptive GNSS persistence explicitly opts in/out.
+Settings → Tracking policy → Adaptive GNSS persistence explicitly opts in/out.
 This separate local policy is schema/revision 1, atomically committed before it is
 published, with a change counter and saved-change UTC (`effectiveAt`, assigned
 before commit). The existing journal records publication; sampling diagnostics record
@@ -535,38 +535,34 @@ Room v6 columns store the validated alert request; no destructive migration/new 
 See [physical acceptance](DEVICE-ACCEPTANCE.md); real sound/vibration, DND/mute,
 locked/OEM/Doze behavior remain NOT TESTED without actual hardware.
 
-## Settings and Diagnostics field presentation (#39)
+## Settings and Diagnostics (#39)
 
-Settings groups Party/Command, Tracking & GNSS Policy, field readiness and existing
-appearance/emergency preferences. Party, endpoint and interval edits remain drafts
-until **Save settings** succeeds locally; **Cancel edits** restores persisted values.
-Draft text/focus/selection and disclosures survive Activity recreation and data
-refresh. The adaptive switch is explicitly an immediate Apply of #24's existing
-policy, OFF by default, affecting future stored observations only. Local cadence,
-latest retained Command request/outcome, active override and applied cadence/revision
-are distinct. Configuration never starts GNSS by navigation or recreation.
+Settings has one compact Party/Command form for identity, endpoint and local reporting
+interval. **Save settings** confirms local persistence; **Cancel** restores saved
+values. Draft text, focus and selection survive refresh/recreation, including before
+Room loads. A local save does not prove a Command request was applied. Appearance is
+in the title row. Tracking policy shows the applied interval and latest retained
+request outcome. Adaptive persistence uses #24's existing immediate Apply, OFF by
+default and affecting future observations only; revisions/fallback details expand.
 
-Enrollment remains the protected #25 workflow. Wi-Fi, message ACK and authenticated
-control contact are distinct. Enrollment details show the current authority and
-actual retained authenticated instruction/result timestamps. Empty authenticated
-polls have no historical journal record: when current contact is lost, the last
-successful poll time is honestly unknown rather than inferred from Wi-Fi or ACK.
-System permission/location/notification/battery actions retain the existing visible
-Start preflight. Android/OEM background execution and audible/haptic output are not
+Field readiness opens existing permission/location/notification/battery actions.
+Command access opens authority/contact evidence and the protected enrollment flow.
+Wi-Fi, message receipt and authenticated control contact remain separate. Empty
+control polls have no historical journal record; last-contact evidence stays labelled
+as evidence when current contact is unknown. Android/OEM background execution is not
 guaranteed.
 
-Diagnostics begins with Current Health: fix accuracy/age, Room commit failures and
-queue, transport ACK, sync/backlog/unresolved records, SOS delivery versus Command
-operator ACK, device storage and remote-control trust. Phone Alerts separately
-exposes received/output/blocked/local ACK/cancellation evidence without claiming an
-alert was heard. **Advanced Diagnostics** retains SOS evidence, technical details,
-Physical Button Test, confirmed retry and sanitized ZIP export.
+Diagnostics starts with one seven-row health panel: GNSS, storage, Command transport,
+sync, SOS, device space and remote control. Short status badges and metadata represent
+independent facts. **Command Instructions**, **Phone Alerts** and **Advanced Diagnostics**
+are the three disclosure rows. Advanced retains health/technical/SOS evidence,
+Physical Button Test, confirmed retry and sanitized ZIP export. Phone output never
+implies audibility or human acknowledgement.
 
-Command Instructions still reads only the canonical bounded Room journal. Type,
-outcome and received-time selectors combine with UUID/reason/stage/UTC-date search.
-Duplicate filters include the actual duplicate stage while preserving the original
-outcome. Pages show 20 newest-first matching records; open stages, filters and page
-survive recreation. Rendering is deferred while the console is collapsed or another
-destination is selected. Keys, transport, database schema, command execution and
-result custody are unchanged. Physical Android/TalkBack/OEM acceptance remains
-separate from JVM native-render tests.
+Instructions use the same bounded persisted journal: newest-first pages of 20, search,
+optional type/outcome/time filters, expandable stages and Copy ID. Duplicate-stage
+filtering retains the original outcome. Native row identity/focus remains stable
+when canonical data is unchanged; filters, page and expanded IDs survive recreation.
+No queue, database schema, Sender, service, authentication or result-custody authority
+changes. Tracking and the Command web interface are untouched. Real TalkBack,
+keyboard/system dialogs, OEM/Doze and physical field acceptance remain outstanding.

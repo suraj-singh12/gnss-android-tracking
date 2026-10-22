@@ -298,6 +298,10 @@ class UiNavigationVisualTest {
                         )
                     }
                     if (destination == "Diagnostics") {
+                        descendants(root)
+                            .filterIsInstance<Button>()
+                            .single { it.text.startsWith("Advanced Diagnostics") }
+                            .performClick()
                         val tools = activity.get().findViewById<ViewGroup>(R.id.diagnostic_tools)
                         assertTrue(tools.isShown)
                         val actions =
@@ -391,12 +395,12 @@ class UiNavigationVisualTest {
                                 .performClick()
                             settle()
                             all.filterIsInstance<Button>()
-                                .single { it.text.startsWith("Permissions and battery readiness") }
+                                .single { it.text.startsWith("Field readiness") }
                                 .performClick()
                             settle()
                             reveal(
                                 all.filterIsInstance<Button>().single {
-                                    it.text.startsWith("Permissions and battery readiness")
+                                    it.text.startsWith("Field readiness")
                                 }
                             )
                             capture("settings-readiness-expanded")
@@ -411,10 +415,9 @@ class UiNavigationVisualTest {
                             )
                             capture("settings-emergency-expanded")
                             val persistence =
-                                all.filterIsInstance<Button>().single {
-                                    it.text.startsWith("GNSS persistence  ")
+                                all.filterIsInstance<android.widget.CheckBox>().single {
+                                    it.text == "Adaptive GNSS persistence"
                                 }
-                            persistence.performClick()
                             settle()
                             reveal(persistence)
                             assertFalse(
@@ -451,7 +454,17 @@ class UiNavigationVisualTest {
                         console.performClick()
                         settle()
                         reveal(console)
+                        capture("diagnostics-instructions")
+                        val filters =
+                            descendants(root).filterIsInstance<Button>().single {
+                                it.text.startsWith("Filters  ")
+                            }
+                        filters.performClick()
+                        settle()
+                        reveal(filters)
                         capture("diagnostics-command-filters")
+                        filters.performClick()
+                        settle()
                         val commandRow =
                             descendants(root).filterIsInstance<Button>().first {
                                 it.contentDescription?.contains("Tap to expand details") == true
@@ -512,9 +525,7 @@ class UiNavigationVisualTest {
                 all.filterIsInstance<Button>().single { it.text == "Settings" }.performClick()
                 settle()
                 reveal(
-                    all.filterIsInstance<Button>().single {
-                        it.text.startsWith("Permissions and battery readiness")
-                    }
+                    all.filterIsInstance<Button>().single { it.text.startsWith("Field readiness") }
                 )
                 assertTrue(
                     all.filterIsInstance<Button>()

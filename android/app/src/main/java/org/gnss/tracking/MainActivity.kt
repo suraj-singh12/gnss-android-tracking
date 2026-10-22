@@ -64,6 +64,9 @@ class MainActivity : Activity() {
     private lateinit var commandTrust: TextView
     private lateinit var commandTrustEvidence: TextView
     private lateinit var reportingPolicy: TextView
+    private lateinit var reportingDetails: TextView
+    private lateinit var healthHeadline: TextView
+    private val healthRows = linkedMapOf<String, HealthRow>()
     private lateinit var diagnosticTrust: TextView
     private lateinit var phoneAlertSummary: TextView
     private var savedInstallation: Installation? = null
@@ -73,7 +76,6 @@ class MainActivity : Activity() {
     private lateinit var instructionFilter: EditText
     private var instructionPage = 0
     private var refreshConsole: (() -> Unit)? = null
-    private var openCommandConsole: (() -> Unit)? = null
     private var refreshTrust: (() -> Unit)? = null
     private val consoleFilters = linkedMapOf<String, Spinner>()
     private val expandedCommandIds = mutableSetOf<String>()
@@ -117,6 +119,20 @@ class MainActivity : Activity() {
             android.graphics.drawable.RippleDrawable(
                 android.content.res.ColorStateList.valueOf(getColor(R.color.ripple)),
                 surface,
+                null,
+            )
+    }
+
+    private fun styleQuiet(button: Button) {
+        button.isAllCaps = false
+        button.textSize = 14f
+        button.gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+        button.setPadding(dp(4), dp(10), dp(4), dp(10))
+        button.setTextColor(getColor(R.color.accent))
+        button.background =
+            android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(getColor(R.color.ripple)),
+                null,
                 null,
             )
     }
@@ -249,7 +265,11 @@ class MainActivity : Activity() {
                 content.addView(this)
             }
         fun edit(label: String, numeric: Boolean = false): EditText {
-            val heading = text(label)
+            val heading =
+                text(label, 13f).apply {
+                    setTextColor(getColor(R.color.muted))
+                    setPadding(0, dp(8), 0, 0)
+                }
             return EditText(this).apply {
                 id = View.generateViewId()
                 heading.labelFor = id
@@ -268,7 +288,8 @@ class MainActivity : Activity() {
                 text = label
                 minHeight = dp(48)
                 isAllCaps = false
-                styleSecondary(this)
+                if (content === pages.getValue("Tracking")) styleSecondary(this)
+                else styleQuiet(this)
                 setOnClickListener { action() }
                 content.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
             }
@@ -280,38 +301,63 @@ class MainActivity : Activity() {
             val card =
                 LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
-                    setPadding(dp(16), dp(8), dp(16), dp(16))
-                    background =
-                        android.graphics.drawable.GradientDrawable().apply {
-                            setColor(getColor(R.color.surface))
-                            cornerRadius = dp(12).toFloat()
-                            setStroke(dp(1), getColor(R.color.line))
-                        }
+                    setPadding(
+                        dp(16),
+                        dp(if (expanded) 8 else 0),
+                        dp(16),
+                        dp(if (expanded) 12 else 0),
+                    )
+                    if (expanded)
+                        background =
+                            android.graphics.drawable.GradientDrawable().apply {
+                                setColor(getColor(R.color.surface))
+                                cornerRadius = dp(12).toFloat()
+                            }
                     parent.addView(
                         this,
-                        LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) },
+                        LinearLayout.LayoutParams(-1, -2).apply {
+                            topMargin = dp(if (expanded) 8 else 4)
+                        },
                     )
                 }
-            content = card
             val body =
                 LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
                     visibility = if (initiallyOpen) View.VISIBLE else View.GONE
                 }
-            val toggle =
-                button(title + if (initiallyOpen) "  −" else "  +") {
-                    val open = body.visibility != View.VISIBLE
-                    body.visibility = if (open) View.VISIBLE else View.GONE
-                    if (title == "Command Instructions" && open) refreshConsole?.invoke()
-                    (card.getChildAt(0) as Button).apply {
-                        text = title + if (open) "  −" else "  +"
-                        contentDescription = "$title, ${if (open) "expanded" else "collapsed"}"
+            if (expanded) {
+                card.addView(
+                    TextView(this).apply {
+                        text = title
+                        textSize = 18f
+                        setTextColor(getColor(R.color.ink))
+                        setTypeface(null, android.graphics.Typeface.BOLD)
+                        setPadding(0, dp(4), 0, dp(4))
                     }
-                }
-            toggle.contentDescription = "$title, ${if (initiallyOpen) "expanded" else "collapsed"}"
+                )
+                body.visibility = View.VISIBLE
+            } else {
+                card.addView(
+                    Button(this).apply {
+                        styleQuiet(this)
+                        minHeight = dp(48)
+                        setTextColor(getColor(R.color.ink))
+                        text = "$title    ${if (initiallyOpen) "⌄" else "›"}"
+                        contentDescription =
+                            "$title, ${if (initiallyOpen) "expanded" else "collapsed"}"
+                        setOnClickListener {
+                            val open = body.visibility != View.VISIBLE
+                            body.visibility = if (open) View.VISIBLE else View.GONE
+                            text = "$title    ${if (open) "⌄" else "›"}"
+                            contentDescription = "$title, ${if (open) "expanded" else "collapsed"}"
+                            if (title == "Command Instructions" && open) refreshConsole?.invoke()
+                        }
+                    },
+                    LinearLayout.LayoutParams(-1, -2),
+                )
+            }
             card.addView(body)
             disclosureBodies[title] = body
-            content = parent
             return body
         }
         fun physicalButtonAction(label: String, action: () -> Unit) =
@@ -415,7 +461,6 @@ class MainActivity : Activity() {
         root.addView(emergencyDock, root.childCount - 1)
         content = pages.getValue("Settings")
         text("Settings", 24f)
-        text("Identity, Command connection and field setup.", 14f)
         val emergencySettings = group("Emergency shortcut", false)
         content = emergencySettings
         keyOption =
@@ -429,23 +474,40 @@ class MainActivity : Activity() {
                 }
                 content.addView(this)
             }
-        text(
-            "Physical key support: foreground app only. Three short presses within 1.5 s. Volume still changes. Locked screen / other apps: unsupported; open app and hold SOS."
-        )
+        text("Three presses within 1.5 s. Foreground only; unavailable when locked.")
         content = pages.getValue("Diagnostics")
         text("Diagnostics", 24f)
-        text("Operational evidence · safe to inspect while tracking.", 14f)
-        button("Review received instructions") { openCommandConsole?.invoke() }
-        text("Current Health", 20f)
-        diagnosticsSummary = text("Loading operational summary…")
-        diagnosticTrust = text("Remote-control trust · checking enrollment…", 14f)
+        healthHeadline =
+            text("Checking phone…", 14f).apply { setTextColor(getColor(R.color.muted)) }
+        val healthPanel =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                background =
+                    android.graphics.drawable.GradientDrawable().apply {
+                        setColor(getColor(R.color.surface))
+                        cornerRadius = dp(12).toFloat()
+                    }
+            }
+        content.addView(healthPanel, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+        for ((name, icon) in
+            listOf(
+                "GNSS" to android.R.drawable.ic_menu_mylocation,
+                "Storage" to android.R.drawable.ic_menu_save,
+                "Command" to android.R.drawable.ic_menu_send,
+                "Sync" to android.R.drawable.stat_notify_sync,
+                "SOS" to android.R.drawable.ic_dialog_alert,
+                "Device space" to android.R.drawable.ic_menu_manage,
+                "Remote control" to android.R.drawable.ic_lock_lock,
+            )) {
+            healthRows[name] = HealthRow(this, name, icon).also { healthPanel.addView(it) }
+        }
+        content = group("Health details", false)
+        diagnosticsSummary = text("Loading…", 14f)
+        diagnosticTrust = text("", 14f)
+        content = pages.getValue("Diagnostics")
         content = group("Phone Alerts", false)
-        phoneAlertSummary = text("Loading received alert records…", 14f)
-        text(
-            "Received, output attempted, blocked, local acknowledgement and cancellation are separate stages. Sound/vibration cannot prove the alert was heard or felt. Use Command Instructions → alert for individual stages and Stop Alert.",
-            14f,
-        )
-        button("Phone alert notification settings") {
+        phoneAlertSummary = text("Loading…", 14f)
+        button("Notification settings") {
             openSettings(
                 Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                     .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
@@ -552,13 +614,9 @@ class MainActivity : Activity() {
         )
         button("Check setup / permissions") { navigate("Settings") }
         content = pages.getValue("Settings")
-        val fieldSettings = group("Permissions and battery readiness", false)
+        val fieldSettings = group("Field readiness", false)
         content = fieldSettings
-        text("Field Readiness", 18f)
-        text(
-            "Foreground-service readiness uses the existing visible Start checks below. Android/OEM restrictions can still stop background tracking or alerts; no indefinite execution is guaranteed.",
-            14f,
-        )
+        text("Android may limit background operation.", 13f)
         readiness = text("Checking field setup…")
         locationAction =
             button("Allow precise location") {
@@ -613,40 +671,78 @@ class MainActivity : Activity() {
                 )
             }
         content = pages.getValue("Settings")
-        val connectionSettings = group("Party and Command")
+        val connectionSettings = group("Party & Command")
         content = connectionSettings
-        text("Party identity", 18f)
         partyId = edit("Party ID")
         partyName = edit("Party name")
-        commandTrust = text("Checking Command trust…", 14f)
-        text("Configured Command endpoint", 18f)
-        endpoint = edit("Command base URL (local Wi-Fi)")
+        val identityRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        for ((index, field) in listOf(partyId, partyName).withIndex()) {
+            val heading =
+                (0 until connectionSettings.childCount)
+                    .map { connectionSettings.getChildAt(it) }
+                    .filterIsInstance<TextView>()
+                    .single { it.labelFor == field.id }
+            connectionSettings.removeView(heading)
+            connectionSettings.removeView(field)
+            identityRow.addView(
+                LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(heading, LinearLayout.LayoutParams(-1, -2))
+                    addView(field, LinearLayout.LayoutParams(-1, -2))
+                },
+                LinearLayout.LayoutParams(0, -2, 1f).apply { if (index == 1) leftMargin = dp(16) },
+            )
+        }
+        connectionSettings.addView(identityRow, 0)
+        commandTrust = text("Checking access…", 13f).apply { setTextColor(getColor(R.color.muted)) }
+        endpoint = edit("Command address")
         endpoint.hint = "http://192.168.1.10:8080"
 
-        button("Save settings") { save() }
-        button("Cancel edits") {
-            val saved = savedInstallation
-            if (saved == null) {
-                settingsFeedback.text =
-                    "Cannot cancel before saved settings are available · draft retained."
-            } else {
-                restoreSettings(saved)
-                settingsFeedback.text = "Edits canceled · showing locally persisted settings"
+        interval = edit("Reporting interval (s)", true).apply { hint = "5–86400 · steps of 5" }
+        val formActions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val saveSettingsButton =
+            button("Save settings") { save() }
+                .apply {
+                    gravity = android.view.Gravity.CENTER
+                    backgroundTintList =
+                        android.content.res.ColorStateList.valueOf(0xff17654c.toInt())
+                    setTextColor(android.graphics.Color.WHITE)
+                    background =
+                        android.graphics.drawable.GradientDrawable().apply {
+                            setColor(0xff17654c.toInt())
+                            cornerRadius = dp(8).toFloat()
+                        }
+                }
+        val cancelEditsButton =
+            button("Cancel") {
+                val saved = savedInstallation
+                if (saved == null) {
+                    settingsFeedback.text = "Storage unavailable · edits retained"
+                } else {
+                    restoreSettings(saved)
+                    settingsFeedback.text = "Edits canceled"
+                }
             }
-        }
+        content.removeView(saveSettingsButton)
+        content.removeView(cancelEditsButton)
+        formActions.addView(saveSettingsButton, LinearLayout.LayoutParams(0, dp(48), 2f))
+        formActions.addView(
+            cancelEditsButton,
+            LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(12) },
+        )
+        content.addView(formActions, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) })
         settingsFeedback =
-            text(
-                    "Edit Party, endpoint and local interval, then Save settings. A local save does not confirm a Command request or remote application.",
-                    14f,
-                )
-                .apply { accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE }
+            text("Local changes only", 13f).apply {
+                setTextColor(getColor(R.color.muted))
+                accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+            }
         val settingsPage = pages.getValue("Settings")
         val connectionCard = connectionSettings.parent as View
         settingsPage.removeView(connectionCard)
         settingsPage.addView(connectionCard, 2)
         content = settingsPage
         val appearanceButton =
-            button("Appearance: ${if (night) "Night" else "Day"}") {
+            button("${if (night) "Night" else "Day"}  ⌄") {
                 AlertDialog.Builder(this)
                     .setTitle("Appearance")
                     .setSingleChoiceItems(arrayOf("Day", "Night"), if (night) 1 else 0) {
@@ -665,20 +761,22 @@ class MainActivity : Activity() {
                     .show()
             }
         appearanceButton.id = R.id.appearance
+        appearanceButton.contentDescription = "Appearance, ${if (night) "Night" else "Day"}"
         settingsPage.removeView(appearanceButton)
-        settingsPage.addView(appearanceButton, 2)
+        val settingsTitle = settingsPage.getChildAt(0)
+        settingsPage.removeView(settingsTitle)
+        val settingsHeader =
+            LinearLayout(this).apply {
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                addView(settingsTitle, LinearLayout.LayoutParams(0, -2, 1f))
+                addView(appearanceButton, LinearLayout.LayoutParams(-2, -2))
+            }
+        settingsPage.addView(settingsHeader, 0)
         content = settingsPage
-        val trackingPolicy = group("Tracking & GNSS Policy")
+        val trackingPolicy = group("Tracking policy")
         content = trackingPolicy
-        interval = edit("Local reporting interval (seconds, 5–86400 in steps of 5)", true)
-        reportingPolicy = text("Loading applied reporting policy…", 14f)
+        reportingPolicy = text("Loading…", 14f)
         content = trackingPolicy
-        val persistenceSettings = group("GNSS persistence", false)
-        content = persistenceSettings
-        text(
-            "Adaptive persistence is optional and OFF by default. Tracking controls GNSS collection; SOS uses the latest native fix. Changes affect future fixes only.",
-            14f,
-        )
         val adaptive =
             android.widget.CheckBox(this).apply {
                 text = "Adaptive GNSS persistence"
@@ -686,15 +784,13 @@ class MainActivity : Activity() {
                 isChecked = app.persistencePolicy.state.enabled
                 content.addView(this)
             }
-        text(
-            "Apply immediately: changing this switch saves the existing local policy. Historical GNSS observations are never rewritten.",
-            14f,
-        )
-        val policyStatus =
-            text(
-                "Effective: ${if (app.persistencePolicy.state.enabled && app.observationPersistence.samplingState.fallback == null) "Adaptive ON" else "Dense OFF"}",
-                14f,
-            )
+        text("Applies immediately to future observations.", 13f).apply {
+            setTextColor(getColor(R.color.muted))
+        }
+        val policyStatus = text("", 13f).apply { visibility = View.GONE }
+        content = group("Policy details", false)
+        reportingDetails = text("Loading…", 14f)
+        content = trackingPolicy
         adaptive.setOnCheckedChangeListener { _, enabled ->
             if (!adaptive.isEnabled) return@setOnCheckedChangeListener
             adaptive.isEnabled = false
@@ -719,12 +815,11 @@ class MainActivity : Activity() {
                     result.fold(
                         onSuccess = { policy ->
                             policyStatus.text =
-                                "Saved: ${if (policy.enabled) "Adaptive ON" else "Dense OFF"} · applies to future fixes"
+                                "Applied · ${if (policy.enabled) "Adaptive ON" else "Dense OFF"}"
                         },
                         onFailure = {
                             adaptive.isChecked = false
-                            policyStatus.text =
-                                "Policy NOT SAVED · dense persistence effective. Check storage."
+                            policyStatus.text = "Not saved · Dense mode · check storage"
                         },
                     )
                     adaptive.isEnabled = true
@@ -746,8 +841,7 @@ class MainActivity : Activity() {
                 content.addView(this, LinearLayout.LayoutParams(-1, -2))
             }
         content = diagnosticTools
-        text("Diagnostic tools", 20f)
-        text("Inspect and export evidence while tracking continues.")
+
         button("Physical Button Test") {
             physicalButtonPanel.visibility =
                 if (physicalButtonPanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
@@ -785,15 +879,13 @@ class MainActivity : Activity() {
                 physicalButtonPanel.addView(this)
             }
         TextView(this).apply {
-            text =
-                "Only supported keys delivered to this visible Activity are recorded. Background / locked-screen / screen-off volume-button detection: Mechanism unavailable. No MediaSession or background listener is used."
+            text = "Foreground keys only. Locked/background keys: Mechanism unavailable."
             textSize = 14f
             setTextColor(getColor(R.color.ink))
             physicalButtonPanel.addView(this)
         }
         TextView(this).apply {
-            text =
-                "While this test is active, the triple-Volume-Up SOS trigger is paused. Android volume handling and previously saved SOS delivery continue. This test never creates an SOS."
+            text = "SOS shortcut paused during test. Saved SOS delivery continues."
             textSize = 14f
             setTextColor(getColor(R.color.ink))
             physicalButtonPanel.addView(this)
@@ -855,8 +947,8 @@ class MainActivity : Activity() {
                 }
                 .show()
         }
-        content = connectionSettings
-        val enrollmentSettings = group("Command enrollment & authorization", false)
+        content = settingsPage
+        val enrollmentSettings = group("Command access", false)
         content = enrollmentSettings
         commandTrustEvidence = text("Loading trust evidence…", 14f)
         button("Enroll with a different Command") {
@@ -870,7 +962,7 @@ class MainActivity : Activity() {
                 .show()
         }
         content = enrollmentSettings
-        text("Authenticated remote control", 18f)
+
         val controlPhoneIdentity = text("Loading phone identity…")
         controlPhoneIdentity.setTextIsSelectable(true)
         scope.launch {
@@ -893,11 +985,8 @@ class MainActivity : Activity() {
                 setSaveEnabled(false)
             }
         content.addView(commandCredential)
-        val enrollmentStatus =
-            text(
-                "Remote control is unavailable until deliberately enrolled. Compare this phone UUID with Command. Transfer the credential privately; never obtain it from an unverified LAN server."
-            )
-        button("Authorize this Command for remote instructions") {
+        val enrollmentStatus = text("Verify this phone UUID at Command before authorizing.")
+        button("Authorize Command") {
             val value = commandCredential.text.toString()
             commandCredential.text.clear()
             AlertDialog.Builder(this)
@@ -930,30 +1019,17 @@ class MainActivity : Activity() {
         }
         content = pages.getValue("Diagnostics")
         val commandGroup = group("Command Instructions", false)
-        openCommandConsole = {
-            if (commandGroup.visibility != View.VISIBLE)
-                ((commandGroup.parent as ViewGroup).getChildAt(0) as Button).performClick()
-            scroll.post {
-                val bounds = android.graphics.Rect()
-                (commandGroup.parent as View).getDrawingRect(bounds)
-                pageContainer.offsetDescendantRectToMyCoords(commandGroup.parent as View, bounds)
-                scroll.smoothScrollTo(0, bounds.top)
-            }
-        }
         content = commandGroup
         val commandFilter =
             EditText(this).apply {
-                hint = "Filter outcome, action, command ID or UTC date"
+                hint = "Search instructions"
                 contentDescription = hint
             }
         instructionFilter = commandFilter
         commandFilter.setText(savedInstanceState?.getString("instructionFilter") ?: "")
         commandFilter.minHeight = dp(48)
         content.addView(commandFilter)
-        text(
-            "Filter by type, outcome or received time. Search also accepts UUID, UTC date and recorded reason/stage (including duplicates).",
-            14f,
-        )
+        content = group("Filters", false)
         for ((label, options) in
             listOf(
                 "Command type" to
@@ -995,18 +1071,51 @@ class MainActivity : Activity() {
                     minimumHeight = dp(48)
                     contentDescription = label
                     adapter =
-                        ArrayAdapter(
-                            this@MainActivity,
-                            android.R.layout.simple_spinner_dropdown_item,
-                            options,
-                        )
+                        object :
+                            ArrayAdapter<String>(
+                                this@MainActivity,
+                                android.R.layout.simple_spinner_dropdown_item,
+                                options,
+                            ) {
+                            private fun display(position: Int, view: View): View {
+                                (view as TextView).text =
+                                    when {
+                                        position == 0 -> options[position]
+                                        label == "Command type" ->
+                                            commandTypeLabel(options[position])
+                                        label == "Command outcome" ->
+                                            commandStateLabel(options[position])
+                                        else -> options[position]
+                                    }
+                                return view
+                            }
+
+                            override fun getView(
+                                position: Int,
+                                convertView: View?,
+                                parent: ViewGroup,
+                            ): View =
+                                display(position, super.getView(position, convertView, parent))
+
+                            override fun getDropDownView(
+                                position: Int,
+                                convertView: View?,
+                                parent: ViewGroup,
+                            ): View =
+                                display(
+                                    position,
+                                    super.getDropDownView(position, convertView, parent),
+                                )
+                        }
                     setSelection((savedInstanceState?.getInt(label) ?: 0).coerceIn(options.indices))
                 }
             heading.labelFor = choice.id
             content.addView(choice, LinearLayout.LayoutParams(-1, -2))
             consoleFilters[label] = choice
         }
-        val instructionSummary = text("Loading Command Instructions…")
+        content = commandGroup
+        val instructionSummary =
+            text("Loading…", 13f).apply { setTextColor(getColor(R.color.muted)) }
         val commandRows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         content.addView(commandRows)
         var commandHistory = emptyList<CommandRecord>()
@@ -1050,13 +1159,10 @@ class MainActivity : Activity() {
                                 .lowercase()
                                 .contains(filter))
                 }
-            instructionSummary.text =
-                "${app.commandControl.availability}\n${matching.size} matching / ${commandHistory.size} retained. Only instructions actually received appear. Pending results are never cleared by this console."
             val pageCount = maxOf(1, (matching.size + 19) / 20)
             instructionPage = instructionPage.coerceIn(0, pageCount - 1)
-            instructionSummary.append(
-                "\nPage ${instructionPage + 1} of $pageCount · newest first · 20 records per page"
-            )
+            instructionSummary.text =
+                "${matching.size} matching · Page ${instructionPage + 1} of $pageCount"
             val window = matching.drop(instructionPage * 20).take(20)
             val selection =
                 listOf(filter, instructionPage, pageCount, matching.size) +
@@ -1072,16 +1178,24 @@ class MainActivity : Activity() {
                     Button(this).apply {
                         isAllCaps = false
                         minHeight = dp(48)
-                        styleSecondary(this)
+                        styleQuiet(this)
+                        setTextColor(getColor(R.color.ink))
                         text =
-                            "${utc(row.received)} · ${row.operation} · ${row.state}\n${row.reason}\n${commandOutcomeExplanation(row.state)}"
+                            "${commandTypeLabel(row.operation)} · ${commandStateLabel(row.state)}   ›\n${shortCommandTime(row.received)}"
                         setPadding(0, dp(12), 0, dp(12))
                     }
                 commandRows.addView(title)
+                val detailContainer =
+                    LinearLayout(this).apply {
+                        orientation = LinearLayout.VERTICAL
+                        visibility = if (row.id in expandedCommandIds) View.VISIBLE else View.GONE
+                        setPadding(dp(12), 0, dp(4), dp(12))
+                    }
                 val detail =
                     TextView(this).apply {
                         text = commandInstructionDetails(row)
-                        visibility = if (row.id in expandedCommandIds) View.VISIBLE else View.GONE
+                        textSize = 14f
+                        setTextColor(getColor(R.color.muted))
                         setTextIsSelectable(true)
                     }
                 title.contentDescription = "${title.text}. Tap to expand details"
@@ -1096,14 +1210,15 @@ class MainActivity : Activity() {
                     )
                 )
                 title.setOnClickListener {
-                    val expand = detail.visibility == View.GONE
+                    val expand = detailContainer.visibility == View.GONE
                     if (expand) expandedCommandIds.add(row.id)
                     else expandedCommandIds.remove(row.id)
-                    detail.visibility = if (expand) View.VISIBLE else View.GONE
+                    detailContainer.visibility = if (expand) View.VISIBLE else View.GONE
                     title.contentDescription =
                         "${title.text}. ${if (expand) "Expanded" else "Collapsed"}. Tap to expand details"
                 }
-                commandRows.addView(detail)
+                detailContainer.addView(detail)
+                commandRows.addView(detailContainer)
                 if (
                     row.operation == "alert" &&
                         row.trusted &&
@@ -1121,12 +1236,14 @@ class MainActivity : Activity() {
                         }
                     )
                 }
-                commandRows.addView(
+                detailContainer.addView(
                     Button(this).apply {
                         text = if (row.trusted) "Copy command ID" else "Copy security event ID"
                         minHeight = dp(48)
                         isAllCaps = false
-                        styleSecondary(this)
+                        styleQuiet(this)
+                        contentDescription =
+                            "Copy ${if (row.trusted) "command" else "security event"} ID ${row.id}"
                         setOnClickListener {
                             getSystemService(android.content.ClipboardManager::class.java)
                                 .setPrimaryClip(
@@ -1180,7 +1297,7 @@ class MainActivity : Activity() {
             }
         )
         consoleFilters.values.forEach { choice ->
-            var initialSelection = true
+            var previousSelection = choice.selectedItemPosition
             choice.onItemSelectedListener =
                 object : AdapterView.OnItemSelectedListener {
                     override fun onNothingSelected(parent: AdapterView<*>?) {}
@@ -1191,22 +1308,28 @@ class MainActivity : Activity() {
                         position: Int,
                         id: Long,
                     ) {
-                        if (initialSelection) initialSelection = false else instructionPage = 0
+                        if (position != previousSelection) {
+                            previousSelection = position
+                            instructionPage = 0
+                        }
                         renderCommands()
                     }
                 }
         }
         refreshTrust = {
             savedInstallation?.let { state ->
-                reportingPolicy.text = reportingPolicyDescription(state, commandHistory)
+                reportingPolicy.text =
+                    "Applied · ${state.config().effective_reporting_interval_s} s\nCommand · ${reportingRequestSummary(state, commandHistory)}"
+                reportingDetails.text =
+                    reportingPolicyDescription(state, commandHistory) +
+                        "\nAdaptive · ${if (app.persistencePolicy.state.enabled) "ON" else "OFF"} · revision ${app.persistencePolicy.state.revision}\nHistorical observations are unchanged."
             }
             val alerts = commandHistory.filter { it.operation == "alert" }
             phoneAlertSummary.text =
-                if (alerts.isEmpty())
-                    "No received phone alerts in the retained journal. Offline instructions not received by this phone are absent."
+                if (alerts.isEmpty()) "No alerts received"
                 else
                     alerts.take(3).joinToString("\n\n") {
-                        "${utc(it.received)} · ${it.id}\n${it.state} · ${it.reason}\n${commandOutcomeExplanation(it.state)}\nResult custody: ${if (it.confirmed) "confirmed" else "pending or unknown"}"
+                        "${shortCommandTime(it.received)} · ${commandStateLabel(it.state)}\nResult ACK · ${if (it.confirmed) "Confirmed" else "Pending"} · Details in Instructions"
                     }
             commandTrustEvidence.text =
                 commandTrustDescription(
@@ -1215,10 +1338,24 @@ class MainActivity : Activity() {
                     app.commandControl.availability,
                 )
             val binding = savedInstallation
-            val summary =
-                "${if (binding == null) "Enrollment unknown" else if (binding.controlEnrollment == null) "Unenrolled" else "Authority: ${binding.controlAuthority}"}\n${app.commandControl.availability}\nSee enrollment details for last authenticated contact evidence."
-            commandTrust.text = summary
-            diagnosticTrust.text = "Remote-control trust & availability\n$summary"
+            val trustState =
+                when {
+                    binding == null -> "Unknown"
+                    binding.controlEnrollment == null -> "Unenrolled"
+                    app.commandControl.availability.startsWith("Authenticated Command") ->
+                        "Verified"
+                    else -> "Unverified"
+                }
+            commandTrust.text = "Command access · $trustState"
+            diagnosticTrust.text = commandTrustEvidence.text
+            healthRows
+                .getValue("Remote control")
+                .update(
+                    trustState,
+                    if (binding?.controlEnrollment == null) "Enrollment required"
+                    else "Authority bound",
+                    if (trustState == "Verified") R.color.accent else R.color.muted,
+                )
         }
         scope.launch {
             try {
@@ -1262,24 +1399,21 @@ class MainActivity : Activity() {
                 }
             }
         }
-        exportStatus =
-            text("Incident evidence is saved automatically. Export does not stop tracking.")
+        exportStatus = text("Sanitized ZIP · tracking continues", 13f)
         val diagnosticsPage = pages.getValue("Diagnostics")
-        val advancedHeading =
-            TextView(this).apply {
-                text = "Advanced Diagnostics"
-                textSize = 20f
-                setTextColor(getColor(R.color.ink))
-                setPadding(0, dp(20), 0, dp(4))
-            }
-        diagnosticsPage.addView(advancedHeading)
-        for (title in listOf("SOS event details", "Advanced technical evidence")) {
+        val consoleCard = commandGroup.parent as View
+        diagnosticsPage.removeView(consoleCard)
+        diagnosticsPage.addView(consoleCard, 3)
+        content = diagnosticsPage
+        val advanced = group("Advanced Diagnostics", false)
+        for (title in
+            listOf("Health details", "SOS event details", "Advanced technical evidence")) {
             val card = disclosureBodies.getValue(title).parent as View
             diagnosticsPage.removeView(card)
-            diagnosticsPage.addView(card)
+            advanced.addView(card)
         }
         diagnosticsPage.removeView(diagnosticTools)
-        diagnosticsPage.addView(diagnosticTools)
+        advanced.addView(diagnosticTools)
         content = pages.getValue("Tracking")
         startButton =
             button("Loading settings…") {
@@ -1298,8 +1432,7 @@ class MainActivity : Activity() {
             restoreSettings(null, draft)
             settingsDraftLoaded = true
             draftState = null
-            settingsFeedback.text =
-                "Form restored · Save persists local edits; applied policy is separate."
+            settingsFeedback.text = "Unsaved changes restored"
         }
         navigate(savedInstanceState?.getString("destination") ?: "Tracking")
         scope.launch {
@@ -1309,8 +1442,12 @@ class MainActivity : Activity() {
                 throw e
             } catch (e: Exception) {
                 status.text = getString(R.string.cannot_load_settings, e.message)
-                diagnosticsSummary.text =
-                    "Storage unavailable · health and queues unknown. Check device storage before continuing."
+                healthHeadline.text = "Storage unavailable"
+                healthRows.values.forEach { it.update("Unknown") }
+                healthRows
+                    .getValue("Storage")
+                    .update("Unavailable", "Check device space", R.color.warning)
+                diagnosticsSummary.text = "Storage unavailable · health and queues unknown."
                 settingsFeedback.text =
                     "Settings unavailable · local persistence could not be read."
                 trackingSummary.text = "ERROR"
@@ -1420,13 +1557,110 @@ class MainActivity : Activity() {
                             adaptive.isEnabled = false
                             adaptive.isChecked = localPolicy.enabled
                             adaptive.isEnabled = true
+                            val fallback =
+                                app.observationPersistence.samplingState.fallback
+                                    ?: localPolicy.error
                             policyStatus.text =
-                                "Locally saved: ${if (localPolicy.enabled) "ON" else "OFF"} · revision ${localPolicy.revision} · effective: ${if (localPolicy.enabled && app.observationPersistence.samplingState.fallback == null) "Adaptive" else "Dense"}" +
-                                    (app.observationPersistence.samplingState.fallback
-                                            ?: localPolicy.error)
-                                        ?.let { " · $it" }
-                                        .orEmpty()
+                                if (fallback == null) "" else "Dense fallback · $fallback"
+                            policyStatus.visibility =
+                                if (fallback == null) View.GONE else View.VISIBLE
                         }
+                        val collectionHealth = app.observationPersistence.state
+                        val attention =
+                            when {
+                                collectionHealth.writeFailures > 0 ||
+                                    state.knownCollectionLoss > 0 -> "Storage needs attention"
+                                queues.sos > 0 -> "SOS delivery pending"
+                                queues.blocked > 0 || state.deliveryPaused ->
+                                    "Delivery needs attention"
+                                op.error != null || state.operationalError != null ->
+                                    "Tracking needs attention"
+                                else -> if (op.tracking) "Tracking active" else "Tracking stopped"
+                            }
+                        healthHeadline.text = attention
+                        healthHeadline.setTextColor(
+                            getColor(
+                                if (attention.contains("attention") || queues.sos > 0)
+                                    R.color.warning
+                                else R.color.muted
+                            )
+                        )
+                        val fresh =
+                            op.gnss == "fix" && op.ageMillis != null && op.ageMillis in 0..30000
+                        healthRows
+                            .getValue("GNSS")
+                            .update(
+                                if (fresh) "Fresh fix"
+                                else if (op.ageMillis != null) "Stale / unknown" else "No fix",
+                                listOfNotNull(
+                                        op.accuracy?.let {
+                                            "%.1f m".format(java.util.Locale.ROOT, it)
+                                        },
+                                        op.ageMillis?.let { "${it / 1000} s old" },
+                                    )
+                                    .joinToString(" · ")
+                                    .ifEmpty { "Accuracy unavailable" },
+                                if (fresh) R.color.accent else R.color.muted,
+                            )
+                        healthRows
+                            .getValue("Storage")
+                            .update(
+                                if (collectionHealth.writeFailures > 0) "Write error"
+                                else if (collectionHealth.awaitingCommit > 0) "Writing"
+                                else "Ready",
+                                "${queues.gnss} queued" +
+                                    if (state.knownCollectionLoss > 0)
+                                        " · ${state.knownCollectionLoss} lost"
+                                    else "",
+                                if (
+                                    collectionHealth.writeFailures > 0 ||
+                                        state.knownCollectionLoss > 0
+                                )
+                                    R.color.warning
+                                else R.color.muted,
+                            )
+                        healthRows
+                            .getValue("Command")
+                            .update(
+                                if (app.sender.commandReachable == true) "Reachable"
+                                else "No contact",
+                                "Message ACK · ${state.lastAck?.let { shortUtcTime(it) } ?: "None"}",
+                                R.color.muted,
+                            )
+                        healthRows
+                            .getValue("Sync")
+                            .update(
+                                if (queues.blocked > 0 || state.deliveryPaused) "Needs attention"
+                                else if (op.historyPaused) "Paused"
+                                else if (queues.gnss == 0) "Queue clear" else "Pending",
+                                "${queues.gnss} pending" +
+                                    if (queues.blocked > 0) " · ${queues.blocked} unresolved"
+                                    else "",
+                                if (queues.blocked > 0 || state.deliveryPaused) R.color.warning
+                                else R.color.muted,
+                            )
+                        healthRows
+                            .getValue("SOS")
+                            .update(
+                                if (queues.sos > 0) "${queues.sos} pending" else "No pending",
+                                "Operator ACK · Command only",
+                                if (queues.sos > 0) R.color.warning else R.color.muted,
+                            )
+                        val freeSpace = filesDir.usableSpace
+                        healthRows
+                            .getValue("Device space")
+                            .update(
+                                if (freeSpace < 64L * 1024 * 1024) "Low" else "Available",
+                                if (freeSpace >= 1024L * 1024 * 1024)
+                                    "%.1f GB free"
+                                        .format(
+                                            java.util.Locale.ROOT,
+                                            freeSpace.toDouble() / (1024L * 1024 * 1024),
+                                        )
+                                else "${freeSpace / (1024 * 1024)} MB free",
+                                if (freeSpace < 64L * 1024 * 1024) R.color.warning
+                                else R.color.muted,
+                            )
                         diagnosticsSummary.text = buildString {
                             val collection = app.observationPersistence.state
                             appendLine(
@@ -1581,10 +1815,13 @@ class MainActivity : Activity() {
                     initialized = false
                     updateStartControls()
                     status.text = getString(R.string.cannot_read_settings, e.message)
-                    diagnosticsSummary.text =
-                        "Storage unavailable · cannot read Room state. Health and queue counts are unknown. Check device storage and retry opening Diagnostics."
-                    settingsFeedback.text =
-                        "Settings unavailable · edits retained; local persistence could not be read."
+                    healthHeadline.text = "Storage unavailable"
+                    healthRows.values.forEach { it.update("Unknown") }
+                    healthRows
+                        .getValue("Storage")
+                        .update("Unavailable", "Check device space", R.color.warning)
+                    diagnosticsSummary.text = "Storage unavailable · health and queues unknown."
+                    settingsFeedback.text = "Storage unavailable · edits retained"
                     trackingSummary.text = "ERROR"
                     trackingError.text = status.text
                     trackingError.visibility = View.VISIBLE
@@ -1665,8 +1902,7 @@ class MainActivity : Activity() {
 
     private fun save(start: Boolean = false, reenroll: Boolean = false) {
         if (!initialized && !start) {
-            settingsFeedback.text =
-                "Settings not saved · local storage is loading or unavailable; edits retained."
+            settingsFeedback.text = "Settings not saved · storage unavailable"
             return
         }
         if (!initialized) {
@@ -1703,8 +1939,7 @@ class MainActivity : Activity() {
                         savingStart = false
                         attemptStart()
                     } else {
-                        settingsFeedback.text =
-                            "Settings saved · ${seconds} s local reporting. Command overrides remain applied."
+                        settingsFeedback.text = "Settings saved · local only"
                         Toast.makeText(this@MainActivity, "Settings saved", Toast.LENGTH_SHORT)
                             .show()
                     }
@@ -1752,16 +1987,11 @@ class MainActivity : Activity() {
         if (state.precise) askedLocation = false
         if (state.notificationPermission) askedNotifications = false
         readiness.text =
-            state.description() +
-                "\nForeground-service setup: " +
-                if (
-                    state.precise &&
-                        state.gps == true &&
-                        state.notifications == true &&
-                        state.powerSave == false
-                )
-                    "Visible Start prerequisites satisfied; Android may still restrict execution."
-                else "Action required before visible Start; review the checks above."
+            "Location · ${if (state.precise) "Precise" else "Permission needed"}\n" +
+                "GPS · ${if (state.gps == true) "On" else "Off / unknown"}\n" +
+                "Notifications · ${if (state.notifications == true) "Allowed" else "Blocked / unknown"}\n" +
+                "Battery saver · ${if (state.powerSave == false) "Off" else "On / unknown"}\n" +
+                "Background · ${if (state.optimizationExemption == true) "Exempt; OEM limits may apply" else "Battery limits may apply"}"
         locationAction.visibility = if (state.precise) View.GONE else View.VISIBLE
         gpsAction.visibility = if (state.gps == true) View.GONE else View.VISIBLE
         notificationAction.visibility = if (state.notifications == true) View.GONE else View.VISIBLE

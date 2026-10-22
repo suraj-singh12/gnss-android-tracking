@@ -38,10 +38,6 @@ class AdaptiveSettingsTest {
             settle()
             val views = descendants(controller.get().findViewById(android.R.id.content))
             views.filterIsInstance<Button>().single { it.text == "Settings" }.performClick()
-            views
-                .filterIsInstance<Button>()
-                .single { it.text.toString().startsWith("GNSS persistence  ") }
-                .performClick()
             return views.filterIsInstance<CheckBox>().single {
                 it.text == "Adaptive GNSS persistence"
             }

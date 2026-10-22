@@ -212,7 +212,7 @@ class MainActivityStartupTest {
         val activity = open()
         try {
             assertTrue(
-                field<TextView>(activity.get(), "readiness").text.contains("enable Location/GPS")
+                field<TextView>(activity.get(), "readiness").text.contains("GPS · Off / unknown")
             )
             field<Button>(activity.get(), "gpsAction").performClick()
             assertEquals(
@@ -233,7 +233,7 @@ class MainActivityStartupTest {
             shadowOf(gps).setProviderEnabled(LocationManager.GPS_PROVIDER, true)
             activity.start().resume()
             assertNotNull(shadowOf(app).nextStartedService)
-            assertTrue(field<TextView>(activity.get(), "readiness").text.contains("✓ GPS on"))
+            assertTrue(field<TextView>(activity.get(), "readiness").text.contains("GPS · On"))
         } finally {
             close(activity)
         }
@@ -261,7 +261,11 @@ class MainActivityStartupTest {
             activity.resume()
             assertNotNull(shadowOf(app).nextStartedService)
             assertNull(shadowOf(app).nextStartedService)
-            assertTrue(field<TextView>(activity.get(), "readiness").text.contains("✓ Allowed"))
+            assertTrue(
+                field<TextView>(activity.get(), "readiness")
+                    .text
+                    .contains("Notifications · Allowed")
+            )
         } finally {
             close(activity)
         }
@@ -298,7 +302,7 @@ class MainActivityStartupTest {
             assertTrue(
                 field<TextView>(activity.get(), "readiness")
                     .text
-                    .contains("precise location is required")
+                    .contains("Location · Permission needed")
             )
             field<Button>(activity.get(), "locationAction").performClick()
             assertEquals(
@@ -320,8 +324,8 @@ class MainActivityStartupTest {
         val activity = open()
         try {
             val readiness = field<TextView>(activity.get(), "readiness")
-            assertTrue(readiness.text.contains("allow tracking notifications"))
-            assertTrue(readiness.text.contains("Battery Saver is ON"))
+            assertTrue(readiness.text.contains("Notifications · Blocked / unknown"))
+            assertTrue(readiness.text.contains("Battery saver · On / unknown"))
             field<Button>(activity.get(), "notificationAction").performClick()
             assertEquals(
                 Settings.ACTION_APP_NOTIFICATION_SETTINGS,
@@ -343,7 +347,7 @@ class MainActivityStartupTest {
             shadowOf(power).setIsPowerSaveMode(false)
             activity.pause().resume()
             assertNotNull(shadowOf(app).nextStartedService)
-            assertTrue(readiness.text.contains("✓ Off"))
+            assertTrue(readiness.text.contains("Battery saver · Off"))
         } finally {
             close(activity)
         }
@@ -354,8 +358,11 @@ class MainActivityStartupTest {
         val activity = open()
         try {
             val description = field<TextView>(activity.get(), "readiness").text.toString()
-            assertTrue(description.contains("background battery restrictions may affect tracking"))
-            assertTrue(description.contains("Unrestricted / allow background activity"))
+            assertTrue(description.contains("Background · Battery limits may apply"))
+            assertEquals(
+                android.view.View.VISIBLE,
+                field<Button>(activity.get(), "backgroundAction").visibility,
+            )
             assertNull(shadowOf(activity.get()).nextStartedActivity)
             field<Button>(activity.get(), "backgroundAction").performClick()
             val settings = shadowOf(activity.get()).nextStartedActivity
@@ -423,7 +430,7 @@ class MainActivityStartupTest {
             assertTrue(
                 field<TextView>(activity.get(), "readiness")
                     .text
-                    .contains("Action required — allow tracking notifications")
+                    .contains("Notifications · Blocked / unknown")
             )
             field<Button>(activity.get(), "startButton").performClick()
             await { !field<Boolean>(activity.get(), "savingStart") }
@@ -493,8 +500,8 @@ class MainActivityStartupTest {
                 .setIgnoringBatteryOptimizations(app.packageName, true)
             activity.pause().resume()
             val text = field<TextView>(activity.get(), "readiness").text.toString()
-            assertTrue(text.contains("Android optimization exemption present"))
-            assertTrue(text.contains("OEM setup still required"))
+            assertTrue(text.contains("Background · Exempt"))
+            assertTrue(text.contains("OEM limits may apply"))
             assertEquals(
                 android.view.View.VISIBLE,
                 field<Button>(activity.get(), "backgroundAction").visibility,
@@ -516,7 +523,7 @@ class MainActivityStartupTest {
             assertTrue(
                 field<TextView>(activity.get(), "readiness")
                     .text
-                    .contains("precise location is required")
+                    .contains("Location · Permission needed")
             )
             shadowOf(app).grantPermissions(Manifest.permission.ACCESS_FINE_LOCATION)
             deliverPermissionResult(
@@ -527,7 +534,9 @@ class MainActivityStartupTest {
             )
             shadowOf(Looper.getMainLooper()).idle()
             assertNull(shadowOf(app).nextStartedService)
-            assertTrue(field<TextView>(activity.get(), "readiness").text.contains("✓ Precise"))
+            assertTrue(
+                field<TextView>(activity.get(), "readiness").text.contains("Location · Precise")
+            )
         } finally {
             close(activity)
         }

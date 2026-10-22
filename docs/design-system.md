@@ -205,21 +205,22 @@ while approval amounts and missing coverage remain visible. Retry Missing,
 Save & Use and Cancel preserve verified data. The toolbar Layers dialog remains
 independent and distinguishes available/hidden/visible/processing failure.
 
-## Issue #39 Settings and Diagnostics refinement
+## Issue #39 Settings and Diagnostics
 
-Tracking remains the visual/behavior baseline with unchanged geometry and controls.
-Settings retains native Day/Night sections: Party & Command, Tracking & GNSS Policy,
-field readiness, and appearance/emergency preferences. Save/Cancel edits and explicit
-immediate adaptive Apply distinguish local durability from remote effectiveness.
-Trust provisioning is collapsed and protected; configured endpoint, binding,
-last authenticated evidence and current availability retain distinct meanings.
+Tracking remains the visual and behavioral baseline. Settings uses two restrained
+native surfaces: a configuration form and tracking policy. Identity fields share a
+row; a filled Save action and quiet Cancel action establish priority. Appearance
+stays in the title row. Policy shows applied cadence and concise request state;
+adaptive Apply has one future-observations caption. Readiness, authorization and
+revisions are disclosed rather than repeated inline.
 
-Diagnostics uses text-labelled Current Health facts, with evidence and recovery
-instructions per subsystem. No aggregate green connection indicator substitutes for
-GNSS freshness, authenticated control, Room durability, sync or human acknowledgement.
-Phone Alerts and Command Instructions lead to canonical stages; native 48 dp command
-row buttons expose expandable, selectable details. Twenty-record pages and combined
-type/outcome/time/search filters bound view construction. Advanced Diagnostics keeps
-tools discoverable and raw technical/SOS evidence collapsed. Native disclosure,
-filter, page and form draft state survives recreation; private provisioning text is
-never included in saved instance state.
+Diagnostics has one read-only health panel with seven icon/label/status rows. Short
+metadata and subtle semantic chips communicate facts; information rows are not
+buttons. Instructions, Alerts and Advanced form the default footer. Health evidence,
+SOS stages and technical tools live inside Advanced. Instruction rows show type,
+outcome and time; filters and stage/copy controls expand on demand. Flat disclosure
+rows replace outlined header buttons, and repeated explanations are removed.
+
+Use the existing Day/Night palette, native typography, 48 dp action targets and one
+spacing rhythm. Large text wraps and scrolls naturally. No Tracking, Command web,
+protocol or execution changes are part of this presentation refinement.

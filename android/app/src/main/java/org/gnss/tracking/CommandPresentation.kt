@@ -128,3 +128,42 @@ internal fun commandReasonExplanation(reason: String): String? =
             "The response could not be verified as a supported instruction. Check Command compatibility and enrollment."
         else -> null
     }
+
+internal fun commandTypeLabel(operation: String): String =
+    when (operation) {
+        "reporting" -> "Reporting interval"
+        "adaptive" -> "GNSS policy"
+        "tracking_start" -> "Start tracking"
+        "tracking_stop" -> "Stop tracking"
+        "sync" -> "Sync history"
+        "alert" -> "Phone alert"
+        "security_denied" -> "Security event"
+        else -> operation.replace('_', ' ')
+    }
+
+internal fun commandStateLabel(state: String): String =
+    state.replace('_', ' ').replaceFirstChar { it.uppercase() }
+
+internal fun shortCommandTime(at: Long): String =
+    java.time.format.DateTimeFormatter.ofPattern("d MMM · HH:mm 'UTC'", java.util.Locale.ROOT)
+        .withZone(java.time.ZoneOffset.UTC)
+        .format(java.time.Instant.ofEpochMilli(at))
+
+internal fun shortUtcTime(at: String): String =
+    runCatching { shortCommandTime(java.time.Instant.parse(at).toEpochMilli()) }
+        .getOrDefault("Unknown")
+
+internal fun reportingRequestSummary(state: Installation, rows: List<CommandRecord>): String {
+    val row =
+        rows.firstOrNull {
+            it.trusted && it.operation == "reporting" && it.enrollment == state.controlEnrollment
+        } ?: return "Unknown"
+    val request =
+        runCatching {
+                val value = Protocol.parse(row.requested)["seconds"]
+                if (value == null) "Unknown"
+                else if (value.isJsonNull) "Local interval" else "${value.asInt} s"
+            }
+            .getOrDefault("Unknown")
+    return "$request · ${commandStateLabel(row.state)}"
+}

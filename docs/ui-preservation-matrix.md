@@ -191,3 +191,13 @@ recording/Travel Back or remote-control authority changes belong to this extensi
 | Command console / phone alerts | Same journal, actual duplicate stages, filters/pages, expandable native controls, local ACK | CommandConsoleUiTest, SettingsDiagnosticsTest, existing #25/#26 tests |
 | Retry/export/Physical Button Test | Existing tools and confirmation/sanitization preserved in Advanced Diagnostics | Existing export/physical-button tests and native renders |
 | Device acceptance | No native/physical success inferred from software evidence | Real TalkBack, keyboard/rotation/OS/OEM and LAN endurance remain outstanding |
+
+### #39 operational visual refinement
+
+| Surface | Refined presentation | Preserved contract |
+| --- | --- | --- |
+| Settings | Compact identity/endpoint/interval form; primary Save, quiet Cancel; optional details | Existing local transaction, draft lifecycle, immediate OFF-default adaptive policy and protected enrollment |
+| Diagnostics | Seven informational health rows; Instructions/Alerts/Advanced disclosures | Independent GNSS, durability, ACK, sync, SOS, storage and trust facts |
+| Instructions | Concise rows; optional filters/stages/copy; stable focus and saved page | Same bounded authenticated journal, outcomes and result custody |
+| Tools | Advanced contains health/SOS/technical evidence, retry, export and Physical Button Test | Existing confirmation, sanitization, key/SOS suppression and recovery behavior |
+| Tracking / Command web | No visual or functional redesign | Existing layout, controls, GNSS/SOS/Room/Sender/service/protocol authorities |

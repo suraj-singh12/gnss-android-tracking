@@ -51,8 +51,8 @@ class SettingsDiagnosticsTest {
                 requestFocus()
                 setSelection(6)
             }
-            field("Command base URL (local Wi-Fi)").setText("http://192.168.12.3:8080")
-            field("Local reporting interval (seconds, 5–86400 in steps of 5)").setText("35")
+            field("Command address").setText("http://192.168.12.3:8080")
+            field("Reporting interval (s)").setText("35")
             app.operational.value = Operational(health = Health(wifi_connected = true))
             shadowOf(Looper.getMainLooper()).idle()
             assertEquals("Unfinished field edit", field("Party name").text.toString())
@@ -60,26 +60,23 @@ class SettingsDiagnosticsTest {
             until { field("Party name").text.toString() == "Unfinished field edit" }
             assertTrue(field("Party name").hasFocus())
             assertEquals(6, field("Party name").selectionStart)
-            assertEquals(
-                "35",
-                field("Local reporting interval (seconds, 5–86400 in steps of 5)").text.toString(),
-            )
+            assertEquals("35", field("Reporting interval (s)").text.toString())
             assertEquals(original.partyName, app.repository.state().partyName)
             @Suppress("DEPRECATION") controller.get().onBackPressed()
             val unsaved = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
             assertEquals("Unsaved settings", shadowOf(unsaved).title.toString())
             unsaved.getButton(android.app.AlertDialog.BUTTON_NEGATIVE).performClick()
             assertFalse(controller.get().isFinishing)
-            button("Cancel edits").performClick()
+            button("Cancel").performClick()
             assertEquals(original.partyName, field("Party name").text.toString())
-            field("Local reporting interval (seconds, 5–86400 in steps of 5)").setText("3")
+            field("Reporting interval (s)").setText("3")
             button("Save settings").performClick()
             until {
                 all().filterIsInstance<TextView>().any { it.text.startsWith("Settings not saved") }
             }
             assertEquals(original.localInterval, app.repository.state().localInterval)
             org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()?.dismiss()
-            field("Local reporting interval (seconds, 5–86400 in steps of 5)").setText("35")
+            field("Reporting interval (s)").setText("35")
             button("Save settings").performClick()
             until {
                 all().filterIsInstance<TextView>().any { it.text.startsWith("Settings saved") }
@@ -118,7 +115,7 @@ class SettingsDiagnosticsTest {
             val editor = controller.get().findViewById<EditText>(heading.labelFor)
             assertEquals("Unpersisted field edits", editor.text.toString())
             assertTrue(editor.isEnabled)
-            all.filterIsInstance<Button>().single { it.text == "Cancel edits" }.performClick()
+            all.filterIsInstance<Button>().single { it.text == "Cancel" }.performClick()
             assertEquals("Unpersisted field edits", editor.text.toString())
             @Suppress("DEPRECATION") controller.get().onBackPressed()
             val dialog = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
@@ -170,23 +167,38 @@ class SettingsDiagnosticsTest {
                 .single { it.text.startsWith("Command Instructions  ") }
                 .performClick()
             until { all().filterIsInstance<Button>().count { it.text == "Copy command ID" } == 20 }
+            assertTrue(
+                all()
+                    .filterIsInstance<Button>()
+                    .filter { it.text == "Copy command ID" }
+                    .none { it.isShown }
+            )
             button("Older instructions").performClick()
             assertTrue(all().filterIsInstance<TextView>().any { it.text.contains("Page 2 of 3") })
             val filter =
                 all().filterIsInstance<EditText>().single {
-                    it.hint?.startsWith("Filter outcome") == true
+                    it.hint?.startsWith("Search instructions") == true
                 }
             filter.setText("Duplicate ignored")
             assertEquals(1, all().filterIsInstance<Button>().count { it.text == "Copy command ID" })
             filter.setText("")
+            all()
+                .filterIsInstance<Button>()
+                .single { it.text.startsWith("Filters  ") }
+                .performClick()
             all()
                 .filterIsInstance<Spinner>()
                 .single { it.contentDescription == "Command type" }
                 .setSelection(1)
             shadowOf(Looper.getMainLooper()).idle()
             assertTrue(all().filterIsInstance<TextView>().any { it.text.contains("23 matching") })
+            button("Older instructions").performClick()
+            assertEquals(3, all().filterIsInstance<Button>().count { it.text == "Copy command ID" })
             controller.recreate()
-            until { all().filterIsInstance<Button>().count { it.text == "Copy command ID" } == 20 }
+            until {
+                all().filterIsInstance<Button>().count { it.text == "Copy command ID" } == 3 &&
+                    all().filterIsInstance<TextView>().any { it.text.contains("Page 2 of 2") }
+            }
             assertEquals(
                 1,
                 all()
@@ -196,6 +208,49 @@ class SettingsDiagnosticsTest {
             )
             assertTrue(all().filterIsInstance<TextView>().any { it.text.contains("23 matching") })
             assertFalse(app.operational.value.tracking)
+        } finally {
+            controller.pause().stop().destroy()
+            app.finishForTests()
+        }
+    }
+
+    @Test
+    fun defaultScreensStayCompactAndTechnicalActionsAreDisclosed() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<TrackingApp>()
+        withContext(Dispatchers.IO) { app.repository.state() }
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        fun all() = views(controller.get().findViewById(android.R.id.content))
+        fun visibleText() =
+            all().filterIsInstance<TextView>().filter { it.isShown }.joinToString(" ") { it.text }
+        try {
+            until {
+                all().filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled }
+            }
+            all().filterIsInstance<Button>().single { it.text == "Diagnostics" }.performClick()
+            assertEquals(7, all().filterIsInstance<HealthRow>().size)
+            assertTrue(all().filterIsInstance<HealthRow>().all { !it.isClickable })
+            assertTrue(
+                "Overview should contain concise facts, not paragraphs",
+                visibleText().length < 650,
+            )
+            assertFalse(controller.get().findViewById<View>(R.id.diagnostic_tools).isShown)
+            assertFalse(
+                all()
+                    .filterIsInstance<Button>()
+                    .single { it.text.startsWith("Health details") }
+                    .isShown
+            )
+            all().filterIsInstance<Button>().single { it.text == "Settings" }.performClick()
+            assertTrue("Configuration should stay concise", visibleText().length < 550)
+            assertTrue(
+                all().filterIsInstance<Button>().single { it.text == "Save settings" }.isShown
+            )
+            assertFalse(
+                all()
+                    .filterIsInstance<EditText>()
+                    .single { it.hint?.startsWith("One-time credential") == true }
+                    .isShown
+            )
         } finally {
             controller.pause().stop().destroy()
             app.finishForTests()

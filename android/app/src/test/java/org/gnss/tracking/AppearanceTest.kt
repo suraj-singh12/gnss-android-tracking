@@ -43,7 +43,10 @@ class AppearanceTest {
                 .single { it.text == "Settings" }
                 .performClick()
             val choice = a.findViewById<Button>(R.id.appearance)
-            assertEquals("Appearance: ${if(night) "Night" else "Day"}", choice.text.toString())
+            assertEquals(
+                "Appearance, ${if(night) "Night" else "Day"}",
+                choice.contentDescription.toString(),
+            )
             choice.performClick()
             val dialog = ShadowAlertDialog.getLatestAlertDialog()
             assertEquals("Appearance", shadowOf(dialog).title.toString())

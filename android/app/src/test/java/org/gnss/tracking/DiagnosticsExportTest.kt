@@ -42,6 +42,7 @@ abstract class DiagnosticsExportChecks {
                     else emptyList()
             val controls = buttons(controller.get().findViewById(android.R.id.content))
             controls.single { it.text == "Diagnostics" }.performClick()
+            controls.single { it.text.startsWith("Advanced Diagnostics") }.performClick()
             val button = controls.single { it.text == "Export diagnostics" }
             assertTrue(button.isShown)
             val before = app.operational.value
