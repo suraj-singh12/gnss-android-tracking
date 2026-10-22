@@ -587,7 +587,9 @@ The four independent written V4 corrections are implemented and tested: pause UI
 removed, functional foreground-notification Sync/confirmed Stop, accessible persisted
 icon-only theme toggle, and restrained coordinated emergency colors. Tests check
 notification action routing, no GNSS from Sync, stop cancellation, recreation,
-retained alert ACK action identity and theme colors, and emergency contrast. Native
+retained alert ACK action identity and theme colors, and emergency contrast. The permission-loss lifecycle test waits for active startup
+before revoking permission, retaining all source-stop, wake-lock and error assertions;
+Robolectric does not deliver stopSelf teardown automatically. Native
 notification RemoteViews are rendered across both sizes/themes/font scales. These
 are framework-content renders, not physical Android notification-shade screenshots.
 The notification renderer configures OS Day/Night as well as the app preference;

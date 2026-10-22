@@ -225,11 +225,20 @@ class TrackingLifecycleTest {
     }
 
     @Test
-    fun precisePermissionLossStopsSourceAndReleasesLock() {
+    fun precisePermissionLossStopsSourceAndReleasesLock() = runBlocking {
         val service = Robolectric.buildService(TrackingService::class.java).create()
         try {
             service.get().onStartCommand(Intent(app, TrackingService::class.java), 0, 1)
             shadowOf(Looper.getMainLooper()).idle()
+            // Revoke from the running state, not while asynchronous Room startup
+            // is still publishing its initial status. stopSelf teardown is manual
+            // in Robolectric, unlike Android's service lifecycle.
+            withTimeout(10000) {
+                while (!app.operational.value.tracking) {
+                    shadowOf(Looper.getMainLooper()).idle()
+                    delay(10)
+                }
+            }
             shadowOf(app).denyPermissions(Manifest.permission.ACCESS_FINE_LOCATION)
             shadowOf(app).grantPermissions(Manifest.permission.ACCESS_COARSE_LOCATION)
             shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
