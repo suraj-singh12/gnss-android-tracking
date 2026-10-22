@@ -21,18 +21,26 @@ import (
 
 const mapLimit = 20 * 1024 * 1024
 
+type savedChunkCounts struct {
+	Requested int `json:"requested"`
+	Vector    int `json:"vector"`
+	Terrain   int `json:"terrain"`
+}
 type savedMap struct {
-	Bounds     []float64       `json:"bounds,omitempty"`
-	Components map[string]bool `json:"components,omitempty"`
-	ID         string          `json:"id"`
-	Source     string          `json:"source"`
-	Created    string          `json:"created"`
-	Bytes      int             `json:"bytes"`
+	Chunks     *savedChunkCounts `json:"chunks,omitempty"`
+	Bounds     []float64         `json:"bounds,omitempty"`
+	Components map[string]bool   `json:"components,omitempty"`
+	ID         string            `json:"id"`
+	Source     string            `json:"source"`
+	Created    string            `json:"created"`
+	Bytes      int               `json:"bytes"`
 }
 type mapProvider struct {
 	client               *http.Client
 	search, overpass     string
+	catalog              string
 	dem                  string
+	demCache             string
 	demClient            *http.Client
 	demTestAttemptBudget time.Duration
 	demTestBackoff       time.Duration
@@ -41,6 +49,7 @@ type mapProvider struct {
 	preparedAt           time.Time
 	mu                   sync.Mutex
 	nextSearch, nextArea time.Time
+	nextRegion           time.Time
 }
 
 func newMapProvider() *mapProvider {
@@ -50,7 +59,7 @@ func newMapProvider() *mapProvider {
 	transport.TLSHandshakeTimeout = 10 * time.Second
 	transport.ResponseHeaderTimeout = 20 * time.Second
 	transport.DisableCompression = true
-	return &mapProvider{client: &http.Client{Timeout: 25 * time.Second}, demClient: &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, search: "https://nominatim.openstreetmap.org/search", overpass: "https://overpass-api.de/api/interpreter", dem: "https://elevation-tiles-prod.s3.amazonaws.com/skadi"}
+	return &mapProvider{client: &http.Client{Timeout: 25 * time.Second}, demClient: &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, catalog: "https://download.geofabrik.de/index-v1.json", search: "https://nominatim.openstreetmap.org/search", overpass: "https://overpass-api.de/api/interpreter", dem: "https://elevation-tiles-prod.s3.amazonaws.com/skadi"}
 }
 func (p *mapProvider) reserve(search bool) error {
 	p.mu.Lock()
@@ -75,17 +84,44 @@ func (p *mapProvider) request(ctx context.Context, method, address, body string)
 	if method == "POST" {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
-	resp, err := p.client.Do(req)
+	resp, err := mapHTTPClient(ctx, p.client).Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("map provider request failed: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("map provider returned HTTP %d", resp.StatusCode)
+		if resp.StatusCode == 429 || resp.StatusCode == 503 {
+			wait := 10 * time.Second
+			if v := resp.Header.Get("Retry-After"); v != "" {
+				if seconds, e := time.ParseDuration(v + "s"); e == nil && seconds >= 0 {
+					wait = max(wait, seconds)
+				} else if at, e := http.ParseTime(v); e == nil {
+					wait = max(wait, time.Until(at))
+				} else {
+					return nil, fmt.Errorf("map provider HTTP %d; invalid Retry-After; explicit retry after local cooldown required", resp.StatusCode)
+				}
+			}
+			p.mu.Lock()
+			if method == "POST" {
+				p.nextArea = time.Now().Add(wait)
+			} else {
+				p.nextSearch = time.Now().Add(wait)
+			}
+			p.mu.Unlock()
+			return nil, fmt.Errorf("map provider HTTP %d; Retry-After/cooldown %s; explicit retry required", resp.StatusCode, wait)
+		}
+		return nil, fmt.Errorf("map provider returned HTTP %d; geographic coverage not acquired; existing chunks retained", resp.StatusCode)
 	}
-	b, err := io.ReadAll(io.LimitReader(resp.Body, mapLimit+1))
-	if len(b) > mapLimit {
-		return nil, errors.New("provider data exceeds 20 MB")
+	limit := int64(mapLimit)
+	if ctx.Value(mapBudgetKey{}) == nil {
+		limit = mapConsentBytes
+		if resp.ContentLength > limit {
+			return nil, errors.New("legacy preview exceeds 5 MB; use automatic radius acquisition with explicit transfer approval")
+		}
+	}
+	b, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+	if int64(len(b)) > limit {
+		return nil, errors.New("provider response exceeds the bounded transfer allowance; use automatic radius acquisition")
 	}
 	return b, err
 }
@@ -114,9 +150,17 @@ func (s *Store) RecentEvents() ([]Evidence, error) {
 	return result, rows.Err()
 }
 func (s *Store) listMaps() ([]savedMap, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	rows, err := s.db.Query(`SELECT m.id,m.source,m.created,length(m.data),coalesce(json_extract(m.data,'$.requested_bounds'),'null'),coalesce(substr(t.data,1,8204),x'') FROM offline_maps m LEFT JOIN offline_terrain t ON t.map_id=m.id ORDER BY m.created DESC`)
+	db := s.viewDB
+	if db == nil {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		db = s.db
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	rows, err := db.QueryContext(ctx, `SELECT m.id,m.source,m.created,length(m.data)+(SELECT coalesce(sum(coalesce(length(vector),0)+coalesce(length(terrain),0)),0) FROM offline_map_chunks WHERE map_id=m.id),coalesce(json_extract(m.data,'$.plan.bounds'),json_extract(m.data,'$.requested_bounds'),'null'),coalesce(substr(t.data,1,8204),x''),coalesce(json_array_length(m.data,'$.plan.chunks'),0),
+ (SELECT count(*) FROM offline_map_chunks WHERE map_id=m.id AND vector IS NOT NULL),
+ (SELECT count(*) FROM offline_map_chunks WHERE map_id=m.id AND terrain IS NOT NULL) FROM offline_maps m LEFT JOIN offline_terrain t ON t.map_id=m.id ORDER BY m.created DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -126,8 +170,12 @@ func (s *Store) listMaps() ([]savedMap, error) {
 		var m savedMap
 		var bounds string
 		var metadata []byte
-		if err = rows.Scan(&m.ID, &m.Source, &m.Created, &m.Bytes, &bounds, &metadata); err != nil {
+		var counts savedChunkCounts
+		if err = rows.Scan(&m.ID, &m.Source, &m.Created, &m.Bytes, &bounds, &metadata, &counts.Requested, &counts.Vector, &counts.Terrain); err != nil {
 			return nil, err
+		}
+		if counts.Requested > 0 {
+			m.Chunks = &counts
 		}
 		json.Unmarshal([]byte(bounds), &m.Bounds)
 		if len(metadata) >= 12 {
@@ -323,9 +371,14 @@ func validateMap(b []byte) error {
 		return err
 	}
 	if count == 0 {
-		return errors.New("map has no coordinates")
+		if root["acquisition"] != "complete" {
+			return errors.New("map has no coordinates")
+		}
+		if _, err := mapAreaBounds(b); err != nil {
+			return err
+		}
 	}
-	if max-min > 180 {
+	if max-min > 180 && root["acquisition"] != "complete" {
 		return errors.New("split antimeridian-spanning maps before import")
 	}
 	return nil
@@ -358,6 +411,12 @@ func (s *Store) saveMap(source string, b []byte) (savedMap, error) {
 	return m, tx.Commit()
 }
 func (s *Store) mapRequest(w http.ResponseWriter, r *http.Request, p *mapProvider) bool {
+	if s.mapPackageRequest(w, r) || s.mapSourceRequest(w, r, p) {
+		return true
+	}
+	if s.mapJobRequest(w, r, p) {
+		return true
+	}
 	if s.terrainRequest(w, r, p) {
 		return true
 	}
@@ -480,10 +539,15 @@ func (p *mapProvider) area(ctx context.Context, lat, lon, width, height float64)
 	if lon-dx < -180 || lon+dx > 180 || math.Abs(lat-dy) > 85.05112878 || math.Abs(lat+dy) > 85.05112878 {
 		return nil, errors.New("area crosses unsupported map coverage")
 	}
+	return p.areaBounds(ctx, [4]float64{lon - dx, lat - dy, lon + dx, lat + dy})
+}
+func (p *mapProvider) areaBounds(ctx context.Context, bounds [4]float64) ([]byte, error) {
 	if err := p.reserve(false); err != nil {
 		return nil, err
 	}
-	bbox := fmt.Sprintf("%.7f,%.7f,%.7f,%.7f", lat-dy, lon-dx, lat+dy, lon+dx)
+	// Round source envelopes outwards; nearest-decimal formatting can omit border features.
+	providerBounds := [4]float64{math.Floor(bounds[0]*1e10) / 1e10, math.Max(-mapMercatorLimit, math.Floor(bounds[1]*1e10)/1e10), math.Ceil(bounds[2]*1e10) / 1e10, math.Min(mapMercatorLimit, math.Ceil(bounds[3]*1e10)/1e10)}
+	bbox := fmt.Sprintf("%.10f,%.10f,%.10f,%.10f", providerBounds[1], providerBounds[0], providerBounds[3], providerBounds[2])
 	query := fmt.Sprintf(`[out:json][timeout:20][maxsize:20000000];(way["highway"](%s);way["building"](%s);way["waterway"](%s);way["natural"](%s);way["landuse"](%s););out geom;`, bbox, bbox, bbox, bbox, bbox)
 	b, err := p.request(ctx, "POST", p.overpass, url.Values{"data": {query}}.Encode())
 	if err != nil {
@@ -495,13 +559,16 @@ func (p *mapProvider) area(ctx context.Context, lat, lon, width, height float64)
 			ID       int64             `json:"id"`
 			Tags     map[string]string `json:"tags"`
 			Geometry []struct {
-				Lat float64 `json:"lat"`
-				Lon float64 `json:"lon"`
+				Lat *float64 `json:"lat"`
+				Lon *float64 `json:"lon"`
 			} `json:"geometry"`
 		} `json:"elements"`
 	}
 	if err = json.Unmarshal(b, &result); err != nil {
 		return nil, err
+	}
+	if result.Elements == nil {
+		return nil, errors.New("provider response missing elements; geographic coverage not acquired")
 	}
 	if result.Remark != "" {
 		return nil, errors.New("provider returned incomplete data: " + result.Remark)
@@ -509,11 +576,14 @@ func (p *mapProvider) area(ctx context.Context, lat, lon, width, height float64)
 	features := []any{}
 	for _, e := range result.Elements {
 		if len(e.Geometry) < 2 {
-			continue
+			return nil, errors.New("provider way missing geometry; coverage not validated")
 		}
 		coords := [][2]float64{}
 		for _, c := range e.Geometry {
-			coords = append(coords, [2]float64{c.Lon, c.Lat})
+			if c.Lon == nil || c.Lat == nil {
+				return nil, errors.New("provider geometry missing coordinate; coverage not validated")
+			}
+			coords = append(coords, [2]float64{*c.Lon, *c.Lat})
 		}
 		typ := "LineString"
 		var geometry any = coords
@@ -523,10 +593,8 @@ func (p *mapProvider) area(ctx context.Context, lat, lon, width, height float64)
 		}
 		features = append(features, map[string]any{"type": "Feature", "id": fmt.Sprintf("way/%d", e.ID), "properties": e.Tags, "geometry": map[string]any{"type": typ, "coordinates": geometry}})
 	}
-	if len(features) == 0 {
-		return nil, errors.New("no supported OSM ways in this area; try a different center or import GeoJSON")
-	}
-	data, err := json.Marshal(map[string]any{"type": "FeatureCollection", "features": features, "attribution": "© OpenStreetMap contributors · ODbL", "source": "OpenStreetMap via Overpass (ways only)", "prepared_at": time.Now().UTC().Format(wireTime), "requested_bounds": [4]float64{lon - dx, lat - dy, lon + dx, lat + dy}})
+
+	data, err := json.Marshal(map[string]any{"type": "FeatureCollection", "features": features, "attribution": "© OpenStreetMap contributors · ODbL", "source": "OpenStreetMap via Overpass (ways only)", "prepared_at": time.Now().UTC().Format(wireTime), "requested_bounds": bounds, "acquisition": "complete", "provider": p.overpass, "source_bytes": len(b), "provider_bounds": providerBounds})
 	if err == nil {
 		err = validateMap(data)
 	}

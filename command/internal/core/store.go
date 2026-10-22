@@ -219,6 +219,18 @@ func Open(path string) (*Store, error) {
 	if _, err = db.Exec(`CREATE TABLE IF NOT EXISTS offline_terrain (map_id TEXT PRIMARY KEY REFERENCES offline_maps(id), data BLOB NOT NULL)`); err != nil {
 		return fail(err)
 	}
+	if _, err = db.Exec(`CREATE TABLE IF NOT EXISTS offline_map_chunks (
+ map_id TEXT NOT NULL REFERENCES offline_maps(id), chunk_key TEXT NOT NULL,
+ vector BLOB, terrain BLOB, vector_evidence TEXT NOT NULL DEFAULT '{}', terrain_evidence TEXT NOT NULL DEFAULT '{}',
+ PRIMARY KEY(map_id,chunk_key))`); err != nil {
+		return fail(err)
+	}
+	if _, err = db.Exec(`CREATE TABLE IF NOT EXISTS offline_map_transfers(map_id TEXT PRIMARY KEY REFERENCES offline_maps(id),data TEXT NOT NULL)`); err != nil {
+		return fail(err)
+	}
+	if err = sourceSchema(&Store{db: db}); err != nil {
+		return fail(err)
+	}
 	b, _ := json.Marshal(state)
 	if _, err = db.Exec("INSERT OR IGNORE INTO state(id,data) VALUES(1,?)", string(b)); err != nil {
 		return fail(err)

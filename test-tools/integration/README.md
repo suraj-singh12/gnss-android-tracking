@@ -951,3 +951,20 @@ production browser controls with axe. `GNSS_ALERT_LOAD=1` saturation regression
 queues urgent alerts alongside the retained `GNSS_CONTROL_LOAD=1` Sync regression while preserving SOS/LIVE/bulk ingestion priorities.
 Measured logs explicitly label wall-clock versus synthetic scheduling; physical
 latency/output/native runtime acceptance follows android/DEVICE-ACCEPTANCE.md.
+
+Issue #28 adds `map-radius-ui.cjs` (explicit synthetic georeferenced fixture in the
+real SQLite/server, independent switches and provider-blocked restart) and
+`map-radius-online.cjs` (real non-preset flat/hilly/boundary cases, independent
+big-endian raw HGT node comparisons). The latter exits nonzero for provider failures;
+`GNSS_RADIUS_PROVIDER_REPORT` names its JSON evidence. Both reuse existing
+`GNSS_COMMAND_BINARY`/browser environment conventions. Existing legacy rectangle
+acceptance is retained explicitly, not replaced by synthetic radius success.
+
+
+The #28 `map-radius-ui.cjs` fixture now also exports/imports a standalone terrain
+map and imports/opens a full-extent local PBF through the real server/SQLite APIs,
+with offline geographic rendering and axe. The existing Go map extension suite
+covers cumulative transfer consent, fallback HTTP fixtures, source boundaries,
+streaming PBF integrity/resource limits and malicious portable packages. None of
+these synthetic sources is public-provider or native OS acceptance. The unchanged
+real-provider workflow reports its failures separately; do not waive it.

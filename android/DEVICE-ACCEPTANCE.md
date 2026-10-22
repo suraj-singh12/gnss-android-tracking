@@ -655,3 +655,13 @@ Real sound/vibration; DND/muted behavior; locked-screen/OEM/Doze; native macOS/W
 runtime; real offline LAN fleet/endurance: **NOT TESTED until this procedure runs**.
 The inherited separate external Overpass/map-provider CI failure remains visible
 and outside #26; it must not be concealed by these software or field results.
+
+### Issue #28 geographic background preservation
+
+Use the custom-radius native procedure in `docs/ui-acceptance.md` with the same
+exact-source APK/Command assets. During vector/DEM acquisition, cancellation and
+restart, compare immutable Android WGS84 measurements with Command durable receipts,
+SOS/operator ACK, LIVE freshness, history and authenticated controls/recipient ACK.
+Exercise 20 devices and a 21st joining; downloading a background map must not change
+quality/distance, Recording or Travel Back. Physical Android/native acceptance remains
+NOT TESTED until executed; Linux fixtures/cross-builds are not substitutes.

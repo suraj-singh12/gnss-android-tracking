@@ -464,7 +464,9 @@ async function wait(check) {
   await page.locator("#map-search-results").selectOption({ index: 1 });
   assert.equal(await page.locator("#map-lat").inputValue(), "28.617");
   for (const size of ["500", "1000", "custom"]) {
-    await page.locator("#map-area").selectOption(size);
+    await page.locator("#map-shape").evaluate(e=>e.closest("details").open=true);
+  await page.locator("#map-shape").selectOption("rectangle");
+  await page.locator("#map-area").selectOption(size);
     if (size === "custom") {
       await page.locator("#map-width").fill("1500");
       await page.locator("#map-height").fill("300");
@@ -560,6 +562,7 @@ async function wait(check) {
   });
   await page.locator('[data-close="layers"]').click();
   await page.locator("#open-map").click();
+  await page.locator("#choose-saved-map").click();
   await page
     .getByText("Acquire or import terrain for this saved map", { exact: true })
     .click();

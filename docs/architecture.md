@@ -336,8 +336,8 @@ an `offline_maps` library table to the existing Command SQLite file. The PR #17
 extension adds an associated `offline_terrain` table in that same file: bounded
 binary DEM crops, not GeoJSON raster samples. One source grid supports the selected
 hillshade, contours and elevation inspection; all use the existing map projection.
-Automatic acquisition uses fixed public AWS Open Data Skadi HTTPS tiles (maximum
-four), stitching via existing HGT crops into the same binary package/renderer.
+Legacy automatic acquisition uses fixed public AWS Open Data Skadi HTTPS tiles (maximum
+four per bounded crop), stitching via existing HGT crops into the same binary package/renderer.
 Vectors save first; terrain errors/retries retain vectors and previous terrain.
 DEM gzip decoding streams from the provider response: a deadline/cancellation while
 reading is reported as an interrupted transfer, not proof of corrupt DEM data.
@@ -431,3 +431,59 @@ The permitted app loop owns bounded best-effort repeats; deadlines combine absol
 TTL and monotonic duration. Restart stops/reconciles uncertain output without replay.
 See protocol/protocol-v1.md for authoritative bounds, uncertainty and cancellation
 races. Diagnostic ZIP redacts message content while retaining canonical alert events.
+
+### Issue #28 radius acquisition extension
+
+`offline_maps` owns a persisted ellipsoidal WGS84 circle plan. Additive
+`offline_map_chunks(map_id,chunk_key)` owns per-chunk GeoJSON, existing GTERR001 and
+layer evidence. There is no new receiver, database, geographic renderer, DEM engine
+or terrain format. An explicit browser sequence calls one bounded chunk endpoint;
+no autonomous background downloader runs after browser exit. Committed chunks
+survive exit, failure and response loss. Request identity is deterministic from the
+centre/radius. Additional product selections reuse that map and its native samples. Child asset + success evidence commit in one transaction;
+failed/interrupted attempts cannot publish a validated asset. Legacy maps remain readable.
+
+A 240-arc-second geographic grid bounds native crops and splits antimeridian regions.
+GeographicLib's WGS84 direct geodesic defines the requested circle; optimized longitude
+extrema bound it independently of Mercator. Conservative envelope chunks are deliberately
+supersets, never claimed as an exact source-data percentage. A polar/projection limit,
+2,048-chunk plan limit, 256 MiB child-asset quota, disk reserve and viewport rendering
+budget produce explicit reasons instead of silent radius/tile truncation. Source
+cache I/O, HTTP, decode and encode run outside the receiver mutex; only bounded child
+transactions use it. Existing raw/ACK, quality, SOS, LIVE, controls and projections
+are untouched. Source cache is disposable, SHA-verified and bounded to four full tiles;
+regions can contain more than four tiles through sequential reuse and eviction.
+
+The existing browser renderer lazily loads up to eight visible chunk grids and
+100,000 vector coordinates, shares contour levels across them, clips halos at core
+bounds and preserves void transparency. All overlays share its authoritative WGS84
+positions. Source/coverage metadata and render availability remain separate. See the
+Command README for API/resource/operator details and UI acceptance for evidence limits.
+
+
+### Issue #28 automatic acquisition and standalone map portability
+
+The existing radius map job is the sole acquisition owner. Its map-owned child transfer ledger
+persists cumulative approved/reserved/received body bytes across all providers and
+retries; no second queue, renderer or map library is introduced. The initial 5 MB
+allowance cannot silently escalate. HTTP bodies reserve bounded bytes before reads,
+and announced large fallback requires explicit additional approval. See Command
+README for exact accounting and resource limits.
+
+Exact verified chunks and covering source indexes precede Overpass. Failure triggers
+bounded machine-readable Geofabrik discovery with polygon/hole checks and a single
+regional attempt. Publisher-declared PBF extent/revision/ways-only scope is distinct
+from actual saved chunk envelopes and browser terrain derivation. Streaming PBF
+framing uses the published generated OSM protobuf schema; bounded two-pass indexing
+writes disposable source rows into additive `offline_osm_sources/nodes/ways` tables
+in the same SQLite file. Only completed source rows are reused; unpromoted index
+rows are cleaned on startup/retry. Original GNSS/SOS tables are never modified by map
+operations. Node writes yield every 256 rows; way lookup/geometry work uses the
+existing read connection outside the receiver mutex.
+
+Standalone `.gmap.zip` validates bounded entries, canonical requested coverage,
+asset checksums/formats and missing-layer disclosure before atomic map-library
+publication. Verified chunks/GTERR001 and compatible terrain derivation remain the
+operational assets. This archive is not frozen recording evidence; #38 retains that
+separate ownership. UI uses one Map & Layers dialog with Download New Map, Use
+Existing Map and Import Map, existing Saved Maps selection and Layers controls.

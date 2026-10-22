@@ -157,3 +157,24 @@ OEM/OS, native GNSS or physical field acceptance.
 | Room / SQLite / Sender | Existing v6 schema, enrollment/HMAC/nonces/order/TTL/dedupe/result digests; active alerts excluded from resolved pruning. Real bridge 1/5/20 plus late join. |
 | SOS / LIVE / bulk Sync | Existing authorities/controls/notification IDs unchanged; same Sender priority and bounded control request; saturation/bridge regression. |
 | Physical/native acceptance | Real audio, DND/mute, locked/OEM/Doze, native macOS/Windows and real offline fleet/endurance NOT TESTED until operator session. #24/#25 remain OPEN. |
+
+## Issue #28 preservation
+
+| Surface | Owning mechanism | Verification |
+| --- | --- | --- |
+| Radius/centre, map selection, units, requested circle | Existing Download Map and GeoMap projection | Ellipsoid analytic references, antimeridian and polar tests; radius browser fixture |
+| Partial vector/DEM, restart, source evidence | Existing SQLite library, additive child chunks, GTERR001 | Empty OSM, immutable complete retry, noncontiguous cancel/resume, failed-write rollback |
+| Contours/hillshade/elevation, voids and seams | Existing Terrain/GeoMap, common visible contour levels | Independent native sample assertions; Chromium layer switches/offline restart |
+| Durable GNSS/SOS/LIVE and 21st party | Unchanged receiver/raw/projection/alerts | Stalled-provider fleet test; existing saturated writer controls/alert regressions |
+| Legacy import/rectangle terrain and UI | Existing paths retained explicitly | Existing map/DEM and browser suites |
+
+No Android Settings (#39), recording export packages (#38), GNSS quality/distance,
+recording/Travel Back or remote-control authority changes belong to this extension.
+
+
+| #28 extension surface | Existing owner reused | Verification |
+| --- | --- | --- |
+| Automatic fallback and 5 MB cumulative consent | Map job/chunk persistence and bounded provider clients | Known/unknown lengths, 4+4 MB, 200 MB fallback gate, timeout/429/502/503/504 and restart tests |
+| PBF crop/full extent and source cache | Same SQLite, GeoJSON chunks and viewport renderer | Sparse/dense nodes, missing references, full extent, polygon holes, cache reuse and bounded index/fleet test |
+| Standalone map package | Existing saved vectors/GTERR001 and terrain algorithms | Partial round trip to clean DB, idempotence, corrupt/malicious archive and write-failure rollback |
+| Simplified map lifecycle | Same Map & Layers/Saved Maps/Layers controls | Chromium package/PBF/import/terrain/offline restart and axe; existing dashboard/SOS/control regressions |

@@ -5,6 +5,161 @@ local SQLite, deterministic recording/track engine, and embedded offline dashboa
 Field operators need only the executable and a browser already on their laptop.
 No Node, Python, Docker, external WebAssembly runtime or database service is needed.
 
+## Custom-radius maps (Issue #28)
+
+In **Map & layers → Download Map**, choose a centre by exact WGS84 coordinates,
+existing place search, or **Pick centre on current map**. Enter any finite positive
+radius in metres or kilometres; the value is preserved. The old rectangle controls
+remain an explicitly selected compatibility option. Preview is local and displays
+an ellipsoidal WGS84 geodesic circle, centre, radius, conservative geographic/source
+envelope, source tile count and resource bounds. The circle is not a Mercator pixel
+circle. Longitude wraps at the antimeridian. A request reaching the poles or outside
+Web Mercator coverage receives a specific refusal, without truncation.
+
+Review coverage/resource estimates, then Download Map. The cumulative network allowance starts at **5,000,000 bytes per logical job**, across vectors, DEM, source discovery, errors, retries and fallback. Actual sizes may be unknown; an oversized announced response stops before its body is read, and unknown responses stop at the allowance. Additional explicit approval is required before escalation. Preparation automatically reuses verified exact geographic chunks and covering indexed sources, then tries bounded Overpass (OSM ways only) and independent Skadi/HGT terrain. A valid empty OSM response is successfully acquired sparse
+coverage; missing `elements`, incomplete remarks, malformed geometry, timeouts and
+HTTP errors are failures. On Overpass failure, Command automatically discovers the smallest single covering Geofabrik regional polygon from its machine-readable index and tries its supported `.osm.pbf` extract. Polygon holes/boundaries are checked, not merely overlapping bounding boxes. A larger parent region may be necessary at borders. Unsupported boundary/dateline geometries remain gaps rather than invented coverage. Public providers have no SLA. HTTP 429/503 Retry-After extends the local cooldown; explicit
+retry is required. Skadi retains the existing bounded three-attempt transient retry,
+CRC/size checks and network/processing deadlines. Provider outages do not erase assets.
+
+The existing SQLite `offline_maps` row owns the request. Additive
+`offline_map_chunks` child rows contain validated GeoJSON and unchanged GTERR001
+native crops; legacy `offline_terrain` maps/imports remain supported. Each 240-arc-second
+chunk plus sample halo fits the existing 257² decoder. Regions may use more than four
+source tiles; the four-tile bound applies only to an individual halo crop. Cells are
+never upsampled. Source bounds, EGM96 datum, 1-arc-second native spacing, attribution,
+hashes and actual transfer attempts remain in each saved DEM's metadata/evidence.
+The horizontal CRS is WGS84; source resolution/accuracy varies and is not survey grade.
+Retain OSM ODbL and the complete Skadi multi-source notice when redistributing.
+
+Budgets are explicit: 2,048 plan chunks, 256 MiB total chunk assets, 20 MiB/100,000
+coordinates per vector chunk, 257² samples per terrain crop, four verified full HGT
+source files (about 99 MiB) in `<database>.map-cache`, and a 128 MiB free-disk reserve
+plus 40 MiB working allowance before each acquisition. A large envelope exceeding
+plan/DEM storage bounds is refused with the actual chunk count; there is no preset
+radius substitution. Source transfer sizes are unknown until observed; the preview
+shows per-chunk source-request upper bounds (including possible cache eviction), not invented sizes or ETAs. The disposable cache validates
+SHA-256 and HGT byte count before reuse; validated map products remain in SQLite.
+Keep the SQLite DB/backups private and on a writable local filesystem. Removing the
+disposable source cache while Command is stopped cannot remove saved map products.
+
+One network/decode/save task runs at a time. Network and raster work hold no receiver
+mutex. Each SQLite asset/evidence update is a short atomic transaction with a five-second
+context. Cancel aborts the active request; completed chunks remain usable. **Retry Missing** retries missing
+work, including after restart or lost responses. Identical centre/radius requests
+resolve to one deterministic saved-map identity. Selecting additional terrain products
+updates that entry; validated native DEM samples are reused without provider calls. Completed chunks are immutable on
+retry. An interrupted request is not labelled complete; a failed replacement cannot
+replace earlier validated assets. A physical full disk may prevent even error evidence
+from being saved; existing SQLite transactions retain earlier data.
+
+**Save source & coverage manifest** exposes requested geometry separately from actual
+vector/DEM chunk envelopes, errors, attempts, timestamps, bytes, source metadata and
+valid/void cell counts. Cell counts include sampling halos and are not percentages
+of the circle. No geographic percentage is invented from sparse OSM features or DEM
+samples. Unsupported DEM latitude chunks remain explicit gaps while vectors operate.
+Contours/hillshade require valid cell neighborhoods and successful browser processing;
+the Layers controls and rendering warnings report their availability independently.
+Source acquired does not prove that a product rendered successfully.
+
+Offline reopening reads only stored assets. The same geographic renderer positions
+vectors, DEM, contours, hillshade and original GNSS/SOS. Coverage outlines show the
+requested circle and acquired/missing chunk envelopes. Adjacent visible DEM chunks
+share contour levels and clip sampling halos at their authoritative core bounds.
+Void neighborhoods stay transparent. At most eight visible chunks and 100,000 vector
+coordinates load into the browser; zoom in when the visible envelope exceeds this
+budget. This bounds display work without claiming missing overview detail is acquired
+terrain. Pan/zoom loads other stored chunks locally. Each raw chunk remains accessible
+through `/local/maps/{id}/chunks/{key}?layer=vector` or `layer=terrain`; adding
+`format=gterrain` to terrain exports the existing binary format. **Export Map** produces a standalone `.gmap.zip` for both custom-radius and legacy maps, including verified vectors, GTERR001 DEM, deterministic compatible terrain derivation, provenance and missing-layer disclosure. No recording package is created here.
+
+### Automatic sources, transfer consent and recovery
+
+The main Map & Layers dialog shows the active map/completeness and three choices:
+**Download New Map**, **Use Existing Map**, **Import Map**. Selecting the existing
+Saved Maps selector activates the map. Retry Missing, Export and confirmed Delete
+use that same selection. There is no Reuse button. Legacy rectangles/GeoJSON/DEM
+and provider details remain in disclosures; the Layers toolbar keeps visibility
+independent of availability. Save & Use activates durably committed partial data;
+Cancel stops the current request and retains every verified asset.
+
+The logical-job transfer ledger is an additive `offline_map_transfers` child of the existing map library and
+survives browser loss, retries and Command restart. It reserves at most 32 KiB
+before each body read; a crash can conservatively overcharge one read. Measured
+received body bytes and reserved/approved bytes are separate. These are application
+response-body measurements, excluding protocol overhead and transport/socket
+read-ahead; they are not a wire-level meter. Budgeted preparation uses HTTP/1, a
+4 KiB HTTP read buffer and a requested 128 KiB socket receive buffer (OS effective
+size/accounting can differ; Linux commonly doubles this to 256 KiB per connection), disables automatic decompression and connection reuse,
+and avoids unaccounted HTTP/2 stream-window buffering. Native wire-level limits
+remain part of field acceptance. Unverified redirects are refused. Regional latest-file redirects are limited to
+two authenticated publisher download hosts with the same dataset path/identity
+(or its dated snapshot); the same cumulative gate applies on every hop. No response
+is drained past consent. Known large fallback announces its **cumulative** required
+allowance; the operator must approve it before retry. Unknown lengths stop at the
+approved cap and request another bounded increase. No fake aggregate percentage or
+ETA. Legacy online previews are limited to 5 MB; use the primary radius path for
+larger approved acquisition. Subsequent legacy DEM uses the same saved-map ledger,
+including its recorded vector source bytes.
+
+Geofabrik discovery caches a hash/address-validated index for 24 hours. One regional
+attempt is made per unresolved chunk; failed attempts end and expose Retry Missing.
+Regional download has a five-minute limit and a one-minute publisher cooldown,
+extended by Retry-After. Overpass retains its ten-second cooldown; Skadi retains
+three bounded attempts and its independent six-minute/processing limits. Chunk
+requests/import indexing have a ten-minute deadline. These extensions apply only
+to local preparation routes, not GNSS ingestion. Regional transfer/indexing requires
+3 GB free-space admission, at most 1 GB total source input, eight verified source
+revisions, five million indexed nodes and 512 MiB supported-way geometry; oversized
+regions are refused. A source is published only after both bounded passes validate
+its nodes and selected-way references. Its checksum/revision and source scope remain
+in the acquired chunks. Different source snapshots are disclosed per chunk, not
+claimed as a coherent global OSM revision. Existing maps are never evicted.
+
+### Import Map and standalone portability (format 1)
+
+Import supports existing GeoJSON and terrain, local `.osm.pbf`, and `.gmap.zip`.
+PBF offers **Extract Centre + Radius** or **Use Full Supported Coverage**. Full
+coverage means the file's declared supported non-wrapping extent, bounded to 2,048
+chunks; unsupported larger extents require a crop. The importer supports the same
+tagged-way scope as Overpass, including sparse/dense nodes and referenced ways;
+relations, routing, history/change PBF and unsupported compression are rejected or
+explicitly outside its feature scope. It does not assert publisher completeness
+from feature density. On-disk source indexes use the existing Command SQLite file;
+node batches yield the receiver writer every 256 rows. Geographic extraction and
+viewport loading use the existing GeoJSON chunks and eight-visible-chunk renderer.
+At large overview scales, zoom in for detail; no enormous region is loaded into RAM.
+PBF block sizes are bounded to 32 MiB encoded / 16 MiB expanded. Tagged ways
+with fewer than two nodes cannot form lines/polygons: their present references
+are still validated, and their omitted count/reason is retained in source provenance.
+Large blocks yield individual way writes; each way remains capped at 100,000 nodes. Importing a local
+file performs no network transfer. Verified indexed datasets are reused automatically.
+
+The ZIP contains `manifest.json` with `format: GNSS-Command-map`, `version: 1`,
+`name`, the canonical saved `map` request/coverage, `partial`, attribution/derivation
+notes and `assets` (`path`, `sha256`, `bytes`, chunk/layer and original evidence).
+Assets are `chunks/<key>.vector`, `chunks/<key>.terrain`, or legacy
+`terrain.gterrain`; a legacy vector is embedded in `map`. Missing chunks/layers
+remain missing. GTERR001 plus the compatible built-in Horn hillshade/marching-square
+contour algorithms regenerate selected terrain locally. OSM ODbL and complete Skadi
+attribution travel with the package. There are no source-cache regional datasets,
+GNSS originals, recordings, credentials or phone controls in this format.
+
+Import validates every declared entry/CRC/hash, version, geometry/terrain, canonical
+plan and missing-layer disclosure before publication. It rejects traversal, symlinks,
+duplicate/undeclared/missing entries, unsupported formats, oversized entries/archives
+and bombs. Limits: 256 MiB expanded assets, 20 MiB per chunk, 2 MiB manifest. Staging
+is local and bounded; failed publication rolls back atomically. Portable imports start a fresh 5 MB network allowance; they never inherit another
+installation’s approval or charge its historical source bytes as new transfer.
+Original source evidence remains provenance. Identical portable
+imports resolve to the same map identity and cannot overwrite existing maps. Package
+checksums establish byte integrity, **not creator authenticity**. This is operational
+map portability; #38 owns frozen map revisions inside evidence recordings.
+
+Issue #28 acceptance evidence is recorded in `docs/ui-acceptance.md`. Linux cross-builds
+and synthetic browser surfaces are not native macOS/Windows or real-provider acceptance.
+
+
 ## Build and run
 
 Development requires Go 1.24.7 or newer. From `command`:
@@ -223,7 +378,7 @@ WGS84/EPSG:4326, EGM96 integer metre heights, north-first rows, big-endian int16
 (E/W narrows with latitude); [composite source resolution/accuracy varies](https://github.com/tilezen/joerd/blob/master/docs/data-sources.md).
 Grid spacing is not surveyed accuracy or uniform bare-earth detail. No voids are
 fabricated; an adjacent valid seam sample at the same geographic node may be used.
-Automatic coverage is conservatively limited to 56°S–60°N; no antimeridian crossing.
+Automatic coverage is conservatively limited to 56°S–60°N. Legacy rectangle requests do not cross the antimeridian; custom-radius requests split it into geographic chunks.
 Cross-tile stitching is supported automatically, not by manual multi-file upload.
 A 500 m area still downloads full source tiles: the verified Mussoorie tile is
 18,131,689 compressed bytes / 25,934,402 decoded bytes. Full tiles are not persisted.
@@ -234,13 +389,13 @@ provider, UTC acquisition timestamp, exact tile URLs and decoded SHA-256 hashes
 are retained in terrain metadata/export and shown in Layers. Retain these notices
 when redistributing. No EGM2008 conversion, mandatory credentials or paid dependency.
 
-Select a location/coordinate **centre**, default 500×500 m, choose optional terrain,
+For the legacy rectangle option, select a location/coordinate **centre**, default 500×500 m, choose optional terrain,
 Preview, then Download for Offline Use. Vectors commit first, independently of DEM
 success. A terrain failure warns and retains vectors and any previous terrain.
 Select that saved map, open **Acquire or import terrain for this saved map**, select
 components and press **Download / retry selected terrain**; no duplicate vector map
 is created. No manual HGT is needed. Unchecked terrain makes no DEM request.
-Local HGT/`.gterrain` import remains available. Loopback-only same-origin JSON
+Local HGT/`.gterrain` import remains available for legacy single-grid maps. Loopback-only same-origin JSON
 `POST /local/maps/{id}/terrain-download` takes `components`; bounds come from the
 saved map. Network I/O never holds the Store lock. Storage/schema/GTERR001 remain
 compatible; optional provenance metadata is additive. The previous format limits

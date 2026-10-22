@@ -2,7 +2,19 @@
 "use strict";
 const Terrain = (() => {
   function elevation(g, lon, lat) {
+    // The display viewport may use unwrapped Mercator longitudes at the dateline.
+    if (lon > 180 || lon < -180)
+      lon = ((((lon + 180) % 360) + 360) % 360) - 180;
+    if (g.grids) {
+      for (const grid of g.grids) {
+        const value = elevation(grid, lon, lat);
+        if (value !== null) return value;
+      }
+      return null;
+    }
     const [w, s, e, n] = g.bounds;
+    if (lon === 180 && w === -180) lon = -180;
+    else if (lon === -180 && e === 180) lon = 180;
     if (lon < w || lon > e || lat < s || lat > n) return null;
     const x = ((lon - w) / (e - w)) * (g.columns - 1),
       y = ((n - lat) / (n - s)) * (g.rows - 1);
@@ -32,17 +44,48 @@ const Terrain = (() => {
     }
     return result;
   }
-  function hillshade(g) {
+  function hillshade(g, neighbors = []) {
+    function sample(x, y) {
+      if (x >= 0 && x < g.columns && y >= 0 && y < g.rows)
+        return g.samples[y * g.columns + x];
+      // Native samples across an adjacent crop/dateline, never interpolated or invented.
+      const step = g.arc_seconds / 3600;
+      let lon = g.bounds[0] + x * step;
+      if (lon > 180 || lon < -180)
+        lon = ((((lon + 180) % 360) + 360) % 360) - 180;
+      const lat = g.bounds[3] - y * step;
+      for (const other of neighbors) {
+        if (other.arc_seconds !== g.arc_seconds) continue;
+        let nativeLon = lon;
+        if (nativeLon === 180 && other.bounds[0] === -180) nativeLon = -180;
+        else if (nativeLon === -180 && other.bounds[2] === 180) nativeLon = 180;
+        const fx = (nativeLon - other.bounds[0]) / step,
+          fy = (other.bounds[3] - lat) / step;
+        const ix = Math.round(fx),
+          iy = Math.round(fy);
+        if (
+          Math.abs(ix - fx) < 1e-5 &&
+          Math.abs(iy - fy) < 1e-5 &&
+          ix >= 0 &&
+          ix < other.columns &&
+          iy >= 0 &&
+          iy < other.rows
+        ) {
+          const value = other.samples[iy * other.columns + ix];
+          if (value !== null) return value;
+        }
+      }
+      return null;
+    }
     const values = new Uint8ClampedArray(g.columns * g.rows * 4),
       dy = (g.arc_seconds / 3600) * 111320,
       dx = dy * Math.cos((((g.bounds[1] + g.bounds[3]) / 2) * Math.PI) / 180);
     // Horn 3x3 gradient; illumination NW at 45 degrees. No detail upsampling.
-    for (let y = 1; y < g.rows - 1; y++)
-      for (let x = 1; x < g.columns - 1; x++) {
+    for (let y = 0; y < g.rows; y++)
+      for (let x = 0; x < g.columns; x++) {
         const a = [];
         for (let j = -1; j <= 1; j++)
-          for (let i = -1; i <= 1; i++)
-            a.push(g.samples[(y + j) * g.columns + x + i]);
+          for (let i = -1; i <= 1; i++) a.push(sample(x + i, y + j));
         if (a.some((v) => v === null)) continue;
         const gx =
             (a[2] + 2 * a[5] + a[8] - (a[0] + 2 * a[3] + a[6])) / (8 * dx),
@@ -57,7 +100,7 @@ const Terrain = (() => {
       }
     return values;
   }
-  function contours(g) {
+  function contours(g, chosenInterval) {
     const valid = g.samples.filter((v) => v !== null);
     let low = Infinity,
       high = -Infinity;
@@ -67,7 +110,9 @@ const Terrain = (() => {
     }
     const wanted = Math.max(g.arc_seconds > 1 ? 10 : 5, (high - low) / 12),
       power = 10 ** Math.floor(Math.log10(wanted)),
-      interval = [1, 2, 5, 10].map((v) => v * power).find((v) => v >= wanted);
+      interval =
+        chosenInterval ||
+        [1, 2, 5, 10].map((v) => v * power).find((v) => v >= wanted);
     const segments = [],
       [w, s, e, n] = g.bounds,
       coord = (x, y) => [
@@ -121,20 +166,40 @@ const Terrain = (() => {
         }
     return { interval, segments };
   }
-  function prepare(g) {
+  function prepare(g, interval, neighbors) {
     let contour = null,
       contour_error = null;
-    if (g.components.contours) {
+    let validCells = 0;
+    for (let y = 0; y < g.rows - 1; y++)
+      for (let x = 0; x < g.columns - 1; x++) {
+        const i = y * g.columns + x;
+        if (
+          [i, i + 1, i + g.columns, i + g.columns + 1].every(
+            (k) => g.samples[k] !== null,
+          )
+        )
+          validCells++;
+      }
+    if (g.components.contours && !validCells)
+      contour_error =
+        "Source has no valid four-corner DEM cells; contours unavailable.";
+    if (g.components.contours && validCells) {
       try {
-        contour = contours(g);
+        contour = contours(g, interval);
       } catch (error) {
         if (!error.message.includes("Contour complexity limit")) throw error;
         contour_error = error.message;
       }
     }
+    const shades = g.components.hillshade ? hillshade(g, neighbors) : null;
+    const hasShade = shades?.some((v, i) => i % 4 === 3 && v > 0);
     return {
       ...g,
-      shades: g.components.hillshade ? hillshade(g) : null,
+      shades: hasShade ? shades : null,
+      hillshade_error:
+        g.components.hillshade && !hasShade
+          ? "Source lacks valid 3×3 DEM neighborhoods; hillshade unavailable."
+          : null,
       contour,
       contour_error,
     };

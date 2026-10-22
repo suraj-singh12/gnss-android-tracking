@@ -401,3 +401,175 @@ Android notification action and Command Instructions local action must persist a
 single recipient event and leave SOS untouched; invalid permissions show truthful
 blocked/unknown outcomes. Apply the physical checklist for actual output/locked/OEM
 behavior; synthetic browser/Robolectric evidence does not satisfy those gates.
+
+## Issue #28 custom-radius acceptance (2026-10-21)
+
+Starting integration: `22afce482b4c18d553652d377917390006acc53d`.
+Working branch: `devX/issue-28-custom-map-acquisition`. Working/canonical instruction
+blob: `3b6e0d42935c04c68a4332f82064d82b0301cc04`.
+PR #17/#18/#19/#20 heads are ancestors of this integration and their map/terrain
+mechanisms are retained. #32/#33 are not ancestors; their focused diagnostics and
+provider findings were inspected. No outstanding PR was merged/cherry-picked or rewritten.
+The unverified secondary provider from #33 was not adopted. Existing real-provider
+assertions remain; selecting the legacy rectangle explicitly preserves those tests.
+
+Run with Go 1.24.7+, Node, Playwright and Chromium:
+
+```sh
+cd command
+go test -race ./... && go vet ./...
+go build -o /tmp/gnss-command ./cmd/party-tracker
+cd ..
+GNSS_COMMAND_BINARY=/tmp/gnss-command node test-tools/integration/map-radius-ui.cjs
+GNSS_COMMAND_BINARY=/tmp/gnss-command node test-tools/integration/map-radius-online.cjs
+```
+
+Use the existing `GNSS_PLAYWRIGHT_MODULE`, `GNSS_AXE_MODULE`, `GNSS_CHROMIUM` and
+`GNSS_SCREENSHOT_DIR` overrides when installed outside Node's normal resolution.
+The real-provider runner writes `GNSS_RADIUS_PROVIDER_REPORT`; it exits nonzero
+on provider/data failures. The existing matched-assets workflow runs these checks
+and uploads the separate source/provider/visual evidence; green offline tests never
+turn a failed real-provider result into a pass.
+
+Deterministic evidence:
+
+- PASS: a wholly void source crop no longer aborts a valid neighbouring crop;
+  no surface is filled across the void. Entirely void acquisitions persist source
+  evidence and remain unavailable. Contour/hillshade controls reflect valid cell
+  neighborhoods independently. Valid-cell envelopes remain distinct from full bounds.
+- PASS: one saved job persists native crops from 16 separate source tiles while
+  keeping four source files (103,737,608 raw bytes) in cache. The fixture transferred
+  2,575,766 compressed bytes and stored 1,485,904 bytes in 4.37 s. This is explicitly
+  16/1,764 chunks, not whole-circle completeness or a public-provider pass.
+- PASS: antimeridian hillshade uses only acquired native neighbour nodes; ±180°
+  elevation lookup and saved-request identity share the same geographic position.
+- PASS: partial edge chunks intersect the exact requested envelope rather than
+  overfetching full grid cells. Valid circles at ±85.05° retain their whole coverage.
+- PASS: source-query bounds round outwards rather than omitting border features;
+  abandoned cache-publication temporary files are removed on retry/restart.
+- PASS: independent equatorial WGS84 analytic east-distance references; radii
+  373 / 12,345 / 151,731 m produce conservative envelopes of 4 / 16 / 1,764 chunks
+  and 4 / 4 / 16 possible source tiles at centre 0°,0°. No four-tile region truncation.
+- PASS: Delhi and Himalayan centres, degree crossing, antimeridian splitting,
+  polar/projection restrictions and explicit excessive-resource refusal. The
+  151,731 m region is geometry/planning evidence, not a downloaded 16-tile dataset.
+- PASS: independent signed big-endian source samples, native north-first rows,
+  EGM96 metadata/spacing, exact saved DEM node alignment, voids, existing multi-tile
+  seam/CRC/gzip/error tests, empty valid OSM acquisition and complete-chunk reuse.
+- PASS: noncontiguous saved vectors survive stalled-provider cancellation; retry
+  fills the missing chunk. Identical request identity survives restart/response loss.
+  Additional contour/hillshade selections reuse the saved native source and map ID.
+  SQLite trigger-injected disk-write failure rolls back replacement bytes. This is
+  transactional fault injection, not physical disk exhaustion or OS crash testing.
+- PASS: injected saved-terrain read failure retains validated vectors; injected
+  vector read failure retains terrain. Source and rendering failures remain distinct.
+- PASS: actual Chromium/SQLite fixture screenshots for requested circle, vectors,
+  contours+hillshade, each independent switch, void transparency and offline restart.
+  `map-radius-ui.cjs` reports zero axe violations. Its georeferenced hill/valley is
+  explicitly synthetic. It is not a real mountainous-source visual comparison.
+- Measured non-race native fixture: one 156,608-byte compressed source, 25,934,402
+  decoded bytes, 841 saved samples / 3,100 encoded bytes; acquisition+save
+  180 ms, reload+decode 0.148 ms in one Linux run. Times vary with environment/cache.
+  One Chromium visible-chunk fetch/processing run measured 306 ms. These are not
+  native-platform capacity guarantees or peak-memory measurements.
+- PASS: stalled provider while 21 devices durably submit GNSS and SOS (162 ms in
+  one non-race run; 818 ms in a separate race run). Existing saturated-writer test
+  with authenticated controls/alerts passed: fresh-priority p95/worst 419 ms with
+  21 uploads and 20 concurrent control polls. This does not establish a field SLA.
+
+Real-provider evidence (separate FAIL/BLOCKED category):
+
+| Case | Centre / radius | Planned chunks | Actual result |
+| --- | --- | --- | --- |
+| Flat local | 28.6139, 77.209 / 373 m | 1 | Overpass and Skadi proxy Forbidden; 0 completed |
+| Hilly degree boundary | 27.9999, 88.9999 / 1,234 m | 4 | Overpass and Skadi proxy Forbidden; 0 completed |
+| Larger hilly | 27.95, 88.95 / 7,317 m | 9 | Overpass and Skadi proxy Forbidden; 0 completed |
+
+Direct provider probes also returned CONNECT HTTP 403 for Nominatim/Overpass/Skadi.
+No provider bytes, geographic completeness percentage or real terrain visual pass
+is claimed. Real source quality, native offline display, real-provider long transfer
+and slow-network recovery remain acceptance gates. Historical thin/incomplete terrain
+reproduction: NOT TESTED (exact failing source revision/settings unavailable).
+
+Local Android build/lint/tests and real Room→Command bridge: BLOCKED before tests
+by Gradle bootstrap `UnknownHostException: downloads.gradle.org`; no local Android
+pass is claimed. The workflow still owns matched APK/macOS ARM64/Windows AMD64 assets
+and exact-revision checksums. Cross-build success is not native execution. Physical
+macOS/Windows/Android, physical full disk, power-loss crash recovery, sustained
+native memory/disk pressure and two-hour fleet field acceptance: NOT TESTED.
+
+Native operator steps (both macOS ARM64 and Windows AMD64):
+
+1. Use matched exact-source assets/checksums and the existing signing/data-preservation
+   procedure. Record SHA, OS, browser and writable disk/free space. Keep the earlier DB
+   backup and executable. Never uninstall a tracker with unsynchronised data.
+2. Enter a non-preset radius via exact coordinates, search and map selection; verify
+   units preserve the request. Include a known flat place, a known hill/valley,
+   degree/antimeridian boundaries and a resource-refused request. Review the actual
+   source envelope, transfer upper bounds and confirmation before acquiring.
+3. Cancel during vector transfer, DEM transfer, decode and save; restart and Resume.
+   Export the manifest. Compare completed/failed chunks, raw HGT samples/hash, voids,
+   datum and native resolution. A retry of complete chunks must make no provider call.
+4. Toggle contours/hillshade independently, pan/zoom/resize across chunk boundaries,
+   inspect known reference heights and source voids. Check 1/5/20 devices and device
+   21 joining, SOS/operator ACK, LIVE/history/controls and original GNSS positions.
+5. Exit Command, disconnect internet, restart the same DB, select Saved Maps and
+   inspect source/coverage evidence and all available layers. No external request
+   may be required for display. Zoom in when overview detail exceeds browser limits.
+6. Preserve screenshots, actual bytes/tile/chunk counts, process peak RAM/CPU/disk,
+   save/reload/interaction timings and failures. Mark source gaps and untested steps
+   explicitly. Keep #24/#25/#26 open for physical testing; do not merge or release.
+
+Local software regression summary for #28: Command full Go race suite and vet pass;
+test-tools protocol/simulator/receiver race suite and vet pass; Node map/terrain/SOS
+checks pass; actual-server Chromium dashboard, map-download, radius, SOS and phone
+controls checks pass. Optional Go browser-seed test skips in an ordinary run and is
+executed explicitly by the browser runner. Earlier renderer smoke/fixture failures
+were corrected before final verification; no assertions were weakened. Exact final
+source/checksum/CI identifiers are reported in the issue PR, avoiding self-referential
+commit hashes in this document.
+
+
+### Issue #28 automatic-map extension acceptance (continuation of PR #43)
+
+Software evidence is separate from public-provider and native acceptance. The owning
+Command README documents transfer consent/accounting, provider/source/PBF limits and
+the version-1 standalone map archive. Deterministic tests exercise timeout and
+429/502/503/504 fallback, polygon holes and boundaries, exact-source reuse, 4+4 MB
+cumulative consent, unknown sizes, 200 MB fallback escalation, persistent allowances,
+PBF node/reference validation, partial package parity/idempotence, malicious archives
+and injected database publication failure. Browser evidence covers local full-extent
+PBF, portable terrain round trip, offline restart, independent layer failures,
+three viewports/two themes and accessibility. See PR #43 for exact tested SHA and
+final CI/artifact results rather than treating earlier runs as extension evidence.
+
+A Linux 192,000-node / 32-block PBF fixture (2,681,751 bytes) indexed during real HTTP
+receipt of 21 parties' LIVE and 21 SOS messages. One race-instrumented run took
+4.13 s, sampled process heap peak 9,716,352 bytes; 42 durable HTTP ACK p50 8.93 ms,
+p95 11.89 ms, worst 17.38 ms. This finite fixture is not a 1 GB country-file, native
+memory ceiling or field SLA. Preserve exact-run logs and use CI for final revisions.
+
+Supplemental Linux local-file acceptance used the historical Delaware PBF shipped
+in `github.com/paulmach/osm@v0.9.0/testdata` (7,812,234 bytes; SHA-256
+`71ce7bd152d68cb9bdb11d9de4548db86d103f664bb8620a210ddee433534647`).
+The production import indexed 723,870 nodes / 65,674 supported ways, explicitly
+reported eight non-renderable ways, and extracted/rendered 175 features in a
+373 m crop around 39.157, -75.524 with outward networking blocked. One run took
+25.3 s with sampled process RSS peak 94,273,536 bytes. This exposed and fixed
+an obsolete per-block way-count guard and rejection of one-node ways; regression
+tests retain bounded individual writes and validate even degenerate references.
+This is historical real OSM data, not current public-provider or native acceptance.
+
+Future native/provider procedure: choose a small non-preset circle, a hilly boundary
+circle and a larger regional request. Record original centre/radius, preview/source
+polygons, approved cumulative transfer and actual bytes; force Overpass failure,
+approve a known regional size, cancel/restart/retry and verify only missing work.
+Repeat with unknown length and refused escalation. Import a real regional PBF in
+crop and supported-full modes; pan/zoom while 20+late-21st phones send GNSS/SOS.
+Export a complete and a partial map, transfer to a clean macOS ARM64 and Windows
+AMD64 Command with network disabled, compare vector/DEM samples/layers/provenance,
+then test corrupt archives, disk pressure and interruption without losing prior maps.
+Record source revisions/licenses, bytes, wall time, process RSS, ACK p50/p95/worst
+and screenshots. Physical macOS/Windows/Android, native disk/power-loss endurance and
+historical thin-terrain reproduction remain NOT TESTED until this is done. Public
+provider failures must remain visible independently of passing fixtures.

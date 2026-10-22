@@ -36,9 +36,7 @@
         <button id="open-quality">Quality settings</button
         ><button id="open-map">Map & layers</button
         ><a href="/local/field-report">Export diagnostics</a>
-        <button id="open-history" aria-label="Open Event History">
-          Events
-        </button>
+        <button id="open-history" aria-label="Events history">Events</button>
         <button id="appearance" aria-label="Switch to Night appearance">
           Night
         </button>
@@ -54,24 +52,99 @@
       </div>
     </header>
     <dialog id="phone-control" aria-labelledby="phone-control-title">
-      <div class="dialog-heading"><h1 id="phone-control-title">Live phone controls</h1><button data-close="phone-control" aria-label="Close phone controls">×</button></div>
-      <p>Commands address enrolled phones through their existing outbound connection. Offline / closed apps may not execute. Recording and historical map views never determine recipients.</p>
-      <div class="controls"><button id="control-one">Selected party</button><button id="control-all">All eligible phones</button><button id="control-none">Clear selection</button></div>
+      <div class="dialog-heading">
+        <h1 id="phone-control-title">Live phone controls</h1>
+        <button data-close="phone-control" aria-label="Close phone controls">
+          ×
+        </button>
+      </div>
+      <p>
+        Commands address enrolled phones through their existing outbound
+        connection. Offline / closed apps may not execute. Recording and
+        historical map views never determine recipients.
+      </p>
+      <div class="controls">
+        <button id="control-one">Selected party</button
+        ><button id="control-all">All eligible phones</button
+        ><button id="control-none">Clear selection</button>
+      </div>
       <div id="control-phones" aria-label="Remote recipients"></div>
-      <label>Instruction <select id="control-operation"><option value="reporting">Reporting interval</option><option value="adaptive">Adaptive GNSS persistence</option><option value="sync">Sync All Now</option><option value="tracking_start">Start Tracking</option><option value="tracking_stop">Stop Tracking</option><option value="alert">Phone alert (Normal / Urgent)</option></select></label>
-      <label>Reporting seconds (5–86400, step 5; blank restores local default)<input id="control-seconds" type="number" min="5" max="86400" step="5" value="10"></label>
-      <label><input id="control-adaptive" type="checkbox">Enable adaptive persistence (OFF otherwise; future measurements only)</label>
-      <label>Expires after seconds<input id="control-ttl" type="number" min="5" max="86400" value="300"></label>
-      <fieldset id="control-alert-options" hidden><legend>Phone alert</legend>
-        <label>Alert mode<select id="control-alert-mode"><option value="normal">Normal attention</option><option value="urgent">Urgent repeating</option></select></label>
-        <label>Message (optional, 160 characters)<input id="control-alert-message" maxlength="160" type="text"></label>
-        <label>Urgent output duration seconds (5–120)<input id="control-alert-duration" type="number" min="5" max="120" step="1" value="60"></label>
-        <label>Urgent repeat seconds (5–30)<input id="control-alert-repeat" type="number" min="5" max="30" step="1" value="10"></label>
-        <p>Alert expiry: 5–3600 seconds. Normal output is attempted once; its notification remains available until expiry/Stop. Urgent output stops at expiry, duration, local Stop or confirmed cancellation. Sound/vibration depend on Android settings; output attempted does not mean heard. Phone alerts are separate from SOS.</p>
+      <label
+        >Instruction
+        <select id="control-operation">
+          <option value="reporting">Reporting interval</option>
+          <option value="adaptive">Adaptive GNSS persistence</option>
+          <option value="sync">Sync All Now</option>
+          <option value="tracking_start">Start Tracking</option>
+          <option value="tracking_stop">Stop Tracking</option>
+          <option value="alert">Phone alert (Normal / Urgent)</option>
+        </select></label
+      >
+      <label
+        >Reporting seconds (5–86400, step 5; blank restores local default)<input
+          id="control-seconds"
+          type="number"
+          min="5"
+          max="86400"
+          step="5"
+          value="10"
+      /></label>
+      <label
+        ><input id="control-adaptive" type="checkbox" />Enable adaptive
+        persistence (OFF otherwise; future measurements only)</label
+      >
+      <label
+        >Expires after seconds<input
+          id="control-ttl"
+          type="number"
+          min="5"
+          max="86400"
+          value="300"
+      /></label>
+      <fieldset id="control-alert-options" hidden>
+        <legend>Phone alert</legend>
+        <label
+          >Alert mode<select id="control-alert-mode">
+            <option value="normal">Normal attention</option>
+            <option value="urgent">Urgent repeating</option>
+          </select></label
+        >
+        <label
+          >Message (optional, 160 characters)<input
+            id="control-alert-message"
+            maxlength="160"
+            type="text"
+        /></label>
+        <label
+          >Urgent output duration seconds (5–120)<input
+            id="control-alert-duration"
+            type="number"
+            min="5"
+            max="120"
+            step="1"
+            value="60"
+        /></label>
+        <label
+          >Urgent repeat seconds (5–30)<input
+            id="control-alert-repeat"
+            type="number"
+            min="5"
+            max="30"
+            step="1"
+            value="10"
+        /></label>
+        <p>
+          Alert expiry: 5–3600 seconds. Normal output is attempted once; its
+          notification remains available until expiry/Stop. Urgent output stops
+          at expiry, duration, local Stop or confirmed cancellation.
+          Sound/vibration depend on Android settings; output attempted does not
+          mean heard. Phone alerts are separate from SOS.
+        </p>
       </fieldset>
       <button id="control-issue" class="primary">Review and issue</button>
       <p id="control-status" role="status">Loading…</p>
-      <h2>Per-phone command history</h2><div id="control-history"></div>
+      <h2>Per-phone command history</h2>
+      <div id="control-history"></div>
     </dialog>
     <div id="error" role="alert" hidden></div>
     <section class="recording-bar" aria-label="Recording controls">
@@ -208,7 +281,7 @@
           <div>
             <button
               id="toggle-parties"
-              aria-label="Toggle party sidebar"
+              aria-label="Toggle Parties sidebar"
               aria-expanded="true"
             >
               Parties
@@ -223,7 +296,8 @@
             <button id="zoom-in" aria-label="Zoom in">+</button
             ><button id="zoom-out" aria-label="Zoom out">−</button
             ><button id="fit">Fit parties</button
-            ><button id="focus-party">Focus selected</button><button id="inspect-history">Inspect history</button>
+            ><button id="focus-party">Focus selected</button
+            ><button id="inspect-history">Inspect history</button>
             <button
               id="open-layers"
               title="Show or hide locally prepared terrain layers"
@@ -235,13 +309,28 @@
           </div>
         </div>
         <div id="projection-status" role="status"></div>
+        <div id="map-detail-status" role="status"></div>
 
-        <dialog id="history-inspection" aria-labelledby="history-inspection-title">
-          <form method="dialog"><button aria-label="Close history inspection">Close</button></form>
+        <dialog
+          id="history-inspection"
+          aria-labelledby="history-inspection-title"
+        >
+          <form method="dialog">
+            <button aria-label="Close history inspection">Close</button>
+          </form>
           <h2 id="history-inspection-title">Original history inspection</h2>
-          <label>Layer <select id="inspection-layer"><option value="qualified">Full qualified geometry and decisions</option><option value="raw">Original observations</option></select></label>
+          <label
+            >Layer
+            <select id="inspection-layer">
+              <option value="qualified">
+                Full qualified geometry and decisions
+              </option>
+              <option value="raw">Original observations</option>
+            </select></label
+          >
           <p id="inspection-status" role="status"></p>
-          <button id="inspection-restart">First page</button><button id="inspection-next">Next page</button>
+          <button id="inspection-restart">First page</button
+          ><button id="inspection-next">Next page</button>
           <pre id="inspection-data"></pre>
         </dialog>
         <svg
@@ -331,7 +420,6 @@
               <option value="offline">Offline geographic map</option>
             </select></label
           >
-          <button id="choose-saved-map">Choose another saved map</button>
         </div>
         <details>
           <summary>Display & geographic details</summary>
@@ -371,14 +459,13 @@
         </details>
         <div id="map-warning" role="alert"></div>
       </section>
+
       <details id="map-preparation">
-        <summary>Download Map</summary>
-        <p class="map-workflow">
-          Location → Area → Terrain → Preview → Download
-        </p>
+        <summary id="new-map">Download New Map</summary>
+        <p class="map-workflow">Centre + Radius → Preview → Download Map</p>
         <p>
-          Map preparation uses Nominatim and Overpass, with bounded requests.
-          Field operation stays offline.
+          Command automatically uses verified local data, bounded online sources
+          and regional fallback. Field operation stays offline.
         </p>
         <div class="map-search-row">
           <label
@@ -399,8 +486,8 @@
               id="map-lat"
               required
               type="number"
-              min="-85"
-              max="85"
+              min="-90"
+              max="90"
               step="any"
               value="28.6139" /></label
           ><label
@@ -414,31 +501,59 @@
               value="77.2090"
           /></label>
         </div>
-        <label
-          >Area<select id="map-area">
-            <option value="500">500 × 500 m</option>
-            <option value="1000">1 × 1 km</option>
-            <option value="custom">Custom, at most 2 × 2 km</option>
-          </select></label
-        >
-        <div class="coordinate-fields" id="custom-map-dimensions">
+        <button id="pick-map-center">Pick centre on current map</button>
+        <details>
+          <summary>Advanced · legacy rectangle</summary>
           <label
-            >Width · m<input
-              id="map-width"
-              required
+            >Coverage shape<select id="map-shape">
+              <option value="circle">Geographic circle</option>
+              <option value="rectangle">Legacy rectangle</option>
+            </select></label
+          >
+        </details>
+        <div id="radius-fields" class="coordinate-fields">
+          <label
+            >Radius<input
+              id="map-radius"
               type="number"
-              min="100"
-              max="2000"
-              value="500" /></label
-          ><label
-            >Height · m<input
-              id="map-height"
+              step="any"
               required
-              type="number"
-              min="100"
-              max="2000"
-              value="500"
+              value="373"
           /></label>
+          <label
+            >Unit<select id="radius-unit">
+              <option value="1">metres</option>
+              <option value="1000">kilometres</option>
+            </select></label
+          >
+        </div>
+        <div id="legacy-area" hidden>
+          <label
+            >Area<select id="map-area">
+              <option value="500">500 × 500 m</option>
+              <option value="1000">1 × 1 km</option>
+              <option value="custom">Custom, at most 2 × 2 km</option>
+            </select></label
+          >
+          <div class="coordinate-fields" id="custom-map-dimensions">
+            <label
+              >Width · m<input
+                id="map-width"
+                required
+                type="number"
+                min="100"
+                max="2000"
+                value="500" /></label
+            ><label
+              >Height · m<input
+                id="map-height"
+                required
+                type="number"
+                min="100"
+                max="2000"
+                value="500"
+            /></label>
+          </div>
         </div>
         <fieldset>
           <legend>Optional terrain · automatic offline acquisition</legend>
@@ -460,15 +575,24 @@
             data</label
           >
         </fieldset>
+        <label
+          ><input type="checkbox" id="confirm-map-cost" /> I reviewed the
+          requested coverage and resource limits. Network size is unknown; stop
+          at 5 MB unless I explicitly approve more.</label
+        >
         <div class="map-actions">
-          <button id="preview-map">Preview area & features</button
+          <button id="preview-map">Preview requested area</button
           ><button id="download-map" class="primary" disabled>
-            Download for Offline Use
+            Download Map
           </button>
         </div>
         <div id="map-preparation-status" role="status">
           Select an area to preview available features.
         </div>
+        <details>
+          <summary>Details · coverage, sources and resource limits</summary>
+          <p id="map-plan-details"></p>
+        </details>
         <svg
           id="map-preview"
           role="img"
@@ -481,9 +605,14 @@
         aria-label="Terrain download progress"
       >
         <p id="download-progress" role="status" aria-live="polite" hidden></p>
-        <button id="cancel-download" hidden>Cancel download</button>
+        <button id="cancel-download" hidden>Cancel</button>
+        <button id="resume-map" hidden>Retry Missing</button
+        ><button id="save-use-map" hidden>Save &amp; Use</button>
+        <button id="approve-transfer" hidden>
+          Approve additional transfer
+        </button>
         <details id="download-diagnostics">
-          <summary>Download diagnostics</summary>
+          <summary>Details · source and transfer diagnostics</summary>
           <p>
             Unavailable measurements are marked null. No credentials are
             recorded.
@@ -493,34 +622,18 @@
           <button id="export-download-report">Export download report</button>
         </details>
       </section>
-      <details id="maps-library" open>
-        <summary>Saved Maps</summary>
+      <details id="maps-library">
+        <summary id="choose-saved-map">Use Existing Map · Saved Maps</summary>
         <label
           >Selected saved map<select id="saved-maps">
             <option value="">Select a saved map</option>
           </select></label
         >
         <div id="saved-map-list" aria-label="Saved map library"></div>
-        <details>
-          <summary>Import & manage maps</summary>
-          <p>
-            Import RFC 7946 WGS84 GeoJSON. Unreferenced images and GeoTIFF are
-            not supported.
-          </p>
-          <label
-            >Import GeoJSON<input
-              id="map-file"
-              type="file"
-              accept=".geojson,.json,application/geo+json"
-          /></label>
-          <a
-            id="export-map"
-            class="secondary-action"
-            download="offline-map.geojson"
-            >Export selected map</a
-          >
-          <button id="delete-map">Delete selected map</button>
-        </details>
+        <div class="map-actions">
+          <a id="export-map" download="offline-map.gmap.zip">Export Map</a
+          ><button id="delete-map">Delete selected map</button>
+        </div>
         <details>
           <summary>Acquire or import terrain for this saved map</summary>
           <p>
@@ -538,6 +651,9 @@
               ><input type="checkbox" id="prepare-elevation" /> Elevation</label
             >
           </div>
+
+          <a id="export-manifest" hidden>Save source & coverage manifest</a>
+          <pre id="map-coverage-status" style="white-space: pre-wrap"></pre>
           <button id="download-terrain">
             Download / retry selected terrain
           </button>
@@ -557,6 +673,68 @@
             >
           </details>
           <p id="terrain-status" role="status"></p>
+        </details>
+      </details>
+      <details id="map-import">
+        <summary id="open-map-import">Import Map</summary>
+        <label
+          >Map dataset or package<input
+            id="source-map-file"
+            type="file"
+            accept=".osm.pbf,.pbf,.gmap.zip,.zip,.geojson,.json"
+        /></label>
+        <div id="regional-import-options" hidden>
+          <label
+            >Regional dataset coverage<select id="source-map-mode">
+              <option value="crop">Extract Centre + Radius</option>
+              <option value="full">Use Full Supported Coverage</option>
+            </select></label
+          >
+          <div id="import-crop-fields" class="coordinate-fields">
+            <label
+              >Centre latitude<input
+                id="import-map-lat"
+                type="number"
+                step="any"
+                min="-85"
+                max="85"
+                value="28.6139" /></label
+            ><label
+              >Centre longitude<input
+                id="import-map-lon"
+                type="number"
+                step="any"
+                min="-180"
+                max="180"
+                value="77.209" /></label
+            ><label
+              >Radius · metres<input
+                id="import-map-radius"
+                type="number"
+                step="any"
+                value="373"
+            /></label>
+          </div>
+          <p>
+            Full coverage is bounded to the declared source extent and 2,048
+            viewport chunks. Tagged OSM ways are supported; relations and
+            routing are unavailable.
+          </p>
+        </div>
+        <button id="import-map-source">Validate &amp; Import Map</button>
+        <p id="map-import-status" role="status"></p>
+        <details>
+          <summary>Legacy GeoJSON import</summary>
+          <p>
+            Import RFC 7946 WGS84 GeoJSON. Unreferenced images and GeoTIFF are
+            not supported.
+          </p>
+          <label
+            >Import GeoJSON<input
+              id="map-file"
+              type="file"
+              accept=".geojson,.json,application/geo+json"
+          /></label>
         </details>
       </details>
     </dialog>
