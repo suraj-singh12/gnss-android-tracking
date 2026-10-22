@@ -27,17 +27,18 @@ const pbfIndexLimit = 512 * 1024 * 1024
 const pbfNodeLimit = 5_000_000
 
 type osmSource struct {
-	ID        string          `json:"id"`
-	Name      string          `json:"name"`
-	URL       string          `json:"url,omitempty"`
-	SHA       string          `json:"sha256"`
-	Revision  string          `json:"revision"`
-	Bounds    [4]float64      `json:"bounds"`
-	Footprint json.RawMessage `json:"footprint,omitempty"`
-	Bytes     int64           `json:"bytes"`
-	Nodes     int             `json:"nodes"`
-	Ways      int             `json:"ways"`
-	Note      string          `json:"scope"`
+	ID             string          `json:"id"`
+	Name           string          `json:"name"`
+	URL            string          `json:"url,omitempty"`
+	SHA            string          `json:"sha256"`
+	Revision       string          `json:"revision"`
+	Bounds         [4]float64      `json:"bounds"`
+	Footprint      json.RawMessage `json:"footprint,omitempty"`
+	Bytes          int64           `json:"bytes"`
+	Nodes          int             `json:"nodes"`
+	Ways           int             `json:"ways"`
+	DegenerateWays int             `json:"non_renderable_ways,omitempty"`
+	Note           string          `json:"scope"`
 }
 
 func sourceSchema(s *Store) error {
@@ -370,9 +371,6 @@ func (s *Store) indexPBF(ctx context.Context, path string, supplied osmSource, e
 			db = s.db
 		}
 		for _, g := range p.Primitivegroup {
-			if len(g.Ways) > 4096 {
-				return errors.New("PBF block exceeds 4096-way transaction budget")
-			}
 			for _, w := range g.Ways {
 				if len(w.Keys) != len(w.Vals) {
 					return errors.New("PBF way tags mismatch")
@@ -388,8 +386,8 @@ func (s *Store) indexPBF(ctx context.Context, path string, supplied osmSource, e
 				if tags["highway"] == "" && tags["building"] == "" && tags["waterway"] == "" && tags["natural"] == "" && tags["landuse"] == "" {
 					continue
 				}
-				if len(w.Refs) < 2 || len(w.Refs) > 100000 {
-					return errors.New("PBF way coordinate budget exceeded")
+				if len(w.Refs) > 100000 {
+					return fmt.Errorf("PBF way coordinate budget exceeded (%d refs)", len(w.Refs))
 				}
 				coords := [][2]float64{}
 				bnd := [4]float64{180, 90, -180, -90}
@@ -416,6 +414,11 @@ func (s *Store) indexPBF(ctx context.Context, path string, supplied osmSource, e
 					bnd[2] = max(bnd[2], x)
 					bnd[3] = max(bnd[3], y)
 				}
+				// Validate present references even when a way cannot form a line.
+				if len(coords) < 2 {
+					src.DegenerateWays++
+					continue
+				}
 				feature := osmWayFeature(w.GetId(), tags, coords)
 				b, e := json.Marshal(feature)
 				if e != nil {
@@ -438,6 +441,9 @@ func (s *Store) indexPBF(ctx context.Context, path string, supplied osmSource, e
 	})
 	if err != nil {
 		return src, err
+	}
+	if src.DegenerateWays > 0 {
+		src.Note += fmt.Sprintf("; %d tagged ways have fewer than two nodes and cannot form renderable lines/polygons", src.DegenerateWays)
 	}
 	b, _ := json.Marshal(src)
 	s.mu.Lock()

@@ -34,7 +34,11 @@ func extensionStore(t *testing.T) *Store {
 	t.Cleanup(func() { s.Close() })
 	return s
 }
-func fixturePBF(t *testing.T, broken bool) []byte {
+func fixturePBF(t *testing.T, broken bool) []byte { return fixturePBFWayCount(t, broken, 1) }
+func fixturePBFWayCount(t *testing.T, broken bool, count int) []byte {
+	return fixturePBFWays(t, broken, count, false)
+}
+func fixturePBFWays(t *testing.T, broken bool, count int, degenerate bool) []byte {
 	t.Helper()
 	var out bytes.Buffer
 	block := func(typ string, m proto.Message) {
@@ -61,7 +65,17 @@ func fixturePBF(t *testing.T, broken bool) []byte {
 	if broken {
 		refs[1] = 999
 	}
-	block("OSMData", &pb.PrimitiveBlock{Stringtable: &pb.StringTable{S: []string{"", "highway", "path"}}, Primitivegroup: []*pb.PrimitiveGroup{{Nodes: nodes, Dense: &pb.DenseNodes{Id: []int64{3, 1}, Lon: []int64{950000, 10000}, Lat: []int64{950000, 10000}}}, {Ways: []*pb.Way{{Id: proto.Int64(9), Keys: []uint32{1}, Vals: []uint32{2}, Refs: refs}}}}})
+	ways := make([]*pb.Way, count)
+	for i := range ways {
+		ways[i] = &pb.Way{Id: proto.Int64(int64(9 + i)), Keys: []uint32{1}, Vals: []uint32{2}, Refs: refs}
+	}
+	if degenerate {
+		ways[0].Refs = []int64{1}
+		if broken {
+			ways[0].Refs[0] = 999
+		}
+	}
+	block("OSMData", &pb.PrimitiveBlock{Stringtable: &pb.StringTable{S: []string{"", "highway", "path"}}, Primitivegroup: []*pb.PrimitiveGroup{{Nodes: nodes, Dense: &pb.DenseNodes{Id: []int64{3, 1}, Lon: []int64{950000, 10000}, Lat: []int64{950000, 10000}}}, {Ways: ways}}})
 	return out.Bytes()
 }
 func writePBF(t *testing.T, b []byte) string {
@@ -614,5 +628,37 @@ func TestRegionalRedirectIdentityAndTransferConsent(t *testing.T) {
 				t.Fatal(e)
 			}
 		})
+	}
+}
+
+func TestPBFCommonWayBlockUsesBoundedIndividualWrites(t *testing.T) {
+	s := extensionStore(t)
+	src, e := s.indexPBF(context.Background(), writePBF(t, fixturePBFWayCount(t, false, 5000)), osmSource{Name: "common-size way block"}, nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if src.Ways != 5000 {
+		t.Fatal("valid ways silently omitted", src.Ways)
+	}
+	data, e := s.sourceVectors(context.Background(), src, [4]float64{.09, .09, .11, .11})
+	if e != nil {
+		t.Fatal(e)
+	}
+	var collection struct {
+		Features []json.RawMessage `json:"features"`
+	}
+	if e = json.Unmarshal(data, &collection); e != nil || len(collection.Features) != 5000 {
+		t.Fatal("indexed way block does not round trip", len(collection.Features), e)
+	}
+}
+
+func TestPBFNonRenderableWaysAreReportedAndReferencesStillValidated(t *testing.T) {
+	s := extensionStore(t)
+	src, e := s.indexPBF(context.Background(), writePBF(t, fixturePBFWays(t, false, 2, true)), osmSource{Name: "degenerate way"}, nil)
+	if e != nil || src.Ways != 1 || src.DegenerateWays != 1 || !strings.Contains(src.Note, "1 tagged ways") {
+		t.Fatal(src, e)
+	}
+	if _, e = s.indexPBF(context.Background(), writePBF(t, fixturePBFWays(t, true, 1, true)), osmSource{Name: "missing degenerate reference"}, nil); e == nil {
+		t.Fatal("one-node way bypassed reference validation")
 	}
 }

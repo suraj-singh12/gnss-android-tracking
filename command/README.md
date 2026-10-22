@@ -129,7 +129,10 @@ from feature density. On-disk source indexes use the existing Command SQLite fil
 node batches yield the receiver writer every 256 rows. Geographic extraction and
 viewport loading use the existing GeoJSON chunks and eight-visible-chunk renderer.
 At large overview scales, zoom in for detail; no enormous region is loaded into RAM.
-PBF block sizes are bounded to 32 MiB encoded / 16 MiB expanded. Importing a local
+PBF block sizes are bounded to 32 MiB encoded / 16 MiB expanded. Tagged ways
+with fewer than two nodes cannot form lines/polygons: their present references
+are still validated, and their omitted count/reason is retained in source provenance.
+Large blocks yield individual way writes; each way remains capped at 100,000 nodes. Importing a local
 file performs no network transfer. Verified indexed datasets are reused automatically.
 
 The ZIP contains `manifest.json` with `format: GNSS-Command-map`, `version: 1`,

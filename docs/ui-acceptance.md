@@ -549,6 +549,17 @@ receipt of 21 parties' LIVE and 21 SOS messages. One race-instrumented run took
 p95 11.89 ms, worst 17.38 ms. This finite fixture is not a 1 GB country-file, native
 memory ceiling or field SLA. Preserve exact-run logs and use CI for final revisions.
 
+Supplemental Linux local-file acceptance used the historical Delaware PBF shipped
+in `github.com/paulmach/osm@v0.9.0/testdata` (7,812,234 bytes; SHA-256
+`71ce7bd152d68cb9bdb11d9de4548db86d103f664bb8620a210ddee433534647`).
+The production import indexed 723,870 nodes / 65,674 supported ways, explicitly
+reported eight non-renderable ways, and extracted/rendered 175 features in a
+373 m crop around 39.157, -75.524 with outward networking blocked. One run took
+25.3 s with sampled process RSS peak 94,273,536 bytes. This exposed and fixed
+an obsolete per-block way-count guard and rejection of one-node ways; regression
+tests retain bounded individual writes and validate even degenerate references.
+This is historical real OSM data, not current public-provider or native acceptance.
+
 Future native/provider procedure: choose a small non-preset circle, a hilly boundary
 circle and a larger regional request. Record original centre/radius, preview/source
 polygons, approved cumulative transfer and actual bytes; force Overpass failure,
