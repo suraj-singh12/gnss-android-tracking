@@ -94,6 +94,44 @@ class SettingsDiagnosticsTest {
     }
 
     @Test
+    fun restoredDraftIsVisibleAndResavableBeforeAsyncStorageLoads() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<TrackingApp>()
+        val saved =
+            android.os.Bundle().apply {
+                putString("destination", "Settings")
+                putBundle(
+                    "settingsDraft",
+                    android.os.Bundle().apply {
+                        putString("partyId", "Draft party")
+                        putString("partyName", "Unpersisted field edits")
+                        putString("endpoint", "http://192.168.1.4:8080")
+                        putString("interval", "45")
+                    },
+                )
+            }
+        // Deliberately do not idle the UI/Room flows or resume the Activity.
+        // Restoring an editor must not depend on a successful database read.
+        val controller = Robolectric.buildActivity(MainActivity::class.java).create(saved)
+        try {
+            val all = views(controller.get().findViewById(android.R.id.content))
+            val heading = all.filterIsInstance<TextView>().single { it.text == "Party name" }
+            val editor = controller.get().findViewById<EditText>(heading.labelFor)
+            assertEquals("Unpersisted field edits", editor.text.toString())
+            assertTrue(editor.isEnabled)
+            editor.setText("Edited while storage loads")
+            val nextState = android.os.Bundle()
+            controller.saveInstanceState(nextState)
+            assertEquals(
+                "Edited while storage loads",
+                nextState.getBundle("settingsDraft")!!.getString("partyName"),
+            )
+        } finally {
+            controller.destroy()
+            app.finishForTests()
+        }
+    }
+
+    @Test
     fun journalPagesFiltersAndDisclosureSurviveRecreation() = runBlocking {
         val app = ApplicationProvider.getApplicationContext<TrackingApp>()
         val state = app.repository.state()

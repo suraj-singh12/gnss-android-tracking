@@ -69,6 +69,7 @@ class MainActivity : Activity() {
     private var savedInstallation: Installation? = null
     private val disclosureBodies = linkedMapOf<String, LinearLayout>()
     private var draftState: Bundle? = null
+    private var settingsDraftLoaded = false
     private lateinit var instructionFilter: EditText
     private var instructionPage = 0
     private var refreshConsole: (() -> Unit)? = null
@@ -253,6 +254,7 @@ class MainActivity : Activity() {
                 id = View.generateViewId()
                 heading.labelFor = id
                 setSingleLine(true)
+                isEnabled = false // Wait for a saved form or an explicit restored draft.
                 minHeight = dp(48)
                 textSize = 16f
                 inputType =
@@ -1268,6 +1270,13 @@ class MainActivity : Activity() {
         cancelStartButton.visibility = View.GONE
         content.removeView(startButton)
         content.addView(startButton, 2)
+        draftState?.let { draft ->
+            restoreSettings(null, draft)
+            settingsDraftLoaded = true
+            draftState = null
+            settingsFeedback.text =
+                "Form restored · Save persists local edits; applied policy is separate."
+        }
         navigate(savedInstanceState?.getString("destination") ?: "Tracking")
         scope.launch {
             try {
@@ -1301,8 +1310,8 @@ class MainActivity : Activity() {
                         refreshTrust?.invoke()
 
                         if (!initialized) {
-                            restoreSettings(state, draftState)
-                            draftState = null
+                            if (!settingsDraftLoaded) restoreSettings(state)
+                            settingsDraftLoaded = true
                             initialized = true
                             updateStartControls()
                             attemptStart()
@@ -1582,11 +1591,12 @@ class MainActivity : Activity() {
         } else super.onBackPressed()
     }
 
-    private fun restoreSettings(state: Installation, draft: Bundle? = null) {
-        partyId.setText(draft?.getString("partyId") ?: state.partyId)
-        partyName.setText(draft?.getString("partyName") ?: state.partyName)
-        endpoint.setText(draft?.getString("endpoint") ?: state.endpoint)
-        interval.setText(draft?.getString("interval") ?: state.localInterval.toString())
+    private fun restoreSettings(state: Installation?, draft: Bundle? = null) {
+        partyId.setText(draft?.getString("partyId") ?: state?.partyId.orEmpty())
+        partyName.setText(draft?.getString("partyName") ?: state?.partyName.orEmpty())
+        endpoint.setText(draft?.getString("endpoint") ?: state?.endpoint.orEmpty())
+        interval.setText(draft?.getString("interval") ?: state?.localInterval?.toString().orEmpty())
+        listOf(partyId, partyName, endpoint, interval).forEach { it.isEnabled = true }
         if (draft != null) {
             for ((name, field) in
                 listOf(
@@ -1630,6 +1640,11 @@ class MainActivity : Activity() {
     }
 
     private fun save(start: Boolean = false, reenroll: Boolean = false) {
+        if (!initialized && !start) {
+            settingsFeedback.text =
+                "Settings not saved · local storage is loading or unavailable; edits retained."
+            return
+        }
         if (!initialized) {
             app.operational.update {
                 it.copy(error = "Settings are still loading. Start becomes available when ready.")
@@ -1910,7 +1925,7 @@ class MainActivity : Activity() {
         outState.putBoolean("askedNotifications", askedNotifications)
         outState.putInt("permissionInFlight", permissionInFlight ?: 0)
         historyProgressStartDelivered?.let { outState.putLong("historyProgressStartDelivered", it) }
-        if (!initialized) outState.putBundle("settingsDraft", draftState)
+        if (!settingsDraftLoaded) outState.putBundle("settingsDraft", draftState)
         super.onSaveInstanceState(outState)
     }
 

@@ -580,7 +580,8 @@ Starting integration: `39f5593dfc1d428995b393446b5caf9fa3c31848` (accepted #43).
 Guidance matches `3b60b6d6228ca208df75765e2008c9b9abba8a69`.
 
 Software checks use the actual native Activity/Room flows. SettingsDiagnosticsTest
-covers unsaved form refresh/recreation/focus, Cancel, invalid Save, successful local
+covers immediate draft restoration independent of asynchronous Room loading,
+unsaved form refresh/recreation/focus, Cancel, invalid Save, successful local
 Save without service start, journal filtering/pagination/recreation and truthful
 request/applied/trust/result formatting. Existing #24/#25/#26, SOS, persistence,
 Sender, lifecycle, ZIP and bridge tests remain the owning regression gates.
