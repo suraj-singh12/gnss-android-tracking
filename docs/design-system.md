@@ -12,8 +12,7 @@ borders `#DCE3DF`, primary action `#17654C`. Amber denotes degraded conditions;
 Command red `#A51621` is reserved for SOS and critical errors. Android uses the
 restrained V4 burgundy family: Day text `#843E4B`, action `#71333F`, tint `#F6E9EC`;
 Night text `#D5A6B0`, action `#77434E`, tint `#38252D`. White emergency-action labels
-exceed 7:1 contrast; emergency text on its tint exceeds 6:1. Offline contact uses neutral
-text rather than an emergency colour. Stable party colours come from Command's
+exceed 7:1 contrast; emergency text on its tint exceeds 6:1. Android offline/off status pills use amber, distinct from emergency burgundy. Stable party colours come from Command's
 existing device-ID palette; they do not encode health. Provisional paths are dashed,
 qualified history muted, fresh GNSS filled, last-known GNSS hollow and labelled.
 
@@ -208,38 +207,50 @@ while approval amounts and missing coverage remain visible. Retry Missing,
 Save & Use and Cancel preserve verified data. The toolbar Layers dialog remains
 independent and distinguishes available/hidden/visible/processing failure.
 
-## Issue #39 full Android redesign status
+## Issue #39 native Android redesign
 
-The operator-approved target is Figma Review V3 (44 frames) plus four written V4
-corrections. The old restriction against changing Tracking visuals is superseded.
-Figma references are currently unavailable (Starter quota; direct view blocked;
-no exports). Full screen structure, nested navigation and Figma fidelity remain
-**pending**, rather than an invented replacement visual language.
+The operator supplied **GNSS-Tracker-Review-V3-native.pdf** (44 vector frames,
+390 × 842, SHA-256 `db4a5e1e10ac9ea6ef432966034a662f3a396c44d9982385934f9d85581730a3`).
+All frames were inspected. It supplies the Review V3 visual references after Figma
+MCP quota exhaustion. Its sample data is visual reference only. The four written V4
+requirements override its pause control, illustrative notifications, bright emergency
+reds and text-labelled Tracking theme control. The newer full-app scope supersedes
+Tracking pixel preservation; its operational contracts remain protected.
 
-V4 implemented independently: icon-only 48 dp minimum Tracking theme target; native
-notification actions for Sync Now and confirmed Stop Tracking; no exposed pause;
-and one restrained emergency palette across existing native views/notification ink.
-System notification geometry belongs to Android. Native RemoteViews render tests
-check both action labels remain inside their notification in Day/Night at both
-sizes and font scales. Current screenshots are evidence of these corrections,
-not a comparison against unavailable Figma frames.
+Android now uses the reference's cool neutral surfaces, teal positive states, quiet
+blue secondary actions, amber offline/off states and restrained burgundy emergency
+family. Day background `#F4F7F8`, ink `#182C36`, surface white; Night background
+`#101820`, surface `#192833`, ink `#EAF4F5`. Day secondary ink `#5D727D` and positive
+ink `#07796F` are slightly darker than the PDF to meet 4.5:1 normal-text contrast.
+All semantic text/surface pairs have automated contrast checks. Typography is native
+sans-serif: 23 sp app title, 22 sp screen title, 16–19 sp card titles, 12–14 sp
+metadata/actions, 25 sp observation metrics. Native actions have 48 dp minimum targets.
+Cards have restrained 1 dp edges, 16 dp corners, 14–16 dp inner padding and a
+12–18 dp vertical rhythm, inside 20 dp page margins.
 
-### Current Settings/Diagnostics baseline
+Tracking groups the party identity separately from state pills, GNSS and two balanced
+Room/ACK metrics. Sync/Start/Stop retain one order across states; contextual alert
+content follows the facts. The protected 1.2-second SOS dock stays above equal-width
+text navigation. At large text and short landscape sizes, the same action row is
+kept above the dock while facts scroll. Native status, lifecycle and queue data drive
+all labels; there are no demonstration values in production.
 
-Settings currently uses two restrained
-native surfaces: a configuration form and tracking policy. Identity fields share a
-row; a filled Save action and quiet Cancel action establish priority. Appearance
-stays in the title row. Policy shows applied cadence and concise request state;
-adaptive Apply has one future-observations caption. Readiness, authorization and
-revisions are disclosed rather than repeated inline.
+Settings has five calm destination rows. Configuration, trust, readiness, policy,
+appearance and enrollment have focused native screens. Readiness actions live in
+the relevant card. Save/Cancel operate on the existing shared draft and transaction;
+refresh does not overwrite edits. Caret restoration follows framework hierarchy
+restoration. Adaptive storage is the real #24 ON/OFF Switch, OFF by default, with one
+future-observations caption. Revision/request evidence is secondary.
 
-Diagnostics has one read-only health panel with seven icon/label/status rows. Short
-metadata and subtle semantic chips communicate facts; information rows are not
-buttons. Instructions, Alerts and Advanced form the default footer. Health evidence,
-SOS stages and technical tools live inside Advanced. Instruction rows show type,
-outcome and time; filters and stage/copy controls expand on demand. Flat disclosure
-rows replace outlined header buttons, and repeated explanations are removed.
+Diagnostics separates seven independent health facts from four destinations:
+Instructions, Phone Alerts, Saved data & sync and Diagnostic tools. Instructions use
+compact outcome filters and chronological, bounded pages; dedicated details show
+verification, attempts, stages and result custody. Full canonical evidence is optional.
+Phone alerts and SOS history use actual persisted records; output attempts never
+imply human acknowledgement. Advanced logs retain technical evidence. Physical Button
+Test, retry and sanitized ZIP export remain discoverable in Diagnostic tools only.
 
-Use the existing Day/Night palette, native typography, 48 dp action targets and one
-spacing rhythm. Large text wraps and scrolls naturally. Command web and protocol remain unchanged. Tracking now includes the V4 presentation
-corrections; GNSS/SOS and existing service execution remain authoritative.
+App-owned dialogs and OS-owned notifications use native layouts. Tracking notification
+Sync and confirmed Stop enter existing Activity workflows; alert ACK retains its
+original receiver/journal. Android owns system surfaces and background restrictions.
+Command web and its existing visual system remain unchanged.

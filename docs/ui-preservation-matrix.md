@@ -179,42 +179,27 @@ recording/Travel Back or remote-control authority changes belong to this extensi
 | Standalone map package | Existing saved vectors/GTERR001 and terrain algorithms | Partial round trip to clean DB, idempotence, corrupt/malicious archive and write-failure rollback |
 | Simplified map lifecycle | Same Map & Layers/Saved Maps/Layers controls | Chromium package/PBF/import/terrain/offline restart and axe; existing dashboard/SOS/control regressions |
 
-## Issue #39 · Android Settings and Diagnostics
+## Issue #39 · Full Android native redesign
 
-| Surface/contract | Change and preserved authority | Software evidence |
+The operator's replacement scope supersedes the old Tracking pixel-preservation
+restriction. Review V3's supplied 44-frame PDF plus four explicit V4 overrides govern
+presentation. [Acceptance](ui-acceptance.md#issue-39-full-android-acceptance) maps every
+Day/Night reference to its native screen and records deliberate OS/accessibility
+adaptations. Command web and the wire contract remain unchanged.
+
+| Surface / contract | Presentation change | Preserved authority / evidence |
 | --- | --- | --- |
-| Tracking / SOS dock / service | Existing layout, controls, hold, sync and operational rendering preserved | Baseline/final native-render comparison; full startup/SOS/lifecycle suite |
-| Settings editing | Drafts survive refresh/recreation, selection/focus retained; Save after transaction; Cancel reloads persisted form | SettingsDiagnosticsTest; existing startup/appearance tests |
-| Reporting/adaptive | Local/requested/outcome/applied/revision shown separately; same immediate saved OFF-default #24 switch | SettingsDiagnosticsTest, AdaptiveSettingsTest, existing policy tests |
-| Command trust | Existing endpoint, binding, private enrollment and confirmed re-enrollment; unknown contact stays unknown | CommandPresentation assertions, existing CommandControlTest |
-| Health | Separate fix/Room/ACK/sync/SOS/storage/trust and recovery text | Native render matrix; unchanged persistence/Sender regressions |
-| Command console / phone alerts | Same journal, actual duplicate stages, filters/pages, expandable native controls, local ACK | CommandConsoleUiTest, SettingsDiagnosticsTest, existing #25/#26 tests |
-| Retry/export/Physical Button Test | Existing tools and confirmation/sanitization preserved in Advanced Diagnostics | Existing export/physical-button tests and native renders |
-| Device acceptance | No native/physical success inferred from software evidence | Real TalkBack, keyboard/rotation/OS/OEM and LAN endurance remain outstanding |
-
-### #39 operational visual refinement
-
-| Surface | Refined presentation | Preserved contract |
-| --- | --- | --- |
-| Settings | Compact identity/endpoint/interval form; primary Save, quiet Cancel; optional details | Existing local transaction, draft lifecycle, immediate OFF-default adaptive policy and protected enrollment |
-| Diagnostics | Seven informational health rows; Instructions/Alerts/Advanced disclosures | Independent GNSS, durability, ACK, sync, SOS, storage and trust facts |
-| Instructions | Concise rows; optional filters/stages/copy; stable focus and saved page | Same bounded authenticated journal, outcomes and result custody |
-| Tools | Advanced contains health/SOS/technical evidence, retry, export and Physical Button Test | Existing confirmation, sanitization, key/SOS suppression and recovery behavior |
-| Tracking / Command web | No visual or functional redesign | Existing layout, controls, GNSS/SOS/Room/Sender/service/protocol authorities |
-
-
-### Issue #39 replacement scope — V4 progress and visual-source blocker
-
-This supersedes prior #39 rows claiming Tracking visuals must remain unchanged.
-The entire app is now authorized for Figma Review V3 redesign. The 44 reference
-frames are inaccessible (Starter quota and blocked direct view; no local exports),
-so full Figma fidelity/navigation/screen acceptance remains pending.
-
-| Area | Implemented V4 correction | Preserved owner / evidence |
-| --- | --- | --- |
-| Tracking header | Accessible moon/sun toggle, existing saved preference | Draft/recreation and no automatic GNSS start tests |
-| Emergency family | Shared Day/Night burgundy text, action and surface tokens | Original 1.2 s hold and SOS engine; contrast/native renders |
-| History UI | Remove exposed pause controls and transfer notification Pause | Existing queue, retry, data retention and OS/lifecycle budgets |
-| Tracking notification | Native Sync Now / Stop Tracking actions | Existing visible sync and confirmed stop; immutable intents, no GNSS from Sync, no replay on recreation |
-| Phone-alert notifications | Coordinated color; retained ACK identity and timeout | Original output/cancel/ACK journal and receiver; no new acknowledgement |
-| Remaining full-app Figma work | Blocked pending visual references | No claim that 44 frames were inspected or matched |
+| Tracking | App/party hierarchy, independent pills, fresh/stale fix, balanced Room/ACK metrics, stable action order, contextual alerts | Original acquisition/session identity, queue/progress projection; startup/GNSS/lifecycle tests |
+| SOS | Anchored subdued dock, same 1.2 s hold, chronological history/details | Original SosHoldGesture/engine/durable outbox; separate delivery and Command operator ACK; SOS regressions |
+| Large text / landscape | Facts scroll; Sync/Start/Stop stay accessible above the protected dock | Native matrix, SOS bounds, scalable text and equal text navigation |
+| Settings | Five destinations, focused Save/Cancel forms, parent Back retains drafts | Existing Installation transaction and Activity draft/caret/focus restoration; lifecycle tests |
+| Reporting / adaptive | Separate local/requested/applied/revision, native ON/OFF Switch | Existing #24 policy, OFF default, originals unchanged; policy tests |
+| Trust / enrollment | Current/draft endpoint, contact evidence, confirmed re-enrollment/disable | Same private credential binding and #25 authorization; credential excluded from saved state/export |
+| Readiness | Permission, location, notification, battery and service limits in relevant cards | Existing FieldPreflight/preflight/start flow and Android system settings |
+| Health | Seven independent informational rows | Fix freshness, Room commits, actual ACK, unresolved sync, SOS, device space and trust remain separate |
+| Instructions / alerts | Chronological pages, compact outcome filters, focused details and Full record | Existing bounded #25/#26 journal, verification/reason/stages/attempt/result custody and human ACK; console/control tests |
+| Recovery / tools | Saved data & sync, Diagnostic tools, Physical Button Test, advanced logs | Existing retry confirmation, sanitized ZIP, key/SOS test suppression and foreground scope |
+| Pause UI | No exposed history pause, including transfer notification | Internal OS/lifecycle budgets and retained queue unchanged |
+| Notifications / theme | Native Sync/confirmed Stop, retained alert ACK, icon-only saved theme toggle | Immutable distinct Activity intents, consumed-action restoration, original alert receiver/timeout/channel; notification tests |
+| Command | Existing browser screens/windows included in screenshot artifact | No Command source/UI/recording/maps/protocol changes |
+| Native acceptance | Honest distinction between rendered software evidence and devices | Real TalkBack/IME/OEM/Doze/locked GNSS/SOS/alert/LAN and native desktop acceptance outstanding |

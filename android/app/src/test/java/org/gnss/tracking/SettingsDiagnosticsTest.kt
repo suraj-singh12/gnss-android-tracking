@@ -36,23 +36,27 @@ class SettingsDiagnosticsTest {
         val original = withContext(Dispatchers.IO) { app.repository.state() }
         val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
         fun all() = views(controller.get().findViewById(android.R.id.content))
-        fun button(text: String) = all().filterIsInstance<Button>().single { it.text == text }
+        fun button(text: String) =
+            all().filterIsInstance<Button>().single { it.text == text && it.isShown }
         fun field(label: String): EditText {
-            val heading = all().filterIsInstance<TextView>().single { it.text == label }
+            val heading =
+                all().filterIsInstance<TextView>().single {
+                    it.text == label && it.labelFor != View.NO_ID
+                }
             return controller.get().findViewById(heading.labelFor)
         }
         try {
             until {
                 all().filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled }
             }
-            button("Settings").performClick()
+            openNativeScreen(controller.get(), "Edit connection")
             field("Party name").apply {
                 setText("Unfinished field edit")
                 requestFocus()
                 setSelection(6)
             }
             field("Command address").setText("http://192.168.12.3:8080")
-            field("Reporting interval (s)").setText("35")
+            field("Phone interval · seconds").setText("35")
             app.operational.value = Operational(health = Health(wifi_connected = true))
             shadowOf(Looper.getMainLooper()).idle()
             assertEquals("Unfinished field edit", field("Party name").text.toString())
@@ -60,24 +64,24 @@ class SettingsDiagnosticsTest {
             until { field("Party name").text.toString() == "Unfinished field edit" }
             assertTrue(field("Party name").hasFocus())
             assertEquals(6, field("Party name").selectionStart)
-            assertEquals("35", field("Reporting interval (s)").text.toString())
+            assertEquals("35", field("Phone interval · seconds").text.toString())
             assertEquals(original.partyName, app.repository.state().partyName)
             @Suppress("DEPRECATION") controller.get().onBackPressed()
-            val unsaved = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
-            assertEquals("Unsaved settings", shadowOf(unsaved).title.toString())
-            unsaved.getButton(android.app.AlertDialog.BUTTON_NEGATIVE).performClick()
             assertFalse(controller.get().isFinishing)
+            assertEquals("Unfinished field edit", field("Party name").text.toString())
+            openNativeScreen(controller.get(), "Edit connection")
             button("Cancel").performClick()
             assertEquals(original.partyName, field("Party name").text.toString())
-            field("Reporting interval (s)").setText("3")
-            button("Save settings").performClick()
+            openNativeScreen(controller.get(), "Reporting interval")
+            field("Phone interval · seconds").setText("3")
+            button("Save").performClick()
             until {
                 all().filterIsInstance<TextView>().any { it.text.startsWith("Settings not saved") }
             }
             assertEquals(original.localInterval, app.repository.state().localInterval)
             org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()?.dismiss()
-            field("Reporting interval (s)").setText("35")
-            button("Save settings").performClick()
+            field("Phone interval · seconds").setText("35")
+            button("Save").performClick()
             until {
                 all().filterIsInstance<TextView>().any { it.text.startsWith("Settings saved") }
             }
@@ -96,6 +100,7 @@ class SettingsDiagnosticsTest {
         val saved =
             android.os.Bundle().apply {
                 putString("destination", "Settings")
+                putString("route", "Edit connection")
                 putBundle(
                     "settingsDraft",
                     android.os.Bundle().apply {
@@ -115,12 +120,11 @@ class SettingsDiagnosticsTest {
             val editor = controller.get().findViewById<EditText>(heading.labelFor)
             assertEquals("Unpersisted field edits", editor.text.toString())
             assertTrue(editor.isEnabled)
-            all.filterIsInstance<Button>().single { it.text == "Cancel" }.performClick()
+            all.filterIsInstance<Button>().first { it.text == "Cancel" }.performClick()
             assertEquals("Unpersisted field edits", editor.text.toString())
             @Suppress("DEPRECATION") controller.get().onBackPressed()
-            val dialog = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
-            assertEquals("Unsaved settings", shadowOf(dialog).title.toString())
-            dialog.getButton(android.app.AlertDialog.BUTTON_NEGATIVE).performClick()
+            assertFalse(controller.get().isFinishing)
+            assertEquals("Unpersisted field edits", editor.text.toString())
             editor.setText("Edited while storage loads")
             val nextState = android.os.Bundle()
             controller.saveInstanceState(nextState)
@@ -159,19 +163,17 @@ class SettingsDiagnosticsTest {
         }
         val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
         fun all() = views(controller.get().findViewById(android.R.id.content))
-        fun button(label: String) = all().filterIsInstance<Button>().single { it.text == label }
+        fun button(label: String) =
+            all().filterIsInstance<Button>().single { it.text == label && it.isShown }
         try {
-            button("Diagnostics").performClick()
-            all()
-                .filterIsInstance<Button>()
-                .single { it.text.startsWith("Command Instructions  ") }
-                .performClick()
-            until { all().filterIsInstance<Button>().count { it.text == "Copy command ID" } == 20 }
+            openNativeScreen(controller.get(), "Command Instructions")
+            fun rows() =
+                all().filterIsInstance<Button>().filter {
+                    it.contentDescription?.contains("Open instruction details") == true
+                }
+            until { rows().size == 20 }
             assertTrue(
-                all()
-                    .filterIsInstance<Button>()
-                    .filter { it.text == "Copy command ID" }
-                    .none { it.isShown }
+                all().filterIsInstance<Button>().none { it.text == "Copy command ID" && it.isShown }
             )
             button("Older instructions").performClick()
             assertTrue(all().filterIsInstance<TextView>().any { it.text.contains("Page 2 of 3") })
@@ -180,23 +182,21 @@ class SettingsDiagnosticsTest {
                     it.hint?.startsWith("Search instructions") == true
                 }
             filter.setText("Duplicate ignored")
-            assertEquals(1, all().filterIsInstance<Button>().count { it.text == "Copy command ID" })
+            assertEquals(1, rows().size)
             filter.setText("")
-            all()
-                .filterIsInstance<Button>()
-                .single { it.text.startsWith("Filters  ") }
-                .performClick()
+            openNativeScreen(controller.get(), "Instruction filters")
             all()
                 .filterIsInstance<Spinner>()
                 .single { it.contentDescription == "Command type" }
                 .setSelection(1)
             shadowOf(Looper.getMainLooper()).idle()
             assertTrue(all().filterIsInstance<TextView>().any { it.text.contains("23 matching") })
+            @Suppress("DEPRECATION") controller.get().onBackPressed()
             button("Older instructions").performClick()
-            assertEquals(3, all().filterIsInstance<Button>().count { it.text == "Copy command ID" })
+            assertEquals(3, rows().size)
             controller.recreate()
             until {
-                all().filterIsInstance<Button>().count { it.text == "Copy command ID" } == 3 &&
+                rows().size == 3 &&
                     all().filterIsInstance<TextView>().any { it.text.contains("Page 2 of 2") }
             }
             assertEquals(
@@ -233,22 +233,19 @@ class SettingsDiagnosticsTest {
                 "Overview should contain concise facts, not paragraphs",
                 visibleText().length < 650,
             )
-            assertFalse(controller.get().findViewById<View>(R.id.diagnostic_tools).isShown)
             assertFalse(
                 all()
                     .filterIsInstance<Button>()
-                    .single { it.text.startsWith("Health details") }
+                    .single { it.text == "Export diagnostic ZIP" }
                     .isShown
             )
-            all().filterIsInstance<Button>().single { it.text == "Settings" }.performClick()
+            openNativeScreen(controller.get(), "Settings")
             assertTrue("Configuration should stay concise", visibleText().length < 550)
-            assertTrue(
-                all().filterIsInstance<Button>().single { it.text == "Save settings" }.isShown
-            )
+            assertTrue(all().filterIsInstance<Button>().none { it.text == "Save" && it.isShown })
             assertFalse(
                 all()
                     .filterIsInstance<EditText>()
-                    .single { it.hint?.startsWith("One-time credential") == true }
+                    .single { it.hint?.startsWith("Command credential") == true }
                     .isShown
             )
         } finally {

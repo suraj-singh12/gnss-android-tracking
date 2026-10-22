@@ -490,21 +490,28 @@ Existing Map and Import Map, existing Saved Maps selection and Layers controls.
 
 ### Issue #39 Android presentation boundary
 
-Settings/Diagnostics adapt existing Installation, FieldPreflight, #24 policy,
-Operational/queue flows and #25/#26 command journal only. CommandPresentation contains
-pure explanation/formatting functions, not an execution or persistence authority.
-OperationalUi supplies read-only native health rows; expanded evidence reads the same
-canonical state.
-Drafts and disclosure/filter/page selections use Activity saved instance state;
-credentials remain excluded. Canonical journal retention/query bounds are unchanged;
-only 20 matching rows render, deferred while hidden, with ordering work off the main
-thread. No schema, Sender scheduling, authentication, result custody or GNSS/SOS engine
-changes are introduced. TrackingNotification builds native actions that enter the
-existing visible MainActivity Sync/confirmed Stop handlers. The consumed action is
-saved across recreation. NotificationAppearance reads the existing preference,
-retains notification identity/actions and remaining timeout, and recolors with
-only-alert-once; it is not an execution or acknowledgement authority. Native
-Tracking/transfer services retain their existing lifetimes. User-facing pause is
-removed while internal OS/lifecycle pause remains. The full Figma-led presentation
-rebuild is pending access to the mandatory Review V3 references. A retained instruction/result timestamp is
-labelled as evidence, not substituted for an unrecorded empty-poll contact time.
+MainActivity retains the existing three top-level destinations, with a small native
+parent-route map for focused detail screens. NativeUi supplies shared view/spacing/
+color primitives; OperationalUi supplies read-only health facts. These views consume
+Installation, FieldPreflight, #24 policy, Operational/Room queue flows and #25/#26
+command journal. CommandPresentation formats canonical reasons/evidence; it does not
+execute commands. No additional navigation framework, database, service, settings
+store or journal is introduced.
+
+Draft text/caret/focus, route, selected records, filter and page state use Activity
+saved instance state. Credentials remain excluded. Only 20 matching journal/SOS rows
+render per page; journal ordering remains off-main, list controls are retained for
+unchanged data, and list rendering is deferred outside its destinations. Alert menus
+are rebuilt only when canonical alert records change. Diagnostic rendering/exports do
+not block GNSS acquisition, SOS, Sender or database commits. Existing journal query
+and retention bounds remain authoritative.
+
+TrackingNotification enters the original visible Sync/confirmed Stop handlers. The
+consumed action is saved across recreation. NotificationAppearance reads the existing
+preference, retains notification identity/actions and remaining timeout, and recolors
+with only-alert-once; it is not an execution or acknowledgement authority. Tracking/
+transfer services retain their existing lifetimes. User-facing pause is removed;
+internal OS/lifecycle pause remains. SOS still uses the original 1.2-second hold and
+engine. A retained instruction/result timestamp is labelled as evidence rather than
+substituted for an unrecorded empty-poll contact time. Full-app presentation now follows
+the supplied Review V3 PDF plus four written V4 overrides.

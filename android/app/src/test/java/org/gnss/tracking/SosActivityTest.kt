@@ -59,7 +59,7 @@ class SosActivityTest {
         val activity = Robolectric.buildActivity(MainActivity::class.java).setup()
         val sos =
             buttons(activity.get().window.decorView as ViewGroup).first {
-                it.text.startsWith("SOS —")
+                it.text == "HOLD FOR SOS"
             }
         sos.performClick()
         assertNull(app.repository.dao.latestSos())
@@ -79,7 +79,7 @@ class SosActivityTest {
         try {
             val button =
                 buttons(activity.get().window.decorView as ViewGroup).single {
-                    it.text.startsWith("SOS —")
+                    it.text == "HOLD FOR SOS"
                 }
             button.layout(0, 0, 240, 64)
             fun touch(action: Int) {
@@ -127,19 +127,27 @@ class SosActivityTest {
                     .getDeclaredField("sosStatus")
                     .apply { isAccessible = true }
                     .get(activity.get()) as android.widget.TextView
+            val pendingContext =
+                activity
+                    .get()
+                    .javaClass
+                    .getDeclaredField("trackingContext")
+                    .apply { isAccessible = true }
+                    .get(activity.get()) as android.widget.TextView
             withTimeout(10000) {
                 // Notice and Room's retained-SOS flow update independently. Require
                 // the complete UI state rather than racing the second emission.
                 while (
                     !status.text.contains("SOS NOT SAVED") ||
-                        !status.text.contains("awaiting Command receipt")
+                        !pendingContext.text.contains("SOS pending")
                 ) {
                     shadowOf(Looper.getMainLooper()).idle()
                     delay(10)
                 }
             }
             assertTrue(status.text.contains("SOS NOT SAVED"))
-            assertTrue(status.text.contains("awaiting Command receipt"))
+            assertTrue(pendingContext.text.contains("SOS pending"))
+            assertTrue(status.contentDescription.contains("storage unavailable"))
             assertEquals(1, app.repository.dao.sosHistory().size)
         } finally {
             activity.pause().stop().destroy()

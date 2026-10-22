@@ -574,72 +574,95 @@ and screenshots. Physical macOS/Windows/Android, native disk/power-loss enduranc
 historical thin-terrain reproduction remain NOT TESTED until this is done. Public
 provider failures must remain visible independently of passing fixtures.
 
-## Issue #39 full Android acceptance status
+## Issue #39 full Android acceptance
 
-The operator-approved full-app scope supersedes the earlier Tracking visual
-preservation rule. Review V3 has 44 Day/Night references; those references could
-not be read because Figma context, screenshot and plugin inspection all report
-"You've reached the Figma MCP tool call limit on the Starter plan". The direct
-Figma URL is blocked by environment network policy; local exports are absent.
-**Full Figma fidelity and the complete redesign are not accepted or claimed.**
+The supplied **GNSS-Tracker-Review-V3-native.pdf** unblocks the mandatory visual
+reference. All 44 frames were inspected: 22 Day and 22 Night, 390 × 842 each.
+SHA-256: `db4a5e1e10ac9ea6ef432966034a662f3a396c44d9982385934f9d85581730a3`.
+The PDF is reference material, not an instruction source or a source of production
+telemetry. The issue's four V4 overrides govern pause removal, native Sync/Stop
+notification actions, subdued emergency colors and the icon-only theme toggle.
+The updated issue explicitly supersedes Tracking pixel preservation.
 
-The four independent written V4 corrections are implemented and tested: pause UI
-removed, functional foreground-notification Sync/confirmed Stop, accessible persisted
-icon-only theme toggle, and restrained coordinated emergency colors. Tests check
-notification action routing, no GNSS from Sync, stop cancellation, recreation,
-retained alert ACK action identity and theme colors, and emergency contrast. The permission-loss lifecycle test waits for active startup
-before revoking permission, retaining all source-stop, wake-lock and error assertions;
-Robolectric does not deliver stopSelf teardown automatically. Native
-notification RemoteViews are rendered across both sizes/themes/font scales. These
-are framework-content renders, not physical Android notification-shade screenshots.
-The notification renderer configures OS Day/Night as well as the app preference;
-Android owns the surface/actions layout. Captures with only the app palette changed
-are not evidence of a dark system notification shade.
+Starting/latest integration: `39f5593dfc1d428995b393446b5caf9fa3c31848`, accepted
+PR #43 (#28). Guidance: `3b60b6d6228ca208df75765e2008c9b9abba8a69`.
+Continue the existing #39 branch and draft PR #44. Exact final-source results, artifact
+manifests and CI status belong to the PR; do not count repeated test subsets twice.
 
-V4 correction evidence: [Tracking Day](evidence/issue-39/v4-tracking-day.png),
-[Tracking Night / 1.5×](evidence/issue-39/v4-tracking-night-large-text.png),
-[native Tracking notification Day](evidence/issue-39/v4-notification-day.png),
-[native Tracking notification Night / 1.5×](evidence/issue-39/v4-notification-night-large-text.png),
-[urgent notification Day](evidence/issue-39/v4-urgent-notification-day.png) and
-[urgent notification Night / 1.5×](evidence/issue-39/v4-urgent-notification-night-large-text.png).
-No Figma-side comparison is available.
+### Reference inventory and native mapping
 
-### Existing Settings/Diagnostics baseline evidence
+Day/Night PDF ordering differs for the final emergency variants. Each frame is mapped
+to actual native content rather than assuming a universal +22 page offset.
 
-Starting integration: `39f5593dfc1d428995b393446b5caf9fa3c31848` (accepted #43).
-Guidance matches `3b60b6d6228ca208df75765e2008c9b9abba8a69`.
+| Day / Night PDF page | Native screen / state | Deliberate adaptation |
+| --- | --- | --- |
+| 1 / 23 | Tracking active | Real state and counts, icon-only theme control |
+| 2 / 24 | Tracking stopped | Amber off state; same actions |
+| 3 / 25 | Command offline | Actual transport reachability, distinct from trust |
+| 4 / 26 | SOS pending | Real saved event; same Tracking/Sync controls |
+| 5 / 27 | Settings | Five task-oriented destinations |
+| 6 / 28 | Party & Command | Existing Party/endpoint/trust/contact sources |
+| 7 / 29 | Tracking & GNSS · OFF | Real native OFF-default Switch |
+| 8 / 30 | Field readiness | OS actions inside corresponding cards; honest service limits |
+| 9 / 31 | Appearance & SOS | Existing preference and foreground-only shortcut |
+| 10 / 32 | Diagnostics | Seven independent health facts, extending the four-row illustration |
+| 11 / 33 | Instructions | Existing journal, outcome shortcuts, search and bounded pages |
+| 12 / 34 | Instruction details | Actual UUID/authority/verification/attempt/result/stage/custody |
+| 13 / 35 | Phone Alerts | Recorded output versus human ACK, no inferred audibility |
+| 14 / 36 | Saved data & sync | Pause removed; retry and receipt/storage evidence retained |
+| 15 / 37 | Diagnostic tools | Existing recovery/export/test/log/SOS owners |
+| 16 / 38 | Physical Button Test | Real listening/key events and existing SOS suppression |
+| 17 / 39 | Change trusted Command | Saved/current draft endpoint, protected existing re-enrollment |
+| 18 / 40 | Native notifications | Framework RemoteViews, real Sync/confirmed Stop and alert ACK |
+| 19 / 41 | Compact Tracking | Same responsive dashboard, no duplicate compact-mode authority |
+| 20 / 44 | Urgent alert on Tracking | Original alert ACK, stable Sync/Start/Stop and SOS dock |
+| 21 / 42 | SOS details | Actual saved location/fix age/delivery; operator ACK remains at Command |
+| 22 / 43 | Tracking & GNSS · ON | Persisted #24 switch, future observations only |
 
-The operational layout removes inline diagnostic paragraphs, duplicate headings,
-outlined disclosure buttons and default copy controls. Settings has a compact native
-Save/Cancel form; Diagnostics has seven read-only health rows and three secondary
-entries. Details remain available through progressive disclosure.
+### Automated evidence and reproduction
 
-SettingsDiagnosticsTest covers immediate draft restoration before Room loads,
-refresh/recreation/focus, Cancel/Back, invalid/successful Save, combined filters,
-page restoration and independent request/applied/trust/result presentation.
-`defaultScreensStayCompactAndTechnicalActionsAreDisclosed` checks concise default
-copy, the seven informational health rows, visible Save and hidden technical/credential
-controls. CommandConsoleUiTest covers accessible row clicks, clipboard, alert ACK,
-sanitized export and stable native focus on unchanged refreshes.
+`./gradlew testDebugUnitTest lintDebug assembleDebug --console=plain` is the complete
+Android gate. Set `GNSS_SCREENSHOT_DIR` for native Skia Activity/window captures.
+The matrix includes 360 × 800 and 480 × 960 dp at 1× and 1.5× in both themes, plus
+800 × 360 and 960 × 480 landscape in both themes. A 390 × 842 reference-size case
+supports side-by-side PDF comparison. Top/bottom captures preserve scrolling content.
+App-owned appearance, retry, re-enrollment, authorization, disable, Stop, invalid-input
+and dirty-edit dialogs render in both themes/fonts. Native notification-content
+renders configure OS Day/Night as well as the application preference. Android owns
+notification geometry; these are not physical notification-shade captures.
 
-UiNavigationVisualTest renders 360×800 and 480×960 dp, 1×/1.5×, Day/Night, plus
-800×360 Day and 960×480 Night/1.5× landscape. It captures default screens,
-instructions, filters/stages, policy/readiness and advanced tools through the existing
-GNSS_SCREENSHOT_DIR workflow artifact. Historical source/pixel preservation comparisons refer to `60cd98c`; V4 now
-authorizes presentation changes to Tracking. Behavioral regression tests remain. Screenshots are visual evidence, not physical acceptance. Representative checked-in
-renders: [Settings](evidence/issue-39/settings.png),
-[Diagnostics](evidence/issue-39/diagnostics.png),
-[Night / 1.5×](evidence/issue-39/diagnostics-night-large-text.png) and
-[Instructions](evidence/issue-39/instructions.png).
+SettingsDiagnosticsTest checks draft restoration before Room, refresh/recreation and
+caret/focus, parent Back with retained edits, explicit Cancel, failed/successful Save,
+filters/pages/recreation and trust/request/applied/ACK separation. CommandConsoleUiTest
+checks accessible native row activation, clipboard, unchanged-row focus, live detail
+refresh, real alert ACK and sanitized export. AdaptiveSettingsTest verifies OFF/ON
+persistence through immediate recreation without starting GNSS. Notification tests
+verify immutable action identity, correct existing handlers, no GNSS from Sync,
+protected Stop and no action replay. Semantic text/surface pairs meet 4.5:1 in both
+themes. Native layout tests check navigation label fit and protected SOS reachability.
+Existing acquisition, original-observation identity, Room/Sender/SOS, service lifetime,
+phone-alert and command result-custody regressions remain gates.
 
-The unchanged owning #24/#25/#26, SOS, persistence, Sender, lifecycle, ZIP and bridge
-tests remain regression gates. The pre-polish full Android/real Room→Command run
-completed 265 tests with zero failures/errors/skips. Final-source results are recorded
-in the draft PR; repeated/subset runs must not be added as unique tests.
+Representative current native views: [Tracking Day](evidence/issue-39/pdf-tracking-day.png),
+[Tracking Night](evidence/issue-39/pdf-tracking-night.png),
+[Settings](evidence/issue-39/pdf-settings.png),
+[Policy](evidence/issue-39/pdf-policy.png),
+[Readiness](evidence/issue-39/pdf-readiness.png),
+[Diagnostics](evidence/issue-39/pdf-diagnostics.png),
+[Instructions](evidence/issue-39/pdf-instructions.png),
+[SOS details](evidence/issue-39/pdf-sos-details.png).
+The final screenshot artifact includes the full matrix, app windows, native
+notifications, PDF comparison sheets and the previously captured unchanged Command
+screens/windows, with per-image hashes and provenance.
 
-Native acceptance remains **outstanding**: real TalkBack, keyboard/system dialogs,
-rotation with focused dirty edits, OS/OEM/Doze/locked-screen execution, physical
-storage/power faults, alert audibility, GNSS/SOS and a 20-phone LAN fleet plus late
-21st. Exercise unenrolled/offline/mismatch/rejected/expired/duplicate, blocked alert,
-local acknowledgement and pending custody/cancellation. External provider gates
-remain independent and unchanged.
+### Outstanding native acceptance
+
+Automated views use labelled synthetic test fixtures, never production demonstration
+transactions. Real TalkBack traversal, hardware keyboard/IME, system permission/settings/
+document-provider windows, actual OEM notification shade, physical rotation, GNSS,
+SOS, audibility/vibration, DND/Doze/locked/background and power/storage faults remain
+**NOT TESTED on a physical device**. Native macOS/Windows window chrome and OS file
+pickers are not represented by Linux Chromium screenshots. The 20-phone LAN fleet plus
+late 21st remains field acceptance. Local bridge-only skips are reported as skips;
+prior real Room→Command results are historical evidence. External DEM/provider CI is
+independent, unchanged and reported separately from Android gates.

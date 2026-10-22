@@ -537,52 +537,46 @@ locked/OEM/Doze behavior remain NOT TESTED without actual hardware.
 
 ## Android redesign (#39)
 
-The updated operator scope is the full Android application, using [Figma Review V3](https://www.figma.com/design/Wv08fsbGaVCC6rg7KYaRjR?node-id=8-2)
-plus four written V4 corrections. **The complete Figma-led redesign is blocked:** the
-Figma Starter tool quota rejects context/screenshots/file inspection, direct file
-access is denied by the environment network policy, and no visual exports are
-available locally. The current layout is not certified against the 44 frames.
+The full Android interface follows the operator's 44-frame Review V3 PDF export and
+four V4 corrections. See [design system](../docs/design-system.md#issue-39-native-android-redesign)
+and [visual acceptance](../docs/ui-acceptance.md#issue-39-full-android-acceptance).
+Tracking presentation is now authorized to change; acquisition, persistence, Sender,
+service lifetime, authentication and SOS execution remain owned by their existing
+components. Command browser UI and protocol are unchanged.
 
-The independently specified V4 corrections are implemented: no exposed history-pause
-control (including the retained-transfer notification), native Tracking notification
-Sync Now and protected Stop Tracking actions, a coordinated burgundy emergency
-palette, and an accessible icon-only Tracking theme toggle. The toggle uses the same
-appearance preference as Settings and preserves drafts through recreation. Android
-owns notification surfaces; app colors update without changing channel settings or
-acknowledgement state. Actions enter the visible existing Activity workflows; Sync
-never starts GNSS and Stop still asks for confirmation. Action consumption survives
-recreation so reopening a notification does not replay an already consumed action.
+- **Tracking:** prominent party identity, independent tracking/Command pills, real
+  GNSS quality/age, balanced saved-observation metrics and ACK progress, one Sync Now
+  and Start/Stop action row, contextual alerts, anchored protected SOS dock. Large
+  text/short landscape keeps actions accessible while facts scroll. The moon/sun
+  control is icon-only and uses the existing persisted appearance preference.
+- **Settings:** five destination rows open Party & Command, Tracking & GNSS, Field
+  readiness, Appearance & SOS and Advanced settings. Nested editors have explicit
+  Save/Cancel and transaction failure feedback. Draft text, focus and caret survive
+  refresh/recreation before Room loads. Back moves to the parent and retains edits;
+  closing with dirty edits asks before discarding. Local Save never proves a Command
+  request or application. The #24 adaptive storage Switch persists immediately,
+  defaults OFF and affects future observations only. Requested/applied/revision and
+  trust/contact evidence remain distinct. Re-enrollment and disabling control ask for
+  confirmation. Credentials are excluded from saved instance state and autofill.
+- **Diagnostics:** seven independently grounded health rows lead to Instructions,
+  Phone Alerts, Saved data & sync and Diagnostic tools. The existing journal supplies
+  newest-first pages of 20, search, outcome shortcuts and type/outcome/time filters.
+  Details show UUID, authority, verification, attempt, outcome/reason, stage timestamps,
+  result custody, Copy ID and sanitized export; Full record expands canonical evidence.
+  Page, filters and selected details survive recreation; unchanged journal refreshes
+  preserve native list controls/focus. Actual alert output/ACK and SOS delivery/history
+  remain separate. Retry, ZIP export, Physical Button Test and advanced logs retain
+  their existing owners. SOS history also pages by 20 and opens actual event details.
 
-The following describes the existing Settings/Diagnostics baseline, not completed
-Figma fidelity:
+No history-pause action is exposed. Tracking notifications have native **Sync Now**
+and **Stop Tracking** actions, using existing visible handlers, immutable distinct
+intents and protected Stop confirmation. Sync does not start GNSS. Consumed actions
+survive recreation. Theme refresh retains notification identity, alert human-ACK action
+and remaining timeout without replaying sound. Android owns notification geometry;
+OS/OEM settings can restrict background operation, notifications and alert output.
 
-Settings has one compact Party/Command form for identity, endpoint and local reporting
-interval. **Save settings** confirms local persistence; **Cancel** restores saved
-values. Draft text, focus and selection survive refresh/recreation, including before
-Room loads. A local save does not prove a Command request was applied. Appearance is
-in the title row. Tracking policy shows the applied interval and latest retained
-request outcome. Adaptive persistence uses #24's existing immediate Apply, OFF by
-default and affecting future observations only; revisions/fallback details expand.
-
-Field readiness opens existing permission/location/notification/battery actions.
-Command access opens authority/contact evidence and the protected enrollment flow.
-Wi-Fi, message receipt and authenticated control contact remain separate. Empty
-control polls have no historical journal record; last-contact evidence stays labelled
-as evidence when current contact is unknown. Android/OEM background execution is not
-guaranteed.
-
-Diagnostics starts with one seven-row health panel: GNSS, storage, Command transport,
-sync, SOS, device space and remote control. Short status badges and metadata represent
-independent facts. **Command Instructions**, **Phone Alerts** and **Advanced Diagnostics**
-are the three disclosure rows. Advanced retains health/technical/SOS evidence,
-Physical Button Test, confirmed retry and sanitized ZIP export. Phone output never
-implies audibility or human acknowledgement.
-
-Instructions use the same bounded persisted journal: newest-first pages of 20, search,
-optional type/outcome/time filters, expandable stages and Copy ID. Duplicate-stage
-filtering retains the original outcome. Native row identity/focus remains stable
-when canonical data is unchanged; filters, page and expanded IDs survive recreation.
-No queue, database schema, Sender, service, authentication or result-custody authority
-changes. Command web remains untouched. Tracking presentation now includes the V4
-corrections above; acquisition and SOS behavior remain owned by existing mechanisms. Real TalkBack,
-keyboard/system dialogs, OEM/Doze and physical field acceptance remain outstanding.
+Run `./gradlew testDebugUnitTest lintDebug assembleDebug --console=plain`.
+`GNSS_SCREENSHOT_DIR` collects native Activity, dialog and notification-content PNGs.
+The screenshot fixtures are test-only Room/operational data. Software renders do not
+establish real GNSS, audibility, OEM/Doze behavior, physical TalkBack or native desktop
+acceptance; use [DEVICE-ACCEPTANCE.md](DEVICE-ACCEPTANCE.md) for field validation.

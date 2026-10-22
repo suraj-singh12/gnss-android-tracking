@@ -34,10 +34,7 @@ class CommandConsoleUiTest {
                 .filterIsInstance<Button>()
                 .single { it.text == "Diagnostics" }
                 .performClick()
-            views(root)
-                .filterIsInstance<Button>()
-                .single { it.text.toString().contains("Command Instructions") }
-                .performClick()
+            openNativeScreen(activity.get(), "Command Instructions")
             val id = Protocol.newId()
             val state = app.repository.state()
             app.repository.dao.insertCommand(
@@ -58,7 +55,7 @@ class CommandConsoleUiTest {
             withTimeout(10000) {
                 while (
                     views(root).filterIsInstance<TextView>().none {
-                        it.text.toString().contains("OS background restriction")
+                        it.contentDescription?.contains("Open instruction details") == true
                     }
                 ) {
                     shadowOf(Looper.getMainLooper()).idle()
@@ -78,7 +75,7 @@ class CommandConsoleUiTest {
             filter.setText("blocked")
             val title =
                 views(root).filterIsInstance<TextView>().first {
-                    it.contentDescription?.toString()?.contains("Tap to expand details") == true
+                    it.contentDescription?.toString()?.contains("Open instruction details") == true
                 }
             assertTrue("Command row must be keyboard focusable", title.isFocusable)
             assertTrue(
@@ -92,6 +89,10 @@ class CommandConsoleUiTest {
                     it.isShown && it.text.toString().contains(id)
                 }
             )
+            views(root)
+                .filterIsInstance<Button>()
+                .single { it.text == "Full record" }
+                .performClick()
             app.repository.dao.updateCommand(
                 app.repository.dao
                     .command(id)!!
@@ -119,9 +120,10 @@ class CommandConsoleUiTest {
                     .text
                     .toString(),
             )
+            openNativeScreen(activity.get(), "Command Instructions")
             val focusedRow =
                 views(root).filterIsInstance<Button>().single {
-                    it.contentDescription?.toString()?.contains("Tap to expand details") == true
+                    it.contentDescription?.toString()?.contains("Open instruction details") == true
                 }
             focusedRow.requestFocus()
             app.repository.dao.updateCommand(app.repository.dao.command(id)!!)

@@ -8,6 +8,7 @@ import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.Switch
 import android.widget.TextView
 import androidx.test.core.app.ApplicationProvider
 import java.io.File
@@ -21,100 +22,85 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * Real Activity/Room flows, rendered using Robolectric's native Skia renderer. Synthetic telemetry
- * does not establish physical GNSS or OEM behavior.
- */
+/** Actual native Activity views and Room fixtures. This is not physical-device acceptance. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = TrackingApp::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class UiNavigationVisualTest {
-    private data class RenderCase(
-        val width: Int,
-        val height: Int,
-        val font: Float,
-        val night: Boolean,
-    )
-
-    private fun descendants(view: View): List<View> =
-        listOf(view) +
-            if (view is ViewGroup)
-                (0 until view.childCount).flatMap { descendants(view.getChildAt(it)) }
-            else emptyList()
-
     @Test
     fun navigationAndOperationalStatesRenderAtCompactLargeAndScaledSizes() = runBlocking {
         val app = ApplicationProvider.getApplicationContext<TrackingApp>()
+        val state = withContext(Dispatchers.IO) { app.repository.state() }
         withContext(Dispatchers.IO) {
-            val state = app.repository.state()
-            // Synthetic journal fixtures for presentation only; never installed in production.
-            for ((index, outcome) in listOf("blocked", "applied", "expired").withIndex()) {
+            app.repository.settings("A-07", "Alpha Patrol", "http://192.168.1.10:8080", 5, false)
+            for ((n, outcome) in listOf("blocked", "applied", "expired", "unknown").withIndex()) {
                 app.repository.dao.insertCommand(
                     CommandRecord(
                         Protocol.newId(),
-                        "test-command-identity",
+                        "test-command",
                         state.deviceId,
                         "test-enrollment",
                         "reporting",
-                        index.toLong(),
-                        1761000000000L - index * 1000L,
+                        n.toLong(),
+                        System.currentTimeMillis() - n * 1000L,
                         state = outcome,
                         reason =
-                            if (outcome == "blocked") "Needs local interaction; open Settings"
-                            else "Recorded $outcome result",
-                        attempted = true,
+                            if (outcome == "blocked") "OS restriction; open app"
+                            else "Recorded $outcome",
+                        attempted = outcome != "unknown",
                         requested = "{\"seconds\":20}",
                         effective = if (outcome == "applied") "20 s" else "",
-                        events =
-                            if (outcome == "applied") "Duplicate ignored; persisted result retained"
-                            else "Result pending delivery",
                     )
                 )
             }
+            app.repository.snapshot(
+                System.currentTimeMillis(),
+                Fix(utc(System.currentTimeMillis()), 0, 28.6, 77.2, 3.0, null, null, null, null),
+                Health(gnss_status = "fix"),
+            )
         }
+        shadowOf(app.getSystemService(android.net.ConnectivityManager::class.java))
+            .clearAllNetworks()
         shadowOf(app)
             .grantPermissions(
                 Manifest.permission.ACCESS_FINE_LOCATION,
                 Manifest.permission.POST_NOTIFICATIONS,
             )
-        shadowOf(app.getSystemService(LocationManager::class.java))
-            .setProviderEnabled(LocationManager.GPS_PROVIDER, true)
         val output = System.getenv("GNSS_SCREENSHOT_DIR")?.let { File(it).apply { mkdirs() } }
-        for ((width, height, font, night) in
+        val cases =
             listOf(
-                RenderCase(360, 800, 1f, false),
-                RenderCase(480, 960, 1f, false),
-                RenderCase(360, 800, 1.5f, false),
-                RenderCase(360, 800, 1f, true),
-                RenderCase(480, 960, 1f, true),
-                RenderCase(360, 800, 1.5f, true),
-                RenderCase(480, 960, 1.5f, false),
-                RenderCase(480, 960, 1.5f, true),
-                RenderCase(800, 360, 1f, false),
-                RenderCase(960, 480, 1.5f, true),
-            )) {
+                Triple(360, 800, 1f),
+                Triple(480, 960, 1f),
+                Triple(360, 800, 1.5f),
+                Triple(480, 960, 1.5f),
+                Triple(800, 360, 1f),
+                Triple(960, 480, 1.5f),
+                Triple(390, 842, 1f),
+            )
+        for (night in listOf(false, true)) for ((width, height, font) in cases) {
             app.getSharedPreferences("appearance", 0).edit().putBoolean("night", night).commit()
-            app.physicalButtonTest.clearResults()
-            withContext(Dispatchers.IO) { app.recorder.physicalButtonHistory() }
-            val config =
+            org.robolectric.RuntimeEnvironment.setQualifiers(
+                "w${width}dp-h${height}dp-${if(width>height) "land" else "port"}"
+            )
+            @Suppress("DEPRECATION")
+            app.resources.updateConfiguration(
                 android.content.res.Configuration(app.resources.configuration).apply {
                     fontScale = font
-                }
-            @Suppress("DEPRECATION")
-            app.resources.updateConfiguration(config, app.resources.displayMetrics)
-            val activity = Robolectric.buildActivity(MainActivity::class.java).setup()
-            // A themed configuration context has its own Robolectric service shadow.
-            // Real Android exposes the same system GPS switch through both contexts.
-            val activityLocation =
-                shadowOf(activity.get().getSystemService(LocationManager::class.java))
-            activityLocation.setProviderEnabled(LocationManager.GPS_PROVIDER, true)
+                },
+                app.resources.displayMetrics,
+            )
+            app.operational.value = Operational()
+            val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+            val a = controller.get()
+            shadowOf(a.getSystemService(LocationManager::class.java))
+                .setProviderEnabled(LocationManager.GPS_PROVIDER, true)
             try {
-                val root = activity.get().findViewById<View>(android.R.id.content)
-                val density = app.resources.displayMetrics.density
+                val root = a.findViewById<ViewGroup>(android.R.id.content)
+                val density = a.resources.displayMetrics.density
                 val w = (width * density).toInt()
                 val h = (height * density).toInt()
                 suspend fun settle() {
-                    repeat(20) {
+                    repeat(12) {
                         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(10))
                         delay(10)
                     }
@@ -124,154 +110,103 @@ class UiNavigationVisualTest {
                     )
                     root.layout(0, 0, w, h)
                     for (tab in
-                        descendants(root).filterIsInstance<Button>().filter {
+                        nativeViews(root).filterIsInstance<Button>().filter {
                             it.text in listOf("Tracking", "Settings", "Diagnostics")
-                        }) {
-                        assertEquals(
-                            "Navigation label must fit at font scale $font",
-                            1,
-                            tab.lineCount,
-                        )
-                    }
+                        }) assertEquals("Tab fits", 1, tab.lineCount)
                     val sos =
-                        descendants(root).filterIsInstance<Button>().single {
-                            it.text == "SOS — hold to activate"
+                        nativeViews(root).filterIsInstance<Button>().single {
+                            it.text == "HOLD FOR SOS"
                         }
                     if (sos.isShown) {
-                        // The test renders the content root directly, without a laid-out window.
                         val bounds = android.graphics.Rect(0, 0, sos.width, sos.height)
-                        (root as ViewGroup).offsetDescendantRectToMyCoords(sos, bounds)
+                        root.offsetDescendantRectToMyCoords(sos, bounds)
                         assertTrue(
-                            "SOS must remain fully reachable",
+                            "SOS reachable at $width × $height / $font",
                             bounds.top >= 0 && bounds.bottom <= h,
                         )
+                        assertTrue(sos.height >= 48 * density)
                     }
                 }
                 fun capture(name: String) {
                     if (output == null) return
                     val image = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
                     root.draw(Canvas(image))
-                    File(output, "android-${if(night) "night-" else ""}${width}-${font}-$name.png")
+                    File(
+                            output,
+                            "android-${if(night) "night" else "day"}-${width}x${height}-${font}-$name.png",
+                        )
                         .outputStream()
                         .use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
                     image.recycle()
                 }
-                suspend fun reveal(view: View) {
-                    val scroller =
-                        descendants(root).filterIsInstance<android.widget.ScrollView>().first()
-                    val body = scroller.getChildAt(0) as ViewGroup
-                    val bounds = android.graphics.Rect(0, 0, view.width, view.height)
-                    body.offsetDescendantRectToMyCoords(view, bounds)
-                    scroller.scrollTo(0, bounds.top)
-                    settle()
+                withTimeout(15000) {
+                    while (
+                        nativeViews(root).filterIsInstance<Button>().none {
+                            it.text == "Start Tracking" && it.isEnabled
+                        }
+                    ) {
+                        shadowOf(Looper.getMainLooper()).idle()
+                        delay(10)
+                    }
                 }
-                awaitInitialized(activity.get())
+                fun actionBounds(): android.graphics.Rect {
+                    val sync =
+                        nativeViews(root).filterIsInstance<Button>().single {
+                            it.text == "Sync Now"
+                        }
+                    assertTrue(
+                        "Sync action is measured and reachable",
+                        sync.width > 0 && sync.height >= 48 * density,
+                    )
+                    return android.graphics.Rect(0, 0, sync.width, sync.height).apply {
+                        root.offsetDescendantRectToMyCoords(sync, this)
+                    }
+                }
+                var stableActions: android.graphics.Rect? = null
                 for ((name, op) in
                     listOf(
-                        "stopped" to Operational(),
-                        "tracking" to
+                        "tracking-stopped" to Operational(),
+                        "tracking-active" to
                             Operational(
                                 tracking = true,
                                 gnss = "fix",
                                 accuracy = 3.0,
                                 ageMillis = 1000,
-                                health = Health(battery_percent = 76, wifi_connected = true),
-                                link = "Wi-Fi available • Command reachable",
+                                health = Health(wifi_connected = true),
                             ),
-                        "offline-stale" to
+                        "tracking-offline" to
                             Operational(
                                 tracking = true,
                                 gnss = "stale",
                                 accuracy = 8.0,
                                 ageMillis = 90000,
-                                health = Health(battery_percent = 43, wifi_connected = false),
-                                link = "Wi-Fi unavailable",
+                                health = Health(wifi_connected = false),
+                            ),
+                        "tracking-error" to
+                            Operational(
+                                tracking = true,
+                                error = "Storage needs attention · Open Diagnostics",
                             ),
                     )) {
                     app.operational.value = op
                     settle()
                     capture(name)
-                    val visibleText =
-                        descendants(root)
+                    if (stableActions == null) stableActions = actionBounds()
+                    else
+                        assertEquals(
+                            "Core actions stay in place for $name",
+                            stableActions,
+                            actionBounds(),
+                        )
+                    val visible =
+                        nativeViews(root)
                             .filterIsInstance<TextView>()
                             .filter { it.isShown }
-                            .joinToString("\n") { it.text }
-                    assertTrue(visibleText.contains(if (op.tracking) "TRACKING" else "STOPPED"))
-                    if (name == "tracking") {
-                        assertTrue(visibleText.contains("GNSS Fresh"))
-                        assertTrue(visibleText.contains("Command Connected"))
-                    }
-                    if (name == "offline-stale") {
-                        assertTrue(visibleText.contains("GNSS Stale"))
-                        assertTrue(visibleText.contains("Offline"))
-                    }
+                            .joinToString(" ") { it.text }
+                    assertTrue(visible.contains(if (op.tracking) "Tracking on" else "Tracking off"))
                 }
-                app.operational.value =
-                    Operational(
-                        tracking = true,
-                        gnss = "fix",
-                        accuracy = 3.0,
-                        ageMillis = 1000,
-                        error = "Command unavailable; retained for retry",
-                        link = "Wi-Fi available",
-                        health = Health(wifi_connected = true),
-                    )
-                settle()
-                assertTrue(
-                    descendants(root).filterIsInstance<TextView>().any {
-                        it.isShown && it.text == "TRACKING"
-                    }
-                )
-                capture("tracking-command-unavailable")
-                val hold =
-                    descendants(root).filterIsInstance<Button>().single {
-                        it.text == "SOS — hold to activate"
-                    }
-                val touch =
-                    android.view.MotionEvent.obtain(
-                        0,
-                        android.os.SystemClock.uptimeMillis(),
-                        android.view.MotionEvent.ACTION_DOWN,
-                        80f,
-                        30f,
-                        0,
-                    )
-                hold.dispatchTouchEvent(touch)
-                touch.recycle()
-                shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(600))
-                root.measure(
-                    View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
-                    View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY),
-                )
-                root.layout(0, 0, w, h)
-                capture("sos-hold-progress")
-                val cancel =
-                    android.view.MotionEvent.obtain(
-                        0,
-                        android.os.SystemClock.uptimeMillis(),
-                        android.view.MotionEvent.ACTION_CANCEL,
-                        80f,
-                        30f,
-                        0,
-                    )
-                hold.dispatchTouchEvent(cancel)
-                cancel.recycle()
+                // Real persisted SOS fixture, never a production demonstration transaction.
                 withContext(Dispatchers.IO) {
-                    app.repository.snapshot(
-                        System.currentTimeMillis(),
-                        Fix(
-                            utc(System.currentTimeMillis()),
-                            0,
-                            28.6,
-                            77.2,
-                            3.0,
-                            null,
-                            null,
-                            null,
-                            null,
-                        ),
-                        Health(gnss_status = "fix"),
-                    )
                     app.repository.saveSos(
                         Protocol.newId(),
                         System.currentTimeMillis(),
@@ -281,287 +216,141 @@ class UiNavigationVisualTest {
                     )
                 }
                 settle()
-                capture("backlog-sos-pending")
-                val all = descendants(root)
-                for (destination in listOf("Settings", "Diagnostics", "Tracking")) {
-                    all.filterIsInstance<Button>().single { it.text == destination }.performClick()
-                    settle()
-                    capture("nav-" + destination.lowercase())
-                    if (destination == "Settings" && height > width) {
-                        val appearance = activity.get().findViewById<Button>(R.id.appearance)
-                        val bounds =
-                            android.graphics.Rect(0, 0, appearance.width, appearance.height)
-                        (root as ViewGroup).offsetDescendantRectToMyCoords(appearance, bounds)
-                        assertTrue(
-                            "Appearance must be discoverable without scrolling",
-                            bounds.top >= 0 && bounds.bottom <= h,
-                        )
+                capture("tracking-sos-pending")
+                val alert =
+                    CommandRecord(
+                        Protocol.newId(),
+                        "test-command",
+                        state.deviceId,
+                        "test-enrollment",
+                        "alert",
+                        20L,
+                        System.currentTimeMillis(),
+                        state = "output_attempted",
+                        attempted = true,
+                        requested =
+                            """{"mode":"urgent","message":"Return to base","duration_s":60,"repeat_s":10}""",
+                    )
+                withContext(Dispatchers.IO) { app.repository.dao.insertCommand(alert) }
+                settle()
+                capture("tracking-urgent-alert")
+                assertEquals("Urgent alert retains core actions", stableActions, actionBounds())
+                nativeViews(root)
+                    .filterIsInstance<Button>()
+                    .first { it.isShown && it.text == "Acknowledge / Stop Alert" }
+                    .performClick()
+                withTimeout(10000) {
+                    while (
+                        withContext(Dispatchers.IO) {
+                            app.repository.dao.command(alert.id)?.state
+                        } != "recipient_acknowledged"
+                    ) {
+                        shadowOf(Looper.getMainLooper()).idle()
+                        delay(10)
                     }
-                    if (destination == "Diagnostics") {
-                        descendants(root)
-                            .filterIsInstance<Button>()
-                            .single { it.text.startsWith("Advanced Diagnostics") }
-                            .performClick()
-                        val tools = activity.get().findViewById<ViewGroup>(R.id.diagnostic_tools)
-                        assertTrue(tools.isShown)
-                        val actions =
-                            descendants(tools)
-                                .filterIsInstance<Button>()
-                                .filter { it.isShown }
-                                .map { it.text.toString() }
-                        assertEquals(
-                            listOf(
-                                "Physical Button Test",
-                                "Retry saved messages",
-                                "Export diagnostics",
-                            ),
-                            actions,
-                        )
-                        descendants(tools)
-                            .filterIsInstance<Button>()
-                            .single { it.text == "Physical Button Test" }
-                            .performClick()
-                        settle()
-                        capture("diagnostics-physical-button-expanded")
-                        val diagnosticText =
-                            descendants(tools)
-                                .filterIsInstance<TextView>()
-                                .filter { it.isShown }
-                                .joinToString("\n") { it.text }
-                        assertTrue(diagnosticText.contains("Test status: INACTIVE"))
-                        assertTrue(diagnosticText.contains("Mechanism unavailable"))
-                        descendants(tools)
+                }
+                settle()
+                capture("tracking-alert-acknowledged")
+                for (name in
+                    listOf(
+                        "Settings",
+                        "Party & Command",
+                        "Edit connection",
+                        "Command trust",
+                        "Change trusted Command",
+                        "Tracking & GNSS",
+                        "Reporting interval",
+                        "Policy details",
+                        "Field readiness",
+                        "Appearance & SOS",
+                        "Advanced settings",
+                        "Command access",
+                        "Diagnostics",
+                        "Command Instructions",
+                        "Instruction filters",
+                        "Phone Alerts",
+                        "Saved data & sync",
+                        "Storage health",
+                        "Diagnostic tools",
+                        "Advanced logs",
+                        "SOS event history",
+                        "SOS details",
+                        "Physical Button Test",
+                    )) {
+                    openNativeScreen(a, name)
+                    settle()
+                    capture(name.lowercase().replace(Regex("[^a-z0-9]+"), "-"))
+                    if (name == "Physical Button Test") {
+                        nativeViews(root)
                             .filterIsInstance<Button>()
                             .single { it.text == "Start Test" }
                             .performClick()
                         settle()
-                        capture("diagnostics-listening")
-                        val now = android.os.SystemClock.uptimeMillis()
-                        activity
-                            .get()
-                            .dispatchKeyEvent(
-                                android.view.KeyEvent(
-                                    now,
-                                    now,
-                                    android.view.KeyEvent.ACTION_DOWN,
-                                    android.view.KeyEvent.KEYCODE_VOLUME_UP,
-                                    0,
-                                )
+                        capture("physical-button-listening")
+                        a.dispatchKeyEvent(
+                            android.view.KeyEvent(
+                                android.view.KeyEvent.ACTION_DOWN,
+                                android.view.KeyEvent.KEYCODE_VOLUME_UP,
                             )
-                        activity
-                            .get()
-                            .dispatchKeyEvent(
-                                android.view.KeyEvent(
-                                    now,
-                                    now + 10,
-                                    android.view.KeyEvent.ACTION_UP,
-                                    android.view.KeyEvent.KEYCODE_VOLUME_UP,
-                                    0,
-                                )
-                            )
-                        settle()
-                        capture("diagnostics-recorded-events")
-                        assertTrue(
-                            descendants(tools).filterIsInstance<TextView>().any {
-                                it.text.contains("Count of actual key presses: 1")
-                            }
                         )
-                        activity.pause().stop()
-                        activity.start().resume()
-                        // Pause stops listening synchronously; the persisted diagnostic
-                        // and its debounced IO/render refresh complete asynchronously.
-                        assertFalse(app.physicalButtonTest.listening)
-                        withTimeout(10000) {
-                            while (
-                                descendants(tools).filterIsInstance<TextView>().none {
-                                    it.text.contains("Test status: INTERRUPTED")
-                                }
-                            ) {
-                                shadowOf(Looper.getMainLooper())
-                                    .idleFor(java.time.Duration.ofMillis(10))
-                                delay(10)
-                            }
-                        }
                         settle()
-                        capture("diagnostics-interrupted")
-                        assertTrue(
-                            descendants(tools).filterIsInstance<TextView>().any {
-                                it.text.contains("Test status: INTERRUPTED")
-                            }
-                        )
-                        run {
-                            all.filterIsInstance<Button>()
-                                .single { it.text == "Settings" }
-                                .performClick()
-                            settle()
-                            all.filterIsInstance<Button>()
-                                .single { it.text.startsWith("Field readiness") }
-                                .performClick()
-                            settle()
-                            reveal(
-                                all.filterIsInstance<Button>().single {
-                                    it.text.startsWith("Field readiness")
-                                }
-                            )
-                            capture("settings-readiness-expanded")
-                            all.filterIsInstance<Button>()
-                                .single { it.text.startsWith("Emergency shortcut") }
-                                .performClick()
-                            settle()
-                            reveal(
-                                all.filterIsInstance<Button>().single {
-                                    it.text.startsWith("Emergency shortcut")
-                                }
-                            )
-                            capture("settings-emergency-expanded")
-                            val persistence =
-                                all.filterIsInstance<android.widget.CheckBox>().single {
-                                    it.text == "Adaptive GNSS persistence"
-                                }
-                            settle()
-                            reveal(persistence)
-                            assertFalse(
-                                all.filterIsInstance<android.widget.CheckBox>()
-                                    .single { it.text == "Adaptive GNSS persistence" }
-                                    .isChecked
-                            )
-                            val adaptiveChoice =
-                                all.filterIsInstance<android.widget.CheckBox>().single {
-                                    it.text == "Adaptive GNSS persistence"
-                                }
-                            assertTrue(
-                                "Adaptive control must retain a 48 dp touch target",
-                                adaptiveChoice.height >= (48 * density).toInt(),
-                            )
-                            capture("settings-gnss-persistence")
-                            (root as ViewGroup).let { view ->
-                                descendants(view)
-                                    .filterIsInstance<android.widget.ScrollView>()
-                                    .first()
-                                    .scrollTo(0, 100000)
-                            }
-                            settle()
-                            capture("settings-extended-content")
-                        }
-                        all.filterIsInstance<Button>()
-                            .single { it.text == "Diagnostics" }
+                        capture("physical-button-event")
+                        nativeViews(root)
+                            .filterIsInstance<Button>()
+                            .single { it.text == "Stop Test" }
                             .performClick()
-                        settle()
-                        val console =
-                            descendants(root).filterIsInstance<Button>().single {
-                                it.text.startsWith("Command Instructions  ")
-                            }
-                        console.performClick()
-                        settle()
-                        reveal(console)
-                        capture("diagnostics-instructions")
-                        val filters =
-                            descendants(root).filterIsInstance<Button>().single {
-                                it.text.startsWith("Filters  ")
-                            }
-                        filters.performClick()
-                        settle()
-                        reveal(filters)
-                        capture("diagnostics-command-filters")
-                        filters.performClick()
-                        settle()
-                        val commandRow =
-                            descendants(root).filterIsInstance<Button>().first {
-                                it.contentDescription?.contains("Tap to expand details") == true
-                            }
-                        assertTrue(commandRow.isFocusable)
-                        assertTrue(
-                            commandRow.performAccessibilityAction(
-                                android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK,
-                                null,
-                            )
-                        )
-                        settle()
-                        reveal(commandRow)
-                        capture("diagnostics-command-stages")
-                        all.filterIsInstance<Button>()
-                            .single { it.text.startsWith("Advanced technical evidence") }
-                            .performClick()
-                        settle()
-                        reveal(
-                            all.filterIsInstance<Button>().single {
-                                it.text.startsWith("Advanced technical evidence")
-                            }
-                        )
-                        capture("diagnostics-advanced")
-                        descendants(root)
-                            .filterIsInstance<android.widget.ScrollView>()
-                            .first()
-                            .scrollTo(0, 100000)
-                        settle()
-                        capture("diagnostics-extended-content")
                     }
-                    assertEquals(
-                        destination,
-                        activity
-                            .get()
-                            .javaClass
-                            .getDeclaredField("destination")
-                            .apply { isAccessible = true }
-                            .get(activity.get()),
-                    )
+                    if (name == "Command Instructions") {
+                        nativeViews(root)
+                            .filterIsInstance<Button>()
+                            .first {
+                                it.contentDescription?.contains("Open instruction details") == true
+                            }
+                            .performClick()
+                        settle()
+                        capture("instruction-details")
+                        nativeViews(root)
+                            .filterIsInstance<Button>()
+                            .single { it.text == "Full record" }
+                            .performClick()
+                        settle()
+                        capture("instruction-full-record")
+                    }
+                    // Capture the lower viewport of every nested route at large fonts.
+                    val scroller =
+                        nativeViews(root).filterIsInstance<android.widget.ScrollView>().first()
+                    scroller.fullScroll(View.FOCUS_DOWN)
+                    settle()
+                    capture(name.lowercase().replace(Regex("[^a-z0-9]+"), "-") + "-bottom")
                 }
-                val settings = all.filterIsInstance<TextView>().single { it.text == "Party ID" }
-                assertFalse(settings.isShown)
-                assertTrue(
-                    all.filterIsInstance<Button>().single { it.text == "Tracking" }.isSelected
-                )
-                // Render actionable permission/GPS recovery, not only the granted state.
-                app.operational.value = Operational()
-                shadowOf(app)
-                    .denyPermissions(
-                        Manifest.permission.ACCESS_FINE_LOCATION,
-                        Manifest.permission.POST_NOTIFICATIONS,
-                    )
-                shadowOf(app.getSystemService(LocationManager::class.java))
-                    .setProviderEnabled(LocationManager.GPS_PROVIDER, false)
-                activityLocation.setProviderEnabled(LocationManager.GPS_PROVIDER, false)
-                activity.pause().resume()
-                all.filterIsInstance<Button>().single { it.text == "Settings" }.performClick()
+                openNativeScreen(a, "Tracking & GNSS")
                 settle()
-                reveal(
-                    all.filterIsInstance<Button>().single { it.text.startsWith("Field readiness") }
-                )
-                assertTrue(
-                    all.filterIsInstance<Button>()
-                        .single { it.text == "Allow precise location" }
-                        .isShown
-                )
-                assertTrue(
-                    all.filterIsInstance<Button>()
-                        .single { it.text == "Open Location settings" }
-                        .isShown
-                )
-                capture("settings-permission-attention")
-                shadowOf(app)
-                    .grantPermissions(
-                        Manifest.permission.ACCESS_FINE_LOCATION,
-                        Manifest.permission.POST_NOTIFICATIONS,
-                    )
-                shadowOf(app.getSystemService(LocationManager::class.java))
-                    .setProviderEnabled(LocationManager.GPS_PROVIDER, true)
-                activityLocation.setProviderEnabled(LocationManager.GPS_PROVIDER, true)
+                val adaptive =
+                    nativeViews(root).filterIsInstance<Switch>().single {
+                        it.text == "Adaptive storage"
+                    }
+                adaptive.performClick()
+                settle()
+                capture("adaptive-on")
+                assertTrue(app.persistencePolicy.state.enabled)
+                adaptive.performClick()
+                settle()
+                assertFalse(app.persistencePolicy.state.enabled)
+                openNativeScreen(a, "Tracking")
+                app.operational.value = Operational(tracking = true)
+                settle()
+                nativeViews(root)
+                    .filterIsInstance<Button>()
+                    .single { it.text == "Stop Tracking" }
+                    .performClick()
+                settle()
+                val dialog = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
+                assertEquals("Stop tracking on this phone?", shadowOf(dialog).title.toString())
+                dialog.dismiss()
             } finally {
-                activity.pause().stop().destroy()
+                controller.pause().stop().destroy()
             }
         }
-        app.operational.value = Operational()
-        app.getSharedPreferences("appearance", 0).edit().putBoolean("night", false).commit()
-        app.recorder.close()
-    }
-
-    private suspend fun awaitInitialized(activity: MainActivity) {
-        val field = activity.javaClass.getDeclaredField("initialized").apply { isAccessible = true }
-        withTimeout(10000) {
-            while (!field.getBoolean(activity)) {
-                shadowOf(Looper.getMainLooper()).idle()
-                delay(10)
-            }
-        }
+        app.finishForTests()
     }
 }
