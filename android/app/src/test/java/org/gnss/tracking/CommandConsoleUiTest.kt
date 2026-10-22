@@ -120,6 +120,24 @@ class CommandConsoleUiTest {
                     .text
                     .toString(),
             )
+            val focusedRow =
+                views(root).filterIsInstance<Button>().single {
+                    it.contentDescription?.toString()?.contains("Tap to expand details") == true
+                }
+            focusedRow.requestFocus()
+            app.repository.dao.updateCommand(app.repository.dao.command(id)!!)
+            repeat(20) {
+                shadowOf(Looper.getMainLooper()).idle()
+                delay(10)
+            }
+            assertTrue(
+                "Unchanged journal refresh must preserve native row identity",
+                views(root).any { it === focusedRow },
+            )
+            assertTrue(
+                "Unchanged journal refresh must preserve keyboard focus",
+                focusedRow.hasFocus(),
+            )
             filter.setText("")
             val alertId = Protocol.newId()
             app.repository.dao.insertCommand(

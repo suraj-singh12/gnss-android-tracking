@@ -583,7 +583,8 @@ Software checks use the actual native Activity/Room flows. SettingsDiagnosticsTe
 covers immediate draft restoration independent of asynchronous Room loading,
 unsaved form refresh/recreation/focus, Cancel, invalid Save, successful local
 Save without service start, journal filtering/pagination/recreation and truthful
-request/applied/trust/result formatting. Existing #24/#25/#26, SOS, persistence,
+request/applied/trust/result formatting. Unchanged journal/contact refreshes retain
+native row identity and keyboard focus; accessible row clicks expand the actual stages. Existing #24/#25/#26, SOS, persistence,
 Sender, lifecycle, ZIP and bridge tests remain the owning regression gates.
 UiNavigationVisualTest covers 360×800 and 480×960 dp, 1×/1.5×, Day/Night, plus
 800×360 Day and 960×480 Night/1.5× landscape renders. Screenshots are emitted through

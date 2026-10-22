@@ -1013,7 +1013,6 @@ class MainActivity : Activity() {
 
         fun renderCommands() {
             if (destination != "Diagnostics" || commandGroup.visibility != View.VISIBLE) return
-            commandRows.removeAllViews()
             val filter = commandFilter.text.toString().lowercase()
             val matching =
                 commandHistory.filter {
@@ -1050,7 +1049,17 @@ class MainActivity : Activity() {
             instructionSummary.append(
                 "\nPage ${instructionPage + 1} of $pageCount · newest first · 20 records per page"
             )
-            for (row in matching.drop(instructionPage * 20).take(20)) {
+            val window = matching.drop(instructionPage * 20).take(20)
+            val selection =
+                listOf(filter, instructionPage, pageCount, matching.size) +
+                    consoleFilters.values.map { it.selectedItemPosition }
+            // Authenticated contact ticks are independent of row changes. Keep
+            // existing native controls/focus while their canonical data is unchanged.
+            if (renderedWindow == window && renderedSelection == selection) return
+            renderedWindow = window
+            renderedSelection = selection
+            commandRows.removeAllViews()
+            for (row in window) {
                 val title =
                     Button(this).apply {
                         isAllCaps = false
