@@ -714,3 +714,16 @@ and Node map/terrain/SOS/CI-budget checks PASS. Remote exact-SHA workflow
 results/artifacts are recorded in the follow-up PR.
 Historical thin-terrain location and native macOS/Windows physical field
 acceptance remain NOT TESTED; cross-builds are not native acceptance.
+
+Live follow-up evidence at `7c5db227ac9a57c0732a0c070226bb0296d9d00e`:
+real public browser acquisition PASS at 27.3739,88.7618, radius 373 m, 13 real
+OSM features; 61,637 vector bytes before DEM approval; requested/explicitly approved
+cumulative 19,188,488 bytes; 19,126,851 compressed DEM bytes; every native node,
+hillshade/contour alignment and offline production restart PASS. The raw Skadi
+probe independently passed (18,131,689 compressed bytes). Radius cases accurately
+failed the 30 MB ceiling at 227,876,423 / 50,306,338 regional bytes and 37,721,900 /
+33,058,591 cumulative multi-tile DEM bytes, while preserving completed chunks.
+The legacy Overpass probe timed out awaiting headers. Its prior report-only
+nonzero-result/zero-exit mismatch was discovered in CI and corrected: a failed
+real-provider report now always produces a failed process/check. These are
+independent outcomes, not a successful skip. Final follow-up CI is linked in PR #45.
