@@ -1,13 +1,20 @@
 <resources>
     <color name="surface">#FFFFFF</color>
-    <color name="background">#F3F5F4</color>
-    <color name="ink">#24343B</color>
-    <color name="muted">#607077</color>
-    <color name="line">#DCE3DF</color>
+    <color name="background">#F4F7F8</color>
+    <color name="ink">#182C36</color>
+    <color name="muted">#5D727D</color>
+    <color name="line">#DBE4E8</color>
     <color name="control_line">#B2C2BC</color>
-    <color name="accent">#17654C</color>
-    <color name="danger">#A51621</color>
-    <color name="warning">#80590C</color>
+    <color name="accent">#07796F</color>
+    <color name="danger">#843E4B</color>
+    <color name="warning">#A05E15</color>
     <color name="disabled_ink">#829189</color>
     <color name="ripple">#3317654C</color>
+    <color name="emergency_action">#71333F</color>
+    <color name="emergency_surface">#F6E9EC</color>
+    <color name="action">#087B72</color>
+    <color name="secondary">#13669E</color>
+    <color name="secondary_surface">#E7F2FA</color>
+    <color name="positive_surface">#E0F3EE</color>
+    <color name="warning_surface">#FFF2DE</color>
 </resources>

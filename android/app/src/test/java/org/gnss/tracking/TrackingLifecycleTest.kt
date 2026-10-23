@@ -225,11 +225,20 @@ class TrackingLifecycleTest {
     }
 
     @Test
-    fun precisePermissionLossStopsSourceAndReleasesLock() {
+    fun precisePermissionLossStopsSourceAndReleasesLock() = runBlocking {
         val service = Robolectric.buildService(TrackingService::class.java).create()
         try {
             service.get().onStartCommand(Intent(app, TrackingService::class.java), 0, 1)
             shadowOf(Looper.getMainLooper()).idle()
+            // Revoke from the running state, not while asynchronous Room startup
+            // is still publishing its initial status. stopSelf teardown is manual
+            // in Robolectric, unlike Android's service lifecycle.
+            withTimeout(10000) {
+                while (!app.operational.value.tracking) {
+                    shadowOf(Looper.getMainLooper()).idle()
+                    delay(10)
+                }
+            }
             shadowOf(app).denyPermissions(Manifest.permission.ACCESS_FINE_LOCATION)
             shadowOf(app).grantPermissions(Manifest.permission.ACCESS_COARSE_LOCATION)
             shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
@@ -472,9 +481,11 @@ class TrackingLifecycleTest {
             val buttons =
                 descendants(activity.get().findViewById(android.R.id.content))
                     .filterIsInstance<android.widget.Button>()
-            buttons.single { it.text == "Pause history sync" }.performClick()
+            assertTrue(buttons.none { it.text.contains("Pause history", ignoreCase = true) })
+            // Internal pause remains a lifecycle/recovery mechanism, not a UI action.
+            app.pauseHistory()
             assertTrue(app.operational.value.historyPaused)
-            buttons.single { it.text == "Sync All Now" }.performClick()
+            buttons.single { it.text == "Sync Now" }.performClick()
             assertFalse(app.operational.value.historyPaused)
             repeat(20) {
                 shadowOf(Looper.getMainLooper()).idle()
@@ -523,6 +534,7 @@ class TrackingLifecycleTest {
             )
             assertEquals(22, shadowOf(service).lastForegroundNotificationId)
             assertNotNull(shadowOf(service).lastForegroundNotification)
+            assertTrue(shadowOf(service).lastForegroundNotification.actions.isNullOrEmpty())
             assertTrue(shadowOf(manager).getLocationUpdateListeners().isEmpty())
             assertFalse(app.repository.state().tracking)
             service.onStartCommand(

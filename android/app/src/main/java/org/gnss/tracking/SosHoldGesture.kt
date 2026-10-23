@@ -103,7 +103,7 @@ internal class SosHoldGesture(
         button.isPressed = false
         button.parent?.requestDisallowInterceptTouchEvent(false)
         progress.progress = 0
-        button.text = "SOS — hold to activate"
+        button.text = "HOLD FOR SOS"
     }
 
     companion object {

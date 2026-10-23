@@ -42,7 +42,8 @@ abstract class DiagnosticsExportChecks {
                     else emptyList()
             val controls = buttons(controller.get().findViewById(android.R.id.content))
             controls.single { it.text == "Diagnostics" }.performClick()
-            val button = controls.single { it.text == "Export diagnostics" }
+            openNativeScreen(controller.get(), "Diagnostic tools")
+            val button = controls.single { it.text == "Export diagnostic ZIP" }
             assertTrue(button.isShown)
             val before = app.operational.value
             button.performClick()

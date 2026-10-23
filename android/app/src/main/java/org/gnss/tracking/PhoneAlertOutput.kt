@@ -109,6 +109,12 @@ class NotificationPhoneAlertOutput(private val context: Context) : PhoneAlertOut
         val notification =
             Notification.Builder(context, channelId)
                 .setSmallIcon(R.drawable.ic_device)
+                .setColor(
+                    NotificationAppearance.colour(
+                        context,
+                        if (spec.mode == "urgent") R.color.danger else R.color.accent,
+                    )
+                )
                 .setContentTitle(
                     if (spec.mode == "urgent") "Urgent Command alert" else "Command attention alert"
                 )

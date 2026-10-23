@@ -178,3 +178,28 @@ recording/Travel Back or remote-control authority changes belong to this extensi
 | PBF crop/full extent and source cache | Same SQLite, GeoJSON chunks and viewport renderer | Sparse/dense nodes, missing references, full extent, polygon holes, cache reuse and bounded index/fleet test |
 | Standalone map package | Existing saved vectors/GTERR001 and terrain algorithms | Partial round trip to clean DB, idempotence, corrupt/malicious archive and write-failure rollback |
 | Simplified map lifecycle | Same Map & Layers/Saved Maps/Layers controls | Chromium package/PBF/import/terrain/offline restart and axe; existing dashboard/SOS/control regressions |
+
+## Issue #39 · Full Android native redesign
+
+The operator's replacement scope supersedes the old Tracking pixel-preservation
+restriction. Review V3's supplied 44-frame PDF plus four explicit V4 overrides govern
+presentation. [Acceptance](ui-acceptance.md) maps every
+Day/Night reference to its native screen and records deliberate OS/accessibility
+adaptations. Command web and the wire contract remain unchanged.
+
+| Surface / contract | Presentation change | Preserved authority / evidence |
+| --- | --- | --- |
+| Tracking | App/party hierarchy, independent pills, fresh/stale fix, balanced Room/ACK metrics, stable action order, contextual alerts | Original acquisition/session identity, queue/progress projection; startup/GNSS/lifecycle tests |
+| SOS | Anchored subdued dock, same 1.2 s hold, chronological history/details | Original SosHoldGesture/engine/durable outbox; separate delivery and Command operator ACK; SOS regressions |
+| Large text / landscape | Facts scroll; the compact responsive footer keeps Sync/Start/Stop, SOS and urgent ACK reachable | Native matrix, SOS bounds, scalable text and equal text navigation |
+| Settings | Five destinations, focused Save/Cancel forms, parent Back retains drafts | Existing Installation transaction and Activity draft/caret/focus restoration; lifecycle tests |
+| Reporting / adaptive | Separate local/requested/applied/revision, native ON/OFF Switch | Existing #24 policy, OFF default, originals unchanged; policy tests |
+| Trust / enrollment | Current/draft endpoint, contact evidence, confirmed re-enrollment/disable | Same private credential binding and #25 authorization; credential excluded from saved state/export |
+| Readiness | Permission, location, notification, battery and service limits in relevant cards | Existing FieldPreflight/preflight/start flow and Android system settings |
+| Health | Seven independent informational rows | Fix freshness, Room commits, actual ACK, unresolved sync, SOS, device space and trust remain separate |
+| Instructions / alerts | Chronological pages, compact outcome filters, focused details and Full record | Existing bounded #25/#26 journal, verification/reason/stages/attempt/result custody and human ACK; console/control tests |
+| Recovery / tools | Saved data & sync, Diagnostic tools, Physical Button Test, advanced logs | Existing retry confirmation, sanitized ZIP, key/SOS test suppression and foreground scope |
+| Pause UI | No exposed history pause, including transfer notification | Internal OS/lifecycle budgets and retained queue unchanged |
+| Notifications / theme | Native Sync/confirmed Stop, retained alert ACK, icon-only saved theme toggle | Immutable distinct Activity intents, consumed-action restoration, original alert receiver/timeout/channel; notification tests |
+| Command | Existing browser screens/windows included in screenshot artifact | No Command source/UI/recording/maps/protocol changes |
+| Native acceptance | Honest distinction between rendered software evidence and devices | Real TalkBack/IME/OEM/Doze/locked GNSS/SOS/alert/LAN and native desktop acceptance outstanding |

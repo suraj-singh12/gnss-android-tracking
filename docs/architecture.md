@@ -487,3 +487,33 @@ publication. Verified chunks/GTERR001 and compatible terrain derivation remain t
 operational assets. This archive is not frozen recording evidence; #38 retains that
 separate ownership. UI uses one Map & Layers dialog with Download New Map, Use
 Existing Map and Import Map, existing Saved Maps selection and Layers controls.
+
+### Issue #39 Android presentation boundary
+
+MainActivity retains the existing three top-level destinations, with a small native
+parent-route map for focused detail screens. NativeUi supplies shared view/spacing/
+color primitives; OperationalUi supplies read-only health facts. These views consume
+Installation, FieldPreflight, #24 policy, Operational/Room queue flows and #25/#26
+command journal. CommandPresentation formats canonical reasons/evidence; it does not
+execute commands. No additional navigation framework, database, service, settings
+store or journal is introduced.
+
+Draft text/caret/focus, route, selected records, filter and page state use Activity
+saved instance state. Credentials remain excluded. Only 20 matching journal/SOS rows
+render per page; journal ordering remains off-main, list controls are retained for
+unchanged data, and list rendering is deferred outside its destinations. Tracking
+snapshots the existing Operational state after suspended diagnostic reads and uses
+that same snapshot for its status, fix and control labels. Alert menus
+are rebuilt only when canonical alert records change. Diagnostic rendering/exports do
+not block GNSS acquisition, SOS, Sender or database commits. Existing journal query
+and retention bounds remain authoritative.
+
+TrackingNotification enters the original visible Sync/confirmed Stop handlers. The
+consumed action is saved across recreation. NotificationAppearance reads the existing
+preference, retains notification identity/actions and remaining timeout, and recolors
+with only-alert-once; it is not an execution or acknowledgement authority. Tracking/
+transfer services retain their existing lifetimes. User-facing pause is removed;
+internal OS/lifecycle pause remains. SOS still uses the original 1.2-second hold and
+engine. A retained instruction/result timestamp is labelled as evidence rather than
+substituted for an unrecorded empty-poll contact time. Full-app presentation now follows
+the supplied Review V3 PDF plus four written V4 overrides.

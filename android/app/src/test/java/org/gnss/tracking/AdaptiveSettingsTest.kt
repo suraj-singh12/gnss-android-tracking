@@ -3,8 +3,7 @@ package org.gnss.tracking
 import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
-import android.widget.CheckBox
+import android.widget.Switch
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.*
 import org.junit.Assert.*
@@ -34,17 +33,11 @@ class AdaptiveSettingsTest {
                 delay(10)
             }
         }
-        suspend fun toggle(): CheckBox {
+        suspend fun toggle(): Switch {
             settle()
             val views = descendants(controller.get().findViewById(android.R.id.content))
-            views.filterIsInstance<Button>().single { it.text == "Settings" }.performClick()
-            views
-                .filterIsInstance<Button>()
-                .single { it.text.toString().startsWith("GNSS persistence  ") }
-                .performClick()
-            return views.filterIsInstance<CheckBox>().single {
-                it.text == "Adaptive GNSS persistence"
-            }
+            openNativeScreen(controller.get(), "Tracking & GNSS")
+            return views.filterIsInstance<Switch>().single { it.text == "Adaptive storage" }
         }
         val choice = toggle()
         assertFalse(choice.isChecked)

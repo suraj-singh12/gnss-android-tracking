@@ -9,8 +9,10 @@ controls and Command uses accessible HTML controls.
 
 Neutral surfaces `#F3F5F4`, white cards, ink `#24343B`, secondary ink `#607077`,
 borders `#DCE3DF`, primary action `#17654C`. Amber denotes degraded conditions;
-red `#A51621` is reserved for SOS and critical errors. Offline contact uses neutral
-text rather than an emergency colour. Stable party colours come from Command's
+Command red `#A51621` is reserved for SOS and critical errors. Android uses the
+restrained V4 burgundy family: Day text `#843E4B`, action `#71333F`, tint `#F6E9EC`;
+Night text `#D5A6B0`, action `#77434E`, tint `#38252D`. White emergency-action labels
+exceed 7:1 contrast; emergency text on its tint exceeds 6:1. Android offline/off status pills use amber, distinct from emergency burgundy. Stable party colours come from Command's
 existing device-ID palette; they do not encode health. Provisional paths are dashed,
 qualified history muted, fresh GNSS filled, last-known GNSS hollow and labelled.
 
@@ -54,7 +56,7 @@ Backend contact grace periods follow each device's effective reporting interval.
 
 Three persistent destinations: **Tracking · Settings · Diagnostics**. Tracking shows
 large lifecycle state, one Start/Stop control, GNSS accuracy/age, application contact
-and last ACK, concise GNSS queue state, battery and a protected hold-to-activate SOS dock that stays visible above navigation. Tracking also exposes local Sync All Now and Pause history sync. Saved-history automatic delivery is available while visible with Tracking OFF. User-started manual drain also has a bounded dataSync foreground lifetime; neither action starts collection. The History card separates pending, durable ACK and unresolved counts, with reconstruction explicitly Command-owned.
+and last ACK, concise GNSS queue state, battery and a protected hold-to-activate SOS dock that stays visible above navigation. Tracking exposes local Sync Now. History-pause UI and notification actions are removed; internal OS/lifecycle pause mechanisms remain. Saved-history automatic delivery is available while visible with Tracking OFF. User-started manual drain also has a bounded dataSync foreground lifetime; neither action starts collection. The History card separates pending, durable ACK and unresolved counts, with reconstruction explicitly Command-owned.
 Check setup opens Settings in one interaction. Settings starts with the Party and
 Command form, then expandable emergency and permissions/battery sections. It contains field readiness
 and permission/system-setting actions, identity labels, receiver address, reporting
@@ -184,7 +186,7 @@ visible phone UUID and local Disable. Diagnostics → Command Instructions uses 
 same canonical Room journal for chronological stages, filter/expand/copy and ZIP.
 Security-denied attempts carry local event IDs; absent offline commands have no
 invented phone record. Existing Tracking and SOS geometry/behavior stays intact;
-#39 may later polish Settings/Diagnostics independently.
+#39 refines Settings/Diagnostics as documented below.
 
 ### Radius acquisition in the existing map workflow
 
@@ -204,3 +206,51 @@ there is no per-row Use or Reuse button. Network/resource details are expandable
 while approval amounts and missing coverage remain visible. Retry Missing,
 Save & Use and Cancel preserve verified data. The toolbar Layers dialog remains
 independent and distinguishes available/hidden/visible/processing failure.
+
+## Issue #39 native Android redesign
+
+The operator supplied **GNSS-Tracker-Review-V3-native.pdf** (44 vector frames,
+390 × 842, SHA-256 `db4a5e1e10ac9ea6ef432966034a662f3a396c44d9982385934f9d85581730a3`).
+All frames were inspected. It supplies the Review V3 visual references after Figma
+MCP quota exhaustion. Its sample data is visual reference only. The four written V4
+requirements override its pause control, illustrative notifications, bright emergency
+reds and text-labelled Tracking theme control. The newer full-app scope supersedes
+Tracking pixel preservation; its operational contracts remain protected.
+
+Android now uses the reference's cool neutral surfaces, teal positive states, quiet
+blue secondary actions, amber offline/off states and restrained burgundy emergency
+family. Day background `#F4F7F8`, ink `#182C36`, surface white; Night background
+`#101820`, surface `#192833`, ink `#EAF4F5`. Day secondary ink `#5D727D` and positive
+ink `#07796F` are slightly darker than the PDF to meet 4.5:1 normal-text contrast.
+All semantic text/surface pairs have automated contrast checks. Typography is native
+sans-serif: 23 sp app title, 22 sp screen title, 16–19 sp card titles, 12–14 sp
+metadata/actions, 25 sp observation metrics. Native actions have 48 dp minimum targets.
+Cards have restrained 1 dp edges, 16 dp corners, 14–16 dp inner padding and a
+12–18 dp vertical rhythm, inside 20 dp page margins.
+
+Tracking groups the party identity separately from state pills, GNSS and two balanced
+Room/ACK metrics. Sync/Start/Stop retain one order across states; contextual alert
+content follows the facts. The protected 1.2-second SOS dock stays above equal-width
+text navigation. Large text keeps the same action row above SOS while facts scroll; landscape shares
+a compact actions/SOS footer and keeps urgent acknowledgement reachable. Native status, lifecycle and queue data drive
+all labels; there are no demonstration values in production.
+
+Settings has five calm destination rows. Configuration, trust, readiness, policy,
+appearance and enrollment have focused native screens. Readiness actions live in
+the relevant card. Save/Cancel operate on the existing shared draft and transaction;
+refresh does not overwrite edits. Caret restoration follows framework hierarchy
+restoration. Adaptive storage is the real #24 ON/OFF Switch, OFF by default, with one
+future-observations caption. Revision/request evidence is secondary.
+
+Diagnostics separates seven independent health facts from four destinations:
+Instructions, Phone Alerts, Saved data & sync and Diagnostic tools. Instructions use
+compact outcome filters and chronological, bounded pages; dedicated details show
+verification, attempts, stages and result custody. Full canonical evidence is optional.
+Phone alerts and SOS history use actual persisted records; output attempts never
+imply human acknowledgement. Advanced logs retain technical evidence. Physical Button
+Test, retry and sanitized ZIP export remain discoverable in Diagnostic tools only.
+
+App-owned dialogs and OS-owned notifications use native layouts. Tracking notification
+Sync and confirmed Stop enter existing Activity workflows; alert ACK retains its
+original receiver/journal. Android owns system surfaces and background restrictions.
+Command web and its existing visual system remain unchanged.

@@ -42,21 +42,13 @@ class RetainedTransferService : Service() {
                 Intent(this, MainActivity::class.java),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
-        val pause =
-            PendingIntent.getService(
-                this,
-                0,
-                Intent(this, RetainedTransferService::class.java).setAction("pause"),
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-            )
         val notification =
             Notification.Builder(this, "history-transfer")
                 .setSmallIcon(R.drawable.ic_device)
                 .setContentTitle("Synchronizing saved GNSS")
-                .setContentText("Saved history only. Pause preserves saved data.")
+                .setContentText("Sending saved data; GNSS remains off.")
                 .setContentIntent(open)
                 .setOngoing(true)
-                .addAction(Notification.Action.Builder(null, "Pause", pause).build())
                 .build()
         if (android.os.Build.VERSION.SDK_INT >= 29)
             startForeground(22, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)

@@ -34,10 +34,7 @@ class CommandConsoleUiTest {
                 .filterIsInstance<Button>()
                 .single { it.text == "Diagnostics" }
                 .performClick()
-            views(root)
-                .filterIsInstance<Button>()
-                .single { it.text.toString().contains("Command Instructions") }
-                .performClick()
+            openNativeScreen(activity.get(), "Command Instructions")
             val id = Protocol.newId()
             val state = app.repository.state()
             app.repository.dao.insertCommand(
@@ -58,7 +55,7 @@ class CommandConsoleUiTest {
             withTimeout(10000) {
                 while (
                     views(root).filterIsInstance<TextView>().none {
-                        it.text.toString().contains("OS background restriction")
+                        it.contentDescription?.contains("Open instruction details") == true
                     }
                 ) {
                     shadowOf(Looper.getMainLooper()).idle()
@@ -67,7 +64,7 @@ class CommandConsoleUiTest {
             }
             val filter =
                 views(root).filterIsInstance<EditText>().single {
-                    it.hint?.toString()?.startsWith("Filter outcome") == true
+                    it.hint?.toString()?.startsWith("Search instructions") == true
                 }
             filter.setText("reporting")
             assertTrue(
@@ -78,14 +75,24 @@ class CommandConsoleUiTest {
             filter.setText("blocked")
             val title =
                 views(root).filterIsInstance<TextView>().first {
-                    it.contentDescription?.toString()?.contains("Tap to expand details") == true
+                    it.contentDescription?.toString()?.contains("Open instruction details") == true
                 }
-            title.performClick()
+            assertTrue("Command row must be keyboard focusable", title.isFocusable)
+            assertTrue(
+                title.performAccessibilityAction(
+                    android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK,
+                    null,
+                )
+            )
             assertTrue(
                 views(root).filterIsInstance<TextView>().any {
-                    it.visibility == View.VISIBLE && it.text.toString().contains(id)
+                    it.isShown && it.text.toString().contains(id)
                 }
             )
+            views(root)
+                .filterIsInstance<Button>()
+                .single { it.text == "Full record" }
+                .performClick()
             app.repository.dao.updateCommand(
                 app.repository.dao
                     .command(id)!!
@@ -94,8 +101,7 @@ class CommandConsoleUiTest {
             withTimeout(10000) {
                 while (
                     views(root).filterIsInstance<TextView>().none {
-                        it.visibility == View.VISIBLE &&
-                            it.text.toString().contains("Result pending delivery")
+                        it.isShown && it.text.toString().contains("Result pending delivery")
                     }
                 ) {
                     shadowOf(Looper.getMainLooper()).idle()
@@ -113,6 +119,25 @@ class CommandConsoleUiTest {
                     .getItemAt(0)
                     .text
                     .toString(),
+            )
+            openNativeScreen(activity.get(), "Command Instructions")
+            val focusedRow =
+                views(root).filterIsInstance<Button>().single {
+                    it.contentDescription?.toString()?.contains("Open instruction details") == true
+                }
+            focusedRow.requestFocus()
+            app.repository.dao.updateCommand(app.repository.dao.command(id)!!)
+            repeat(20) {
+                shadowOf(Looper.getMainLooper()).idle()
+                delay(10)
+            }
+            assertTrue(
+                "Unchanged journal refresh must preserve native row identity",
+                views(root).any { it === focusedRow },
+            )
+            assertTrue(
+                "Unchanged journal refresh must preserve keyboard focus",
+                focusedRow.hasFocus(),
             )
             filter.setText("")
             val alertId = Protocol.newId()

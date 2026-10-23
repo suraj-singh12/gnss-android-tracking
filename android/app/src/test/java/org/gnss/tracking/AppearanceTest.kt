@@ -34,7 +34,7 @@ class AppearanceTest {
                 a.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK,
             )
             assertEquals(
-                if (night) 0xffe5edf1.toInt() else 0xff24343b.toInt(),
+                if (night) 0xffeaf4f5.toInt() else 0xff182c36.toInt(),
                 a.getColor(R.color.ink),
             )
             val root = a.findViewById<View>(android.R.id.content)
@@ -42,8 +42,12 @@ class AppearanceTest {
                 .filterIsInstance<Button>()
                 .single { it.text == "Settings" }
                 .performClick()
+            openNativeScreen(a, "Appearance & SOS")
             val choice = a.findViewById<Button>(R.id.appearance)
-            assertEquals("Appearance: ${if(night) "Night" else "Day"}", choice.text.toString())
+            assertEquals(
+                "Appearance, ${if(night) "Night" else "Day"}",
+                choice.contentDescription.toString(),
+            )
             choice.performClick()
             val dialog = ShadowAlertDialog.getLatestAlertDialog()
             assertEquals("Appearance", shadowOf(dialog).title.toString())

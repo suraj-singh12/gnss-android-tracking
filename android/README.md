@@ -42,7 +42,7 @@ and GPS enabled and Battery Saver off; notification refusal needs Settings befor
 that preserved Start intent can continue. Android itself allows an FGS without
 notification permission, but that is not healthy field setup.
 Start Tracking is a visible user action. Stop Tracking requires confirmation and
-stops collection. Saved messages automatically synchronize while the app is visible, without restarting GNSS. The Tracking view's Saved GNSS sync bar uses current Room queue counts: acknowledgements since the view/manual-drain baseline divided by those acknowledgements plus **all currently pending GNSS**. If more observations are recorded while sending, the total increases and the percentage can fall; unresolved saved GNSS remains pending. The percentage refers to Android-local durable delivery, **not** Command's completed history reconstruction or any offline phone inventory. No estimated finish time is asserted. **Sync All Now** preserves learned capacity and accelerates the payload ramp using the same Sender; **Pause history sync** stops selecting new history requests, retaining every row. An in-flight request may still finish. SOS and live tracking remain independently eligible. Reopening
+stops collection. Saved messages automatically synchronize while the app is visible, without restarting GNSS. The Tracking view's Saved GNSS sync bar uses current Room queue counts: acknowledgements since the view/manual-drain baseline divided by those acknowledgements plus **all currently pending GNSS**. If more observations are recorded while sending, the total increases and the percentage can fall; unresolved saved GNSS remains pending. The percentage refers to Android-local durable delivery, **not** Command's completed history reconstruction or any offline phone inventory. No estimated finish time is asserted. **Sync Now** preserves learned capacity and accelerates the payload ramp using the same Sender; The internal pause mechanism remains for OS/lifecycle budgets; user-facing pause controls are removed. An in-flight request may still finish. SOS and live tracking remain independently eligible. Reopening
 the Activity does not restart or stop tracking. Reboot and force-stop require
 another explicit Start Tracking. Sticky service recreation can recover tracking
 and outbox after process death when Android permits it; it is not a bypass of
@@ -67,7 +67,7 @@ SSID/BSSID/MAC access is required.
 ## Optional adaptive GNSS persistence (Issue #24)
 
 **OFF is the default**, for fresh installs, upgrades and absent/unreadable policy.
-Settings → GNSS persistence → Adaptive GNSS persistence explicitly opts in/out.
+Settings → Tracking policy → Adaptive GNSS persistence explicitly opts in/out.
 This separate local policy is schema/revision 1, atomically committed before it is
 published, with a change counter and saved-change UTC (`effectiveAt`, assigned
 before commit). The existing journal records publication; sampling diagnostics record
@@ -401,7 +401,7 @@ the retained outbox. Sender completion uses an indexed existence check, not a re
 
 The same Sender/outbox implements both policies. Automatic delivery starts with one
 observation, then targets 500/1000/2000/4000/8000/16000/20000/32000/64000 decimal bytes.
-It needs one history ACK through 2000 and two thereafter. Manual **Sync All Now**
+It needs one history ACK through 2000 and two thereafter. Manual **Sync Now**
 coalesces repeated presses, preserves the healthy ramp and advances two ladder
 levels per healthy ACK (RTT ≤1500 ms), prioritizing history over routine status while
 always retaining SOS and fresh LIVE opportunities. Neither policy waits to fill a
@@ -446,8 +446,8 @@ Command raw receipt and reconstruction remain separate; no global completion is
 inferred from unknown/offline phone inventory.
 
 With Tracking OFF, visible-app automatic transfer collects **zero new fixes**.
-User-started Sync All Now also starts a `dataSync` foreground-service lifetime,
-with a transfer notification/Pause action and bounded wakelock. The service owns no
+User-started Sync Now also starts a `dataSync` foreground-service lifetime,
+with a transfer notification and bounded wakelock. The service owns no
 provider, queue or second Sender. It can continue after backgrounding/screen lock,
 subject to Android/OEM/Doze restrictions, permission/start restrictions and Android
 15's aggregate six-hour dataSync budget. It stops on completion, unresolved setup,
@@ -496,8 +496,8 @@ control responses are sanitized security events with local event IDs. Offline
 commands never received are absent, not fabricated rejects. Pending/unconfirmed
 results survive restart and bounded history pruning. Existing Export diagnostics
 adds `command-instructions.json` without keys/MACs/raw instruction bodies. No console
-operation deletes GNSS/SOS or pending control state. The UI shows the newest 100
-matching records; refine the filter for older retained records.
+operation deletes GNSS/SOS or pending control state. The UI shows 20 matching records per page, newest first; use filters or older/newer
+pages to inspect retained records.
 
 See the [wire/security contract](../protocol/protocol-v1.md).
 Physical Android background, Keystore/OEM, GNSS and LAN acceptance remain **NOT TESTED**
@@ -534,3 +534,49 @@ ZIP includes sanitized alert stages and timings, redacting message content. Exis
 Room v6 columns store the validated alert request; no destructive migration/new DB.
 See [physical acceptance](DEVICE-ACCEPTANCE.md); real sound/vibration, DND/mute,
 locked/OEM/Doze behavior remain NOT TESTED without actual hardware.
+
+## Android redesign (#39)
+
+The full Android interface follows the operator's 44-frame Review V3 PDF export and
+four V4 corrections. See [design system](../docs/design-system.md)
+and [visual acceptance](../docs/ui-acceptance.md).
+Tracking presentation is now authorized to change; acquisition, persistence, Sender,
+service lifetime, authentication and SOS execution remain owned by their existing
+components. Command browser UI and protocol are unchanged.
+
+- **Tracking:** prominent party identity, independent tracking/Command pills, real
+  GNSS quality/age, balanced saved-observation metrics and ACK progress, one Sync Now
+  and Start/Stop action row, contextual alerts, anchored protected SOS dock. Large
+  text/landscape keeps actions, deliberate SOS and urgent ACK accessible while facts scroll. The moon/sun
+  control is icon-only and uses the existing persisted appearance preference.
+- **Settings:** five destination rows open Party & Command, Tracking & GNSS, Field
+  readiness, Appearance & SOS and Advanced settings. Nested editors have explicit
+  Save/Cancel and transaction failure feedback. Draft text, focus and caret survive
+  refresh/recreation before Room loads. Back moves to the parent and retains edits;
+  closing with dirty edits asks before discarding. Local Save never proves a Command
+  request or application. The #24 adaptive storage Switch persists immediately,
+  defaults OFF and affects future observations only. Requested/applied/revision and
+  trust/contact evidence remain distinct. Re-enrollment and disabling control ask for
+  confirmation. Credentials are excluded from saved instance state and autofill.
+- **Diagnostics:** seven independently grounded health rows lead to Instructions,
+  Phone Alerts, Saved data & sync and Diagnostic tools. The existing journal supplies
+  newest-first pages of 20, search, outcome shortcuts and type/outcome/time filters.
+  Details show UUID, authority, verification, attempt, outcome/reason, stage timestamps,
+  result custody, Copy ID and sanitized export; Full record expands canonical evidence.
+  Page, filters and selected details survive recreation; unchanged journal refreshes
+  preserve native list controls/focus. Actual alert output/ACK and SOS delivery/history
+  remain separate. Retry, ZIP export, Physical Button Test and advanced logs retain
+  their existing owners. SOS history also pages by 20 and opens actual event details.
+
+No history-pause action is exposed. Tracking notifications have native **Sync Now**
+and **Stop Tracking** actions, using existing visible handlers, immutable distinct
+intents and protected Stop confirmation. Sync does not start GNSS. Consumed actions
+survive recreation. Theme refresh retains notification identity, alert human-ACK action
+and remaining timeout without replaying sound. Android owns notification geometry;
+OS/OEM settings can restrict background operation, notifications and alert output.
+
+Run `./gradlew testDebugUnitTest lintDebug assembleDebug --console=plain`.
+`GNSS_SCREENSHOT_DIR` collects native Activity, dialog and notification-content PNGs.
+The screenshot fixtures are test-only Room/operational data. Software renders do not
+establish real GNSS, audibility, OEM/Doze behavior, physical TalkBack or native desktop
+acceptance; use [DEVICE-ACCEPTANCE.md](DEVICE-ACCEPTANCE.md) for field validation.
