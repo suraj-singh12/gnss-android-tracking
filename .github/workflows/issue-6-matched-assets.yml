@@ -30,11 +30,6 @@ jobs:
     timeout-minutes: 20
     env:
       GNSS_CI_TRANSFER_BUDGET_BYTES: "30000000"
-      GNSS_SCREENSHOT_DIR: ${{ runner.temp }}/map-software-evidence/visual
-      GNSS_TERRAIN_PROVIDER_REPORT: ${{ runner.temp }}/map-software-evidence/controlled-acquisition.json
-      GNSS_COMMAND_BINARY: ${{ runner.temp }}/gnss-map-command
-      GNSS_MAP_REFERENCE_BINARY: ${{ runner.temp }}/gnss-map-reference
-      GNSS_PLAYWRIGHT_MODULE: ${{ runner.temp }}/gnss-map-browser/node_modules/playwright
     steps:
       - uses: actions/checkout@v4
         with:
@@ -46,6 +41,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Define deterministic acceptance paths
+        run: |
+          echo "GNSS_SCREENSHOT_DIR=$RUNNER_TEMP/map-software-evidence/visual" >> "$GITHUB_ENV"
+          echo "GNSS_TERRAIN_PROVIDER_REPORT=$RUNNER_TEMP/map-software-evidence/controlled-acquisition.json" >> "$GITHUB_ENV"
+          echo "GNSS_COMMAND_BINARY=$RUNNER_TEMP/gnss-map-command" >> "$GITHUB_ENV"
+          echo "GNSS_MAP_REFERENCE_BINARY=$RUNNER_TEMP/gnss-map-reference" >> "$GITHUB_ENV"
+          echo "GNSS_PLAYWRIGHT_MODULE=$RUNNER_TEMP/gnss-map-browser/node_modules/playwright" >> "$GITHUB_ENV"
       - name: Deterministic acquisition and controlled failure/recovery
         run: |
           mkdir -p "$RUNNER_TEMP/map-software-evidence"
