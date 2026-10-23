@@ -170,7 +170,14 @@ func (s *Store) acquireVector(ctx context.Context, p *mapProvider, id string, c 
 		if e != nil {
 			message = e.Error()
 		}
-		budget.attempts = append(budget.attempts, mapSourceAttempt{src.URL, "regional catalog / PBF", message, time.Now().UTC().Format(wireTime)})
+		attemptSource := src.URL
+		if attemptSource == "" {
+			attemptSource = p.catalog
+			if state, err := s.transferState(id); err == nil && state.Source != "" && state.Source != p.overpass {
+				attemptSource = state.Source
+			}
+		}
+		budget.attempts = append(budget.attempts, mapSourceAttempt{attemptSource, "regional catalog / PBF", message, time.Now().UTC().Format(wireTime)})
 	}
 	if e != nil {
 		return nil, fmt.Errorf("Overpass: %v; regional fallback: %w", overpassErr, e)

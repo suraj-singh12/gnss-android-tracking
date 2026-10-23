@@ -1,0 +1,19 @@
+{
+  "N58W134.SRTMGL1.hgt.zip": {
+    "url": "https://raw.githubusercontent.com/millie-spencer/Seven-Decades-Glacier-Loss-Nevados-Chillan/5f4272de7edf7cb3e0a0002d1766bee26d67cdc6/srtm_data/N58W134.SRTMGL1.hgt.zip",
+    "git_blob_sha1": "dbd6c93c07858e1d960c61b10acb6de65ec85e31",
+    "sha256": "462c8f7a7e24c8c0f2dc18d584e059b1234aa81e1cacf32127ecf591e2327b7d",
+    "decoded_sha256": "3ba3b8ab608e1adccf3bf91130c441278f8c1de8911222ca8a3176090502eded",
+    "decoded_bytes": 25934402, "bounds": [-134,58,-133,59], "dimensions": [3601,3601],
+    "arc_seconds": 1, "vertical_datum": "EGM96", "dataset": "NASA/USGS SRTMGL1 (not a claimed Skadi snapshot)",
+    "terms": "https://lpdaac.usgs.gov/products/srtmgl1v003/",
+    "attribution": "NASA/USGS SRTM, public-domain US Government samples. GitHub mirror Spencer (2026), https://doi.org/10.5281/zenodo.21987345. ZIP preserved byte-for-byte; controlled HTTP replay gzip-encodes original HGT, without changing samples."
+  },
+  "delaware-latest.osm.pbf": {
+    "url": "https://raw.githubusercontent.com/paulmach/osm/4f398c4aa98299befea02dc78d1c29d5e31ab4c9/testdata/delaware-latest.osm.pbf",
+    "git_blob_sha1": "e654f924bf1adcf73ee5b7c5850233214f42eb1b",
+    "sha256": "71ce7bd152d68cb9bdb11d9de4548db86d103f664bb8620a210ddee433534647",
+    "attribution": "© OpenStreetMap contributors, ODbL 1.0, https://www.openstreetmap.org/copyright. Original PBF preserved byte-for-byte; revision and bounds read from PBF header. Mirror: Paul Mach; see LICENSE-osm-mirror.txt.",
+    "scope": "Supported OSM ways only. Real Delaware data is tested separately from Alaska DEM; controlled Alaska vector geometry is synthetic, never claimed as real OSM coverage."
+  }
+}

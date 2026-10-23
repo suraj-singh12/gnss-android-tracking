@@ -10,11 +10,13 @@ import (
 	"time"
 )
 
+const demPolicy = "TCP connection 10s; TLS 10s; response headers 20s; each tile attempt 120s; overall acquisition 6min; bounded processing 10s; save 5s; at most 3 attempts/tile, backoff 1s/2s, Retry-After <=30s respected; null measurements unavailable"
+
 // Streaming is the existing bounded request, not a job queue/background worker.
 // The browser aborts the request to cancel; ingestion deadlines stay unchanged.
 func (s *Store) downloadTerrainResponse(w http.ResponseWriter, r *http.Request, p *mapProvider, id string, bounds [4]float64, components map[string]bool) {
 	started := time.Now()
-	report := DEMReport{Revision: BuildRevision(), Provider: "AWS Open Data Terrain Tiles", Dataset: "Mapzen Skadi composite / WGS84 / EGM96", MapID: id, Started: started.UTC().Format(time.RFC3339), Bounds: bounds, Centre: [2]float64{(bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2}, Components: components, Attempts: []DEMAttempt{}, Policy: "TCP connection 10s; TLS 10s; response headers 20s; each tile attempt 120s; overall acquisition 6min; bounded processing 10s; save 5s; at most 3 attempts/tile, backoff 1s/2s, Retry-After <=30s respected; null measurements unavailable", Stage: "connecting"}
+	report := DEMReport{Revision: BuildRevision(), Provider: "AWS Open Data Terrain Tiles", Dataset: "Mapzen Skadi composite / WGS84 / EGM96", MapID: id, Started: started.UTC().Format(time.RFC3339), Bounds: bounds, Centre: [2]float64{(bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2}, Components: components, Attempts: []DEMAttempt{}, Policy: demPolicy, Stage: "connecting"}
 	stream := r.Header.Get("Accept") == "application/x-ndjson"
 	report.AreaMetres = [2]float64{(bounds[2] - bounds[0]) * 111320 * math.Cos(report.Centre[1]*math.Pi/180), (bounds[3] - bounds[1]) * 111320}
 	if stream {

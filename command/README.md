@@ -1018,3 +1018,40 @@ replayed. Older phones report unsupported. These alerts share #25 security,
 SQLite, transport and result custody and never acknowledge Android SOS or control
 Command's SOS siren. Native Windows/macOS, real LAN fleet/endurance and actual
 Android audio remain NOT TESTED until the deferred combined acceptance session.
+
+### Map acquisition reliability acceptance (#28 follow-up)
+
+`confirmed: true` confirms the area/resource preview; it does **not** increase the
+5,000,000-byte default network allowance. The chunk API returns HTTP 409 with
+`transfer_approval_required`, map/chunk/layer IDs and the durable transfer ledger
+when consent is needed. Streaming/UI clients read the same manifest. Use the
+existing `POST /local/maps/{id}/approve-transfer` with the exact displayed
+**cumulative** `approved_bytes`, then retry that same missing chunk/job. Invalid or
+insufficient approval leaves accounting unchanged. Repeating approval does not
+add bytes. A rejected large regional file does not set the approval amount for a
+later independent DEM source. Error-page sizes do not conceal actual HTTP errors.
+The UI pauses at consent, shows exact bytes, and never reports complete while
+selected chunk products are missing or have known void gaps.
+
+Tests use `GNSS_CI_TRANSFER_BUDGET_BYTES` (default **5,000,000**, explicitly
+**30,000,000 per logical map in CI**). This is an acceptance-driver ceiling, not a
+production setting or bypass. Requests above it fail with the exact requested
+bytes; the observed 50–228 MB regional fallbacks cannot be auto-approved. At most
+eight additional approvals are attempted. Existing 1 GB source, local storage,
+redirect/provider validation, processing and resource limits remain enforced.
+
+`map-acquisition-deterministic.cjs` runs production handlers/providers/SQLite and
+the actual browser approval confirmation against a Go test-only local provider,
+then kills that process and opens the same database with production Command
+without internet. Original NASA/USGS 1-arc-second SRTMGL1 HGT and OSM Delaware PBF
+samples, pinned upstream revisions, licenses and SHA256 values are in
+`internal/core/testdata/maps/provenance.json`. SRTM is replayed through the gzip
+Skadi-format adapter; this is not a claim that the sample is a current Skadi
+snapshot. Alaska vector geometry in the browser replay is explicitly synthetic;
+real OSM PBF acquisition/crop/fallback correctness is independently tested in Go.
+No invented elevations or resampled 3-arc-second samples satisfy real DEM checks.
+
+Public-provider tests remain separate failing checks if providers fail or a CI
+ceiling blocks acquisition. Their reports preserve actual provider attempts,
+HTTP/timeout errors, transfer accounting, completed/missing chunks and restart
+results. Fixture success never turns a failed public acquisition into PASS.

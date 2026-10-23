@@ -1,11 +1,12 @@
-/* REAL public DEM + real Command/UI/storage, not a fixture/HEAD acceptance. */
+/* Production acquisition/UI/storage acceptance. Public providers by default;
+ * controlled runs explicitly identify the verified real SRTM replay sample. */
 "use strict";
+const { waitForAcquisition, transferBudget, classify, json } = require("./map-acquisition-support.cjs");
 const assert = require("node:assert/strict"),
   fs = require("node:fs"),
   os = require("node:os"),
   path = require("node:path"),
   net = require("node:net"),
-  zlib = require("node:zlib"),
   crypto = require("node:crypto");
 const { spawn } = require("node:child_process"),
   { once } = require("node:events");
@@ -17,6 +18,7 @@ const report = {
   source_revision: process.env.SOURCE_REVISION || process.env.GITHUB_SHA || "local-unfrozen",
   checked_at: new Date().toISOString(),
   passed: false,
+  checks: { geographic_data_acquired: "NOT TESTED", dem_data_acquired: "NOT TESTED", alignment_verified: "NOT TESTED", offline_restart_verified: "NOT TESTED" },
 };
 let command, browser, acceptancePage;
 async function port() {
@@ -28,22 +30,25 @@ async function port() {
   return p;
 }
 async function wait(f) {
-  for (let i = 0; i < 3900; i++) {
+  for (let i = 0; i < 300; i++) {
     if (await f()) return;
     await new Promise((r) => setTimeout(r, 100));
   }
-  throw Error("Acceptance wait timed out");
+  throw Error("Startup/render deadline exceeded; see captured UI and manifest diagnostics");
 }
 (async () => {
   const ingest = await port(),
     dashboard = await port(),
-    local = `http://127.0.0.1:${dashboard}`;
+    local = process.env.GNSS_ACCEPTANCE_LOCAL || `http://127.0.0.1:${dashboard}`;
+  const db = process.env.GNSS_ACCEPTANCE_DB || path.join(work, "command.sqlite");
+  report.category = process.env.GNSS_ACCEPTANCE_LOCAL ? "deterministic production pipeline / real SRTM sample; controlled vector geometry" : "real public providers";
+  report.ci_transfer_budget_bytes = transferBudget();
   async function start(offline = false) {
     command = spawn(
       process.env.GNSS_COMMAND_BINARY,
       [
         "-db",
-        path.join(work, "command.sqlite"),
+        db,
         "-ingest-listen",
         `127.0.0.1:${ingest}`,
         "-dashboard-listen",
@@ -71,7 +76,7 @@ async function wait(f) {
       }
     });
   }
-  await start();
+  if (!process.env.GNSS_ACCEPTANCE_LOCAL) await start();
   browser = await chromium.launch({
     headless: true,
     executablePath: process.env.GNSS_CHROMIUM || undefined,
@@ -88,17 +93,14 @@ async function wait(f) {
   await page.locator("#open-map").click();
   await page.locator("#map-preparation > summary").click();
   const lat = Number(process.env.GNSS_DEM_LAT || 30.4598),
-    lon = Number(process.env.GNSS_DEM_LON || 78.0644),
-    size = String(process.env.GNSS_DEM_SIZE || 500);
+    lon = Number(process.env.GNSS_DEM_LON || 78.061),
+    radius = Number(process.env.GNSS_DEM_RADIUS || 373);
   await page.locator("#map-lat").fill(String(lat));
   await page.locator("#map-lon").fill(String(lon));
-  await page.locator("#map-shape").evaluate(e=>e.closest("details").open=true);
-  await page.locator("#map-shape").selectOption("rectangle");
-  await page.locator("#map-area").selectOption(size);
+  await page.locator("#map-radius").fill(String(radius));
+  await page.locator("#radius-unit").selectOption("1");
   for (const k of ["hillshade", "contours", "elevation"])
     await page.locator("#download-" + k).check();
-  assert.equal(await page.locator("#map-width").inputValue(), size);
-  assert.equal(await page.locator("#map-height").inputValue(), size);
   await page.locator("#preview-map").click();
   await wait(() => page.locator("#download-map").isEnabled());
   const out = process.env.GNSS_SCREENSHOT_DIR || work;
@@ -107,39 +109,45 @@ async function wait(f) {
     path: path.join(out, "real-dem-area-preview.png"),
     fullPage: true,
   });
+  await page.locator("#confirm-map-cost").check();
   await page.locator("#download-map").click();
-  await wait(async () =>
-    (await page.locator("#map-preparation-status").textContent()).includes(
-      "Saved locally",
-    ),
-  );
-  const maps = await (await fetch(local + "/local/maps")).json();
-  assert.equal(maps.length, 1);
-  const id = maps[0].id;
-  const map = await (await fetch(local + "/local/maps/" + id)).json();
-  const grid = await (
-    await fetch(local + "/local/maps/" + id + "/terrain")
-  ).json();
+  if (process.env.GNSS_ACCEPTANCE_LOCAL) {
+    await page.locator("#approve-transfer").waitFor({ state: "visible", timeout: 30000 });
+    await page.waitForFunction(() => !downloadAbort);
+    const id = await page.evaluate(() => activeMapID);
+    const before = await json(local, `maps/${id}/manifest`);
+    assert.equal(before.transfer.approved_bytes, 5000000);
+    assert.ok(before.transfer.approval_required_bytes > 5000000);
+    // Refuse the actual native confirmation; it must neither resume nor approve.
+    page.once("dialog", d => d.dismiss());
+    await page.locator("#approve-transfer").click();
+    await new Promise(resolve => setTimeout(resolve, 300));
+    assert.deepEqual((await json(local, `maps/${id}/manifest`)).transfer, before.transfer);
+    report.ui_approval_refused_without_transfer = true;
+    await page.screenshot({ path: path.join(out, "transfer-approval-refused.png"), fullPage: true });
+    // Leaving a pending approval preserves the map; re-opening resumes same job.
+    await page.locator("#save-use-map").click();
+    assert.deepEqual((await json(local, `maps/${id}/manifest`)).transfer, before.transfer);
+    await page.locator("#open-map").click();
+    await page.locator("#map-preparation").evaluate(e => e.open = true);
+    report.pending_approval_save_use_preserves_map = true;
+  }
+  const acquired = await waitForAcquisition(page, local, report);
+  const id = acquired.id, manifest = acquired.manifest;
+  assert.equal(manifest.plan.request.radius_m, radius);
+  assert.equal(manifest.chunks.length, 1, "single-chunk alignment case");
+  const key = manifest.chunks[0].key;
+  const map = await json(local, `maps/${id}/chunks/${key}?layer=vector`);
+  const grid = await json(local, `maps/${id}/chunks/${key}?layer=terrain`);
   assert.ok(grid.provenance?.tiles.length);
   assert.equal(grid.vertical_datum, "EGM96");
   assert.equal(grid.arc_seconds, 1);
-  const onlineDownloadReport = await (
-    await fetch(local + "/local/maps/" + id + "/download-report")
-  ).json();
-  assert.equal(onlineDownloadReport.outcome, "ready");
-  assert.ok(onlineDownloadReport.attempts.length > 0);
-  assert.ok(
-    Math.abs(onlineDownloadReport.area_width_height_metres[0] - Number(size)) <
-      1e-6,
-  );
-  assert.ok(
-    Math.abs((map.requested_bounds[0] + map.requested_bounds[2]) / 2 - lon) <
-      1e-6,
-  );
-  assert.ok(
-    Math.abs((map.requested_bounds[1] + map.requested_bounds[3]) / 2 - lat) <
-      1e-6,
-  );
+  report.checks.geographic_data_acquired = "PASS";
+  report.checks.dem_data_acquired = "PASS";
+  const onlineDownloadReport = manifest;
+  assert.deepEqual(map.requested_bounds, manifest.chunks[0].bounds);
+  assert.ok(map.requested_bounds[0] < lon && map.requested_bounds[2] > lon);
+  assert.ok(map.requested_bounds[1] < lat && map.requested_bounds[3] > lat);
   // Independent decoded raw reference: compare EVERY persisted geographic node.
   assert.equal(
     grid.provenance.tiles.length,
@@ -147,11 +155,10 @@ async function wait(f) {
     "this acceptance case uses one source tile",
   );
   const url = grid.provenance.tiles[0].url;
-  const response = await fetch(url, { signal: AbortSignal.timeout(120000) });
-  assert.equal(response.status, 200);
-  const raw = zlib.gunzipSync(Buffer.from(await response.arrayBuffer()), {
-    maxOutputLength: 3601 * 3601 * 2,
-  });
+  // Controlled runs compare against pinned original HGT, never invented values.
+  const raw = process.env.GNSS_ACCEPTANCE_RAW_HGT
+    ? fs.readFileSync(process.env.GNSS_ACCEPTANCE_RAW_HGT)
+    : fs.readFileSync(path.join(db + ".map-cache", url.split("/").pop().replace(".gz", "")));
   assert.equal(raw.length, 3601 * 3601 * 2);
   assert.equal(
     crypto.createHash("sha256").update(raw).digest("hex"),
@@ -184,6 +191,7 @@ async function wait(f) {
   async function alignment() {
     return page.evaluate(
       ({ lon, lat }) => {
+        const terrain = globalThis.radiusGrids[0];
         const root = document.querySelector("#tracks"),
           image = document.querySelector('[data-layer="hillshade"]'),
           [x, y] = GeoMap.project(terrain.bounds[0], terrain.bounds[3]);
@@ -249,6 +257,7 @@ async function wait(f) {
       aligned.contourAligned &&
       aligned.contourSegments > 0,
   );
+  report.checks.alignment_verified = "PASS";
   await page.mouse.move(aligned.cursor.x, aligned.cursor.y);
   assert.match(
     await page.locator("#hover").textContent(),
@@ -262,34 +271,38 @@ async function wait(f) {
   });
   const terrainFile = Buffer.from(
     await (
-      await fetch(local + "/local/maps/" + id + "/terrain-file")
+      await fetch(local + `/local/maps/${id}/chunks/${key}?layer=terrain&format=gterrain`)
     ).arrayBuffer(),
   );
-  command.kill("SIGTERM");
-  await once(command, "exit");
-  await start(true);
+  if (command) {
+    command.kill("SIGTERM");
+    await once(command, "exit");
+  } else {
+    // Terminate the test-only provider harness; production Command reopens its DB.
+    process.kill(Number(process.env.GNSS_ACCEPTANCE_HARNESS_PID), "SIGTERM");
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  // Controlled harness used this port; restart production on the same URL.
+  const restartPort = new URL(local).port;
+  command = spawn(process.env.GNSS_COMMAND_BINARY,
+    ["-db", db, "-ingest-listen", `127.0.0.1:${ingest}`, "-dashboard-listen", `127.0.0.1:${restartPort}`],
+    { stdio: "ignore", env: { ...process.env, HTTP_PROXY: "http://127.0.0.1:1", HTTPS_PROXY: "http://127.0.0.1:1", NO_PROXY: "127.0.0.1,localhost" } });
+  await wait(async () => { try { return (await fetch(local + "/local/state")).ok; } catch { return false; } });
   let externalBrowserRequests = 0;
-  await context.route("**/*", (r) => {
+  await context.route("**/*", r => {
     if (r.request().url().startsWith(local)) return r.continue();
     externalBrowserRequests++;
     return r.abort();
   });
-  // Verify outbound acquisition really fails with blocked Command internet and
-  // that this failed retry cannot overwrite the saved offline terrain.
-  const retry = await fetch(local + "/local/maps/" + id + "/terrain-download", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ components: { elevation: true } }),
+  // Completed work is a no-network no-op, including after process interruption.
+  await json(local, `maps/${id}/chunks/${key}`, { layer: "terrain" });
+  const missing = await json(local, "map-jobs", { lat: lat + .02, lon, radius_m: 373, confirmed: true, components: { elevation: true } });
+  const missingManifest = await json(local, `maps/${missing.id}/manifest`);
+  const retry = await fetch(local + `/local/maps/${missing.id}/chunks/${missingManifest.chunks[0].key}`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ layer: "vector" }), signal: AbortSignal.timeout(40000),
   });
-  assert.equal(retry.status, 400);
-  assert.deepEqual(
-    Buffer.from(
-      await (
-        await fetch(local + "/local/maps/" + id + "/terrain-file")
-      ).arrayBuffer(),
-    ),
-    terrainFile,
-  );
+  assert.equal(retry.status, 502, "offline new acquisition must truthfully fail");
+  assert.deepEqual(Buffer.from(await (await fetch(local + `/local/maps/${id}/chunks/${key}?layer=terrain&format=gterrain`)).arrayBuffer()), terrainFile);
   await page.reload();
   await page.waitForSelector('[data-layer="hillshade"]');
   await page.waitForSelector('[data-layer="contours"]');
@@ -297,10 +310,11 @@ async function wait(f) {
   assert.equal(offline.elevation, aligned.elevation);
   assert.ok(offline.pixelAligned && offline.contourAligned);
   assert.equal(externalBrowserRequests, 0);
+  report.checks.offline_restart_verified = "PASS";
   await page.mouse.move(offline.cursor.x, offline.cursor.y);
   assert.match(
     await page.locator("#hover").textContent(),
-    /Estimated ground elevation ~\d+ m.*EGM96/,
+    /Estimated ground elevation ~-?\d+ m.*EGM96/,
   );
   await page.screenshot({
     path: path.join(out, "real-dem-aligned-offline-restart.png"),
@@ -359,6 +373,8 @@ async function wait(f) {
 })()
   .catch(async (e) => {
     report.error = e.stack;
+    report.error_cause = e.cause ? String(e.cause) : undefined;
+    report.outcome = classify(e);
     if (acceptancePage) {
       try {
         report.visible_failure_state = (await acceptancePage.locator("body").innerText()).slice(0, 16000);

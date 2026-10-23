@@ -968,3 +968,36 @@ covers cumulative transfer consent, fallback HTTP fixtures, source boundaries,
 streaming PBF integrity/resource limits and malicious portable packages. None of
 these synthetic sources is public-provider or native OS acceptance. The unchanged
 real-provider workflow reports its failures separately; do not waive it.
+
+### Approval-aware map acquisition (#28 reliability follow-up)
+
+Use `GNSS_CI_TRANSFER_BUDGET_BYTES=30000000` for an explicitly bounded acceptance
+allowance per logical map. Unset means the production default 5 MB, not unlimited
+consent. `map-acquisition-support.cjs` drives the real approval endpoint for API
+cases and the real button/native confirmation for browser cases. It reads the
+actual manifest requirement, rejects requests over budget, resumes the same map
+ID and bounds approval counts/state deadlines. Failed reports retain map/area,
+chunk/source/HTTP errors, transfer ledger, completed/missing assets and recovery
+instructions. Public failures never become successful skips.
+
+```sh
+node --test test-tools/integration/map-acquisition-support.test.cjs
+(cd command && go test -race ./internal/core -run 'Test(Map|Radius|DEM)' -count=1)
+(cd command && go build -o /tmp/gnss-command ./cmd/party-tracker)
+GNSS_COMMAND_BINARY=/tmp/gnss-command node test-tools/integration/map-acquisition-deterministic.cjs
+GNSS_COMMAND_BINARY=/tmp/gnss-command GNSS_CI_TRANSFER_BUDGET_BYTES=30000000 node test-tools/integration/dem-offline-acceptance.cjs
+GNSS_COMMAND_BINARY=/tmp/gnss-command GNSS_CI_TRANSFER_BUDGET_BYTES=30000000 node test-tools/integration/map-radius-online.cjs
+```
+
+The deterministic script compiles its Go test harness (or uses
+`GNSS_MAP_REFERENCE_BINARY`) and verifies original checksummed real SRTM HGT
+samples, actual gzip acquisition, consent refusal/acceptance, native node values,
+EGM96, hillshade/contour alignment, process interruption and offline production
+restart. Its controlled Alaska vector geometry is labelled synthetic. Separate
+Go acceptance acquires original real OSM PBF via controlled Overpass 502/regional
+fallback, indexes/crops real coordinates, checks provenance and repeats offline
+without corruption. Original samples and licensing live in Command's existing
+`internal/core/testdata/maps` fixture directory. No public server is needed for
+software acceptance. `map-software-acceptance`, `dem-provider` and `integrated`
+are independent jobs in the existing matched-assets workflow; the live-provider
+job retains failures and uploads reports even when another acquisition fails.

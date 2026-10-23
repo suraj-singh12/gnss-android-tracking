@@ -122,11 +122,12 @@ async function wait(f) {
   });
   await page.locator("#confirm-map-cost").check();
   await page.locator("#download-map").click();
+  // This fixture intentionally contains source voids. Acquired grids are usable,
+  // but the application must disclose partial coverage instead of success.
   await wait(async () =>
-    (await page.locator("#map-preparation-status").textContent()).includes(
-      "Saved locally",
-    ),
-  );
+    (await page.locator("#map-preparation-status").textContent()).includes("Partial map retained"));
+  assert.match(await page.locator("#map-preparation-status").textContent(), /coverage or layers remain unavailable/);
+  report.known_voids_reported_as_partial = true;
   const maps = await (await fetch(local + "/local/maps")).json();
   assert.equal(maps.length, 1);
   await page.locator("#choose-saved-map").click();
@@ -330,6 +331,10 @@ async function wait(f) {
   report.manifest = await (
     await fetch(local + `/local/maps/${maps[0].id}/manifest`)
   ).json();
+  assert.ok(report.manifest.chunks.every(c => c.vector.status === "complete" && c.terrain.status === "complete"));
+  assert.ok(report.manifest.chunks.some(c => c.terrain.void_dem_cells > 0));
+  assert.equal(report.manifest.transfer.approved_bytes, 5000000);
+  assert.equal(report.manifest.transfer.received_bytes, 0);
   report.elapsed_browser_ms = await page.evaluate(() => performance.now());
   await page.locator("#saved-maps").selectOption(maps[0].id);
   page.once("dialog", (d) => d.dismiss());

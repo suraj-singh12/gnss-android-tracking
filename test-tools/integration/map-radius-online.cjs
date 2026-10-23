@@ -1,3 +1,4 @@
+const { acquireChunk, transferBudget, classify } = require("./map-acquisition-support.cjs");
 /* Real public providers. A failed provider is a failure, never a fixture pass. */
 const fs = require("node:fs"),
   os = require("node:os"),
@@ -18,6 +19,8 @@ const report = {
   cases: [],
 };
 let command;
+const ciBudget = transferBudget();
+report.ci_transfer_budget_bytes = ciBudget;
 async function port() {
   const s = net.createServer();
   s.listen(0, "127.0.0.1");
@@ -44,6 +47,7 @@ async function port() {
     const r = await fetch(local + "/local/" + route, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(390000),
         body: JSON.stringify(body),
       }),
       data = await r.json();
@@ -82,7 +86,7 @@ async function port() {
         let completed = 0;
         try {
           for (const chunk of plan.chunks) {
-            await post(`maps/${saved.id}/chunks/${chunk.key}`, { layer });
+            await acquireChunk(local, saved.id, chunk.key, layer, evidence, ciBudget);
             completed++;
             if (layer === "vector") {
               const data = await (
@@ -152,6 +156,7 @@ async function port() {
           evidence.layers[layer] = {
             status: "FAIL",
             completed,
+            outcome: classify(error),
             error: String(error),
           };
         }

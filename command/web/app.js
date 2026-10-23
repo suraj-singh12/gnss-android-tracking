@@ -2485,7 +2485,7 @@ function radiusDescription(manifest) {
     (manifest.plan.full_extent
       ? "Imported declared full source extent.\n"
       : `Requested centre ${manifest.plan.request.lat}, ${manifest.plan.request.lon}; radius ${manifest.plan.request.radius_m} m.\n`) +
-    `Actual cumulative received bytes: ${manifest.transfer?.received_bytes || 0}; allowance ${manifest.transfer?.approved_bytes || 5000000} bytes.\nCurrent/last source: ${manifest.transfer?.current_source || "local verified data / not contacted"}.\n` +
+    `Actual cumulative received bytes: ${manifest.transfer?.received_bytes || 0}; reserved ${manifest.transfer?.reserved_bytes || 0}; allowance ${manifest.transfer?.approved_bytes || 5000000} bytes; additional approval requires cumulative ${manifest.transfer?.approval_required_bytes || 0} bytes.\nCurrent/last source: ${manifest.transfer?.current_source || "local verified data / not contacted"}.\n` +
     `Vector acquired ${complete("vector")}/${chunks.length} chunk envelopes (empty features are valid). DEM grids saved ${complete("terrain")}/${chunks.length}.\n` +
     `DEM cells with four valid corners: ${chunks.reduce((n, c) => n + (c.terrain.valid_dem_cells || 0), 0)}; cells with void corners: ${chunks.reduce((n, c) => n + (c.terrain.void_dem_cells || 0), 0)}.\n` +
     `${manifest.plan.dem_unsupported || ""}\n` +
@@ -2513,7 +2513,7 @@ async function loadRadiusManifest(id) {
   $("save-use-map").hidden = false;
   $("approve-transfer").hidden = !manifest.transfer?.approval_required_bytes;
   $("approve-transfer").textContent =
-    `Approve cumulative ${((manifest.transfer?.approval_required_bytes || 0) / 1000000).toFixed(2)} MB transfer`;
+    `Approve cumulative ${((manifest.transfer?.approval_required_bytes || 0) / 1000000).toFixed(2)} MB transfer (${manifest.transfer?.approval_required_bytes || 0} bytes)`;
   $("map-coverage-status").textContent = radiusDescription(manifest);
   $("map-metadata").textContent = radiusDescription(manifest);
   updateLayers();
@@ -2700,6 +2700,9 @@ async function resumeRadius() {
       } catch (e) {
         failure = e;
         if (controller.signal.aborted) throw e;
+        await loadRadiusManifest(id);
+        // Stop on consent so the displayed request cannot change under the operator.
+        if (radiusManifest?.transfer?.approval_required_bytes) break;
         // Stop this provider's queue after one failure; try the independent layer.
       }
     }
@@ -2723,7 +2726,11 @@ async function resumeRadius() {
         : "Saved manifest unavailable; reload Saved Maps.") +
       "\nLast operation: " +
       failure.message;
-  $("map-preparation-status").textContent = failure
+  const incomplete = radiusManifest?.chunks.some(c =>
+    c.vector.status !== "complete" ||
+    (Object.values(radiusManifest.components).some(Boolean) &&
+      (c.terrain.status !== "complete" || c.terrain.void_dem_cells > 0)));
+  $("map-preparation-status").textContent = failure || incomplete
     ? `Partial map retained. ${radiusManifest?.transfer?.approval_required_bytes ? "Additional transfer approval is required." : "Some requested coverage or layers remain unavailable."} Retry Missing or Save & Use. Details explains the cause.`
     : "Saved locally · acquired chunks available after restart without internet; inspect source & coverage manifest for known voids and layer availability.";
 }
@@ -2975,7 +2982,7 @@ $("approve-transfer").onclick = async () => {
     if (!n || !activeMapID) return;
     if (
       !confirm(
-        `Source: ${radiusManifest.transfer.current_source || "unknown"}. Already received ${(radiusManifest.transfer.received_bytes / 1000000).toFixed(2)} MB. Approve cumulative network transfer up to ${(n / 1000000).toFixed(2)} MB for this map job, including bytes already received? Regional sources may require up to 3 GB free disk space. Further escalation will require approval.`,
+        `Source: ${radiusManifest.transfer.current_source || "unknown"}. Already received ${(radiusManifest.transfer.received_bytes / 1000000).toFixed(2)} MB. Approve cumulative network transfer up to ${(n / 1000000).toFixed(2)} MB (${n} bytes) for this map job, including bytes already received? Regional sources may require up to 3 GB free disk space. Further escalation will require approval.`,
       )
     )
       return;

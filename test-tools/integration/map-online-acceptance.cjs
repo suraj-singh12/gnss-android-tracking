@@ -107,9 +107,11 @@ async function port() {
     const out = process.env.GNSS_MAP_ACCEPTANCE_REPORT;
     if (out) fs.writeFileSync(out, JSON.stringify(result, null, 2) + "\n");
     console.log(JSON.stringify(result, null, 2));
-    if (!result.passed)
+    if (!result.passed) {
+      process.exitCode = 1;
       console.log(
         "LIVE PROVIDER ACCEPTANCE BLOCKED — offline regression results remain separate.",
       );
+    }
     fs.rmSync(work, { recursive: true, force: true });
   });
