@@ -117,13 +117,17 @@ type mapBudgetTransport struct {
 }
 
 func (t mapBudgetTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	state, err := t.budget.s.transferState(t.budget.id)
+	_, err := t.budget.s.changeTransfer(t.budget.id, func(s *mapTransfer) error {
+		s.Source = r.URL.String()
+		s.Required = 0
+		if s.Charged >= s.Allowance {
+			s.Required = s.Allowance + mapConsentBytes
+			return errMapConsent
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
-	}
-	if state.Charged >= state.Allowance {
-		_, _ = t.budget.s.changeTransfer(t.budget.id, func(s *mapTransfer) error { s.Required = max(s.Required, s.Allowance+mapConsentBytes); return nil })
-		return nil, errMapConsent
 	}
 	resp, err := t.base.RoundTrip(r)
 	if err != nil {
@@ -133,11 +137,18 @@ func (t mapBudgetTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	// are limited by every subsequent read. Redirect bodies are not drained.
 	_, err = t.budget.s.changeTransfer(t.budget.id, func(s *mapTransfer) error {
 		s.Source = r.URL.String()
+		// A requirement describes this response, not a rejected earlier source.
+		// Preserve the cumulative charged/approved ledger across source changes.
+		s.Required = 0
+		// Do not hide provider errors/redirects behind an error-page size approval.
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return nil
+		}
 		if resp.ContentLength > mapTransferLimit {
 			return errors.New("source exceeds 1 GB supported transfer limit")
 		}
 		if resp.ContentLength > s.Allowance-s.Charged {
-			s.Required = max(s.Required, s.Charged+resp.ContentLength)
+			s.Required = s.Charged + resp.ContentLength
 			return fmt.Errorf("%w: %s requires cumulative %d bytes", errMapConsent, r.URL.Host, s.Required)
 		}
 		return nil

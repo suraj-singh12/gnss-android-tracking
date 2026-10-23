@@ -517,3 +517,16 @@ internal OS/lifecycle pause remains. SOS still uses the original 1.2-second hold
 engine. A retained instruction/result timestamp is labelled as evidence rather than
 substituted for an unrecorded empty-poll contact time. Full-app presentation now follows
 the supplied Review V3 PDF plus four written V4 overrides.
+
+Map consent is an explicit acquisition state, not a network failure. The same
+transfer ledger powers API HTTP 409 `transfer_approval_required` responses and UI
+manifest/confirmation. A pending requirement describes the currently attempted
+source's actual cumulative requirement; switching sources cannot enlarge the
+approved allowance, and a rejected regional response must not contaminate a later
+DEM requirement. Non-success HTTP responses retain their provider status rather
+than being reclassified by their error-page Content-Length. Browser acquisition
+pauses at consent before starting the next independent layer. Tests exercise
+these handlers and source adapters through local providers, immutable pinned real
+HGT/PBF inputs, actual browser confirmation and offline production restart.
+Public-provider acceptance has its own job and truthful failure reports; it is
+independent of the deterministic software and controlled recovery gates.

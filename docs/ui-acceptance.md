@@ -668,3 +668,45 @@ pickers are not represented by Linux Chromium screenshots. The 20-phone LAN flee
 late 21st remains field acceptance. Local bridge-only skips are reported as skips;
 prior real Room→Command results are historical evidence. External DEM/provider CI is
 independent, unchanged and reported separately from Android gates.
+
+### Issue #28 acquisition reliability follow-up (2026-10-23)
+
+Starting integration HEAD: `1c8049ede4c806ca2cefce33eecf764e035583f4` (merged #43
+and #44). Branch: `devX/issue-28-acquisition-reliability`. Original failing run:
+https://github.com/suraj-singh12/gnss-android-tracking/actions/runs/39876771277.
+Skadi HTTP 200 decoded 25,934,402 bytes from 18,131,689 compressed bytes; this was
+not a DEM decode failure. Live vector calls timed out awaiting headers or returned
+HTTP 502. Smallest covering regional fallback requested 227,876,423 / 50,306,338
+cumulative bytes. The old radius API acceptance never approved transfer, and the
+legacy rectangle browser acceptance waited 390 seconds after a concrete Overpass
+error. Production's safety stop was working. A stale pending regional requirement
+could additionally mislabel a later independent DEM source.
+
+Deterministic acceptance now uses the production map job, transfer ledger,
+provider adapters, persistence and browser. Verified original SRTMGL1 samples at
+58.6101,-133.8101, radius 373 m produce an independently decoded nearest elevation
+894 m (not surveyed ground truth), native 1-arc-second WGS84/EGM96 samples,
+aligned hillshade pixel centres and contour coordinates. Real OSM Delaware PBF
+fallback/crop/reimport/offline reuse is checked separately; controlled Alaska
+vector geometry is explicitly synthetic. Source files, immutable upstream
+revisions, hashes and licensing are recorded in Command testdata provenance.
+
+Local verification: API approval refusal/insufficient/repeated acceptance,
+32 KiB interrupted reservation, restart accounting, zero body reads before known
+oversize consent, no silent allowance enlargement, and independent source
+requirements PASS. Real SRTM every persisted native node and real OSM PBF crop,
+reimport/restart PASS. Controlled HTTP 502, header timeout, truncated/malformed
+files and SQLite disk-write failure preserve completed vectors/previous maps.
+Browser refusal leaves transfer unchanged; Save & Use while approval is pending
+preserves the job; real confirmation accepts the exact cumulative request;
+original terrain survives process termination and offline production restart.
+Screenshots show requested circle, native contours/hillshade and exact readout.
+
+CI config explicitly caps automated approval at 30,000,000 cumulative bytes per
+map and leaves the production default 5,000,000 bytes untouched. Requests for
+50–228 MB fail with exact amounts. Local live-provider access is blocked by the
+managed environment's HTTP destination policy (CONNECT 403); this is an
+environment access failure, not proof of provider outage or a successful skip.
+Remote exact-SHA workflow results/artifacts are recorded in the follow-up PR.
+Historical thin-terrain location and native macOS/Windows physical field
+acceptance remain NOT TESTED; cross-builds are not native acceptance.

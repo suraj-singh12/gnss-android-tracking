@@ -166,6 +166,14 @@ func (p *mapProvider) downloadDEMTile(ctx context.Context, name, address string,
 		}
 		if err != nil {
 			var ne net.Error
+			traceMu.Lock()
+			if a.Stage == "connecting" && connectionMS != nil && firstByteMS == nil {
+				a.Stage = "awaiting response headers"
+			}
+			traceMu.Unlock()
+			if errors.Is(err, errMapConsent) {
+				a.Stage = "waiting for transfer approval"
+			}
 			if errors.Is(err, errMapConsent) || errors.Is(err, context.Canceled) || ctx.Err() != nil {
 				retry = false
 			}

@@ -340,7 +340,7 @@ func (s *Store) acquireMapChunk(ctx context.Context, p *mapProvider, id, key, la
 		if s.path != ":memory:" {
 			p.demCache = s.path + ".map-cache"
 		}
-		report := DEMReport{MapID: id, Revision: BuildRevision(), Bounds: chunk.Bounds, Started: started.UTC().Format(wireTime), Provider: "AWS Open Data Terrain Tiles", Dataset: "Mapzen Skadi composite / WGS84 / EGM96", Components: j.Components, Attempts: []DEMAttempt{}}
+		report := DEMReport{MapID: id, Revision: BuildRevision(), Bounds: chunk.Bounds, Centre: [2]float64{(chunk.Bounds[0] + chunk.Bounds[2]) / 2, (chunk.Bounds[1] + chunk.Bounds[3]) / 2}, AreaMetres: [2]float64{(chunk.Bounds[2] - chunk.Bounds[0]) * 111320 * math.Cos((chunk.Bounds[1]+chunk.Bounds[3])/2*math.Pi/180), (chunk.Bounds[3] - chunk.Bounds[1]) * 111320}, Policy: demPolicy, Started: started.UTC().Format(wireTime), Provider: "AWS Open Data Terrain Tiles", Dataset: "Mapzen Skadi composite / WGS84 / EGM96", Components: j.Components, Attempts: []DEMAttempt{}}
 		var g terrainGrid
 		g, err = p.acquireDEMReport(ctx, chunk.Bounds, j.Components, &report, emit)
 		if err == nil || errors.Is(err, errDEMNoData) {
@@ -370,6 +370,9 @@ func (s *Store) acquireMapChunk(ctx context.Context, p *mapProvider, id, key, la
 			if err == nil {
 				b, err = encodeTerrain(g)
 			}
+		}
+		if len(report.Attempts) > 0 {
+			report.Stage = report.Attempts[len(report.Attempts)-1].Stage
 		}
 		report.ElapsedMS = *milliseconds(time.Since(started))
 		report.Outcome = "complete"
@@ -554,7 +557,12 @@ func (s *Store) mapJobRequest(w http.ResponseWriter, r *http.Request, p *mapProv
 		}
 		emit(DEMProgress{Stage: stage, Error: message})
 	} else if err != nil {
-		failure(w, 502, "chunk_acquisition_failed", err)
+		if errors.Is(err, errMapConsent) {
+			transfer, _ := s.transferState(parts[0])
+			respond(w, http.StatusConflict, map[string]any{"error": "transfer_approval_required", "message": err.Error(), "map_id": parts[0], "chunk_id": parts[2], "layer": in.Layer, "transfer": transfer})
+		} else {
+			failure(w, 502, "chunk_acquisition_failed", err)
+		}
 	} else {
 		respond(w, 200, map[string]bool{"complete": true})
 	}

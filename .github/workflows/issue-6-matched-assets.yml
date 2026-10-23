@@ -24,8 +24,54 @@ permissions:
 env:
   SOURCE_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
 jobs:
-  dem-provider:
+  map-software-acceptance:
+    # Required software gate: no dependency on public-provider uptime.
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GNSS_CI_TRANSFER_BUDGET_BYTES: "30000000"
+      GNSS_SCREENSHOT_DIR: ${{ runner.temp }}/map-software-evidence/visual
+      GNSS_TERRAIN_PROVIDER_REPORT: ${{ runner.temp }}/map-software-evidence/controlled-acquisition.json
+      GNSS_COMMAND_BINARY: ${{ runner.temp }}/gnss-map-command
+      GNSS_MAP_REFERENCE_BINARY: ${{ runner.temp }}/gnss-map-reference
+      GNSS_PLAYWRIGHT_MODULE: ${{ runner.temp }}/gnss-map-browser/node_modules/playwright
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REVISION }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.7"
+          cache-dependency-path: command/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Deterministic acquisition and controlled failure/recovery
+        run: |
+          mkdir -p "$RUNNER_TEMP/map-software-evidence"
+          set -o pipefail
+          (cd command && go test -race -v ./internal/core -run 'Test(Map|Radius|DEM)' -count=1) | tee "$RUNNER_TEMP/map-software-evidence/acquisition-race.txt"
+          node --test test-tools/integration/map-acquisition-support.test.cjs
+          (cd command && go build -o "$GNSS_COMMAND_BINARY" ./cmd/party-tracker && go test -c -o "$GNSS_MAP_REFERENCE_BINARY" ./internal/core)
+      - name: Production pipeline browser approval, real samples and offline restart
+        run: |
+          npm install --prefix "$RUNNER_TEMP/gnss-map-browser" playwright
+          "$RUNNER_TEMP/gnss-map-browser/node_modules/.bin/playwright" install --with-deps chromium
+          node test-tools/integration/map-acquisition-deterministic.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Map-software-acceptance-${{ env.SOURCE_REVISION }}
+          path: ${{ runner.temp }}/map-software-evidence
+          if-no-files-found: error
+  dem-provider:
+    # Real failures remain failing, independently of the deterministic gate.
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      # Per logical map, cumulative across vector/DEM/fallback/retries.
+      # Rejects the observed 50 MB and 228 MB regional files.
+      GNSS_CI_TRANSFER_BUDGET_BYTES: "30000000"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,6 +90,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/dem-evidence"
           node test-tools/integration/dem-acquisition.cjs
       - name: Real automatic DEM acquisition, geographic alignment and offline restart
+        if: always()
         env:
           GNSS_TERRAIN_PROVIDER_REPORT: ${{ runner.temp }}/dem-evidence/terrain-provider-check.json
           GNSS_COMMAND_BINARY: ${{ runner.temp }}/gnss-dem-command
@@ -51,7 +98,7 @@ jobs:
           GNSS_SCREENSHOT_DIR: ${{ runner.temp }}/dem-evidence/visual-evidence
           GNSS_DEM_LAT: "27.3739"
           GNSS_DEM_LON: "88.7618"
-          GNSS_DEM_SIZE: "1000"
+          GNSS_DEM_RADIUS: "373"
         run: |
           (cd command && go build -o "$RUNNER_TEMP/gnss-dem-command" ./cmd/party-tracker)
           npm install --prefix "$RUNNER_TEMP/gnss-dem-browser" playwright
@@ -67,6 +114,12 @@ jobs:
         run: |
           (cd command && go build -o "$RUNNER_TEMP/gnss-dem-command" ./cmd/party-tracker)
           node test-tools/integration/map-radius-online.cjs
+      - name: Attempt bounded real online map acceptance and record external result
+        if: always()
+        env:
+          GNSS_COMMAND_BINARY: ${{ runner.temp }}/gnss-dem-command
+          GNSS_MAP_ACCEPTANCE_REPORT: ${{ runner.temp }}/dem-evidence/map-online-acceptance.json
+        run: node test-tools/integration/map-online-acceptance.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -177,13 +230,6 @@ jobs:
           CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -buildvcs=true -o "$RUNNER_TEMP/gnss-assets/GNSS-Command-macos-arm64" ./cmd/party-tracker
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -buildvcs=true -o "$RUNNER_TEMP/gnss-assets/GNSS-Command-windows-x64.exe" ./cmd/party-tracker
           go build -o "$RUNNER_TEMP/gnss-command-linux" ./cmd/party-tracker
-      - name: Attempt bounded real online map acceptance and record external result
-        id: map-acceptance
-        continue-on-error: true
-        env:
-          GNSS_COMMAND_BINARY: ${{ runner.temp }}/gnss-command-linux
-          GNSS_MAP_ACCEPTANCE_REPORT: ${{ runner.temp }}/gnss-assets/map-online-acceptance.json
-        run: node test-tools/integration/map-online-acceptance.cjs
       - name: Browser verification including SOS and offline maps
         run: |
           npm install --prefix "$RUNNER_TEMP/gnss-browser" playwright @axe-core/playwright
@@ -269,8 +315,3 @@ jobs:
             android/app/build/reports
             android/app/build/test-results
             ${{ runner.temp }}/gnss-assets/visual-evidence
-      - name: Preserve external map acceptance failure after uploading evidence
-        if: ${{ always() && steps.map-acceptance.outcome == 'failure' }}
-        run: |
-          echo "External Overpass/map acceptance failed. Software checks and artifacts do not waive this gate."
-          exit 1
