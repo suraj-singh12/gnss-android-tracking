@@ -538,8 +538,8 @@ locked/OEM/Doze behavior remain NOT TESTED without actual hardware.
 ## Android redesign (#39)
 
 The full Android interface follows the operator's 44-frame Review V3 PDF export and
-four V4 corrections. See [design system](../docs/design-system.md#issue-39-native-android-redesign)
-and [visual acceptance](../docs/ui-acceptance.md#issue-39-full-android-acceptance).
+four V4 corrections. See [design system](../docs/design-system.md)
+and [visual acceptance](../docs/ui-acceptance.md).
 Tracking presentation is now authorized to change; acquisition, persistence, Sender,
 service lifetime, authentication and SOS execution remain owned by their existing
 components. Command browser UI and protocol are unchanged.

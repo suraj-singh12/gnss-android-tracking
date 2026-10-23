@@ -69,9 +69,16 @@ class TrackingNotificationTest {
             listOf(TrackingNotification.SYNC, TrackingNotification.STOP),
             intents.map { it.action },
         )
+        // A completed/blocked drain may clear its transient flags before the UI is polled.
+        // Resuming the existing pause and starting retained transfer are stable dispatch evidence.
+        app.pauseHistory()
         val controller = Robolectric.buildActivity(MainActivity::class.java, intents[0]).setup()
         try {
-            until { app.sender.aggressive || app.operational.value.drainStarting }
+            until { !app.operational.value.historyPaused && controller.get().intent.action == null }
+            assertEquals(
+                RetainedTransferService::class.java.name,
+                shadowOf(app).nextStartedService.component!!.className,
+            )
             assertFalse(app.operational.value.tracking)
             assertNull(
                 shadowOf(app).nextStartedService?.takeIf {

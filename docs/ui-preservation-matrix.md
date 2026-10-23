@@ -183,7 +183,7 @@ recording/Travel Back or remote-control authority changes belong to this extensi
 
 The operator's replacement scope supersedes the old Tracking pixel-preservation
 restriction. Review V3's supplied 44-frame PDF plus four explicit V4 overrides govern
-presentation. [Acceptance](ui-acceptance.md#issue-39-full-android-acceptance) maps every
+presentation. [Acceptance](ui-acceptance.md) maps every
 Day/Night reference to its native screen and records deliberate OS/accessibility
 adaptations. Command web and the wire contract remain unchanged.
 
