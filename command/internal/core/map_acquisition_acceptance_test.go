@@ -9,8 +9,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/qedus/osmpbf"
 	"github.com/suraj-singh12/gnss-android-tracking/command/web"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -380,6 +382,7 @@ func TestMapRealPBFFallbackApprovalAndOfflineReuse(t *testing.T) {
 	if len(geo.Features) == 0 || geo.Bounds != c.Bounds {
 		t.Fatal("real crop missing", string(original))
 	}
+	verifyRealPBFCoordinates(t, pbf, geo.Features)
 	src, err := s.indexPBF(context.Background(), filepath.Join("testdata/maps", "delaware-latest.osm.pbf"), osmSource{}, nil)
 	if err != nil || src.ID != sources[0].ID {
 		t.Fatal(err)
@@ -512,4 +515,95 @@ func TestMapControlledFailurePreservesPreviouslyValidAssets(t *testing.T) {
 			t.Logf("%s: %s; valid vector and previous offline map retained", kind, err)
 		})
 	}
+}
+
+// Independently decode original PBF with the upstream streaming decoder. The
+// production importer uses its own bounded two-pass framing/index, so this
+// compares actual node references and geographic coordinates across both paths.
+func verifyRealPBFCoordinates(t *testing.T, pbf []byte, features []json.RawMessage) {
+	t.Helper()
+	type feature struct {
+		ID       string `json:"id"`
+		Geometry struct {
+			Type        string          `json:"type"`
+			Coordinates json.RawMessage `json:"coordinates"`
+		} `json:"geometry"`
+	}
+	refs := map[int64][]int64{}
+	decoded := []feature{}
+	for _, b := range features {
+		var f feature
+		if err := json.Unmarshal(b, &f); err != nil {
+			t.Fatal(err)
+		}
+		var id int64
+		if _, err := fmt.Sscanf(f.ID, "way/%d", &id); err != nil {
+			t.Fatal(err)
+		}
+		refs[id] = nil
+		decoded = append(decoded, f)
+	}
+	scan := func(visit func(any)) {
+		decoder := osmpbf.NewDecoder(bytes.NewReader(pbf))
+		if err := decoder.Start(1); err != nil {
+			t.Fatal(err)
+		}
+		for {
+			item, err := decoder.Decode()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			visit(item)
+		}
+	}
+	scan(func(item any) {
+		if way, ok := item.(*osmpbf.Way); ok {
+			if _, wanted := refs[way.ID]; wanted {
+				refs[way.ID] = way.NodeIDs
+			}
+		}
+	})
+	nodes := map[int64][2]float64{}
+	for _, ids := range refs {
+		if len(ids) < 2 {
+			t.Fatal("source way missing")
+		}
+		for _, id := range ids {
+			nodes[id] = [2]float64{math.NaN(), math.NaN()}
+		}
+	}
+	scan(func(item any) {
+		if node, ok := item.(*osmpbf.Node); ok {
+			if _, wanted := nodes[node.ID]; wanted {
+				nodes[node.ID] = [2]float64{node.Lon, node.Lat}
+			}
+		}
+	})
+	for _, f := range decoded {
+		var id int64
+		fmt.Sscanf(f.ID, "way/%d", &id)
+		var points [][2]float64
+		if f.Geometry.Type == "Polygon" {
+			var rings [][][2]float64
+			if err := json.Unmarshal(f.Geometry.Coordinates, &rings); err != nil || len(rings) != 1 {
+				t.Fatal(err)
+			}
+			points = rings[0]
+		} else if err := json.Unmarshal(f.Geometry.Coordinates, &points); err != nil {
+			t.Fatal(err)
+		}
+		if len(points) != len(refs[id]) {
+			t.Fatal("source reference count mismatch", id)
+		}
+		for i, p := range points {
+			want := nodes[refs[id][i]]
+			if math.IsNaN(want[0]) || math.Abs(p[0]-want[0]) > 1e-9 || math.Abs(p[1]-want[1]) > 1e-9 {
+				t.Fatal("real OSM coordinate mismatch", id, i, p, want)
+			}
+		}
+	}
+	t.Logf("independent PBF reference: all %d crop ways / %d original nodes match geographic coordinates", len(decoded), len(nodes))
 }

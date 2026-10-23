@@ -695,7 +695,9 @@ Local verification: API approval refusal/insufficient/repeated acceptance,
 32 KiB interrupted reservation, restart accounting, zero body reads before known
 oversize consent, no silent allowance enlargement, and independent source
 requirements PASS. Real SRTM every persisted native node and real OSM PBF crop,
-reimport/restart PASS. Controlled HTTP 502, header timeout, truncated/malformed
+reimport/restart PASS. An independent upstream PBF decoder also verifies all
+216 cropped real ways against 1,703 original referenced nodes. Controlled HTTP
+502, header timeout, truncated/malformed
 files and SQLite disk-write failure preserve completed vectors/previous maps.
 Browser refusal leaves transfer unchanged; Save & Use while approval is pending
 preserves the job; real confirmation accepts the exact cumulative request;
@@ -707,6 +709,8 @@ map and leaves the production default 5,000,000 bytes untouched. Requests for
 50–228 MB fail with exact amounts. Local live-provider access is blocked by the
 managed environment's HTTP destination policy (CONNECT 403); this is an
 environment access failure, not proof of provider outage or a successful skip.
-Remote exact-SHA workflow results/artifacts are recorded in the follow-up PR.
+Local full Command Go/race/vet, test-tools race/vet, map-download and radius UI,
+and Node map/terrain/SOS/CI-budget checks PASS. Remote exact-SHA workflow
+results/artifacts are recorded in the follow-up PR.
 Historical thin-terrain location and native macOS/Windows physical field
 acceptance remain NOT TESTED; cross-builds are not native acceptance.
