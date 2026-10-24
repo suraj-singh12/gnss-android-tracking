@@ -1055,3 +1055,12 @@ Public-provider tests remain separate failing checks if providers fail or a CI
 ceiling blocks acquisition. Their reports preserve actual provider attempts,
 HTTP/timeout errors, transfer accounting, completed/missing chunks and restart
 results. Fixture success never turns a failed public acquisition into PASS.
+
+### Issue #49 initial admission correction
+
+Local PBF import checks declared header coverage against selected-area/full-extent
+plan feasibility **before** building a source index. Unsupported full imports return
+the coverage refusal before consuming index resources. This does not yet fix the
+five-million-node selected-area limitation. Regional acquisition checks its existing
+3 GB disk requirement before provider requests can solicit additional transfer
+consent; the later disk check remains a recheck. Existing persistence/limits remain.

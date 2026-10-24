@@ -203,3 +203,28 @@ adaptations. Command web and the wire contract remain unchanged.
 | Notifications / theme | Native Sync/confirmed Stop, retained alert ACK, icon-only saved theme toggle | Immutable distinct Activity intents, consumed-action restoration, original alert receiver/timeout/channel; notification tests |
 | Command | Existing browser screens/windows included in screenshot artifact | No Command source/UI/recording/maps/protocol changes |
 | Native acceptance | Honest distinction between rendered software evidence and devices | Real TalkBack/IME/OEM/Doze/locked GNSS/SOS/alert/LAN and native desktop acceptance outstanding |
+
+## Issue #49 · inventory before V3 UI changes
+
+This is a migration plan, **not implemented UI parity**. Every existing control
+remains in its original location. The exact supplied [V3 reference](evidence/issue-49/v3-reference/IMPLEMENTATION-HANDOFF.md)
+is preserved verbatim. Current issue/operator instructions supersede the handoff's
+historical Figma prerequisite; no populated Figma artifact is claimed.
+
+| Existing controls | Required V3 destination | Preserved owner |
+| --- | --- | --- |
+| Current map, `map-mode` | Current-map status / My Maps display tools | Selection and preferences |
+| Search/results, WGS84 coordinates, centre picker | Get a Map location | Existing search and geographic plan |
+| Radius, m/km, legacy rectangle and dimensions | Get a Map coverage / advanced | Existing plan controls |
+| Preview, coverage/resource details, acknowledgement, download | Get a Map preview / primary action | Existing map job and consent |
+| Download hillshade/contours/elevation | Get a Map optional terrain | Independent terrain acquisition |
+| Progress, cancel, retry, Save & Use | Active task / recovery | Existing durable job and validated partial assets |
+| Additional transfer approval | Active task approval | Existing cumulative transfer ledger |
+| Saved list/select, export, confirmed delete | My Maps library/contextual tools | Existing SQLite library |
+| Source manifest, attribution, coverage | My Maps source details | Existing evidence/manifest |
+| HGT/.gterrain, terrain products and export | My Maps terrain tools | Existing terrain preparation |
+| PBF/GeoJSON/portable package, crop/full controls | Import | Existing validation/import endpoints |
+| Legacy GeoJSON | Import compatibility details | Existing `map-file` |
+| Opacity, diagnostic observations, dot interval | My Maps display settings | Existing display controls |
+| Diagnostics/copy/export | Active task details | Existing download report |
+| Separate Layers popup | Existing quick Layers | Existing independent visibility/availability |

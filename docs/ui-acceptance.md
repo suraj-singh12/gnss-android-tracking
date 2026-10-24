@@ -727,3 +727,37 @@ The legacy Overpass probe timed out awaiting headers. Its prior report-only
 nonzero-result/zero-exit mismatch was discovered in CI and corrected: a failed
 real-provider report now always produces a failed process/check. These are
 independent outcomes, not a successful skip. Final follow-up CI is linked in PR #45.
+
+## Issue #49 · work in progress
+
+Starting integration SHA: `5cc1c263557a2fd6baea962400df5c9b58b61271`.
+Branch: `devX/issue-49-offline-maps-v3`. Canonical guidance:
+`3b60b6d6228ca208df75765e2008c9b9abba8a69` (matches integration).
+Merged PRs #43/#45 are integrated dependencies.
+
+The supplied V3 package is retained in [evidence/issue-49/v3-reference/](evidence/issue-49/v3-reference/).
+Original ZIP SHA-256: `49d003b6f45fd7dec75486cd83572403f4fb0e6eb921f73bc9786835c6fd5dcd`.
+These are design references, **not application screenshots**. The preservation matrix
+records the control inventory before UI changes.
+
+Initial verified defects: full PBF feasibility admission happened after indexing;
+regional disk admission followed the budget transport's possible approval gate;
+nine viewport chunks throw before loading geography; crop import indexes the whole
+source against five million nodes. The current correction addresses only the first
+two admission-order defects. Crop scalability, overview rendering, reliable acquisition
+and V3 implementation remain outstanding.
+
+2026-10-24 public-provider probes: HTTPS CONNECT to
+`https://overpass-api.de/api/interpreter` and
+`https://download.geofabrik.de/asia/india/uttar-pradesh-latest.osm.pbf` both returned
+proxy **403 Forbidden**, `curl: (56) CONNECT tunnel failed, response 403`.
+The enforced environment host policy excludes these providers. Real-provider
+acceptance is **BLOCKED**, not an upstream outage or deterministic pass. Regional
+performance, actual acquisition/render/offline restart, six V3 application screenshot
+states and native field acceptance are unverified. No visual baseline/CI gate was added.
+
+Initial correction validation (Linux, Go 1.24.7): `go test ./...` PASS
+(core 201.557 s); `go vet ./...` PASS; targeted admission/index/redirect tests
+with `-race` PASS (17.499 s); macOS ARM64 and Windows AMD64 Command cross-builds
+PASS. These results cover the initial admission correction, not full Issue #49
+acceptance, full race coverage, browser/V3 review, native runtime or public providers.

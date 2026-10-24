@@ -221,6 +221,11 @@ func (s *Store) discoverRegion(ctx context.Context, p *mapProvider, b [4]float64
 	if s.path == ":memory:" {
 		return osmSource{}, errors.New("regional source caching requires a persistent Command database")
 	}
+	// Admission precedes catalog/download requests: the budget transport may
+	// otherwise solicit consent for a source we cannot store or process.
+	if e := mapDiskReserve(s.path, uint64(3*pbfFileLimit)); e != nil {
+		return osmSource{}, e
+	}
 	if e := os.MkdirAll(cache, 0700); e != nil {
 		return osmSource{}, e
 	}
@@ -385,6 +390,31 @@ func (s *Store) discoverRegion(ctx context.Context, p *mapProvider, b [4]float64
 	src, e := s.indexPBF(ctx, path, osmSource{Name: candidate.Properties.Name, URL: address, Footprint: candidate.Geometry}, emit)
 	return src, e
 }
+func admitPBFPlan(src osmSource, mode string, c mapCircle) (mapPlan, error) {
+	var plan mapPlan
+	var err error
+	switch mode {
+	case "full":
+		plan, err = planExtent(src.Bounds)
+	case "crop":
+		plan, err = planCircle(c)
+		if err == nil && plan.Unsupported != "" {
+			err = errors.New(plan.Unsupported)
+		}
+	default:
+		err = errors.New("choose crop or full")
+	}
+	if err != nil {
+		return plan, err
+	}
+	for _, chunk := range plan.Chunks {
+		if !sourceCovers(src, chunk.Bounds) {
+			return plan, errors.New("requested area extends beyond declared PBF coverage; choose an entirely covered crop")
+		}
+	}
+	return plan, nil
+}
+
 func planExtent(b [4]float64) (mapPlan, error) {
 	if b[0] < -180 || b[2] > 180 || b[1] < -mapMercatorLimit || b[3] > mapMercatorLimit || b[0] >= b[2] || b[1] >= b[3] {
 		return mapPlan{}, errors.New("unsupported full source extent")
@@ -514,7 +544,7 @@ func (s *Store) mapSourceRequest(w http.ResponseWriter, r *http.Request, p *mapP
 		return true
 	}
 	defer os.Remove(f.Name())
-	n, e := io.Copy(f, http.MaxBytesReader(w, r.Body, pbfFileLimit))
+	_, e = io.Copy(f, http.MaxBytesReader(w, r.Body, pbfFileLimit))
 	ce := f.Close()
 	if e == nil {
 		e = ce
@@ -523,31 +553,22 @@ func (s *Store) mapSourceRequest(w http.ResponseWriter, r *http.Request, p *mapP
 		failure(w, 400, "invalid_import", e)
 		return true
 	}
-	src, e := s.indexPBF(ctx, f.Name(), osmSource{Name: "Local OSM PBF"}, nil)
+	// Validate requested coverage before building a disposable source index.
+	// In particular, an infeasible full extent must not consume the crop's
+	// node/index budget before we can suggest selected-area extraction.
+	header, e := pbfHeader(f.Name())
 	if e != nil {
 		failure(w, 400, "invalid_pbf", e)
 		return true
 	}
-	_ = n
-	var plan mapPlan
-	if mode == "full" {
-		plan, e = planExtent(src.Bounds)
-	} else {
-		plan, e = planCircle(c)
-		if e == nil && plan.Unsupported != "" {
-			e = errors.New(plan.Unsupported)
-		}
-	}
-	if e == nil {
-		for _, chunk := range plan.Chunks {
-			if !sourceCovers(src, chunk.Bounds) {
-				e = errors.New("requested area extends beyond declared PBF coverage; choose an entirely covered crop")
-				break
-			}
-		}
-	}
+	plan, e := admitPBFPlan(header, mode, c)
 	if e != nil {
 		failure(w, 400, "unsupported_coverage", e)
+		return true
+	}
+	src, e := s.indexPBF(ctx, f.Name(), osmSource{Name: "Local OSM PBF"}, nil)
+	if e != nil {
+		failure(w, 400, "invalid_pbf", e)
 		return true
 	}
 	j := mapJob{Type: "FeatureCollection", Features: []any{}, Plan: plan, Components: map[string]bool{}, Attribution: "© OpenStreetMap contributors · ODbL", SourceID: src.ID}

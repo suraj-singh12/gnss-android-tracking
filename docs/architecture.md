@@ -530,3 +530,8 @@ these handlers and source adapters through local providers, immutable pinned rea
 HGT/PBF inputs, actual browser confirmation and offline production restart.
 Public-provider acceptance has its own job and truthful failure reports; it is
 independent of the deterministic software and controlled recovery gates.
+
+Issue #49's initial correction admits local PBF declared coverage/plan feasibility
+before indexing and checks regional disk admission before budgeted provider requests.
+The later disk recheck remains. Source indexing, publication transactions, transfer
+ledger and renderer retain their existing owners and resource limits.
