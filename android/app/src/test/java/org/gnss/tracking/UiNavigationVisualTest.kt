@@ -368,10 +368,22 @@ class UiNavigationVisualTest {
                         it.text == "Adaptive storage"
                     }
                 adaptive.performClick()
+                withTimeout(15000) {
+                    while (app.pendingAdaptive != null) {
+                        shadowOf(Looper.getMainLooper()).idle()
+                        delay(10)
+                    }
+                }
                 settle()
                 capture("adaptive-on")
                 assertTrue(app.persistencePolicy.state.enabled)
                 adaptive.performClick()
+                withTimeout(15000) {
+                    while (app.pendingAdaptive != null) {
+                        shadowOf(Looper.getMainLooper()).idle()
+                        delay(10)
+                    }
+                }
                 settle()
                 assertFalse(app.persistencePolicy.state.enabled)
                 openNativeScreen(a, "Tracking")
