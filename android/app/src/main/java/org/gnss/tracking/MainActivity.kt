@@ -862,41 +862,35 @@ class MainActivity : Activity() {
         content = group("Policy details", false)
         reportingDetails = text("Loading…", 14f)
         content = trackingPolicy
+        var renderingAdaptive = false
+        fun renderAdaptive() {
+            val pending = app.pendingAdaptive
+            val policy = app.persistencePolicy.state
+            renderingAdaptive = true
+            try {
+                val checked = pending ?: policy.enabled
+                if (adaptive.isChecked != checked) adaptive.isChecked = checked
+            } finally {
+                renderingAdaptive = false
+            }
+            val fallback = app.observationPersistence.samplingState.fallback ?: policy.error
+            val status = when {
+                pending != null -> "Saving · ${if (pending) "Adaptive ON" else "Dense OFF"}"
+                app.adaptiveSaveFailed -> "Not saved · Dense fallback · check storage · saved ${if (policy.enabled) "ON" else "OFF"}"
+                fallback != null -> "Dense fallback · $fallback"
+                policy.enabled -> "ON · Adaptive storage"
+                else -> "OFF · Dense storage"
+            }
+            if (policyStatus.text.toString() != status) policyStatus.text = status
+        }
         adaptive.setOnCheckedChangeListener { _, enabled ->
-            if (!adaptive.isEnabled) return@setOnCheckedChangeListener
-            adaptive.isEnabled = false
-            // The saved user action belongs to the application, so rotating or
-            // leaving this Activity cannot cancel an accepted preference write.
-            app.workScope.launch {
-                val result = runCatching {
-                    app.persistencePolicy.setEnabled(enabled, utc(SystemClock.wallMillis())).also {
-                        app.recorder.event(
-                            DiagnosticEvent.PERSISTENCE_POLICY_CHANGED,
-                            persistencePolicy = it,
-                        )
-                    }
-                }
-                if (result.isFailure)
-                    app.recorder.event(
-                        DiagnosticEvent.PERSISTENCE_POLICY_FAILED,
-                        persistencePolicy = app.persistencePolicy.state,
-                    )
-                withContext(Dispatchers.Main) {
-                    if (isDestroyed) return@withContext
-                    result.fold(
-                        onSuccess = { policy ->
-                            policyStatus.text =
-                                "Applied · ${if (policy.enabled) "Adaptive ON" else "Dense OFF"}"
-                        },
-                        onFailure = {
-                            adaptive.isChecked = app.persistencePolicy.state.enabled
-                            policyStatus.text = "Not saved · Dense mode · check storage"
-                        },
-                    )
-                    adaptive.isEnabled = true
-                }
+            if (!renderingAdaptive) {
+                app.requestAdaptive(enabled)
+                renderAdaptive()
             }
         }
+        renderAdaptive()
+        scope.launch { app.adaptiveRequests.collect { renderAdaptive() } }
 
         content = pages.getValue("Diagnostics")
         val diagnosticTools =
@@ -1629,19 +1623,7 @@ class MainActivity : Activity() {
                             }
                         batterySummary.text =
                             "Battery · ${op.health.battery_percent?.let { "$it%" } ?: "Unavailable"}${if (op.health.charging == true) " · Charging" else ""}"
-                        if (adaptive.isEnabled) {
-                            adaptive.isEnabled = false
-                            adaptive.isChecked = localPolicy.enabled
-                            adaptive.isEnabled = true
-                            val fallback =
-                                app.observationPersistence.samplingState.fallback
-                                    ?: localPolicy.error
-                            policyStatus.text =
-                                if (fallback != null) "Dense fallback · $fallback"
-                                else if (localPolicy.enabled) "ON · Adaptive storage"
-                                else "OFF · Dense storage"
-                            policyStatus.visibility = View.VISIBLE
-                        }
+                        renderAdaptive()
                         val collectionHealth = app.observationPersistence.state
                         val attention =
                             when {

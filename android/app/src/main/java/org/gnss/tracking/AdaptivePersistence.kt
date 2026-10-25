@@ -76,7 +76,6 @@ class LocalPersistencePolicy(private val preferences: SharedPreferences) {
             } catch (e: Exception) {
                 state =
                     state.copy(
-                        enabled = false,
                         error = "Policy save failed; dense persistence effective",
                     )
                 throw e

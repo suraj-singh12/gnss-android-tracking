@@ -28,9 +28,12 @@ class AdaptiveSettingsTest {
         withContext(Dispatchers.IO) { app.repository.state() }
         val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
         suspend fun settle() {
-            repeat(30) {
+            withTimeout(15000) {
+                while (app.pendingAdaptive != null) {
+                    shadowOf(Looper.getMainLooper()).idle()
+                    delay(10)
+                }
                 shadowOf(Looper.getMainLooper()).idle()
-                delay(10)
             }
         }
         suspend fun toggle(): Switch {
@@ -41,8 +44,21 @@ class AdaptiveSettingsTest {
         }
         val choice = toggle()
         assertFalse(choice.isChecked)
-        choice.performClick()
-        controller.recreate() // No wait: an Activity teardown cannot cancel the accepted write.
+        synchronized(app.persistencePolicy) {
+            choice.isFocusableInTouchMode = true
+            assertTrue(choice.requestFocus())
+            choice.performClick()
+            assertTrue(choice.isEnabled)
+            assertTrue(choice.hasFocus())
+            choice.performClick()
+            choice.performClick()
+            assertEquals(true, app.pendingAdaptive)
+            assertTrue(choice.isEnabled)
+            assertTrue(choice.hasFocus())
+            // Hold the policy monitor so no write can finish before teardown.
+            controller.recreate()
+            assertEquals(true, app.pendingAdaptive)
+        }
         settle()
         assertTrue(app.persistencePolicy.state.enabled)
         assertNull(shadowOf(controller.get()).nextStartedService)
@@ -51,7 +67,7 @@ class AdaptiveSettingsTest {
         restored.performClick()
         settle()
         assertFalse(app.persistencePolicy.state.enabled)
-        assertEquals(2L, app.persistencePolicy.state.changes)
+        assertEquals(4L, app.persistencePolicy.state.changes)
         assertNull(shadowOf(controller.get()).nextStartedService)
         controller.pause().stop().destroy()
         app.finishForTests()
