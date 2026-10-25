@@ -378,12 +378,19 @@ class CommandEnrollmentUiTest {
                     assertEquals(3, field.selectionStart)
                     field.text.clear()
                     capture("entry-bottom")
+                    val phoneId = withContext(Dispatchers.IO) { app.repository.state().deviceId }
+                    field.setText(
+                        "gnss1:${Protocol.newId()}:$phoneId:${Protocol.newId()}:${"01".repeat(32)}"
+                    )
+                    click("Review authorization")
+                    settle()
                     controller.recreate()
                     val restored =
                         nativeViews(controller.get().findViewById(android.R.id.content))
                             .filterIsInstance<EditText>()
                             .single { it.hint == "Private enrollment credential" }
                     assertEquals("", restored.text.toString())
+                    assertTrue("Review recreation returns to private entry", restored.isShown)
                 } finally {
                     controller.pause().stop().destroy()
                 }

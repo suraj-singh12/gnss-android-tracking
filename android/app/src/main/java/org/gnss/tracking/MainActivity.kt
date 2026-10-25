@@ -1428,9 +1428,10 @@ class MainActivity : Activity() {
             ::navigate,
         )
         navigate(
-            savedInstanceState?.getString("route")
-                ?: savedInstanceState?.getString("destination")
-                ?: "Tracking"
+            savedInstanceState?.getString("route")?.let {
+                // Review candidates are private process memory, never restored form state.
+                if (it == "Review authorization") "Enter credential" else it
+            } ?: savedInstanceState?.getString("destination") ?: "Tracking"
         )
         scope.launch {
             try {
@@ -2499,7 +2500,13 @@ class MainActivity : Activity() {
                         )
                         .setNegativeButton("Cancel") { _, _ -> enrollmentSecret = null }
                         .setPositiveButton("Authorize Command") { _, _ ->
-                            val approved = enrollmentSecret ?: return@setPositiveButton
+                            val approved = enrollmentSecret
+                            if (approved == null) {
+                                entryError.text =
+                                    "Private credential cleared. Enter it again to authorize."
+                                navigate("Enter credential")
+                                return@setPositiveButton
+                            }
                             enrollmentSecret = null
                             scope.launch {
                                 try {
