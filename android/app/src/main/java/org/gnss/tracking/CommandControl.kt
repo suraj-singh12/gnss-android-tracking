@@ -214,9 +214,16 @@ class CommandControl(
     private val alertOutput: PhoneAlertOutput? = null,
     private val alertRuntimeAllowed: () -> Boolean = { true },
 ) {
+    private val contactState = kotlinx.coroutines.flow.MutableStateFlow<AuthenticatedContact?>(null)
+    val contactUpdates: kotlinx.coroutines.flow.StateFlow<AuthenticatedContact?>
+        get() = contactState
+
     @Volatile
     var contact: AuthenticatedContact? = null
-        private set
+        private set(value) {
+            field = value
+            contactState.value = value
+        }
 
     fun contactFresh(state: Installation) = contact?.fresh(state, clock.elapsedMillis()) == true
 

@@ -1330,8 +1330,11 @@ class MainActivity : Activity() {
         }
         scope.launch {
             try {
-                combine(app.repository.dao.observeCommands(), app.commandControl.updates) { rows, _
-                        ->
+                combine(
+                        app.repository.dao.observeCommands(),
+                        app.commandControl.updates,
+                        app.commandControl.contactUpdates,
+                    ) { rows, _, _ ->
                         rows
                     }
                     .collect {

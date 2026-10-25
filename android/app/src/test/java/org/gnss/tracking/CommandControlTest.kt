@@ -207,6 +207,7 @@ class CommandControlTest {
             commandContactLabel(repository.state(), engine.contact, clock.now),
         )
         assertTrue(capturedRequest.isEmpty())
+        assertEquals(ContactFailure.AUTHENTICATION, engine.contactUpdates.value?.failure)
         assertNull(repository.state().controlLastSuccess)
     }
 
