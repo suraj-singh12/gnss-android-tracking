@@ -239,6 +239,18 @@ class CommandEnrollmentUiTest {
                         },
                     )
                     capture("state-$index")
+                    if (index == 1) {
+                        controller.pause()
+                        org.robolectric.shadows.ShadowSystemClock.advanceBy(
+                            java.time.Duration.ofSeconds(31)
+                        )
+                        controller.resume()
+                        assertTrue(
+                            nativeViews(root).filterIsInstance<TextView>().any {
+                                it.isShown && it.text == "Contact unavailable"
+                            }
+                        )
+                    }
                 }
                 // Identity copy remains separate from secrets and instruction IDs.
                 nativeViews(root)

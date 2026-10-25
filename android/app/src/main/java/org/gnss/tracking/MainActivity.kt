@@ -3350,6 +3350,8 @@ class MainActivity : Activity() {
             DiagnosticEvent.ACTIVITY_RESUMED,
             app.diagnostics.value?.serviceGeneration,
         )
+        // Re-evaluate elapsed time after sleep even if the UI deadline could not run.
+        refreshTrust?.invoke()
         refreshPreflight()
         promptMissingPermissions()
         dispatchNotificationAction()
