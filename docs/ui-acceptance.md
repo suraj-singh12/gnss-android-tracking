@@ -756,7 +756,7 @@ Operator visual approval remains outstanding.
 
 The dialog remains 720 px maximum, 768 px tall where space permits, and 688 px tall
 at 1280×720, with an internal scrolling body and persistent actions. The existing
-[control preservation matrix](ui-preservation-matrix.md#issue-49--v3-control-preservation)
+[control preservation matrix](ui-preservation-matrix.md)
 records every old control and its implemented destination. Existing functional and
 accessibility checks retain behavior assertions. Navigation uses the three task
 tabs; preview invalidation is checked against the authoritative prepared state,
@@ -813,6 +813,24 @@ cumulative CI ceiling remains enforced. A failed provider or oversized fallback 
 reported as failure/blocked evidence, never a synthetic pass. Exact-head statuses,
 logs and uploaded artifacts must be inspected and reported in the draft PR before
 live acceptance is considered complete.
+
+First runner qualification, source `5a28a3e2d8bd40de90685d82126431c57caff777`,
+[run 40153556918](https://github.com/suraj-singh12/gnss-android-tracking/actions/runs/40153556918):
+software acceptance passed; downloaded artifact source and controlled approval,
+sample/alignment and offline-restart evidence were inspected. Public Delhi and
+Mathura 373 m maps acquired 208 and 123 feature occurrences respectively, with
+terrain and cold offline rendering passing. Four-chunk boundary and nine-chunk
+larger maps acquired vectors and rendered offline, but their terrain acquisition
+remained incomplete: required cumulative allowances of 37,785,251 and 33,313,447
+bytes exceeded the unchanged 30 MB CI ceiling. The provider job therefore failed;
+these scenarios are budget-blocked, not complete terrain passes. The separate
+public DEM/UI and bounded online-map probes passed. No public-provider outage was
+observed in these results. Exact-head requalification remains required after edits.
+
+The initial integrated run passed Android tests/lint/APK and Command race (221.807 s),
+then the repository Markdown contract rejected an anchor link in this section.
+The link was corrected to the existing file without weakening the contract.
+Later integrated steps did not run on that attempt and are not claimed passed.
 
 Historical Codex Cloud probes returned proxy CONNECT 403 before reaching providers;
 those results do not establish an upstream outage or GitHub-run acceptance. The
