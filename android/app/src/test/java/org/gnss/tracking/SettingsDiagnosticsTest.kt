@@ -173,7 +173,7 @@ class SettingsDiagnosticsTest {
                 }
             until { rows().size == 20 }
             assertTrue(
-                all().filterIsInstance<Button>().none { it.text == "Copy command ID" && it.isShown }
+                all().filterIsInstance<Button>().none { it.text == "Copy instruction ID" && it.isShown }
             )
             button("Older instructions").performClick()
             assertTrue(all().filterIsInstance<TextView>().any { it.text.contains("Page 2 of 3") })
