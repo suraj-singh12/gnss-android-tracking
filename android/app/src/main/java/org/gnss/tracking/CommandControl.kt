@@ -325,7 +325,14 @@ class CommandControl(
                     state.endpoint.isBlank() ||
                     !transport.wifiAvailable()
             ) {
-                failedContact(state, ContactFailure.TRANSPORT)
+                val bindingMismatch =
+                    state.controlAuthority != key.authority ||
+                        state.controlEnrollment != key.enrollment ||
+                        state.deviceId != key.device
+                failedContact(
+                    state,
+                    if (bindingMismatch) ContactFailure.AUTHENTICATION else ContactFailure.TRANSPORT,
+                )
                 availability =
                     if (!transport.wifiAvailable()) "Offline: waiting for Wi-Fi; results retained"
                     else "Remote control unavailable: local authorization or endpoint required"

@@ -199,6 +199,18 @@ class CommandControlTest {
     }
 
     @Test
+    fun mismatchedLocalCredentialIsAuthenticationFailureWithoutAnExchange() = runBlocking {
+        key = key.copy(authority = Protocol.newId())
+        engine.step()
+        assertEquals(
+            "Authentication failed",
+            commandContactLabel(repository.state(), engine.contact, clock.now),
+        )
+        assertTrue(capturedRequest.isEmpty())
+        assertNull(repository.state().controlLastSuccess)
+    }
+
+    @Test
     fun contactFreshnessIsMonotonicAndCannotCrossBindings() {
         val state =
             Installation(
