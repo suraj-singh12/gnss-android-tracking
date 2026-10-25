@@ -977,9 +977,12 @@ async function refreshMaps(selected) {
           m.bounds = GeoMap.parse(await data.text(), m.source).bounds;
       } catch {}
     }
-    $("saved-maps").add(
-      new Option(`${m.source} · ${(m.bytes / 1024).toFixed(1)} KB`, m.id),
+    const option = new Option(
+      `${m.source} · ${(m.bytes / 1024).toFixed(1)} KB`,
+      m.id,
     );
+    option.dataset.source = m.source;
+    $("saved-maps").add(option);
     const row = el("div", undefined, "saved-map-row");
     const select = el("strong", m.source);
     row.dataset.mapId = m.id;
@@ -1048,7 +1051,8 @@ async function loadSavedMap(id) {
   if (!response.ok)
     throw Error("Saved map unavailable; blank canvas remains available");
   const source =
-    $("saved-maps").selectedOptions[0]?.textContent || "Saved offline map";
+    [...$("saved-maps").options].find((option) => option.value === id)?.dataset
+      .source || "Saved offline map";
   useMap(await response.text(), source, id);
   if (offlineMap?.plan) {
     await loadRadiusManifest(id);

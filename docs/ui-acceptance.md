@@ -782,7 +782,9 @@ since Preview & Download now also validates an unprepared selection.
 - Map selection and conflicting actions remain locked during acquisition/import.
   Import uses the existing abort controller; Stop import cancels its request and
   preserves prior maps. Empty acquisition is not labeled an available partial map.
-  Changed selections clear stale previews. Library counts refresh after acquisition.
+  Changed selections clear stale previews. Library counts refresh after acquisition;
+  the current-map strip uses the saved source name, without a stale size copied
+  from a pre-acquisition dropdown label.
 
 ### Engineering evidence and limits
 
