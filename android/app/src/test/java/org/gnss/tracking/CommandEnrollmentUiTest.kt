@@ -31,6 +31,9 @@ class CommandEnrollmentUiTest {
         val app = ApplicationProvider.getApplicationContext<TrackingApp>()
         val output = System.getenv("GNSS_SCREENSHOT_DIR")?.let { File(it).apply { mkdirs() } }
         for (night in listOf(false, true)) {
+            withContext(Dispatchers.IO) {
+                app.repository.settings("Alpha", "Alpha", "http://192.168.1.10:8080", 10)
+            }
             app.getSharedPreferences("appearance", 0).edit().putBoolean("night", night).commit()
             org.robolectric.RuntimeEnvironment.setQualifiers("w360dp-h800dp-port")
             withContext(Dispatchers.IO) {

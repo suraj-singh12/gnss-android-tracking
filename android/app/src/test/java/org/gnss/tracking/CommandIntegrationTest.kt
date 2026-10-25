@@ -688,6 +688,9 @@ class CommandIntegrationTest {
             val late = enroll(phone(legacy = false))
             poll(fleet + late)
             assertTrue(late.phone.repository.dao.commandHistory().isEmpty())
+            // A real, verified empty response establishes contact without an instruction.
+            assertTrue(late.engine.contactFresh(late.phone.repository.state()))
+            assertNotNull(late.phone.repository.state().controlLastSuccess)
             for ((index, p) in fleet.withIndex()) {
                 assertEquals(5, p.phone.repository.state().config().effective_reporting_interval_s)
                 val journal = p.phone.repository.dao.command(ids[index])!!
@@ -776,6 +779,7 @@ class CommandIntegrationTest {
         p.phone.reopen()
         bridge.restart()
         p.engine = engine(p.phone, p.key, p.policy)
+        assertFalse(p.engine.contactFresh(p.phone.repository.state()))
         p.phone.repository.settings("local", "same identity", bridge.phone, 10)
         poll(listOf(p))
         assertTrue(p.phone.repository.dao.command(ids[0])!!.confirmed)
