@@ -1,0 +1,5 @@
+=== RUN   TestMapPBFCropWith21PartyDurableHTTPPriority
+    map_extension_test.go:600: PBF bytes=2681751 nodes=192000 elapsed=4.696527928s sampled_process_heap_peak=17584128 bytes; 42 durable HTTP LIVE/SOS ACK p50=26.641324ms p95=78.238973ms worst=215.325674ms (Linux fixture, not native/provider)
+--- PASS: TestMapPBFCropWith21PartyDurableHTTPPriority (21.98s)
+PASS
+ok  	github.com/suraj-singh12/gnss-android-tracking/command/internal/core	23.012s

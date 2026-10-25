@@ -1,0 +1,6 @@
+=== RUN   TestLargeCompactCropResourceAcceptance
+    map_crop_index_test.go:218: GENERATED source bytes=15315683 nodes=5100000 selected ways=1 compact node bytes=122400000 elapsed=2.030402805s
+--- PASS: TestLargeCompactCropResourceAcceptance (4.85s)
+PASS
+
+exit=0 elapsed_seconds=4.860 max_rss_kib=98236 user_seconds=3.159 system_seconds=0.902

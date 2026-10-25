@@ -28,21 +28,22 @@ type mapJob struct {
 	Attribution string          `json:"attribution"`
 }
 type chunkEvidence struct {
-	Reused         bool               `json:"reused_verified_product,omitempty"`
-	SourceAttempts []mapSourceAttempt `json:"source_attempts,omitempty"`
-	ValidBounds    []float64          `json:"valid_dem_cell_bounds,omitempty"`
-	SourceURL      string             `json:"source_url,omitempty"`
-	SourceBytes    int64              `json:"observed_transfer_body_bytes,omitempty"`
-	ElapsedMS      float64            `json:"elapsed_ms,omitempty"`
-	Status         string             `json:"status"`
-	Attempts       int                `json:"attempts"`
-	Bytes          int                `json:"stored_bytes"`
-	At             string             `json:"acquired_at,omitempty"`
-	Error          string             `json:"error,omitempty"`
-	ValidCells     int                `json:"valid_dem_cells,omitempty"`
-	VoidCells      int                `json:"void_dem_cells,omitempty"`
-	Metadata       *terrainGrid       `json:"dem_metadata,omitempty"`
-	Report         *DEMReport         `json:"transfer,omitempty"`
+	Reused                bool               `json:"reused_verified_product,omitempty"`
+	SourceAttempts        []mapSourceAttempt `json:"source_attempts,omitempty"`
+	SourceAttemptsOmitted int                `json:"source_attempts_omitted,omitempty"`
+	ValidBounds           []float64          `json:"valid_dem_cell_bounds,omitempty"`
+	SourceURL             string             `json:"source_url,omitempty"`
+	SourceBytes           int64              `json:"observed_transfer_body_bytes,omitempty"`
+	ElapsedMS             float64            `json:"elapsed_ms,omitempty"`
+	Status                string             `json:"status"`
+	Attempts              int                `json:"attempts"`
+	Bytes                 int                `json:"stored_bytes"`
+	At                    string             `json:"acquired_at,omitempty"`
+	Error                 string             `json:"error,omitempty"`
+	ValidCells            int                `json:"valid_dem_cells,omitempty"`
+	VoidCells             int                `json:"void_dem_cells,omitempty"`
+	Metadata              *terrainGrid       `json:"dem_metadata,omitempty"`
+	Report                *DEMReport         `json:"transfer,omitempty"`
 }
 type chunkStatus struct {
 	mapChunk
@@ -315,7 +316,7 @@ func (s *Store) acquireMapChunk(ctx context.Context, p *mapProvider, id, key, la
 	if err = mapDiskReserve(s.path, 168*1024*1024); err != nil {
 		return err
 	}
-	e := chunkEvidence{Status: "interrupted; retry safely", Attempts: previous.Attempts + 1, Error: "request started; no validated commit yet"}
+	e := chunkEvidence{Status: "interrupted; retry safely", Attempts: previous.Attempts + 1, Error: "request started; no validated commit yet", SourceAttempts: append([]mapSourceAttempt(nil), previous.SourceAttempts...), SourceAttemptsOmitted: previous.SourceAttemptsOmitted}
 	if err = s.writeChunk(ctx, id, key, layer, nil, e); err != nil {
 		return err
 	}
@@ -388,7 +389,12 @@ func (s *Store) acquireMapChunk(ctx context.Context, p *mapProvider, id, key, la
 			}
 		}
 	}
-	e.SourceAttempts = budget.attempts
+	e.SourceAttempts = append(e.SourceAttempts, budget.attempts...)
+	if len(e.SourceAttempts) > 64 {
+		omitted := len(e.SourceAttempts) - 64
+		e.SourceAttemptsOmitted += omitted
+		e.SourceAttempts = append([]mapSourceAttempt(nil), e.SourceAttempts[omitted:]...)
+	}
 	afterTransfer, _ := s.transferState(id)
 	e.SourceBytes = afterTransfer.Received - beforeTransfer.Received
 	e.ElapsedMS = float64(time.Since(started)) / float64(time.Millisecond)

@@ -1,3 +1,4 @@
+const crypto = require("node:crypto");
 /* Deterministic georeferenced fixture, real SQLite/server, offline Chromium restart. */
 const assert = require("node:assert/strict"),
   fs = require("node:fs"),
@@ -104,11 +105,16 @@ async function wait(f) {
   );
   await page.goto(local);
   await page.locator("#open-map").click();
-  await page.locator("#map-preparation").evaluate((e) => (e.open = true));
+  await page.locator("#tab-map-preparation").click();
+  await page.locator(".map-precise").evaluate((e) => (e.open = true));
+  await page.getByRole("button", { name: "Custom", exact: true }).click();
   await page.locator("#map-lat").fill("27.3739");
   await page.locator("#map-lon").fill("88.7618");
   await page.locator("#map-radius").fill("0.373");
   await page.locator("#radius-unit").selectOption("1000");
+  await page
+    .locator("#preview-map")
+    .evaluate((e) => (e.closest("details").open = true));
   await page.locator("#preview-map").click();
   await page.locator("[data-requested-circle]").waitFor();
   assert.match(
@@ -125,16 +131,27 @@ async function wait(f) {
   // This fixture intentionally contains source voids. Acquired grids are usable,
   // but the application must disclose partial coverage instead of success.
   await wait(async () =>
-    (await page.locator("#map-preparation-status").textContent()).includes("Partial map retained"));
-  assert.match(await page.locator("#map-preparation-status").textContent(), /coverage or layers remain unavailable/);
+    (await page.locator("#map-preparation-status").textContent()).includes(
+      "Partial map retained",
+    ),
+  );
+  assert.match(
+    await page.locator("#map-preparation-status").textContent(),
+    /coverage or layers remain unavailable/,
+  );
   report.known_voids_reported_as_partial = true;
   const maps = await (await fetch(local + "/local/maps")).json();
   assert.equal(maps.length, 1);
-  await page.locator("#choose-saved-map").click();
+  await page.locator("#tab-maps-library").click();
   await page.locator("#saved-maps").selectOption(maps[0].id);
   await wait(async () => !(await page.locator("#layer-contours").isDisabled()));
-  await page.locator("#map-preparation").evaluate((e) => (e.open = true));
+  await page.locator("#tab-map-preparation").click();
+  await page.locator(".map-precise").evaluate((e) => (e.open = true));
+  await page.getByRole("button", { name: "Custom", exact: true }).click();
   await page.locator("#map-lat").fill("90");
+  await page
+    .locator("#preview-map")
+    .evaluate((e) => (e.closest("details").open = true));
   await page.locator("#preview-map").click();
   await wait(async () =>
     (await page.locator("#map-preparation-status").textContent()).includes(
@@ -248,7 +265,7 @@ async function wait(f) {
   report.vector_failure_preserves_terrain = true;
 
   await page.locator("#open-map").click();
-  await page.locator("#choose-saved-map").click();
+  await page.locator("#tab-maps-library").click();
   assert.match(
     await page.locator("#export-map").getAttribute("href"),
     /\/export$/,
@@ -262,7 +279,7 @@ async function wait(f) {
     packagePath,
     Buffer.from(await packageResponse.arrayBuffer()),
   );
-  await page.locator("#open-map-import").click();
+  await page.locator("#tab-map-import").click();
   await page.locator("#source-map-file").setInputFiles(packagePath);
   await page.locator("#import-map-source").click();
   await wait(async () => {
@@ -298,16 +315,16 @@ async function wait(f) {
   const full = await (await fetch(local + "/local/maps")).json();
   assert.equal(full.find((m) => m.id.startsWith("import-")).chunks.vector, 9);
   await page.locator('[data-close="map-settings"]').click();
-  for (let i = 0; i < 6; i++) {
-    if ((await page.locator('[data-layer="offline-map"] polyline').count()) > 0)
-      break;
-    await page.locator("#zoom-in").click();
-    await page.waitForTimeout(350);
-  }
-  await wait(
-    async () =>
-      (await page.locator('[data-layer="offline-map"] polyline').count()) > 0,
+  // Nine verified chunks must display at the fitted overview, without zooming
+  // around the historical eight-chunk failure.
+  await page.waitForFunction(
+    () =>
+      terrainGeneration?.id === activeMapID &&
+      terrainGeneration.visible_chunks === 9 &&
+      document.querySelectorAll('[data-layer="offline-map"] polyline').length >
+        0,
   );
+  assert.equal(await page.evaluate(() => terrainGeneration.visible_chunks), 9);
   await page.screenshot({
     path: path.join(out, "map-pbf-full-extent-offline-render.png"),
     fullPage: true,
@@ -317,34 +334,141 @@ async function wait(f) {
     path: path.join(out, "map-pbf-full-extent-fixture.png"),
     fullPage: true,
   });
+  // Original, checksum-pinned regional PBF, imported locally through the real
+  // UI/backend. Public provider availability is a separate Actions job.
+  await page.locator("#tab-map-import").click();
+  await page
+    .locator("#source-map-file")
+    .setInputFiles(
+      path.join(
+        __dirname,
+        "../../command/internal/core/testdata/maps/delaware-latest.osm.pbf",
+      ),
+    );
+  await page.locator("#source-map-mode").selectOption("crop");
+  await page.locator("#import-map-lat").fill("39.745");
+  await page.locator("#import-map-lon").fill("-75.548");
+  await page.locator("#import-map-radius").fill("373");
+  const beforeCancelledImport = (
+    await (await fetch(local + "/local/maps")).json()
+  ).length;
+  let releaseImport;
+  const heldImport = new Promise((resolve) => {
+    releaseImport = resolve;
+  });
+  const holdImport = async (route) => {
+    await heldImport;
+    await route.abort("aborted").catch(() => {});
+  };
+  await page.route("**/local/map-import?**", holdImport);
+  await page.locator("#import-map-source").click();
+  await page.waitForFunction(() => mapImportPending && !!downloadAbort);
+  assert.equal(
+    await page.locator("#saved-maps").isDisabled(),
+    true,
+    "map selection must stay fixed during import",
+  );
+  await page.locator("#cancel-download").click();
+  releaseImport();
+  await page.waitForFunction(
+    () =>
+      !mapImportPending &&
+      document
+        .querySelector("#map-import-status")
+        .textContent.includes("Import stopped"),
+  );
+  await page.unroute("**/local/map-import?**", holdImport);
+  assert.equal(
+    (await (await fetch(local + "/local/maps")).json()).length,
+    beforeCancelledImport,
+  );
+  assert.equal(await page.locator("#source-map-file").isDisabled(), false);
+  report.local_import_cancel_preserves_maps = "PASS";
+  await page.locator("#import-map-source").click();
+  await page.waitForFunction(
+    () =>
+      document
+        .querySelector("#map-import-status")
+        .textContent.includes("Stored in Saved Maps"),
+    null,
+    { timeout: 120000 },
+  );
+  const realID = await page.evaluate(() => activeMapID);
+  const realManifest = await (
+    await fetch(local + `/local/maps/${realID}/manifest`)
+  ).json();
+  assert.ok(realManifest.chunks.every((c) => c.vector.status === "complete"));
+  const realRoute =
+    local +
+    `/local/maps/${realID}/chunks/${realManifest.chunks[0].key}?layer=vector`;
+  const realData = await (await fetch(realRoute)).text();
+  assert.equal(
+    JSON.parse(realData).features.length,
+    216,
+    "original regional crop must retain the independently verified ways",
+  );
+  command.kill("SIGKILL");
+  await once(command, "exit");
+  await start();
+  await page.reload();
+  await wait(
+    async () =>
+      (await page.locator('[data-layer="offline-map"] polyline').count()) > 0,
+  );
+  assert.equal(
+    await (await fetch(realRoute)).text(),
+    realData,
+    "crash/restart changed verified source geometry",
+  );
+  const coldManifest = await (
+    await fetch(local + `/local/maps/${realID}/manifest`)
+  ).json();
+  assert.deepEqual(coldManifest.transfer, realManifest.transfer);
+  report.real_pbf_crop_crash_offline = {
+    status: "PASS",
+    source:
+      "immutable original Delaware PBF — not current public-provider acceptance",
+    features: 216,
+    sha256: crypto.createHash("sha256").update(realData).digest("hex"),
+    map_id: realID,
+  };
+  await page.screenshot({
+    path: path.join(out, "real-pbf-crop-offline-after-crash.png"),
+    fullPage: true,
+  });
+  await page.locator("#open-map").click();
+  await page.locator("#tab-maps-library").click();
   const panelAxe = await new Axe({ page }).analyze();
   assert.deepEqual(
     panelAxe.violations.map((v) => v.id),
     [],
   );
   report.portable_package_and_full_pbf = "PASS (local fixture, no providers)";
-  await page.locator("#choose-saved-map").click();
+  await page.locator("#tab-maps-library").click();
   await page.locator("#saved-maps").selectOption(maps[0].id);
   assert.deepEqual(errors, []);
-  report.passed = true;
   report.browser_render = await page.evaluate(() => terrainGeneration);
   report.manifest = await (
     await fetch(local + `/local/maps/${maps[0].id}/manifest`)
   ).json();
-  assert.ok(report.manifest.chunks.every(c => c.vector.status === "complete" && c.terrain.status === "complete"));
-  assert.ok(report.manifest.chunks.some(c => c.terrain.void_dem_cells > 0));
+  assert.ok(
+    report.manifest.chunks.every(
+      (c) => c.vector.status === "complete" && c.terrain.status === "complete",
+    ),
+  );
+  assert.ok(report.manifest.chunks.some((c) => c.terrain.void_dem_cells > 0));
   assert.equal(report.manifest.transfer.approved_bytes, 5000000);
   assert.equal(report.manifest.transfer.received_bytes, 0);
   report.elapsed_browser_ms = await page.evaluate(() => performance.now());
   await page.locator("#saved-maps").selectOption(maps[0].id);
   page.once("dialog", (d) => d.dismiss());
   await page.locator("#delete-map").click();
-  assert.equal((await (await fetch(local + "/local/maps")).json()).length, 3);
+  assert.equal((await (await fetch(local + "/local/maps")).json()).length, 4);
   page.once("dialog", (d) => d.accept());
   await page.locator("#delete-map").click();
   await wait(
     async () =>
-      (await (await fetch(local + "/local/maps")).json()).length === 2,
+      (await (await fetch(local + "/local/maps")).json()).length === 3,
   );
   await wait(async () =>
     (await page.locator("#current-map-name").textContent()).includes(
@@ -355,6 +479,7 @@ async function wait(f) {
   assert.equal(await page.locator("#save-use-map").isVisible(), false);
   assert.deepEqual(errors, []);
   report.confirmed_delete_and_cancel = "PASS";
+  report.passed = true;
 
   console.log(
     JSON.stringify({

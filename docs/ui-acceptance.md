@@ -728,36 +728,94 @@ nonzero-result/zero-exit mismatch was discovered in CI and corrected: a failed
 real-provider report now always produces a failed process/check. These are
 independent outcomes, not a successful skip. Final follow-up CI is linked in PR #45.
 
-## Issue #49 · work in progress
+## Issue #49 · V3 popup and offline map correction
 
-Starting integration SHA: `5cc1c263557a2fd6baea962400df5c9b58b61271`.
-Branch: `devX/issue-49-offline-maps-v3`. Canonical guidance:
-`3b60b6d6228ca208df75765e2008c9b9abba8a69` (matches integration).
-Merged PRs #43/#45 are integrated dependencies.
+Starting integration: `5cc1c263557a2fd6baea962400df5c9b58b61271`.
+Issue branch: `devX/issue-49-offline-maps-v3`. Canonical instructions:
+`3b60b6d6228ca208df75765e2008c9b9abba8a69`; the application branch matches it.
+Merged #43/#45 are dependencies. The draft PR targets integration; no merge,
+issue closure, release or native field-stability claim is authorized.
 
-The supplied V3 package is retained in [evidence/issue-49/v3-reference/](evidence/issue-49/v3-reference/).
-Original ZIP SHA-256: `49d003b6f45fd7dec75486cd83572403f4fb0e6eb921f73bc9786835c6fd5dcd`.
-These are design references, **not application screenshots**. The preservation matrix
-records the control inventory before UI changes.
+### Approved reference and rendered review
 
-Initial verified defects: full PBF feasibility admission happened after indexing;
-regional disk admission followed the budget transport's possible approval gate;
-nine viewport chunks throw before loading geography; crop import indexes the whole
-source against five million nodes. The current correction addresses only the first
-two admission-order defects. Crop scalability, overview rendering, reliable acquisition
-and V3 implementation remain outstanding.
+The exact supplied [V3 reference](evidence/issue-49/v3-reference/) is retained
+verbatim. Original ZIP SHA-256:
+`49d003b6f45fd7dec75486cd83572403f4fb0e6eb921f73bc9786835c6fd5dcd`.
+The handoff's historical Figma prerequisite is superseded by the current issue and
+operator approval of this ZIP; no populated Figma artifact is claimed.
 
-2026-10-24 public-provider probes: HTTPS CONNECT to
-`https://overpass-api.de/api/interpreter` and
-`https://download.geofabrik.de/asia/india/uttar-pradesh-latest.osm.pbf` both returned
-proxy **403 Forbidden**, `curl: (56) CONNECT tunnel failed, response 403`.
-The enforced environment host policy excludes these providers. Real-provider
-acceptance is **BLOCKED**, not an upstream outage or deterministic pass. Regional
-performance, actual acquisition/render/offline restart, six V3 application screenshot
-states and native field acceptance are unverified. No visual baseline/CI gate was added.
+The [rendered captures](evidence/issue-49/rendered/) are complete application
+windows, separate from the design references. Six primary states have Day/Night
+captures at 1600×900, 1280×720 and 390×844. Review metadata identifies the controlled
+provider and actual persisted map state. The complete saved-map library example
+uses the immutable original Delaware PBF; the acquisition/approval/recovery examples
+use the existing controlled provider, not current public services. The preview
+shows requested geography, never the reference's illustrative invented road tiles.
+No screenshot-baseline suite, pixel-diff gate or second browser framework is added.
+Operator visual approval remains outstanding.
 
-Initial correction validation (Linux, Go 1.24.7): `go test ./...` PASS
-(core 201.557 s); `go vet ./...` PASS; targeted admission/index/redirect tests
-with `-race` PASS (17.499 s); macOS ARM64 and Windows AMD64 Command cross-builds
-PASS. These results cover the initial admission correction, not full Issue #49
-acceptance, full race coverage, browser/V3 review, native runtime or public providers.
+The dialog remains 720 px maximum, 768 px tall where space permits, and 688 px tall
+at 1280×720, with an internal scrolling body and persistent actions. The existing
+[control preservation matrix](ui-preservation-matrix.md#issue-49--v3-control-preservation)
+records every old control and its implemented destination. Existing functional and
+accessibility checks retain behavior assertions. Navigation uses the three task
+tabs; preview invalidation is checked against the authoritative prepared state,
+since Preview & Download now also validates an unprepared selection.
+
+### Corrected product defects
+
+- Full PBF coverage feasibility previously followed whole-source indexing; it now
+  precedes indexing. Regional disk/cache admission precedes any additional transfer
+  approval. An impossible cumulative request above 1 GB cannot offer approval.
+- Crop imports previously hit the whole-source five-million-node SQLite budget.
+  A disposable compact disk index resolves original references with bounded pages,
+  while retaining only genuinely covered source geometry in the existing SQLite
+  library. Full extent remains separately admitted and retains its original limit.
+- A ninth visible chunk previously threw before loading any geography. Vectors now
+  load progressively under the shared coordinate budget, independently of the DEM
+  budget. Deferred detail is explicit; stored geometry is unchanged.
+- Approved regional retries no longer repeat Overpass or stop at its local cooldown.
+  The UI reads durable allowance before prompting, including after a lost response.
+  Original provider failure history survives retry/restart (latest 64 records with
+  an explicit omitted count). Provider queue headroom is separate from the legacy
+  synchronous HTTP deadline; explicit short client deadlines remain respected.
+- Map selection and conflicting actions remain locked during acquisition/import.
+  Import uses the existing abort controller; Stop import cancels its request and
+  preserves prior maps. Empty acquisition is not labeled an available partial map.
+  Changed selections clear stale previews. Library counts refresh after acquisition.
+
+### Engineering evidence and limits
+
+Local Linux / Go 1.24.7 evidence, before exact-head Actions qualification:
+
+| Check | Evidence/result |
+| --- | --- |
+| Full Command race suite | PASS, 450.822 s; subsequent source-history regression PASS, 33.738 s |
+| Command/test-tools vet; test-tools race | PASS |
+| Existing dashboard/download/radius browser and accessibility | PASS in local runs; radius now asserts nine-chunk overview without zoom |
+| Controlled production acquisition | PASS: refused and committed consent, every native HGT sample, alignment, offline process restart; explicitly not public-provider acceptance |
+| Original regional PBF | 7,812,234-byte Delaware original, 723,870 nodes; independent verification of all 216 requested ways against 1,703 source nodes |
+| Real PBF browser durability | PASS: local UI import, SIGKILL, production restart with dead provider proxy, identical stored geometry and offline rendering; original fixture, not a live download |
+| Generated large-node workload | 5,100,000 nodes, 15,315,683 input bytes, 122,400,000 compact node bytes; extraction 2.030 s; process peak RSS 98,236 KiB. Generated framing is not an actual 148 MB Uttar Pradesh acceptance run |
+| 21-party crop concurrency | 42 durable LIVE/SOS HTTP ACKs under race; p95 78.239 ms, worst 215.326 ms; Linux fixture, not native or field evidence |
+| macOS ARM64 / Windows AMD64 | Cross-build checks passed; native runtime NOT TESTED |
+
+The early compact prototype repeatedly decoded entire partitions on real-world ID
+patterns and exceeded the race-suite deadline. Paged binary lookup corrected that
+measured defect; the real-PBF race regression passed in approximately 32 s.
+
+Per the operator's latest decision, **all real public-provider acceptance runs on
+GitHub-hosted Ubuntu Actions**, in the existing `map-software-acceptance` and
+`dem-provider` workflow jobs. Both record and assert the checked-out PR HEAD SHA.
+The provider job adds the Mathura small-area case and verifies stored vector hashes
+and offline rendering independently when DEM is unavailable. The existing 30 MB
+cumulative CI ceiling remains enforced. A failed provider or oversized fallback is
+reported as failure/blocked evidence, never a synthetic pass. Exact-head statuses,
+logs and uploaded artifacts must be inspected and reported in the draft PR before
+live acceptance is considered complete.
+
+Historical Codex Cloud probes returned proxy CONNECT 403 before reaching providers;
+those results do not establish an upstream outage or GitHub-run acceptance. The
+actual large Uttar Pradesh source remains unverified unless the Actions evidence
+substantiate it within authorized transfer/resource limits. Physical Android and
+native macOS/Windows acceptance remain separately tracked in #23/#7.

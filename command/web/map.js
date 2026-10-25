@@ -4,12 +4,16 @@ const GeoMap = (() => {
   const radius = 6378137,
     limit = 85.05112878;
   let wrapCenter = 0;
-  function setWrap(lon) { const previous=wrapCenter; wrapCenter = lon; return previous; }
+  function setWrap(lon) {
+    const previous = wrapCenter;
+    wrapCenter = lon;
+    return previous;
+  }
   function project(lon, lat) {
-    let delta=lon-wrapCenter;
-    if(delta>180)delta-=360*Math.ceil((delta-180)/360);
-    if(delta< -180)delta+=360*Math.ceil((-180-delta)/360);
-    lon=wrapCenter+delta;
+    let delta = lon - wrapCenter;
+    if (delta > 180) delta -= 360 * Math.ceil((delta - 180) / 360);
+    if (delta < -180) delta += 360 * Math.ceil((-180 - delta) / 360);
+    lon = wrapCenter + delta;
     return [
       (radius * lon * Math.PI) / 180,
       radius *
@@ -113,11 +117,18 @@ const GeoMap = (() => {
       geometry(data.geometry);
       for (const shape of shapes) shape.properties = data.properties || {};
     } else geometry(data);
-    if (data.plan || (data.acquisition === "complete" && data.requested_bounds)) {
+    if (
+      data.plan ||
+      (data.acquisition === "complete" && data.requested_bounds)
+    ) {
       const extent = data.plan?.bounds || data.requested_bounds;
-      bounds.splice(0,4,...extent);
+      bounds.splice(0, 4, ...extent);
     } else if (!count) throw Error("Map has no geographic coordinates.");
-    if (!data.plan && data.acquisition !== "complete" && bounds[2] - bounds[0] > 180)
+    if (
+      !data.plan &&
+      data.acquisition !== "complete" &&
+      bounds[2] - bounds[0] > 180
+    )
       throw Error(
         "Antimeridian-spanning maps require splitting before import.",
       );
@@ -131,6 +142,43 @@ const GeoMap = (() => {
         data.attribution ||
         "Imported map · verify its source licence before distribution",
     };
+  }
+  // Presentation-only overview. Retain source vertices and endpoints; polygons
+  // remain exact to avoid changing holes/topology. A visible omission is reported
+  // when a chunk cannot fit its fair share of the bounded viewport budget.
+  function overview(input, tolerance, budget) {
+    const shapes = [];
+    let count = 0,
+      omitted = 0;
+    const square = Math.max(0, tolerance) ** 2;
+    for (const shape of input) {
+      let candidate = shape;
+      if (shape.type === "line" && square > 0) {
+        const points = shape.coordinates,
+          kept = [points[0]];
+        let last = points[0];
+        for (let i = 1; i < points.length - 1; i++) {
+          const p = points[i];
+          if ((p[0] - last[0]) ** 2 + (p[1] - last[1]) ** 2 >= square) {
+            kept.push(p);
+            last = p;
+          }
+        }
+        kept.push(points[points.length - 1]);
+        candidate = { ...shape, coordinates: kept };
+      }
+      const size =
+        candidate.type === "polygon"
+          ? candidate.rings.reduce((n, r) => n + r.length, 0)
+          : candidate.coordinates.length;
+      if (count + size > budget) {
+        omitted++;
+        continue;
+      }
+      shapes.push(candidate);
+      count += size;
+    }
+    return { shapes, count, omitted };
   }
   function unproject(x, y) {
     return [
@@ -148,6 +196,6 @@ const GeoMap = (() => {
       ? fix.bearing_deg
       : null;
   }
-  return { project, unproject, parse, liveHeading, setWrap };
+  return { project, unproject, parse, overview, liveHeading, setWrap };
 })();
 if (typeof module !== "undefined") module.exports = GeoMap;

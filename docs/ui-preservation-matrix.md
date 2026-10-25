@@ -204,14 +204,16 @@ adaptations. Command web and the wire contract remain unchanged.
 | Command | Existing browser screens/windows included in screenshot artifact | No Command source/UI/recording/maps/protocol changes |
 | Native acceptance | Honest distinction between rendered software evidence and devices | Real TalkBack/IME/OEM/Doze/locked GNSS/SOS/alert/LAN and native desktop acceptance outstanding |
 
-## Issue #49 · inventory before V3 UI changes
+## Issue #49 · V3 control preservation
 
-This is a migration plan, **not implemented UI parity**. Every existing control
-remains in its original location. The exact supplied [V3 reference](evidence/issue-49/v3-reference/IMPLEMENTATION-HANDOFF.md)
+The existing controls are moved in place, retaining their original IDs and backend
+handlers; task tabs wrap the same native dialog. The table records implemented
+locations. Existing functional/accessibility checks retain their assertions, with
+navigation updated to the task tabs. The exact supplied [V3 reference](evidence/issue-49/v3-reference/IMPLEMENTATION-HANDOFF.md)
 is preserved verbatim. Current issue/operator instructions supersede the handoff's
 historical Figma prerequisite; no populated Figma artifact is claimed.
 
-| Existing controls | Required V3 destination | Preserved owner |
+| Existing controls | Implemented V3 destination | Preserved owner |
 | --- | --- | --- |
 | Current map, `map-mode` | Current-map status / My Maps display tools | Selection and preferences |
 | Search/results, WGS84 coordinates, centre picker | Get a Map location | Existing search and geographic plan |

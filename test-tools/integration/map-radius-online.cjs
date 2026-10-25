@@ -1,4 +1,8 @@
-const { acquireChunk, transferBudget, classify } = require("./map-acquisition-support.cjs");
+const {
+  acquireChunk,
+  transferBudget,
+  classify,
+} = require("./map-acquisition-support.cjs");
 /* Real public providers. A failed provider is a failure, never a fixture pass. */
 const fs = require("node:fs"),
   os = require("node:os"),
@@ -57,6 +61,12 @@ async function port() {
   for (const c of [
     { lat: 28.6139, lon: 77.209, radius_m: 373, name: "Delhi flat local" },
     {
+      lat: 27.4924,
+      lon: 77.6737,
+      radius_m: 373,
+      name: "Mathura operator small area",
+    },
+    {
       lat: 27.9999,
       lon: 88.9999,
       radius_m: 1234,
@@ -83,19 +93,40 @@ async function port() {
       evidence.source_tiles = plan.source_tiles.length;
       evidence.id = saved.id;
       for (const layer of ["vector", "terrain"]) {
-        let completed = 0;
+        let completed = 0,
+          featureOccurrences = 0;
         try {
           for (const chunk of plan.chunks) {
-            await acquireChunk(local, saved.id, chunk.key, layer, evidence, ciBudget);
+            await acquireChunk(
+              local,
+              saved.id,
+              chunk.key,
+              layer,
+              evidence,
+              ciBudget,
+            );
             completed++;
             if (layer === "vector") {
-              const data = await (
+              const text = await (
                 await fetch(
                   local +
                     `/local/maps/${saved.id}/chunks/${chunk.key}?layer=vector`,
                 )
-              ).json();
+              ).text();
+              const data = JSON.parse(text);
               assert.deepEqual(data.requested_bounds, chunk.bounds);
+              assert.equal(data.type, "FeatureCollection");
+              assert.ok(Array.isArray(data.features));
+              featureOccurrences += data.features.length;
+              (evidence.vector_assets ||= []).push({
+                key: chunk.key,
+                features: data.features.length,
+                sha256: require("node:crypto")
+                  .createHash("sha256")
+                  .update(text)
+                  .digest("hex"),
+                source_url: data.provider || null,
+              });
               if (completed < plan.chunks.length)
                 await new Promise((r) => setTimeout(r, 10050));
             } else {
@@ -151,7 +182,18 @@ async function port() {
                 }
             }
           }
-          evidence.layers[layer] = { status: "PASS", completed };
+          if (layer === "vector" && c.name === "Mathura operator small area")
+            assert.ok(
+              featureOccurrences > 0,
+              "Mathura acquisition returned no actual geographic features",
+            );
+          evidence.layers[layer] = {
+            status: "PASS",
+            completed,
+            ...(layer === "vector"
+              ? { feature_occurrences: featureOccurrences }
+              : {}),
+          };
         } catch (error) {
           evidence.layers[layer] = {
             status: "FAIL",
@@ -191,7 +233,9 @@ async function port() {
   async function realVisualAcceptance(local, ingest) {
     for (const c of report.cases)
       c.visual = { status: "NOT TESTED", reason: "no stored DEM acquired" };
-    const cases = report.cases.filter((c) => c.layers.terrain?.completed > 0);
+    const cases = report.cases.filter(
+      (c) => c.layers.terrain?.completed > 0 || c.layers.vector?.completed > 0,
+    );
     if (!cases.length) return;
     let browser;
     try {
@@ -257,10 +301,49 @@ async function port() {
               ),
             c.id,
           );
-          await page.locator("#choose-saved-map").click();
+          await page.locator("#tab-maps-library").click();
           await page.locator("#saved-maps").selectOption(c.id);
           await page.locator('[data-close="map-settings"]').click();
           const prefix = c.name.replaceAll(" ", "-");
+          for (const asset of c.vector_assets || []) {
+            const text = await (
+              await fetch(
+                local + `/local/maps/${c.id}/chunks/${asset.key}?layer=vector`,
+              )
+            ).text();
+            assert.equal(
+              require("node:crypto")
+                .createHash("sha256")
+                .update(text)
+                .digest("hex"),
+              asset.sha256,
+              "offline restart changed persisted geographic features",
+            );
+          }
+          if ((c.layers.vector?.feature_occurrences || 0) > 0)
+            await page.waitForFunction(
+              () =>
+                document.querySelector('[data-layer="offline-map"]')?.children
+                  .length > 0,
+            );
+          const vectorShapes = await page
+            .locator('[data-layer="offline-map"] > *')
+            .count();
+          if (!(c.layers.terrain?.completed > 0)) {
+            c.visual = {
+              status: "PASS",
+              offline_restarted: true,
+              vector_shapes: vectorShapes,
+              terrain: "not available; vector render independent",
+              screenshots: images,
+            };
+            await page.screenshot({
+              path: path.join(images, prefix + "-real-vector-only-offline.png"),
+              fullPage: true,
+            });
+            assert.deepEqual(errors, []);
+            continue;
+          }
           await page.screenshot({
             path: path.join(
               images,
@@ -290,6 +373,7 @@ async function port() {
           c.visual = {
             status: "PASS",
             offline_restarted: true,
+            vector_shapes: vectorShapes,
             contour_segments: await page
               .locator('[data-layer="contours"] polyline')
               .count(),

@@ -489,6 +489,12 @@ func TestMapPackageWriteFailureRollsBackAllAssets(t *testing.T) {
 }
 
 func TestMapPBFBoundedIndexWith21PartyDurableHTTPPriority(t *testing.T) {
+	testPBFIndexWith21Parties(t, false)
+}
+func TestMapPBFCropWith21PartyDurableHTTPPriority(t *testing.T) {
+	testPBFIndexWith21Parties(t, true)
+}
+func testPBFIndexWith21Parties(t *testing.T, crop bool) {
 	s := extensionStore(t)
 	s.Now = func() time.Time { return base.Add(time.Second) }
 	file, e := os.CreateTemp(t.TempDir(), "large-*.pbf")
@@ -528,7 +534,12 @@ func TestMapPBFBoundedIndexWith21PartyDurableHTTPPriority(t *testing.T) {
 	defer cancel()
 	begin := time.Now()
 	go func() {
-		_, e := s.indexPBF(ctx, file.Name(), osmSource{Name: "192k-node resource fixture"}, func(p DEMProgress) { once.Do(func() { close(started) }) })
+
+		var bounds [][4]float64
+		if crop {
+			bounds = append(bounds, [4]float64{.08, .08, .12, .12})
+		}
+		_, e := s.indexPBF(ctx, file.Name(), osmSource{Name: "192k-node resource fixture"}, func(p DEMProgress) { once.Do(func() { close(started) }) }, bounds...)
 		done <- e
 	}()
 	<-started

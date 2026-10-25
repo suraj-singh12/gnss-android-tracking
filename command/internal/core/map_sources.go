@@ -148,23 +148,35 @@ func (s *Store) acquireVector(ctx context.Context, p *mapProvider, id string, c 
 	if b, e := s.reuseVector(ctx, id, c); e != nil || b != nil {
 		return b, e
 	}
-	emitDEM(emit, DEMProgress{Stage: "bounded Overpass request"})
-	b, overpassErr := p.areaBounds(ctx, c.Bounds)
-	if budget, ok := ctx.Value(mapBudgetKey{}).(*mapBudget); ok {
-		message := ""
-		if overpassErr != nil {
-			message = overpassErr.Error()
+	// A durable approved regional transfer is resumed without another Overpass
+	// attempt (or its local cooldown). The catalog still verifies the publisher;
+	// a ledger URL is never used as an arbitrary download address.
+	transfer, _ := s.transferState(id)
+	previousURL, _ := url.Parse(transfer.Source)
+	resumeRegional := transfer.Allowance > mapConsentBytes && previousURL != nil && strings.HasSuffix(previousURL.Path, ".osm.pbf")
+	var b []byte
+	var overpassErr error
+	if resumeRegional {
+		overpassErr = errors.New("resuming previously approved regional fallback")
+	} else {
+		emitDEM(emit, DEMProgress{Stage: "bounded Overpass request"})
+		b, overpassErr = p.areaBounds(ctx, c.Bounds)
+		if budget, ok := ctx.Value(mapBudgetKey{}).(*mapBudget); ok {
+			message := ""
+			if overpassErr != nil {
+				message = overpassErr.Error()
+			}
+			budget.attempts = append(budget.attempts, mapSourceAttempt{p.overpass, "Overpass ways", message, time.Now().UTC().Format(wireTime)})
 		}
-		budget.attempts = append(budget.attempts, mapSourceAttempt{p.overpass, "Overpass ways", message, time.Now().UTC().Format(wireTime)})
 	}
 	if overpassErr == nil {
 		return b, nil
 	}
-	if errors.Is(overpassErr, errMapConsent) || ctx.Err() != nil {
+	if errors.Is(overpassErr, errMapConsent) || errors.Is(overpassErr, errMapCooldown) || ctx.Err() != nil {
 		return nil, overpassErr
 	}
 	emitDEM(emit, DEMProgress{Stage: "Overpass unavailable; discovering covering regional source", Error: overpassErr.Error()})
-	src, e := s.discoverRegion(ctx, p, c.Bounds, emit)
+	src, e := s.discoverRegion(ctx, p, c.Bounds, emit, j.Plan.Bounds)
 	if budget, ok := ctx.Value(mapBudgetKey{}).(*mapBudget); ok {
 		message := ""
 		if e != nil {
@@ -212,7 +224,7 @@ func (s *Store) reuseVector(ctx context.Context, id string, c mapChunk) ([]byte,
 	}
 	return nil, rows.Err()
 }
-func (s *Store) discoverRegion(ctx context.Context, p *mapProvider, b [4]float64, emit demObserver) (osmSource, error) {
+func (s *Store) discoverRegion(ctx context.Context, p *mapProvider, b [4]float64, emit demObserver, desired ...[4]float64) (osmSource, error) {
 	catalog := p.catalog
 	if catalog == "" {
 		catalog = "https://download.geofabrik.de/index-v1.json"
@@ -221,6 +233,7 @@ func (s *Store) discoverRegion(ctx context.Context, p *mapProvider, b [4]float64
 	if s.path == ":memory:" {
 		return osmSource{}, errors.New("regional source caching requires a persistent Command database")
 	}
+	cleanupMapWork(cache)
 	// Admission precedes catalog/download requests: the budget transport may
 	// otherwise solicit consent for a source we cannot store or process.
 	if e := mapDiskReserve(s.path, uint64(3*pbfFileLimit)); e != nil {
@@ -318,6 +331,25 @@ func (s *Store) discoverRegion(ctx context.Context, p *mapProvider, b [4]float64
 	if cooling {
 		return osmSource{}, errors.New("regional publisher cooldown active; retry missing later")
 	}
+	sources, err := s.osmSources()
+	if err != nil {
+		return osmSource{}, err
+	}
+	if len(sources) >= 8 {
+		return osmSource{}, errors.New("source cache full (8 datasets); existing maps retained")
+	}
+	var cached int64
+	for _, src := range sources {
+		cached += src.Bytes
+	}
+	// Announced source bytes must fit both transfer and storage admission before
+	// a cumulative approval is offered; unknown lengths retain the bounded gate.
+	ctx = context.WithValue(ctx, mapAdmissionKey{}, func(resp *http.Response) error {
+		if resp.ContentLength > pbfFileLimit-cached {
+			return errors.New("regional source exceeds remaining 1 GB source-cache processing budget")
+		}
+		return mapDiskReserve(s.path, uint64(3*pbfFileLimit))
+	})
 	downloadCtx, cancelDownload := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancelDownload()
 	client := *p.client
@@ -387,7 +419,21 @@ func (s *Store) discoverRegion(ctx context.Context, p *mapProvider, b [4]float64
 	if n > pbfFileLimit {
 		return osmSource{}, errors.New("PBF exceeds 1 GB")
 	}
-	src, e := s.indexPBF(ctx, path, osmSource{Name: candidate.Properties.Name, URL: address, Footprint: candidate.Geometry}, emit)
+	crop := b
+	if len(desired) > 0 && footprintCovers(candidate.Geometry, desired[0]) {
+		crop = desired[0]
+	}
+	// Cache the enclosing native chunk cells when genuinely covered, so nearby
+	// small requests can reuse this verified crop without another regional transfer.
+	header, headerErr := pbfHeader(path)
+	if headerErr != nil {
+		return osmSource{}, headerErr
+	}
+	expanded := [4]float64{math.Max(header.Bounds[0], math.Floor(crop[0]/mapChunkStep)*mapChunkStep), math.Max(header.Bounds[1], math.Floor(crop[1]/mapChunkStep)*mapChunkStep), math.Min(header.Bounds[2], math.Ceil(crop[2]/mapChunkStep)*mapChunkStep), math.Min(header.Bounds[3], math.Ceil(crop[3]/mapChunkStep)*mapChunkStep)}
+	if sourceCovers(header, expanded) && footprintCovers(candidate.Geometry, expanded) {
+		crop = expanded
+	}
+	src, e := s.indexPBF(ctx, path, osmSource{Name: candidate.Properties.Name, URL: address, Footprint: candidate.Geometry}, emit, crop)
 	return src, e
 }
 func admitPBFPlan(src osmSource, mode string, c mapCircle) (mapPlan, error) {
@@ -424,7 +470,7 @@ func planExtent(b [4]float64) (mapPlan, error) {
 	w, e := int(math.Floor(b[0]/mapChunkStep)), int(math.Ceil(b[2]/mapChunkStep))
 	s, n := int(math.Floor(b[1]/mapChunkStep)), int(math.Ceil(b[3]/mapChunkStep))
 	if int64(e-w)*int64(n-s) > maxMapChunks {
-		return p, errors.New("full declared source extent exceeds 2048 viewport-chunk budget; choose Extract Centre + Radius")
+		return p, errors.New("full declared source extent exceeds 2048 viewport-chunk budget; choose Selected area (centre + radius)")
 	}
 	for y := s; y < n; y++ {
 		for x := w; x < e; x++ {
@@ -534,11 +580,22 @@ func (s *Store) mapSourceRequest(w http.ResponseWriter, r *http.Request, p *mapP
 			return true
 		}
 	}
+	if s.path != ":memory:" {
+		cleanupMapWork(s.path + ".map-cache")
+	}
 	if e := mapDiskReserve(s.path, uint64(3*pbfFileLimit)); e != nil {
 		failure(w, 400, "resource_limit", e)
 		return true
 	}
-	f, e := os.CreateTemp("", "gnss-source-*.osm.pbf")
+	cache := s.path + ".map-cache"
+	if s.path == ":memory:" {
+		cache = os.TempDir()
+	}
+	if e := os.MkdirAll(cache, 0700); e != nil {
+		failure(w, 503, "storage_unavailable", e)
+		return true
+	}
+	f, e := os.CreateTemp(cache, "gnss-source-*.osm.pbf")
 	if e != nil {
 		failure(w, 503, "storage_unavailable", e)
 		return true
@@ -566,7 +623,12 @@ func (s *Store) mapSourceRequest(w http.ResponseWriter, r *http.Request, p *mapP
 		failure(w, 400, "unsupported_coverage", e)
 		return true
 	}
-	src, e := s.indexPBF(ctx, f.Name(), osmSource{Name: "Local OSM PBF"}, nil)
+	var src osmSource
+	if mode == "crop" {
+		src, e = s.indexPBF(ctx, f.Name(), osmSource{Name: "Local OSM PBF"}, nil, plan.Bounds)
+	} else {
+		src, e = s.indexPBF(ctx, f.Name(), osmSource{Name: "Local OSM PBF"}, nil)
+	}
 	if e != nil {
 		failure(w, 400, "invalid_pbf", e)
 		return true

@@ -21,6 +21,8 @@ import (
 
 const mapLimit = 20 * 1024 * 1024
 
+var errMapCooldown = errors.New("provider cooldown active; wait before another request")
+
 type savedChunkCounts struct {
 	Requested int `json:"requested"`
 	Vector    int `json:"vector"`
@@ -69,7 +71,7 @@ func (p *mapProvider) reserve(search bool) error {
 		next, interval = &p.nextSearch, time.Second
 	}
 	if time.Now().Before(*next) {
-		return errors.New("provider cooldown active; wait before another request")
+		return errMapCooldown
 	}
 	*next = time.Now().Add(interval)
 	return nil
@@ -84,7 +86,16 @@ func (p *mapProvider) request(ctx context.Context, method, address, body string)
 	if method == "POST" {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
-	resp, err := mapHTTPClient(ctx, p.client).Do(req)
+	client := p.client
+	if method == "POST" && address == p.overpass && ctx.Value(mapBudgetKey{}) != nil && (client.Timeout == 0 || client.Timeout == 25*time.Second) {
+		copy := *client
+		// Background chunk routes have a ten-minute deadline. Leave headroom for
+		// provider queueing beyond the query's own processing timeout; legacy
+		// synchronous preview remains inside the local server's 30-second limit.
+		copy.Timeout = 70 * time.Second
+		client = &copy
+	}
+	resp, err := mapHTTPClient(ctx, client).Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("map provider request failed: %w", err)
 	}
@@ -548,7 +559,11 @@ func (p *mapProvider) areaBounds(ctx context.Context, bounds [4]float64) ([]byte
 	// Round source envelopes outwards; nearest-decimal formatting can omit border features.
 	providerBounds := [4]float64{math.Floor(bounds[0]*1e10) / 1e10, math.Max(-mapMercatorLimit, math.Floor(bounds[1]*1e10)/1e10), math.Ceil(bounds[2]*1e10) / 1e10, math.Min(mapMercatorLimit, math.Ceil(bounds[3]*1e10)/1e10)}
 	bbox := fmt.Sprintf("%.10f,%.10f,%.10f,%.10f", providerBounds[1], providerBounds[0], providerBounds[3], providerBounds[2])
-	query := fmt.Sprintf(`[out:json][timeout:20][maxsize:20000000];(way["highway"](%s);way["building"](%s);way["waterway"](%s);way["natural"](%s);way["landuse"](%s););out geom;`, bbox, bbox, bbox, bbox, bbox)
+	querySeconds := 20
+	if ctx.Value(mapBudgetKey{}) != nil {
+		querySeconds = 45
+	}
+	query := fmt.Sprintf(`[out:json][timeout:%d][maxsize:20000000];(way["highway"](%s);way["building"](%s);way["waterway"](%s);way["natural"](%s);way["landuse"](%s););out geom;`, querySeconds, bbox, bbox, bbox, bbox, bbox)
 	b, err := p.request(ctx, "POST", p.overpass, url.Values{"data": {query}}.Encode())
 	if err != nil {
 		return nil, err
