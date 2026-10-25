@@ -580,3 +580,11 @@ Run `./gradlew testDebugUnitTest lintDebug assembleDebug --console=plain`.
 The screenshot fixtures are test-only Room/operational data. Software renders do not
 establish real GNSS, audibility, OEM/Doze behavior, physical TalkBack or native desktop
 acceptance; use [DEVICE-ACCEPTANCE.md](DEVICE-ACCEPTANCE.md) for field validation.
+
+Adaptive storage interaction (#47): the native Switch stays enabled during saves
+and refreshes. Each tap is queued in application-owned work in acceptance order;
+Activity/theme recreation observes the latest pending request without cancelling
+writes. Saving feedback describes the request; completion restores the policy
+owner's saved value without invoking the listener. Failed commits retain the last
+saved consent/revision, with the existing dense error fallback until a successful
+save. Historical observations and tracking-service lifecycle are unchanged.

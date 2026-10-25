@@ -665,3 +665,13 @@ SOS/operator ACK, LIVE freshness, history and authenticated controls/recipient A
 Exercise 20 devices and a 21st joining; downloading a background map must not change
 quality/distance, Recording or Travel Back. Physical Android/native acceptance remains
 NOT TESTED until executed; Linux fixtures/cross-builds are not substitutes.
+
+## Issue #47 switch interaction — physical acceptance outstanding
+
+In Day and Night, focus Adaptive storage using keyboard and TalkBack. Toggle
+rapidly during saves/refresh, navigate away/back, rotate and change theme during
+an accepted write. Confirm final saved state after reopening, one commit per tap,
+no focus theft or thumb oscillation, and no GNSS start. Induce a storage failure:
+check Not saved feedback, saved consent restoration and dense fallback; retry.
+Capture Day/Night Settings screenshots and a screen recording on the operator's
+physical device. JVM tests cannot establish OEM animation or TalkBack stability.

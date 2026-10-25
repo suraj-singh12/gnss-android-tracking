@@ -119,6 +119,32 @@ class AdaptivePersistenceTest {
     }
 
     @Test
+    fun rejectedDisableRetainsSavedConsentButUsesDenseFallback() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val prefs = app.getSharedPreferences("failed-disable-test", 0)
+        LocalPersistencePolicy(prefs).setEnabled(true, utc(100000))
+        val failing = object : android.content.SharedPreferences by prefs {
+            override fun edit(): android.content.SharedPreferences.Editor {
+                val delegate = prefs.edit()
+                return object : android.content.SharedPreferences.Editor by delegate {
+                    override fun putString(key: String?, value: String?): android.content.SharedPreferences.Editor = this
+                    override fun commit() = false
+                }
+            }
+        }
+        val policy = LocalPersistencePolicy(failing)
+        try {
+            policy.setEnabled(false, utc(101000))
+            fail("commit must fail")
+        } catch (_: IllegalStateException) {}
+        assertTrue(policy.state.enabled)
+        assertTrue(LocalPersistencePolicy(prefs).state.enabled)
+        assertNotNull(policy.state.error)
+        assertFalse(SamplingState(policy = policy.state).effectiveAdaptive)
+        assertEquals(1L, policy.state.changes)
+    }
+
+    @Test
     fun denseDefaultRetainsEveryOriginalAndSwitchOffIsProspective() {
         val sampler = AdaptivePersistence()
         val input = (0..60).map { value(it) }

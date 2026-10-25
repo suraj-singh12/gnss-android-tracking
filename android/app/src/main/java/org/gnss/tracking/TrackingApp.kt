@@ -169,6 +169,42 @@ class TrackingApp : Application() {
         )
     }
     val sosNotice = MutableStateFlow<String?>(null)
+    // Request metadata only: persistencePolicy remains the sole policy authority.
+    val adaptiveRequests = MutableStateFlow(0L)
+    private var policyWrite: Job? = null
+    private var policyRequest = 0L
+    @Volatile var pendingAdaptive: Boolean? = null
+        private set
+    @Volatile var adaptiveSaveFailed = false
+        private set
+
+    @Synchronized
+    fun requestAdaptive(enabled: Boolean): Job {
+        val request = ++policyRequest
+        val previous = policyWrite
+        pendingAdaptive = enabled
+        adaptiveSaveFailed = false
+        adaptiveRequests.value++
+        return durableWork.launch {
+            previous?.join()
+            val result = runCatching {
+                persistencePolicy.setEnabled(enabled, utc(SystemClock.wallMillis()))
+            }
+            recorder.event(
+                if (result.isSuccess) DiagnosticEvent.PERSISTENCE_POLICY_CHANGED
+                else DiagnosticEvent.PERSISTENCE_POLICY_FAILED,
+                persistencePolicy = persistencePolicy.state,
+            )
+            synchronized(this@TrackingApp) {
+                if (request == policyRequest) {
+                    adaptiveSaveFailed = result.isFailure
+                    pendingAdaptive = null
+                    adaptiveRequests.value++
+                }
+            }
+        }.also { policyWrite = it }
+    }
+
     val workScope = durableWork
     @Volatile var activityVisible = false
     @Volatile var lastCaptureElapsed = 0L
