@@ -112,7 +112,10 @@ async function wait(check) {
   );
   assert.equal(await page.locator("#current-mode").isChecked(), true);
   assert.equal(await page.locator("#session-mode").isEnabled(), true);
-  assert.match(await page.locator("#session-mode-status").textContent(), /all received tracking sessions/);
+  assert.match(
+    await page.locator("#session-mode-status").textContent(),
+    /all received tracking sessions/,
+  );
   await page
     .locator('#recording-start [data-close="recording-start"]')
     .last()
@@ -221,9 +224,7 @@ async function wait(check) {
     fullPage: true,
   });
   await page.locator("#confirm-recording").click();
-  await wait(
-    async () => (await state()).recording?.mode === "from_beginning",
-  );
+  await wait(async () => (await state()).recording?.mode === "from_beginning");
   await page.reload();
   await page.waitForFunction(
     () => document.querySelectorAll(".party-select").length === 5,
@@ -344,7 +345,12 @@ async function wait(check) {
   await page.locator("#fit").click();
   await page.locator("#focus-party").click();
   await page.locator("#open-map").click();
+  await page.locator("#tab-maps-library").click();
   await page.getByText("Display & geographic details", { exact: true }).click();
+  await page.locator("#tab-maps-library").click();
+  await page
+    .locator("#dots")
+    .evaluate((e) => (e.closest("details").open = true));
   await page.locator("#dots").fill("40");
   await page.locator("#dots").blur();
   const qualifiedBeforeRaw = (await state()).devices[partyIds[2]].total_m;
@@ -382,6 +388,10 @@ async function wait(check) {
   });
   await page.waitForSelector('[data-layer="offline-map"]');
   assert.match(await page.locator("#map-metadata").innerText(), /EPSG:4326/);
+  await page.locator("#tab-maps-library").click();
+  await page
+    .locator("#map-opacity")
+    .evaluate((e) => (e.closest("details").open = true));
   await page.locator("#map-opacity").fill("0.25");
   await page.locator('[data-close="map-settings"]').click();
   await page.locator("#fit").click();
@@ -455,7 +465,9 @@ async function wait(check) {
     if (delayPreview) await new Promise((r) => setTimeout(r, 300));
     return route.fulfill({ json: downloaded });
   });
-  await page.locator("#map-preparation > summary").click();
+  await page.locator("#tab-map-preparation").click();
+  await page.locator(".map-precise").evaluate((e) => (e.open = true));
+  await page.getByRole("button", { name: "Custom", exact: true }).click();
   await page.locator("#map-search").fill("Delhi");
   await page.locator("#search-map").click();
   await page.waitForFunction(
@@ -464,17 +476,20 @@ async function wait(check) {
   await page.locator("#map-search-results").selectOption({ index: 1 });
   assert.equal(await page.locator("#map-lat").inputValue(), "28.617");
   for (const size of ["500", "1000", "custom"]) {
-    await page.locator("#map-shape").evaluate(e=>e.closest("details").open=true);
-  await page.locator("#map-shape").selectOption("rectangle");
-  await page.locator("#map-area").selectOption(size);
+    await page
+      .locator("#map-shape")
+      .evaluate((e) => (e.closest("details").open = true));
+    await page.locator("#map-shape").selectOption("rectangle");
+    await page.locator("#map-area").selectOption(size);
     if (size === "custom") {
       await page.locator("#map-width").fill("1500");
       await page.locator("#map-height").fill("300");
     }
+    await page
+      .locator("#preview-map")
+      .evaluate((e) => (e.closest("details").open = true));
     await page.locator("#preview-map").click();
-    await page.waitForFunction(
-      () => !document.querySelector("#download-map").disabled,
-    );
+    await page.waitForFunction(() => !!preparedMap);
     assert.match(
       await page.locator("#map-preparation-status").innerText(),
       /features.*KB/,
@@ -490,11 +505,14 @@ async function wait(check) {
   );
   await page.locator("#map-search-results").selectOption({ index: 1 });
   assert.equal(
-    await page.locator("#download-map").isDisabled(),
+    await page.evaluate(() => preparedMap === undefined),
     true,
-    "changing place invalidates the previous preview",
+    "changing place invalidates the previous preview before Preview & Download can acquire",
   );
   await page.locator("#map-lat").fill("");
+  await page
+    .locator("#preview-map")
+    .evaluate((e) => (e.closest("details").open = true));
   await page.locator("#preview-map").click();
   assert.equal(
     areas.length,
@@ -503,6 +521,9 @@ async function wait(check) {
   );
   await page.locator("#map-lat").fill("28.617");
   delayPreview = true;
+  await page
+    .locator("#preview-map")
+    .evaluate((e) => (e.closest("details").open = true));
   await page.locator("#preview-map").click();
   await page.locator("#map-lon").fill("77.213");
   await page.waitForFunction(() =>
@@ -511,27 +532,35 @@ async function wait(check) {
       .textContent.includes("Area changed"),
   );
   assert.equal(
-    await page.locator("#download-map").isDisabled(),
+    await page.evaluate(() => preparedMap === undefined),
     true,
-    "a stale response cannot enable the wrong area's download",
+    "a stale response cannot authorize the wrong area's download",
   );
   delayPreview = false;
   await page.locator("#map-lon").fill("77.212");
+  await page.locator("#include-map-terrain").check();
+  await page
+    .locator("#download-elevation")
+    .evaluate((e) => (e.closest("details").open = true));
+  await page.locator("#download-hillshade").uncheck();
+  await page.locator("#download-contours").uncheck();
   await page.locator("#download-elevation").check();
+  await page
+    .locator("#preview-map")
+    .evaluate((e) => (e.closest("details").open = true));
   await page.locator("#preview-map").click();
-  await page.waitForFunction(
-    () => !document.querySelector("#download-map").disabled,
-  );
+  await page.waitForFunction(() => !!preparedMap);
   assert.equal(
     await page.locator("#download-dem").count(),
     0,
     "automatic DEM preview must not require a manual file",
   );
   await page.locator("#download-elevation").uncheck();
+  await page
+    .locator("#preview-map")
+    .evaluate((e) => (e.closest("details").open = true));
   await page.locator("#preview-map").click();
-  await page.waitForFunction(
-    () => !document.querySelector("#download-map").disabled,
-  );
+  await page.waitForFunction(() => !!preparedMap);
   const mapDistance = (await state()).devices[partyIds[2]].total_m;
   await page.screenshot({
     path: path.join(out, "command-map-download-preview-fixture.png"),
@@ -562,7 +591,7 @@ async function wait(check) {
   });
   await page.locator('[data-close="layers"]').click();
   await page.locator("#open-map").click();
-  await page.locator("#choose-saved-map").click();
+  await page.locator("#tab-maps-library").click();
   await page
     .getByText("Acquire or import terrain for this saved map", { exact: true })
     .click();
@@ -861,10 +890,23 @@ async function wait(check) {
   );
   // Clear retains focus in the detail editor. Independent device inventory must
   // still refresh after pending reconstruction; do not blur to conceal a stall.
-  await page.waitForFunction(() => document.querySelectorAll('#devices input[type=checkbox]').length === Object.keys(state.devices).length);
-  assert.equal(await page.locator('#selected-detail .override button').last().evaluate(e => e === document.activeElement), true);
+  await page.waitForFunction(
+    () =>
+      document.querySelectorAll("#devices input[type=checkbox]").length ===
+      Object.keys(state.devices).length,
+  );
+  assert.equal(
+    await page
+      .locator("#selected-detail .override button")
+      .last()
+      .evaluate((e) => e === document.activeElement),
+    true,
+  );
   // Arrange the sidebar state after viewport changes and reload before using it.
-  if ((await page.locator("#toggle-parties").getAttribute("aria-expanded")) === "false")
+  if (
+    (await page.locator("#toggle-parties").getAttribute("aria-expanded")) ===
+    "false"
+  )
     await page.locator("#toggle-parties").click();
   await page
     .getByRole("checkbox", { name: "Show track for Alpha", exact: true })
@@ -1121,11 +1163,43 @@ async function wait(check) {
   .catch(async (e) => {
     console.error(e);
     process.exitCode = 1;
-    if (diagnosticPage) try {
-      await diagnosticPage.screenshot({path:path.join(out,"command-failure.png"),fullPage:true});
-      fs.writeFileSync(path.join(out,"command-failure.html"),await diagnosticPage.content());
-      fs.writeFileSync(path.join(out,"command-failure-state.json"),JSON.stringify(await diagnosticPage.evaluate(()=>({main:document.querySelector("main")?.className,focus:document.activeElement?.outerHTML,labels:[...document.querySelectorAll("input[type=checkbox]")].map(e=>({label:e.getAttribute("aria-label"),visible:!!e.getClientRects().length})),devices:typeof state==="undefined"?null:Object.values(state.devices).map(d=>({id:d.device_id,party:d.snapshot.party}))})),null,2));
-    } catch (diagnosticError) { console.error("Diagnostic capture failed",diagnosticError); }
+    if (diagnosticPage)
+      try {
+        await diagnosticPage.screenshot({
+          path: path.join(out, "command-failure.png"),
+          fullPage: true,
+        });
+        fs.writeFileSync(
+          path.join(out, "command-failure.html"),
+          await diagnosticPage.content(),
+        );
+        fs.writeFileSync(
+          path.join(out, "command-failure-state.json"),
+          JSON.stringify(
+            await diagnosticPage.evaluate(() => ({
+              main: document.querySelector("main")?.className,
+              focus: document.activeElement?.outerHTML,
+              labels: [
+                ...document.querySelectorAll("input[type=checkbox]"),
+              ].map((e) => ({
+                label: e.getAttribute("aria-label"),
+                visible: !!e.getClientRects().length,
+              })),
+              devices:
+                typeof state === "undefined"
+                  ? null
+                  : Object.values(state.devices).map((d) => ({
+                      id: d.device_id,
+                      party: d.snapshot.party,
+                    })),
+            })),
+            null,
+            2,
+          ),
+        );
+      } catch (diagnosticError) {
+        console.error("Diagnostic capture failed", diagnosticError);
+      }
   })
   .finally(async () => {
     if (browser) await browser.close();
@@ -1134,5 +1208,5 @@ async function wait(check) {
       await once(command, "exit");
     }
     if (!process.exitCode) fs.rmSync(work, { recursive: true, force: true });
-    else console.error("Failed UI fixture retained:",work);
+    else console.error("Failed UI fixture retained:", work);
   });

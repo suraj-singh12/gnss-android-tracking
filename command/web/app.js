@@ -903,6 +903,8 @@ $("event-filter").onchange = renderEvents;
 let preparedMap;
 let preparationRevision = 0;
 let downloadAbort, lastDownloadReport, retryTerrainRendering, terrainGeneration;
+let mapImportPending = false,
+  transferApprovalPending = false;
 function showDownloadReport(report) {
   lastDownloadReport = report;
   $("download-report-text").textContent = JSON.stringify(report, null, 2);
@@ -950,11 +952,12 @@ $("export-download-report").onclick = () => {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
-async function mapPost(path, data) {
+async function mapPost(path, data, signal) {
   const response = await fetch("/local/" + path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
+    signal,
   });
   const result = await response.json();
   if (!response.ok) throw Error(result.message || "Map operation failed");
@@ -974,12 +977,16 @@ async function refreshMaps(selected) {
           m.bounds = GeoMap.parse(await data.text(), m.source).bounds;
       } catch {}
     }
-    $("saved-maps").add(
-      new Option(`${m.source} · ${(m.bytes / 1024).toFixed(1)} KB`, m.id),
+    const option = new Option(
+      `${m.source} · ${(m.bytes / 1024).toFixed(1)} KB`,
+      m.id,
     );
+    option.dataset.source = m.source;
+    $("saved-maps").add(option);
     const row = el("div", undefined, "saved-map-row");
     const select = el("strong", m.source);
     row.dataset.mapId = m.id;
+    row.classList.toggle("selected", m.id === (selected || activeMapID));
     row.append(
       select,
       el(
@@ -1044,7 +1051,8 @@ async function loadSavedMap(id) {
   if (!response.ok)
     throw Error("Saved map unavailable; blank canvas remains available");
   const source =
-    $("saved-maps").selectedOptions[0]?.textContent || "Saved offline map";
+    [...$("saved-maps").options].find((option) => option.value === id)?.dataset
+      .source || "Saved offline map";
   useMap(await response.text(), source, id);
   if (offlineMap?.plan) {
     await loadRadiusManifest(id);
@@ -1443,10 +1451,17 @@ $("map-search-results").onchange = () => {
     invalidatePreparation();
   }
 };
-function invalidatePreparation() {
+function invalidatePreparation(resetConsent = true) {
+  if (resetConsent !== false) $("confirm-map-cost").checked = false;
   preparationRevision++;
   preparedMap = undefined;
-  $("download-map").disabled = true;
+  $("map-preview").replaceChildren();
+  $("map-plan-details").textContent = "";
+  $("map-preparation-status").textContent =
+    resetConsent === false
+      ? "Checking requested area…"
+      : "Area changed · Preview & Download checks the new selection before acquisition.";
+  $("download-map").disabled = false;
 }
 for (const id of ["map-lat", "map-lon", "map-width", "map-height"])
   $(id).oninput = invalidatePreparation;
@@ -1468,7 +1483,7 @@ $("preview-map").onclick = async () => {
     await previewRadius();
     return;
   }
-  invalidatePreparation();
+  invalidatePreparation(false);
   for (const id of ["map-lat", "map-lon", "map-width", "map-height"])
     if (!$(id).reportValidity()) return;
   $("preview-map").disabled = true;
@@ -2437,11 +2452,21 @@ $("export-runtime").onclick = async () => {
 let radiusManifest,
   radiusViewKey,
   radiusViewTimer,
-  radiusViewVersion = 0;
+  radiusViewVersion = 0,
+  radiusFetchAbort;
 let pickingMapCenter = false;
 $("map-shape").onchange = () => {
   $("radius-fields").hidden = $("map-shape").value !== "circle";
-  $("legacy-area").hidden = $("map-shape").value === "circle";
+  const circle = $("map-shape").value === "circle";
+  $("legacy-area").hidden = circle;
+  const presets = document.querySelector(".map-radius-presets");
+  if (presets) {
+    presets.hidden = !circle;
+    $("map-radius-caption").hidden = !circle;
+    $("radius-fields").hidden =
+      !circle ||
+      presets.querySelector('[aria-pressed="true"]')?.textContent !== "Custom";
+  }
   invalidatePreparation();
 };
 for (const id of ["map-radius", "radius-unit"])
@@ -2512,15 +2537,18 @@ async function loadRadiusManifest(id) {
   $("export-manifest").download = "map-source-coverage.json";
   $("save-use-map").hidden = false;
   $("approve-transfer").hidden = !manifest.transfer?.approval_required_bytes;
-  $("approve-transfer").textContent =
-    `Approve cumulative ${((manifest.transfer?.approval_required_bytes || 0) / 1000000).toFixed(2)} MB transfer (${manifest.transfer?.approval_required_bytes || 0} bytes)`;
+  $("approve-transfer").textContent = "Approve once";
+  $("approve-transfer").setAttribute(
+    "aria-label",
+    `Approve cumulative ${manifest.transfer?.approval_required_bytes || 0} bytes for ${manifest.transfer?.current_source || "this source"}`,
+  );
   $("map-coverage-status").textContent = radiusDescription(manifest);
   $("map-metadata").textContent = radiusDescription(manifest);
   updateLayers();
   draw();
 }
 async function previewRadius() {
-  invalidatePreparation();
+  invalidatePreparation(false);
   for (const id of ["map-lat", "map-lon", "map-radius"])
     if (!$(id).reportValidity()) return;
   const request = {
@@ -2538,7 +2566,6 @@ async function previewRadius() {
         terrainLayers.map((k) => [k, $("download-" + k).checked]),
       ),
     };
-    $("confirm-map-cost").checked = false;
     $("map-plan-details").textContent =
       `Additional network transfer: unknown. Initial cumulative allowance: 5 MB, shared by vectors, DEM, source discovery and retries. Large fallback requires additional approval before transfer. Disk: ≤256 MiB saved chunks, ≤1 GB source cache plus bounded on-disk index and 3 GB free-space admission for regional processing. WGS84 centre ${request.lat}, ${request.lon}; radius ${request.radius_m} m; approximate ellipsoidal area ${(plan.approximate_ellipsoidal_area_m2 / 1000000).toFixed(6)} km² (sampled boundary). Ellipsoidal geodesic circle. Envelope W/S/E/N ${plan.bounds.map((v) => v.toFixed(7)).join(", ")}. ${plan.chunks.length} chunks; ${plan.source_tiles.length} possible native source tiles including sampling halo; ${plan.maximum_source_requests_before_retries} maximum source requests before cache/retries. DEM transfer ≤ ${(plan.maximum_compressed_dem_bytes / 1048576).toFixed(1)} MiB before bounded retries (compressed sizes unknown). Vector sizes unknown, ≤20 MiB/chunk. DEM ≤${(plan.maximum_terrain_bytes / 1048576).toFixed(1)} MiB; chunk library budget 256 MiB; source cache 99 MiB; disk reserve 128 MiB; one network/decode at a time. Provider cooldown 10 s/vector request. ${plan.dem_unsupported || "DEM adapter: 56°S–60°N, WGS84/EGM96, native 1 arc sec; source accuracy varies."} ${plan.unsupported || "Confirm estimate, then acquire available layers. Coverage gaps remain explicit."}`;
     $("map-preparation-status").textContent =
@@ -2581,7 +2608,9 @@ async function startRadiusDownload() {
   const candidate = preparedMap;
   if (!$("confirm-map-cost").checked) {
     $("map-preparation-status").textContent +=
-      " Explicit cost confirmation is required.";
+      " Review and acknowledge the initial transfer allowance.";
+    $("confirm-map-cost").scrollIntoView({ block: "nearest" });
+    $("confirm-map-cost").focus();
     return;
   }
   $("download-map").disabled = true;
@@ -2665,7 +2694,7 @@ async function resumeRadius() {
                 attemptedOverpass = true;
               $("download-progress").hidden = false;
               $("download-progress").textContent =
-                `${layer} ${c.key}: ${event.stage}; ${((performance.now() - started) / 1000).toFixed(1)} s elapsed; ${event.received_bytes ?? "not measured"} observed bytes ${event.error || ""}`;
+                `${layer === "vector" ? "Map data" : "Terrain"} · ${manifest.chunks.filter((x) => x[layer].status === "complete").length}/${manifest.chunks.length} areas safely saved · ${event.stage}; ${((performance.now() - started) / 1000).toFixed(1)} s elapsed; ${event.received_bytes ?? "not measured"} observed bytes ${event.error || ""}`;
               if (event.stage === "failed") throw Error(event.error);
               if (event.stage === "complete") doneEvent = true;
             }
@@ -2713,7 +2742,10 @@ async function resumeRadius() {
     $("cancel-download").hidden = true;
     $("resume-map").disabled = false;
     $("approve-transfer").disabled = false;
-    if (activeMapID === id) await loadRadiusManifest(id);
+    if (activeMapID === id) {
+      await loadRadiusManifest(id);
+      await refreshMaps(id);
+    }
   }
   if (radiusManifest?.plan) {
     $("download-progress").textContent =
@@ -2726,13 +2758,16 @@ async function resumeRadius() {
         : "Saved manifest unavailable; reload Saved Maps.") +
       "\nLast operation: " +
       failure.message;
-  const incomplete = radiusManifest?.chunks.some(c =>
-    c.vector.status !== "complete" ||
-    (Object.values(radiusManifest.components).some(Boolean) &&
-      (c.terrain.status !== "complete" || c.terrain.void_dem_cells > 0)));
-  $("map-preparation-status").textContent = failure || incomplete
-    ? `Partial map retained. ${radiusManifest?.transfer?.approval_required_bytes ? "Additional transfer approval is required." : "Some requested coverage or layers remain unavailable."} Retry Missing or Save & Use. Details explains the cause.`
-    : "Saved locally · acquired chunks available after restart without internet; inspect source & coverage manifest for known voids and layer availability.";
+  const incomplete = radiusManifest?.chunks.some(
+    (c) =>
+      c.vector.status !== "complete" ||
+      (Object.values(radiusManifest.components).some(Boolean) &&
+        (c.terrain.status !== "complete" || c.terrain.void_dem_cells > 0)),
+  );
+  $("map-preparation-status").textContent =
+    failure || incomplete
+      ? `Partial map retained. ${radiusManifest?.transfer?.approval_required_bytes ? "Additional transfer approval is required." : "Some requested coverage or layers remain unavailable."} Retry Missing or Save & Use. Details explains the cause.`
+      : "Saved locally · acquired chunks available after restart without internet; inspect source & coverage manifest for known voids and layer availability.";
 }
 function radiusClip(root, g, xy) {
   if (!g.core_bounds) return "none";
@@ -2795,6 +2830,9 @@ function scheduleRadiusView(w, h) {
   if (key === radiusViewKey) return;
   radiusViewKey = key;
   clearTimeout(radiusViewTimer);
+  radiusFetchAbort?.abort();
+  const controller = new AbortController();
+  radiusFetchAbort = controller;
   const version = ++radiusViewVersion;
   const a = GeoMap.unproject(
       viewport.cx - w / 2 / viewport.scale,
@@ -2818,42 +2856,56 @@ function scheduleRadiusView(w, h) {
       grids = [],
       detailWarnings = [];
     let count = 0,
-      vectorBudgetExceeded = false;
+      loadedVectors = 0,
+      omittedFeatures = 0;
+    const vectorChunks = chunks.filter(
+      (c) => c.vector.status === "complete",
+    ).length;
+    const chunkBudget = Math.floor(100000 / Math.max(1, vectorChunks));
+    const detailScale = viewport.scale;
     const generationStarted = performance.now();
     try {
-      if (chunks.length > 8)
-        throw Error(
-          `${chunks.length} visible chunk envelopes: zoom in to load geographic detail within the 8-chunk browser budget. Coverage outline remains visible.`,
+      if (chunks.filter((c) => c.terrain.status === "complete").length > 8)
+        detailWarnings.push(
+          "Overview shows vectors across all saved chunks. DEM detail is limited to eight grids; zoom in for terrain throughout the viewport.",
         );
       for (const c of chunks) {
         if (version !== radiusViewVersion || activeMapID !== id) return;
-        if (c.vector.status === "complete" && !vectorBudgetExceeded) {
+        if (c.vector.status === "complete") {
           try {
             const r = await fetch(
               `/local/maps/${encodeURIComponent(id)}/chunks/${c.key}?layer=vector`,
+              { signal: controller.signal },
             );
             if (!r.ok) throw Error("Saved vector chunk read failed");
-            const parsed = GeoMap.parse(await r.text(), "OSM");
-            count += parsed.count;
-            if (count > 100000)
-              throw Error(
-                "Visible vectors exceed 100,000 coordinates; zoom in for detail",
-              );
-            shapes.push(...parsed.shapes);
+            const text = await r.text();
+            if (version !== radiusViewVersion || activeMapID !== id) return;
+            const parsed = GeoMap.parse(text, "OSM");
+            const detail = GeoMap.overview(
+              parsed.shapes,
+              1 / detailScale,
+              chunkBudget,
+            );
+            count += detail.count;
+            omittedFeatures += detail.omitted;
+            shapes.push(...detail.shapes);
+            loadedVectors++;
+            offlineMap = { ...offlineMap, shapes: shapes.slice() };
+            $("map-detail-status").textContent =
+              `Loading local overview: ${loadedVectors}/${vectorChunks} saved vector chunks; ${omittedFeatures} features deferred by the display budget. Zoom in for more detail.`;
+            draw();
+            await new Promise(requestAnimationFrame);
           } catch (error) {
             detailWarnings.push(
               `${c.key}: vector not rendered: ${error.message}`,
             );
-            if (count > 100000) {
-              vectorBudgetExceeded = true;
-              shapes.length = 0;
-            }
           }
         }
-        if (c.terrain.status === "complete") {
+        if (c.terrain.status === "complete" && grids.length < 8) {
           try {
             const r = await fetch(
               `/local/maps/${encodeURIComponent(id)}/chunks/${c.key}?layer=terrain`,
+              { signal: controller.signal },
             );
             if (!r.ok) throw Error("Saved DEM chunk read failed");
             const grid = await r.json();
@@ -2903,8 +2955,12 @@ function scheduleRadiusView(w, h) {
         if (version !== radiusViewVersion || activeMapID !== id) return;
       }
       grids.splice(0, grids.length, ...prepared);
+      if (omittedFeatures)
+        detailWarnings.push(
+          `${omittedFeatures} stored features deferred by the 100,000-coordinate overview budget; zoom in for detail. Saved data is unchanged.`,
+        );
       $("map-detail-status").textContent =
-        `Local detail: ${chunks.length} visible chunks, ${grids.length} DEM grids; ${offlineMap.plan.full_extent ? "declared source extent" : "requested circle"} in blue; dashed envelopes show acquired/missing coverage.`;
+        `Local detail: ${loadedVectors}/${vectorChunks} saved vector chunks loaded; ${chunks.length} visible chunks, ${grids.length} DEM grids; ${offlineMap.plan.full_extent ? "declared source extent" : "requested circle"} in blue; dashed envelopes show acquired/missing coverage.`;
       detailWarnings.push(
         ...grids
           .filter((g) => g.contour_error || g.hillshade_error)
@@ -2917,8 +2973,7 @@ function scheduleRadiusView(w, h) {
         $("map-detail-status").textContent += " " + detailWarnings.join("; ");
     } catch (e) {
       if (version !== radiusViewVersion) return;
-      shapes.length = 0;
-      grids.length = 0;
+      // Retain independently decoded geography if a later component fails.
       $("map-warning").textContent = e.message;
       $("map-detail-status").textContent = e.message;
     }
@@ -2977,9 +3032,26 @@ $("save-use-map").onclick = async () => {
   }
 };
 $("approve-transfer").onclick = async () => {
+  if (
+    downloadAbort ||
+    mapImportPending ||
+    transferApprovalPending ||
+    !activeMapID
+  )
+    return;
+  const approvalMapID = activeMapID;
+  transferApprovalPending = true;
+  $("approve-transfer").disabled = true;
   try {
+    // Re-read durable consent before prompting: a lost response or restart must
+    // not ask again for an allowance the server already committed.
+    await loadRadiusManifest(approvalMapID);
+    if (!$("map-settings").open || activeMapID !== approvalMapID) return;
     const n = radiusManifest?.transfer?.approval_required_bytes;
-    if (!n || !activeMapID) return;
+    if (!n) {
+      await resumeRadius();
+      return;
+    }
     if (
       !confirm(
         `Source: ${radiusManifest.transfer.current_source || "unknown"}. Already received ${(radiusManifest.transfer.received_bytes / 1000000).toFixed(2)} MB. Approve cumulative network transfer up to ${(n / 1000000).toFixed(2)} MB (${n} bytes) for this map job, including bytes already received? Regional sources may require up to 3 GB free disk space. Further escalation will require approval.`,
@@ -2992,11 +3064,19 @@ $("approve-transfer").onclick = async () => {
     await resumeRadius();
   } catch (e) {
     $("map-preparation-status").textContent = e.message;
+  } finally {
+    transferApprovalPending = false;
+    $("approve-transfer").disabled = !!downloadAbort;
+    $("map-import-status").dispatchEvent(new Event("map-operation-change"));
   }
 };
 $("import-map-source").onclick = async () => {
+  if (downloadAbort || mapImportPending || transferApprovalPending) return;
   const file = $("source-map-file").files[0];
   if (!file) return;
+  const controller = new AbortController();
+  downloadAbort = controller;
+  mapImportPending = true;
   $("import-map-source").disabled = true;
   $("map-import-status").textContent =
     `Validating local ${file.name} (${file.size.toLocaleString()} bytes). No network transfer. Existing maps remain available.`;
@@ -3004,10 +3084,13 @@ $("import-map-source").onclick = async () => {
     let saved;
     if (/\.(geojson|json)$/i.test(file.name)) {
       if (file.size > 20 * 1024 * 1024) throw Error("GeoJSON exceeds 20 MiB");
-      saved = await mapPost("maps", {
-        source: file.name,
-        data: JSON.parse(await file.text()),
-      });
+      const data = JSON.parse(await file.text());
+      controller.signal.throwIfAborted();
+      saved = await mapPost(
+        "maps",
+        { source: file.name, data },
+        controller.signal,
+      );
     } else {
       const zip = /\.zip$/i.test(file.name);
       if (file.size > (zip ? 256 * 1024 * 1024 : 1000000000))
@@ -3024,20 +3107,28 @@ $("import-map-source").onclick = async () => {
           method: "POST",
           headers: { "Content-Type": "application/octet-stream" },
           body: file,
+          signal: controller.signal,
         },
       );
       saved = await r.json();
       if (!r.ok) throw Error(saved.message || "Import rejected");
     }
+    if (downloadAbort === controller) downloadAbort = undefined;
     await refreshMaps(saved.id);
     await loadSavedMap(saved.id);
     if (!/\.zip$/i.test(file.name) && offlineMap?.plan) await resumeRadius();
-    $("map-import-status").textContent =
-      "Stored in Saved Maps and active. Unavailable coverage remains explicit.";
+    $("map-import-status").textContent = radiusManifest
+      ? `Stored in Saved Maps. ${radiusSummary(radiusManifest)} ${radiusManifest.chunks.some((c) => c.vector.status === "complete" || c.terrain.status === "complete") ? "Verified saved areas are available offline." : "No verified map areas yet; retry missing work."}`
+      : "Stored in Saved Maps and active. Source attribution is retained.";
   } catch (e) {
-    $("map-import-status").textContent = e.message;
+    $("map-import-status").textContent = controller.signal.aborted
+      ? "Import stopped. Previously saved geography is retained."
+      : e.message;
   } finally {
+    if (downloadAbort === controller) downloadAbort = undefined;
+    mapImportPending = false;
     $("import-map-source").disabled = false;
+    $("map-import-status").dispatchEvent(new Event("map-operation-change"));
   }
 };
 
@@ -3050,3 +3141,553 @@ $("source-map-file").onchange = () => {
     $("source-map-file").files[0]?.name || "",
   );
 };
+
+// V3 adapts the existing popup and controls in place. No duplicate action/state
+// owners: moved nodes retain their original backend handlers and identifiers.
+function initializeMapModal() {
+  const dialog = $("map-settings"),
+    get = $("map-preparation"),
+    library = $("maps-library"),
+    imports = $("map-import");
+  const current = $("current-map-name").closest("section");
+  const display = el("details");
+  display.append(el("summary", "Display & geographic details"));
+  display.append(
+    current.querySelector(".current-map-controls"),
+    $("current-map-layers"),
+  );
+  const oldDisplay = current.querySelector("details");
+  for (const node of [...oldDisplay.children].slice(1)) display.append(node);
+  oldDisplay.remove();
+  library.append(display, $("map-warning"));
+  current.classList.add("map-current-strip");
+  $("current-map-title").textContent = "Current Map";
+  const change = el("button", "Change in My Maps →");
+  change.className = "map-text-action";
+  change.onclick = () => selectTab("maps-library");
+  current.append(change);
+  const tabs = el("div");
+  tabs.className = "map-task-tabs";
+  tabs.setAttribute("role", "tablist");
+  tabs.setAttribute("aria-label", "Map tasks");
+  const panels = [
+    [get, "Get a Map", "new-map"],
+    [imports, "Import", "open-map-import"],
+    [library, "My Maps", "choose-saved-map"],
+  ];
+  let importAreaEdited = false;
+  function selectTab(id) {
+    if (
+      id === "map-import" &&
+      !importAreaEdited &&
+      $("map-shape").value === "circle"
+    ) {
+      $("import-map-lat").value = $("map-lat").value;
+      $("import-map-lon").value = $("map-lon").value;
+      $("import-map-radius").value =
+        Number($("map-radius").value) * Number($("radius-unit").value);
+      updateImportPreview().catch(showError);
+    }
+    dialog.dataset.mapTab = id;
+    body.scrollTop = 0;
+    for (const [panel] of panels) {
+      const selected = panel.id === id;
+      panel.open = selected;
+      const wrapper = $(panel.id + "-panel");
+      if (wrapper) wrapper.hidden = !selected;
+      const button = $("tab-" + panel.id);
+      button.setAttribute("aria-selected", String(selected));
+      button.tabIndex = selected ? 0 : -1;
+    }
+    updateTask();
+  }
+  panels.forEach(([panel, label, legacy], index) => {
+    const tab = el("button", label);
+    tab.id = "tab-" + panel.id;
+    tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-controls", panel.id);
+    panel.classList.add("map-task-panel");
+    panel.setAttribute("aria-labelledby", tab.id);
+    tab.onclick = () => selectTab(panel.id);
+    tab.onkeydown = (e) => {
+      let next = index;
+      if (e.key === "ArrowRight") next = (index + 1) % 3;
+      else if (e.key === "ArrowLeft") next = (index + 2) % 3;
+      else if (e.key === "Home") next = 0;
+      else if (e.key === "End") next = 2;
+      else return;
+      e.preventDefault();
+      selectTab(panels[next][0].id);
+      $("tab-" + panels[next][0].id).focus();
+    };
+    tabs.append(tab);
+    $(legacy).onclick = (e) => {
+      e.preventDefault();
+      selectTab(panel.id);
+    };
+  });
+  current.after(tabs);
+  const body = el("div");
+  body.className = "map-modal-body";
+  const feedback = dialog.querySelector(".map-download-feedback");
+  tabs.after(body);
+  body.append(get, imports, library);
+  for (const [panel] of panels) {
+    const wrapper = el("div");
+    wrapper.id = panel.id + "-panel";
+    wrapper.setAttribute("role", "tabpanel");
+    wrapper.setAttribute("aria-labelledby", "tab-" + panel.id);
+    panel.removeAttribute("role");
+    panel.before(wrapper);
+    wrapper.append(panel);
+    $("tab-" + panel.id).setAttribute("aria-controls", wrapper.id);
+  }
+  const footer = el("div");
+  footer.className = "map-modal-footer";
+  const footerNote = el("small", "Saved maps work without internet");
+  footerNote.className = "muted";
+  const actions = el("div");
+  actions.className = "map-footer-actions";
+  footer.append(footerNote, actions);
+  dialog.append(footer);
+  const getActions = el("div");
+  getActions.dataset.mapAction = "map-preparation";
+  getActions.append($("download-map"));
+  actions.append(getActions);
+  const importActions = el("div");
+  importActions.dataset.mapAction = "map-import";
+  importActions.append($("import-map-source"));
+  actions.append(importActions);
+  $("import-map-source").classList.add("primary");
+  const libraryActions = el("div");
+  libraryActions.dataset.mapAction = "maps-library";
+  const use = el("button", "Use selected map");
+  use.className = "primary";
+  use.id = "use-selected-map";
+  use.onclick = () => $("save-use-map").onclick();
+  libraryActions.append(use);
+  actions.append(libraryActions);
+  const taskActions = el("div");
+  taskActions.className = "map-active-actions";
+  const notNow = el("button", "Not now");
+  notNow.className = "map-approval-defer";
+  notNow.onclick = () => dialog.close();
+  taskActions.append(notNow);
+  taskActions.append(
+    $("cancel-download"),
+    $("resume-map"),
+    $("save-use-map"),
+    $("approve-transfer"),
+  );
+  actions.append(taskActions);
+  $("save-use-map").textContent = "Use saved areas";
+  $("cancel-download").textContent = "Stop download";
+  $("save-use-map").classList.add("primary");
+  $("approve-transfer").classList.add("primary");
+  for (const p of [...get.querySelectorAll(":scope > p")]) p.remove();
+  const form = el("div");
+  form.id = "get-map-form";
+  for (const node of [...get.children].slice(1)) form.append(node);
+  get.append(form);
+  form.prepend(el("h2", "Where do you need the map?"));
+  const search = form.querySelector(".map-search-row");
+  const centre = el("button", "Use map centre");
+  centre.id = "use-map-centre";
+  centre.onclick = () => {
+    if (!viewport) return;
+    const [lon, lat] = GeoMap.unproject(viewport.cx, viewport.cy);
+    $("map-lat").value = lat;
+    $("map-lon").value = ((lon + 540) % 360) - 180;
+    invalidatePreparation();
+  };
+  search.append(centre);
+  $("search-map").textContent = "Find";
+  const precise = el("details");
+  precise.className = "map-precise";
+  precise.append(el("summary", "Coordinates & advanced area"));
+  precise.append(
+    $("map-lat").closest(".coordinate-fields"),
+    $("pick-map-center"),
+  );
+  const shapeDetails = $("map-shape").closest("details");
+  precise.append($("map-shape").closest("label"));
+  shapeDetails.remove();
+  precise.append($("legacy-area"));
+  search.after(precise);
+  const presets = el("div");
+  presets.className = "map-radius-presets";
+  presets.setAttribute("aria-label", "Coverage radius");
+  const radiusLabel = el("p", "Coverage radius");
+  radiusLabel.className = "map-field-caption";
+  radiusLabel.id = "map-radius-caption";
+  precise.after(radiusLabel, presets);
+  const custom = $("radius-fields");
+  for (const [label, value] of [
+    ["1 km", 1000],
+    ["5 km", 5000],
+    ["10 km", 10000],
+    ["Custom", null],
+  ]) {
+    const b = el("button", label);
+    b.setAttribute("aria-pressed", "false");
+    b.onclick = () => {
+      for (const x of presets.children)
+        x.setAttribute("aria-pressed", String(x === b));
+      custom.hidden = value !== null;
+      if (value !== null) {
+        $("map-radius").value = value;
+        $("radius-unit").value = "1";
+        invalidatePreparation();
+      } else $("map-radius").focus();
+    };
+    presets.append(b);
+  }
+  presets.after(custom);
+  custom.hidden = true;
+  presets.children[1].click();
+  const preview = el("section");
+  preview.className = "map-selection-preview";
+  preview.append(
+    el("p", "Selection preview"),
+    $("map-preview"),
+    el(
+      "small",
+      "Requested area only · geographic features appear after acquisition.",
+    ),
+  );
+  get.append(preview);
+  const optional = el("div");
+  optional.className = "map-optional-terrain";
+  const terrainLabel = el("label");
+  const include = el("input");
+  include.type = "checkbox";
+  include.id = "include-map-terrain";
+  terrainLabel.append(
+    include,
+    document.createTextNode(" Include terrain & elevation"),
+  );
+  const terrainOptions = $("download-hillshade").closest("fieldset");
+  const products = el("details");
+  products.append(
+    el("summary", "Terrain products & provider details"),
+    terrainOptions,
+  );
+  products.hidden = true;
+  include.onchange = () => {
+    products.hidden = !include.checked;
+    for (const k of terrainLayers) $("download-" + k).checked = include.checked;
+    invalidatePreparation();
+  };
+  optional.append(
+    terrainLabel,
+    el("small", "Hillshade and contours use available elevation data."),
+    products,
+  );
+  get.append(optional);
+  optional.after(precise);
+  for (const k of terrainLayers)
+    $("download-" + k).addEventListener("change", () => {
+      include.checked = terrainLayers.some((k) => $("download-" + k).checked);
+    });
+
+  const consent = $("confirm-map-cost").closest("label");
+  consent.className = "map-initial-consent";
+  consent.lastChild.textContent =
+    " Allow up to 5 MB for this map. Ask before any additional transfer.";
+  get.append(consent);
+  const technical = el("details");
+  technical.append(
+    el("summary", "Coverage, sources & resource limits"),
+    $("map-plan-details"),
+    $("preview-map"),
+  );
+  form.querySelector(".map-actions").remove();
+  get.append(technical);
+  // The old details container now has no plan content; remove that empty wrapper.
+  for (const d of [...form.querySelectorAll(":scope > details")])
+    if (!d.querySelector("input,select,button,p")) d.remove();
+  get.append($("map-preparation-status"));
+  body.prepend(feedback);
+  const taskTitle = el("h2");
+  taskTitle.id = "map-task-title";
+  feedback.prepend(taskTitle);
+  const taskSource = el("p");
+  taskSource.id = "map-task-source";
+  taskSource.className = "muted";
+  taskTitle.after(taskSource);
+  const taskReason = el("p");
+  taskReason.id = "map-task-reason";
+  taskReason.setAttribute("role", "status");
+  taskSource.after(taskReason);
+  feedback.setAttribute("aria-label", "Map acquisition and recovery");
+  const originalDownload = $("download-map").onclick;
+  $("download-map").textContent = "Preview & Download";
+  $("download-map").disabled = false;
+  let primaryPending = false;
+  $("download-map").onclick = async () => {
+    if (
+      primaryPending ||
+      mapImportPending ||
+      transferApprovalPending ||
+      downloadAbort
+    )
+      return;
+    primaryPending = true;
+    $("download-map").disabled = true;
+    $("download-map").setAttribute("aria-busy", "true");
+    try {
+      if (!preparedMap) {
+        const expected = preparationRevision + 1;
+        await $("preview-map").onclick();
+        if (preparationRevision !== expected) return;
+      }
+      if (preparedMap && !preparedMap.plan?.unsupported)
+        await originalDownload();
+    } finally {
+      primaryPending = false;
+      $("download-map").removeAttribute("aria-busy");
+      $("download-map").disabled = !!preparedMap?.plan?.unsupported;
+    }
+  };
+  imports.insertBefore(
+    el("h2", "Import an existing offline map"),
+    imports.children[1],
+  );
+  $("source-map-file").closest("label").classList.add("map-file-drop");
+  $("import-map-source").disabled = !$("source-map-file").files.length;
+  $("source-map-file").addEventListener("change", () => {
+    $("import-map-source").disabled =
+      !$("source-map-file").files.length || !!downloadAbort || mapImportPending;
+  });
+  $("source-map-mode").options[0].textContent = "Selected area";
+  $("source-map-mode").options[1].textContent = "Entire file · if feasible";
+  library.insertBefore(el("h2", "Your offline maps"), library.children[1]);
+  function updateTask() {
+    const previousState = dialog.dataset.mapState;
+    const transfer = radiusManifest?.transfer;
+    const acquiring = !!downloadAbort;
+    const busy = acquiring || mapImportPending || transferApprovalPending;
+    dialog.dataset.mapImportBusy = String(mapImportPending);
+    for (const control of dialog.querySelectorAll(
+      "#saved-maps,#map-mode,#map-file,#source-map-file,#source-map-mode,#import-map-lat,#import-map-lon,#import-map-radius",
+    ))
+      control.disabled = busy;
+    $("import-map-source").disabled =
+      busy || !$("source-map-file").files.length;
+    $("cancel-download").hidden = !downloadAbort;
+    $("cancel-download").textContent = mapImportPending
+      ? "Stop import"
+      : "Stop download";
+    $("resume-map").disabled = busy;
+    const partial = radiusManifest?.chunks?.some(
+      (c) =>
+        c.vector.status !== "complete" ||
+        (Object.values(radiusManifest.components || {}).some(Boolean) &&
+          (c.terrain.status !== "complete" || c.terrain.void_dem_cells > 0)),
+    );
+    const available = radiusManifest?.chunks?.some(
+      (c) => c.vector.status === "complete" || c.terrain.status === "complete",
+    );
+    const approval = !mapImportPending && !!transfer?.approval_required_bytes;
+    $("approve-transfer").disabled = busy || !approval;
+    const task = acquiring || approval || !!radiusManifest;
+    dialog.dataset.mapState = approval
+      ? "approval"
+      : acquiring
+        ? "progress"
+        : partial
+          ? "recovery"
+          : "idle";
+    if (
+      previousState !== dialog.dataset.mapState &&
+      ["progress", "approval", "recovery"].includes(dialog.dataset.mapState)
+    )
+      body.scrollTop = 0;
+    form.hidden = acquiring || approval;
+    optional.hidden = acquiring || approval;
+    precise.hidden = acquiring || approval;
+    consent.hidden =
+      acquiring || approval || dialog.dataset.mapTab !== "map-preparation";
+    $("map-preparation-status").hidden = acquiring || approval;
+    feedback.hidden =
+      !task ||
+      dialog.dataset.mapTab === "map-import" ||
+      (!acquiring && !approval && !partial);
+    taskTitle.textContent = mapImportPending
+      ? "Importing local map"
+      : approval
+        ? "Additional download approval required"
+        : acquiring
+          ? "Downloading selected area"
+          : partial
+            ? available
+              ? "Partial map available"
+              : "Map not yet available"
+            : "Saved map available";
+    const importFile = $("source-map-file").files[0];
+    taskSource.textContent = mapImportPending
+      ? `Local import: ${importFile?.name || "selected file"}. No provider transfer.`
+      : transfer
+        ? `Source: ${transfer.current_source || "not contacted yet / local checks"} · ${transfer.received_bytes.toLocaleString()} bytes received · approved ceiling ${transfer.approved_bytes.toLocaleString()} bytes${approval ? ` · additional ${Math.max(0, transfer.approval_required_bytes - transfer.approved_bytes).toLocaleString()} bytes requested · new cumulative ceiling ${transfer.approval_required_bytes.toLocaleString()} bytes` : ""}`
+        : "";
+    const cause = radiusManifest?.chunks
+      ?.flatMap((c) => [c.vector.error, c.terrain.error])
+      .find(Boolean);
+    taskReason.textContent = mapImportPending
+      ? ""
+      : cause ||
+        (partial
+          ? "Requested coverage or terrain remains unavailable. Verified saved areas are retained."
+          : "");
+    getActions.hidden = acquiring || approval;
+    use.disabled = busy || !activeMapID || (!!radiusManifest && !available);
+    $("save-use-map").disabled = !!radiusManifest && !available;
+    $("delete-map").disabled = busy || !activeMapID;
+    $("export-map").hidden = !activeMapID;
+    centre.disabled = busy || !viewport;
+    $("use-import-centre").disabled = busy || !viewport;
+    $("use-import-centre").hidden = $("source-map-mode").value === "full";
+    footerNote.textContent = acquiring
+      ? "Verified saved areas are retained"
+      : approval
+        ? "Approval applies to this cumulative allowance"
+        : "Saved maps work without internet";
+  }
+  // Backend handlers already publish authoritative progress/manifest state into
+  // these nodes. Observe those changes, without introducing another job timer.
+  new MutationObserver(updateTask).observe($("download-progress"), {
+    childList: true,
+    subtree: true,
+    attributes: true,
+  });
+  new MutationObserver(updateTask).observe($("approve-transfer"), {
+    attributes: true,
+    attributeFilter: ["hidden"],
+  });
+  $("source-map-mode").addEventListener("change", updateTask);
+  $("map-import-status").addEventListener("map-operation-change", updateTask);
+  new MutationObserver(updateTask).observe($("map-import-status"), {
+    childList: true,
+    subtree: true,
+  });
+  new MutationObserver(updateTask).observe($("current-map-name"), {
+    childList: true,
+  });
+  const consentArea = el("div");
+  consentArea.className = "map-footer-consent";
+  consentArea.append(footerNote, consent);
+  footer.prepend(consentArea);
+  library.insertBefore(display.querySelector(".current-map-controls"), display);
+  library.insertBefore($("current-map-layers"), display);
+  const visibility = el("button", "Layer visibility");
+  visibility.onclick = () => {
+    dialog.close();
+    $("open-layers").click();
+  };
+  library.insertBefore(visibility, display);
+  $("regional-import-options").hidden = false;
+  for (const id of ["import-map-lat", "import-map-lon", "import-map-radius"])
+    $(id).addEventListener("input", () => {
+      importAreaEdited = true;
+    });
+  const useImportCentre = el("button", "Use map centre");
+  useImportCentre.id = "use-import-centre";
+  useImportCentre.onclick = () => {
+    if (!viewport) return;
+    const [lon, lat] = GeoMap.unproject(viewport.cx, viewport.cy);
+    $("import-map-lat").value = lat;
+    $("import-map-lon").value = ((lon + 540) % 360) - 180;
+    importAreaEdited = true;
+    updateImportPreview().catch(showError);
+  };
+  $("import-crop-fields").before(useImportCentre);
+  const importLimits = $("regional-import-options").querySelector("p");
+  const importDetails = el("details");
+  importDetails.append(
+    el("summary", "Supported coverage & source details"),
+    importLimits,
+  );
+  imports.append(importDetails);
+  const importFormatNote = el(
+    "small",
+    "Supported: OSM PBF, GeoJSON and portable .gmap.zip.",
+  );
+  $("source-map-file").closest("label").append(importFormatNote);
+  const importPreview = el("section");
+  importPreview.className = "map-selection-preview";
+  const importSVG = svg("svg", {
+    viewBox: "0 0 400 180",
+    role: "img",
+    "aria-label": "Selected import area preview",
+  });
+  importSVG.id = "import-area-preview";
+  importPreview.append(
+    el("p", "Selected import area"),
+    importSVG,
+    el(
+      "small",
+      "Requested crop only · source coverage is validated during import.",
+    ),
+  );
+  imports.insertBefore(importPreview, $("map-import-status"));
+  let importPreviewVersion = 0;
+  async function updateImportPreview() {
+    const revision = ++importPreviewVersion;
+    const file = $("source-map-file").files[0];
+    importPreview.hidden =
+      $("source-map-mode").value === "full" ||
+      (file && !/\.pbf$/i.test(file.name));
+    if (importPreview.hidden) return;
+    try {
+      const plan = await mapPost("map-plan", {
+        lat: Number($("import-map-lat").value),
+        lon: Number($("import-map-lon").value),
+        radius_m: Number($("import-map-radius").value),
+      });
+      if (revision !== importPreviewVersion) return;
+      importSVG.replaceChildren();
+      if (plan.circle?.length) {
+        const points = plan.circle.map((p) => GeoMap.project(...p));
+        const xs = points.map((p) => p[0]),
+          ys = points.map((p) => p[1]);
+        const cx = (Math.min(...xs) + Math.max(...xs)) / 2,
+          cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+        const scale = Math.min(
+          380 / Math.max(1, Math.max(...xs) - Math.min(...xs)),
+          160 / Math.max(1, Math.max(...ys) - Math.min(...ys)),
+        );
+        importSVG.append(
+          svg("polygon", {
+            points: points
+              .map(
+                (p) =>
+                  `${200 + (p[0] - cx) * scale},${90 - (p[1] - cy) * scale}`,
+              )
+              .join(" "),
+            fill: "#4084aa22",
+            stroke: "#2677a8",
+            "stroke-width": 2,
+          }),
+        );
+      }
+    } catch (e) {
+      if (revision === importPreviewVersion) {
+        importSVG.replaceChildren();
+        $("map-import-status").textContent = e.message;
+      }
+    }
+  }
+  for (const id of [
+    "import-map-lat",
+    "import-map-lon",
+    "import-map-radius",
+    "source-map-mode",
+    "source-map-file",
+  ])
+    $(id).addEventListener("change", updateImportPreview);
+  updateImportPreview().catch(showError);
+  selectTab("map-preparation");
+  updateTask();
+  previewRadius().catch(showError);
+}
+initializeMapModal();

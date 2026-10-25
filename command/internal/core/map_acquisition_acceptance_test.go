@@ -383,7 +383,11 @@ func TestMapRealPBFFallbackApprovalAndOfflineReuse(t *testing.T) {
 		t.Fatal("real crop missing", string(original))
 	}
 	verifyRealPBFCoordinates(t, pbf, geo.Features)
-	src, err := s.indexPBF(context.Background(), filepath.Join("testdata/maps", "delaware-latest.osm.pbf"), osmSource{}, nil)
+	statuses, statusErr := s.mapChunkStatuses(m.ID, j)
+	if statusErr != nil || len(statuses[0].Vector.SourceAttempts) < 3 || !strings.Contains(statuses[0].Vector.SourceAttempts[0].Error, "502") {
+		t.Fatal("approved retry lost original provider failure", statuses, statusErr)
+	}
+	src, err := s.indexPBF(context.Background(), filepath.Join("testdata/maps", "delaware-latest.osm.pbf"), osmSource{}, nil, c.Bounds)
 	if err != nil || src.ID != sources[0].ID {
 		t.Fatal(err)
 	}
@@ -419,6 +423,23 @@ func TestMapAcquisitionBrowserServer(t *testing.T) {
 	}
 	defer s.Close()
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Optional fault file for manual popup inspection with the existing test
+		// harness. This provider configuration is never in production binaries.
+		if path := os.Getenv("GNSS_MAP_PROVIDER_FAULT_FILE"); path != "" {
+			fault, _ := os.ReadFile(path)
+			if string(fault) == "terrain-503" && strings.Contains(r.URL.Path, ".hgt.gz") {
+				w.WriteHeader(503)
+				return
+			}
+			for string(fault) == "pause" {
+				select {
+				case <-r.Context().Done():
+					return
+				case <-time.After(50 * time.Millisecond):
+				}
+				fault, _ = os.ReadFile(path)
+			}
+		}
 		if strings.Contains(r.URL.Path, ".hgt.gz") {
 			w.Header().Set("Content-Length", strconv.Itoa(len(compressed)))
 			w.Write(compressed)
@@ -606,4 +627,48 @@ func verifyRealPBFCoordinates(t *testing.T, pbf []byte, features []json.RawMessa
 		}
 	}
 	t.Logf("independent PBF reference: all %d crop ways / %d original nodes match geographic coordinates", len(decoded), len(nodes))
+}
+
+func TestMapCumulativeLimitCannotOfferImpossibleApproval(t *testing.T) {
+	s := extensionStore(t)
+	m, err := s.createMapJob(mapCircle{Lat: .1, Lon: .1, Radius: 373}, nil, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.changeTransfer(m.ID, func(state *mapTransfer) error {
+		state.Allowance = mapTransferLimit
+		state.Charged = mapTransferLimit - 5
+		state.Received = state.Charged
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var read atomic.Int64
+	base := fixtureTransport(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Header: make(http.Header), ContentLength: 10, Body: countedBody{bytes.NewReader(make([]byte, 10)), &read}}, nil
+	})
+	ctx := context.WithValue(context.Background(), mapBudgetKey{}, &mapBudget{s: s, id: m.ID})
+	req, _ := http.NewRequestWithContext(ctx, "GET", "https://example.invalid/source", nil)
+	_, err = mapHTTPClient(ctx, &http.Client{Transport: base}).Do(req)
+	if err == nil || errors.Is(err, errMapConsent) || read.Load() != 0 {
+		t.Fatal("offered impossible cumulative authorization", err, read.Load())
+	}
+	state, err := s.transferState(m.ID)
+	if err != nil || state.Required != 0 {
+		t.Fatal(state, err)
+	}
+	_, err = s.changeTransfer(m.ID, func(state *mapTransfer) error { state.Charged = mapTransferLimit; return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := mapBudgetBody{ReadCloser: io.NopCloser(strings.NewReader("x")), budget: &mapBudget{s: s, id: m.ID}, remaining: -1}
+	_, err = body.Read(make([]byte, 1))
+	if err == nil || errors.Is(err, errMapConsent) {
+		t.Fatal("unknown source requested approval beyond hard limit", err)
+	}
+	state, err = s.transferState(m.ID)
+	if err != nil || state.Required != 0 {
+		t.Fatal(state, err)
+	}
 }

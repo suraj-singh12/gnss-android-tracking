@@ -18,6 +18,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"path/filepath"
 	"runtime"
 	"time"
 )
@@ -38,6 +39,7 @@ type osmSource struct {
 	Nodes          int             `json:"nodes"`
 	Ways           int             `json:"ways"`
 	DegenerateWays int             `json:"non_renderable_ways,omitempty"`
+	Cropped        bool            `json:"selected_area,omitempty"`
 	Note           string          `json:"scope"`
 }
 
@@ -202,7 +204,7 @@ func scanPBF(ctx context.Context, path string, visit func(*pb.PrimitiveBlock) er
 		}
 	}
 }
-func (s *Store) indexPBF(ctx context.Context, path string, supplied osmSource, emit demObserver) (src osmSource, err error) {
+func (s *Store) indexPBF(ctx context.Context, path string, supplied osmSource, emit demObserver, cropBounds ...[4]float64) (src osmSource, err error) {
 	stat, err := os.Stat(path)
 	if err != nil {
 		return src, err
@@ -230,12 +232,25 @@ func (s *Store) indexPBF(ctx context.Context, path string, supplied osmSource, e
 	}
 	src.SHA = hex.EncodeToString(h.Sum(nil))
 	src.ID = "pbf-" + src.SHA
+	var crop *[4]float64
+	if len(cropBounds) > 0 {
+		bounds := cropBounds[0]
+		if !sourceCovers(src, bounds) {
+			return src, errors.New("crop exceeds declared source bounds")
+		}
+		crop = &bounds
+		src.Bounds = bounds
+		src.Cropped = true
+		src.Note += "; selected-area extraction; retained ways intersect the declared crop, with original full references"
+		b, _ := json.Marshal(bounds)
+		src.ID += "-crop-" + shaMap(b)[:16]
+	}
 	sources, err := s.osmSources()
 	if err != nil {
 		return src, err
 	}
 	for _, previous := range sources {
-		if previous.ID == src.ID {
+		if previous.ID == src.ID || (previous.SHA == src.SHA && sourceCovers(previous, src.Bounds)) {
 			return previous, nil
 		}
 	}
@@ -247,7 +262,9 @@ func (s *Store) indexPBF(ctx context.Context, path string, supplied osmSource, e
 	priorNodes := 0
 	for _, v := range sources {
 		cached += v.Bytes
-		priorNodes += v.Nodes
+		if !v.Cropped {
+			priorNodes += v.Nodes
+		}
 	}
 	if cached+src.Bytes > pbfFileLimit {
 		return src, errors.New("source cache exceeds 1 GB")
@@ -271,87 +288,83 @@ func (s *Store) indexPBF(ctx context.Context, path string, supplied osmSource, e
 		return src, err
 	}
 	emitDEM(emit, DEMProgress{Stage: "indexing PBF nodes on disk"})
-	err = scanPBF(ctx, path, func(p *pb.PrimitiveBlock) error {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		tx, e := s.db.BeginTx(ctx, nil)
-		if e != nil {
-			return e
+	var compact *cropNodeIndex
+	if crop != nil {
+		compact, err = newCropNodeIndex(filepath.Dir(path))
+		if err != nil {
+			return src, err
 		}
-		defer func() {
-			if tx != nil {
-				_ = tx.Rollback()
-			}
-		}()
-		stmt, e := tx.Prepare(`INSERT INTO offline_osm_nodes(source,id,lon,lat) VALUES(?,?,?,?)`)
-		if e != nil {
-			return e
+		defer compact.close()
+		emitDEM(emit, DEMProgress{Stage: "indexing source nodes in bounded compact disk partitions"})
+		err = scanPBF(ctx, path, func(p *pb.PrimitiveBlock) error {
+			return visitPBFNodes(ctx, p, func(id, lon, lat int64) error {
+				x := 1e-9 * (float64(p.GetLonOffset()) + float64(p.GetGranularity())*float64(lon))
+				y := 1e-9 * (float64(p.GetLatOffset()) + float64(p.GetGranularity())*float64(lat))
+				if id <= 0 || math.Abs(x) > 180 || math.Abs(y) > 90 {
+					return errors.New("invalid PBF node")
+				}
+				src.Nodes++
+				return compact.add(id, x, y)
+			})
+		})
+		if err == nil {
+			err = compact.finish(ctx)
 		}
-		defer func() {
-			if stmt != nil {
-				_ = stmt.Close()
+	} else {
+		err = scanPBF(ctx, path, func(p *pb.PrimitiveBlock) error {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			tx, e := s.db.BeginTx(ctx, nil)
+			if e != nil {
+				return e
 			}
-		}()
-		add := func(id, lon, lat int64) error {
-			src.Nodes++
-			if src.Nodes+priorNodes > pbfNodeLimit {
-				return errors.New("PBF exceeds 5 million node index budget")
-			}
-			x := 1e-9 * (float64(p.GetLonOffset()) + float64(p.GetGranularity())*float64(lon))
-			y := 1e-9 * (float64(p.GetLatOffset()) + float64(p.GetGranularity())*float64(lat))
-			if math.Abs(x) > 180 || math.Abs(y) > 90 || id <= 0 {
-				return errors.New("invalid PBF node")
-			}
-			_, e := stmt.ExecContext(ctx, src.ID, id, x, y)
-			if e == nil && src.Nodes%256 == 0 {
-				stmt.Close()
-				if e = tx.Commit(); e != nil {
-					return e
+			defer func() {
+				if tx != nil {
+					_ = tx.Rollback()
 				}
-				s.mu.Unlock()
-				runtime.Gosched()
-				s.mu.Lock()
-				tx, e = s.db.BeginTx(ctx, nil)
-				if e != nil {
-					return e
-				}
-				stmt, e = tx.Prepare(`INSERT INTO offline_osm_nodes(source,id,lon,lat) VALUES(?,?,?,?)`)
+			}()
+			stmt, e := tx.Prepare(`INSERT INTO offline_osm_nodes(source,id,lon,lat) VALUES(?,?,?,?)`)
+			if e != nil {
+				return e
 			}
-			return e
-		}
-		for _, g := range p.Primitivegroup {
-			for _, n := range g.Nodes {
-				if e = add(n.GetId(), n.GetLon(), n.GetLat()); e != nil {
-					return e
+			defer func() {
+				if stmt != nil {
+					_ = stmt.Close()
 				}
-			}
-			if d := g.Dense; d != nil {
-				if len(d.Id) != len(d.Lon) || len(d.Id) != len(d.Lat) {
-					return errors.New("PBF dense arrays mismatch")
+			}()
+			add := func(id, lon, lat int64) error {
+				src.Nodes++
+				if src.Nodes+priorNodes > pbfNodeLimit {
+					return errors.New("PBF exceeds 5 million node index budget")
 				}
-				var id, x, y int64
-				for i := range d.Id {
-					var valid bool
-					id, valid = mapDelta(id, d.Id[i])
-					if !valid {
-						return errors.New("PBF node ID delta overflow")
-					}
-					x, valid = mapDelta(x, d.Lon[i])
-					if !valid {
-						return errors.New("PBF longitude delta overflow")
-					}
-					y, valid = mapDelta(y, d.Lat[i])
-					if !valid {
-						return errors.New("PBF latitude delta overflow")
-					}
-					if e = add(id, x, y); e != nil {
+				x := 1e-9 * (float64(p.GetLonOffset()) + float64(p.GetGranularity())*float64(lon))
+				y := 1e-9 * (float64(p.GetLatOffset()) + float64(p.GetGranularity())*float64(lat))
+				if math.Abs(x) > 180 || math.Abs(y) > 90 || id <= 0 {
+					return errors.New("invalid PBF node")
+				}
+				_, e := stmt.ExecContext(ctx, src.ID, id, x, y)
+				if e == nil && src.Nodes%256 == 0 {
+					stmt.Close()
+					if e = tx.Commit(); e != nil {
 						return e
 					}
+					s.mu.Unlock()
+					runtime.Gosched()
+					s.mu.Lock()
+					tx, e = s.db.BeginTx(ctx, nil)
+					if e != nil {
+						return e
+					}
+					stmt, e = tx.Prepare(`INSERT INTO offline_osm_nodes(source,id,lon,lat) VALUES(?,?,?,?)`)
 				}
+				return e
 			}
-		}
-		return tx.Commit()
-	})
+			if e = visitPBFNodes(ctx, p, add); e != nil {
+				return e
+			}
+			return tx.Commit()
+		})
+	}
 	if err != nil {
 		return src, err
 	}
@@ -399,7 +412,12 @@ func (s *Store) indexPBF(ctx context.Context, path string, supplied osmSource, e
 						return errors.New("PBF way reference delta overflow")
 					}
 					var x, y float64
-					if e = db.QueryRowContext(ctx, `SELECT lon,lat FROM offline_osm_nodes WHERE source=? AND id=?`, src.ID, id).Scan(&x, &y); e != nil {
+					if compact != nil {
+						x, y, e = compact.get(ctx, id)
+					} else {
+						e = db.QueryRowContext(ctx, `SELECT lon,lat FROM offline_osm_nodes WHERE source=? AND id=?`, src.ID, id).Scan(&x, &y)
+					}
+					if e != nil {
 						return fmt.Errorf("incomplete PBF way node reference: %w", e)
 					}
 					if math.Abs(y) > mapMercatorLimit {
@@ -417,6 +435,9 @@ func (s *Store) indexPBF(ctx context.Context, path string, supplied osmSource, e
 				// Validate present references even when a way cannot form a line.
 				if len(coords) < 2 {
 					src.DegenerateWays++
+					continue
+				}
+				if crop != nil && (bnd[0] > crop[2] || bnd[2] < crop[0] || bnd[1] > crop[3] || bnd[3] < crop[1]) {
 					continue
 				}
 				feature := osmWayFeature(w.GetId(), tags, coords)

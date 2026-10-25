@@ -92,21 +92,29 @@ async function port() {
     await page.locator("#current-map-title").textContent(),
     "Current Map",
   );
-  await page.locator("#map-preparation > summary").click();
+  await page.locator("#tab-map-preparation").click();
+  await page.locator(".map-precise").evaluate((e) => (e.open = true));
   await page.locator("#map-lat").fill(String(lat));
   await page.locator("#map-lon").fill(String(lon));
-  await page.locator("#map-shape").evaluate(e=>e.closest("details").open=true);
+  await page
+    .locator("#map-shape")
+    .evaluate((e) => (e.closest("details").open = true));
   await page.locator("#map-shape").selectOption("rectangle");
   await page.locator("#map-area").selectOption("1000");
   assert.equal(await page.locator("#map-width").inputValue(), "1000");
   assert.equal(await page.locator("#map-height").inputValue(), "1000");
   assert.equal(await page.locator("#custom-map-dimensions").isVisible(), false);
+  await page.locator("#include-map-terrain").check();
+  await page
+    .locator("#download-hillshade")
+    .evaluate((e) => (e.closest("details").open = true));
   for (const k of ["hillshade", "contours", "elevation"])
     await page.locator("#download-" + k).check();
+  await page
+    .locator("#preview-map")
+    .evaluate((e) => (e.closest("details").open = true));
   await page.locator("#preview-map").click();
-  await page.waitForFunction(
-    () => !document.querySelector("#download-map").disabled,
-  );
+  await page.waitForFunction(() => !!preparedMap);
   let savedID;
   const report = {
     fixture: true,
@@ -211,7 +219,7 @@ async function port() {
       assert.deepEqual(result.violations, []);
     }
   }
-  await page.locator("#choose-saved-map").click();
+  await page.locator("#tab-maps-library").click();
   await page
     .getByText("Acquire or import terrain for this saved map", { exact: true })
     .click();

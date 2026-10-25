@@ -1,0 +1,6 @@
+=== RUN   TestMapRealPBFFallbackApprovalAndOfflineReuse
+    map_acquisition_acceptance_test.go:385: independent PBF reference: all 216 crop ways / 1703 original nodes match geographic coordinates
+    map_acquisition_acceptance_test.go:408: real PBF bytes=7812234 nodes=723870 ways=4882 crop_features=216 bounds=[-75.6 39.733333333333334 -75.53333333333333 39.8] revision=replication 1470857283 / Osmium (http://wiki.openstreetmap.org/wiki/Osmium)
+--- PASS: TestMapRealPBFFallbackApprovalAndOfflineReuse (32.69s)
+PASS
+ok  	github.com/suraj-singh12/gnss-android-tracking/command/internal/core	33.738s

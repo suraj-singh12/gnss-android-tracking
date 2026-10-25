@@ -86,6 +86,83 @@ func writePBF(t *testing.T, b []byte) string {
 	}
 	return p
 }
+
+func TestPBFImportCoverageAdmission(t *testing.T) {
+	regional := osmSource{Bounds: [4]float64{77, 26, 84, 31}}
+	if _, err := admitPBFPlan(regional, "full", mapCircle{}); err == nil || !strings.Contains(err.Error(), "2048") {
+		t.Fatalf("regional full extent must be refused before indexing: %v", err)
+	}
+	plan, err := admitPBFPlan(regional, "crop", mapCircle{Lat: 27.5, Lon: 77.7, Radius: 373})
+	if err != nil || len(plan.Chunks) == 0 || plan.FullExtent {
+		t.Fatalf("small covered crop admission: %+v, %v", plan, err)
+	}
+	for _, c := range []mapCircle{{Lat: 20, Lon: 77.7, Radius: 373}, {Lat: 90, Lon: 77.7, Radius: 373}} {
+		if _, err := admitPBFPlan(regional, "crop", c); err == nil {
+			t.Fatalf("unsupported crop accepted: %+v", c)
+		}
+	}
+}
+
+func TestPBFImportRejectsFullExtentBeforeScanningData(t *testing.T) {
+	s := extensionStore(t)
+	// Only the declared header is valid. A full import must reject the extent
+	// before the malformed data block is scanned or a source index is written.
+	raw := fixturePBF(t, false)
+	headerSize := int(binary.BigEndian.Uint32(raw[:4]))
+	var blobHeader pb.BlobHeader
+	if err := proto.Unmarshal(raw[4:4+headerSize], &blobHeader); err != nil {
+		t.Fatal(err)
+	}
+	var blob pb.Blob
+	if err := proto.Unmarshal(raw[4+headerSize:4+headerSize+int(blobHeader.GetDatasize())], &blob); err != nil {
+		t.Fatal(err)
+	}
+	var header pb.HeaderBlock
+	if err := proto.Unmarshal(blob.GetRaw(), &header); err != nil {
+		t.Fatal(err)
+	}
+	header.Bbox.Right = proto.Int64(10000000000)
+	header.Bbox.Top = proto.Int64(10000000000)
+	data, _ := proto.Marshal(&header)
+	blob.Data = &pb.Blob_Raw{Raw: data}
+	data, _ = proto.Marshal(&blob)
+	blobHeader.Datasize = proto.Int32(int32(len(data)))
+	h, _ := proto.Marshal(&blobHeader)
+	var input bytes.Buffer
+	_ = binary.Write(&input, binary.BigEndian, uint32(len(h)))
+	input.Write(h)
+	input.Write(data)
+	input.WriteString("corrupt OSMData")
+	r := httptest.NewRequest("POST", "/local/map-import?mode=full", &input)
+	w := httptest.NewRecorder()
+	s.mapSourceRequest(w, r, newMapProvider())
+	if w.Code != 400 || !strings.Contains(w.Body.String(), "unsupported_coverage") {
+		t.Fatalf("did not reject extent before scanning: %d %s", w.Code, w.Body.String())
+	}
+	var nodes int
+	if err := s.db.QueryRow(`SELECT count(*) FROM offline_osm_nodes`).Scan(&nodes); err != nil || nodes != 0 {
+		t.Fatalf("rejected import wrote nodes: %d, %v", nodes, err)
+	}
+}
+
+func TestRegionalDiskAdmissionPrecedesProviderAndConsent(t *testing.T) {
+	s := extensionStore(t)
+	s.path = filepath.Join(t.TempDir(), "missing-parent", "maps.sqlite")
+	var contacted atomic.Int32
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		contacted.Add(1)
+		w.WriteHeader(500)
+	}))
+	defer provider.Close()
+	p := newMapProvider()
+	p.catalog = provider.URL
+	if _, err := s.discoverRegion(context.Background(), p, [4]float64{0, 0, .1, .1}, nil); err == nil {
+		t.Fatal("unavailable disk was admitted")
+	}
+	if contacted.Load() != 0 {
+		t.Fatal("contacted a provider before resource admission")
+	}
+}
 func TestMapPBFIndexCropFullAndInvalidReferences(t *testing.T) {
 	s := extensionStore(t)
 	ctx := context.Background()
@@ -412,6 +489,12 @@ func TestMapPackageWriteFailureRollsBackAllAssets(t *testing.T) {
 }
 
 func TestMapPBFBoundedIndexWith21PartyDurableHTTPPriority(t *testing.T) {
+	testPBFIndexWith21Parties(t, false)
+}
+func TestMapPBFCropWith21PartyDurableHTTPPriority(t *testing.T) {
+	testPBFIndexWith21Parties(t, true)
+}
+func testPBFIndexWith21Parties(t *testing.T, crop bool) {
 	s := extensionStore(t)
 	s.Now = func() time.Time { return base.Add(time.Second) }
 	file, e := os.CreateTemp(t.TempDir(), "large-*.pbf")
@@ -451,7 +534,12 @@ func TestMapPBFBoundedIndexWith21PartyDurableHTTPPriority(t *testing.T) {
 	defer cancel()
 	begin := time.Now()
 	go func() {
-		_, e := s.indexPBF(ctx, file.Name(), osmSource{Name: "192k-node resource fixture"}, func(p DEMProgress) { once.Do(func() { close(started) }) })
+
+		var bounds [][4]float64
+		if crop {
+			bounds = append(bounds, [4]float64{.08, .08, .12, .12})
+		}
+		_, e := s.indexPBF(ctx, file.Name(), osmSource{Name: "192k-node resource fixture"}, func(p DEMProgress) { once.Do(func() { close(started) }) }, bounds...)
 		done <- e
 	}()
 	<-started

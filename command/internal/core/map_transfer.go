@@ -30,6 +30,10 @@ type mapTransfer struct {
 	Source    string `json:"current_source,omitempty"`
 }
 type mapBudgetKey struct{}
+
+// A source-specific resource check runs before the generic consent gate can
+// request authorization. It must not read a response body.
+type mapAdmissionKey struct{}
 type mapSourceAttempt struct {
 	Source    string `json:"source"`
 	Operation string `json:"operation"`
@@ -121,7 +125,10 @@ func (t mapBudgetTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 		s.Source = r.URL.String()
 		s.Required = 0
 		if s.Charged >= s.Allowance {
-			s.Required = s.Allowance + mapConsentBytes
+			if s.Allowance >= mapTransferLimit {
+				return errors.New("cumulative 1 GB transfer limit reached; existing assets retained")
+			}
+			s.Required = min(mapTransferLimit, s.Allowance+mapConsentBytes)
 			return errMapConsent
 		}
 		return nil
@@ -132,6 +139,12 @@ func (t mapBudgetTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	resp, err := t.base.RoundTrip(r)
 	if err != nil {
 		return nil, err
+	}
+	if admit, ok := r.Context().Value(mapAdmissionKey{}).(func(*http.Response) error); ok && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		if err := admit(resp); err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
 	}
 	// No body is read when the announced transfer exceeds consent. Unknown sizes
 	// are limited by every subsequent read. Redirect bodies are not drained.
@@ -146,6 +159,9 @@ func (t mapBudgetTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 		}
 		if resp.ContentLength > mapTransferLimit {
 			return errors.New("source exceeds 1 GB supported transfer limit")
+		}
+		if resp.ContentLength > mapTransferLimit-s.Charged {
+			return errors.New("source would exceed the cumulative 1 GB transfer limit")
 		}
 		if resp.ContentLength > s.Allowance-s.Charged {
 			s.Required = s.Charged + resp.ContentLength
@@ -178,7 +194,11 @@ func (b *mapBudgetBody) Read(dst []byte) (int, error) {
 	_, err := b.budget.s.changeTransfer(b.budget.id, func(s *mapTransfer) error {
 		n = min(n, int(s.Allowance-s.Charged))
 		if n <= 0 {
-			s.Required = max(s.Required, s.Allowance+mapConsentBytes)
+			if s.Allowance >= mapTransferLimit {
+				s.Required = 0
+				return errors.New("cumulative 1 GB transfer limit reached; existing assets retained")
+			}
+			s.Required = min(mapTransferLimit, max(s.Required, s.Allowance+mapConsentBytes))
 			return errMapConsent
 		}
 		s.Charged += int64(n)

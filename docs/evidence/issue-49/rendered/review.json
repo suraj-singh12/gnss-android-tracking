@@ -1,0 +1,478 @@
+{
+  "category": "Manual running-app review: controlled provider, real persisted state, immutable original Delaware PBF. NOT public-provider acceptance.",
+  "errors": [],
+  "results": [
+    {
+      "state": "01-get-map",
+      "theme": "day",
+      "width": 1600,
+      "height": 900,
+      "file": "01-get-map-day-1600x900.png",
+      "box": {
+        "x": 440,
+        "y": 66,
+        "width": 720,
+        "height": 768
+      }
+    },
+    {
+      "state": "01-get-map",
+      "theme": "night",
+      "width": 1600,
+      "height": 900,
+      "file": "01-get-map-night-1600x900.png",
+      "box": {
+        "x": 440,
+        "y": 66,
+        "width": 720,
+        "height": 768
+      }
+    },
+    {
+      "state": "01-get-map",
+      "theme": "day",
+      "width": 1280,
+      "height": 720,
+      "file": "01-get-map-day-1280x720.png",
+      "box": {
+        "x": 280,
+        "y": 16,
+        "width": 720,
+        "height": 688
+      }
+    },
+    {
+      "state": "01-get-map",
+      "theme": "night",
+      "width": 1280,
+      "height": 720,
+      "file": "01-get-map-night-1280x720.png",
+      "box": {
+        "x": 280,
+        "y": 16,
+        "width": 720,
+        "height": 688
+      }
+    },
+    {
+      "state": "01-get-map",
+      "theme": "day",
+      "width": 390,
+      "height": 844,
+      "file": "01-get-map-day-390x844.png",
+      "box": {
+        "x": 8,
+        "y": 8,
+        "width": 374,
+        "height": 828
+      }
+    },
+    {
+      "state": "01-get-map",
+      "theme": "night",
+      "width": 390,
+      "height": 844,
+      "file": "01-get-map-night-390x844.png",
+      "box": {
+        "x": 8,
+        "y": 8,
+        "width": 374,
+        "height": 828
+      }
+    },
+    {
+      "state": "03-import",
+      "theme": "day",
+      "width": 1600,
+      "height": 900,
+      "file": "03-import-day-1600x900.png",
+      "box": {
+        "x": 440,
+        "y": 66,
+        "width": 720,
+        "height": 768
+      }
+    },
+    {
+      "state": "03-import",
+      "theme": "night",
+      "width": 1600,
+      "height": 900,
+      "file": "03-import-night-1600x900.png",
+      "box": {
+        "x": 440,
+        "y": 66,
+        "width": 720,
+        "height": 768
+      }
+    },
+    {
+      "state": "03-import",
+      "theme": "day",
+      "width": 1280,
+      "height": 720,
+      "file": "03-import-day-1280x720.png",
+      "box": {
+        "x": 280,
+        "y": 16,
+        "width": 720,
+        "height": 688
+      }
+    },
+    {
+      "state": "03-import",
+      "theme": "night",
+      "width": 1280,
+      "height": 720,
+      "file": "03-import-night-1280x720.png",
+      "box": {
+        "x": 280,
+        "y": 16,
+        "width": 720,
+        "height": 688
+      }
+    },
+    {
+      "state": "03-import",
+      "theme": "day",
+      "width": 390,
+      "height": 844,
+      "file": "03-import-day-390x844.png",
+      "box": {
+        "x": 8,
+        "y": 8,
+        "width": 374,
+        "height": 828
+      }
+    },
+    {
+      "state": "03-import",
+      "theme": "night",
+      "width": 390,
+      "height": 844,
+      "file": "03-import-night-390x844.png",
+      "box": {
+        "x": 8,
+        "y": 8,
+        "width": 374,
+        "height": 828
+      }
+    },
+    {
+      "state": "02-progress",
+      "theme": "day",
+      "width": 1600,
+      "height": 900,
+      "file": "02-progress-day-1600x900.png",
+      "box": {
+        "x": 440,
+        "y": 66,
+        "width": 720,
+        "height": 768
+      }
+    },
+    {
+      "state": "02-progress",
+      "theme": "night",
+      "width": 1600,
+      "height": 900,
+      "file": "02-progress-night-1600x900.png",
+      "box": {
+        "x": 440,
+        "y": 66,
+        "width": 720,
+        "height": 768
+      }
+    },
+    {
+      "state": "02-progress",
+      "theme": "day",
+      "width": 1280,
+      "height": 720,
+      "file": "02-progress-day-1280x720.png",
+      "box": {
+        "x": 280,
+        "y": 16,
+        "width": 720,
+        "height": 688
+      }
+    },
+    {
+      "state": "02-progress",
+      "theme": "night",
+      "width": 1280,
+      "height": 720,
+      "file": "02-progress-night-1280x720.png",
+      "box": {
+        "x": 280,
+        "y": 16,
+        "width": 720,
+        "height": 688
+      }
+    },
+    {
+      "state": "02-progress",
+      "theme": "day",
+      "width": 390,
+      "height": 844,
+      "file": "02-progress-day-390x844.png",
+      "box": {
+        "x": 8,
+        "y": 8,
+        "width": 374,
+        "height": 828
+      }
+    },
+    {
+      "state": "02-progress",
+      "theme": "night",
+      "width": 390,
+      "height": 844,
+      "file": "02-progress-night-390x844.png",
+      "box": {
+        "x": 8,
+        "y": 8,
+        "width": 374,
+        "height": 828
+      }
+    },
+    {
+      "state": "05-transfer-approval",
+      "theme": "day",
+      "width": 1600,
+      "height": 900,
+      "file": "05-transfer-approval-day-1600x900.png",
+      "box": {
+        "x": 440,
+        "y": 66,
+        "width": 720,
+        "height": 768
+      }
+    },
+    {
+      "state": "05-transfer-approval",
+      "theme": "night",
+      "width": 1600,
+      "height": 900,
+      "file": "05-transfer-approval-night-1600x900.png",
+      "box": {
+        "x": 440,
+        "y": 66,
+        "width": 720,
+        "height": 768
+      }
+    },
+    {
+      "state": "05-transfer-approval",
+      "theme": "day",
+      "width": 1280,
+      "height": 720,
+      "file": "05-transfer-approval-day-1280x720.png",
+      "box": {
+        "x": 280,
+        "y": 16,
+        "width": 720,
+        "height": 688
+      }
+    },
+    {
+      "state": "05-transfer-approval",
+      "theme": "night",
+      "width": 1280,
+      "height": 720,
+      "file": "05-transfer-approval-night-1280x720.png",
+      "box": {
+        "x": 280,
+        "y": 16,
+        "width": 720,
+        "height": 688
+      }
+    },
+    {
+      "state": "05-transfer-approval",
+      "theme": "day",
+      "width": 390,
+      "height": 844,
+      "file": "05-transfer-approval-day-390x844.png",
+      "box": {
+        "x": 8,
+        "y": 8,
+        "width": 374,
+        "height": 828
+      }
+    },
+    {
+      "state": "05-transfer-approval",
+      "theme": "night",
+      "width": 390,
+      "height": 844,
+      "file": "05-transfer-approval-night-390x844.png",
+      "box": {
+        "x": 8,
+        "y": 8,
+        "width": 374,
+        "height": 828
+      }
+    },
+    {
+      "state": "06-recovery",
+      "theme": "day",
+      "width": 1600,
+      "height": 900,
+      "file": "06-recovery-day-1600x900.png",
+      "box": {
+        "x": 440,
+        "y": 66,
+        "width": 720,
+        "height": 768
+      }
+    },
+    {
+      "state": "06-recovery",
+      "theme": "night",
+      "width": 1600,
+      "height": 900,
+      "file": "06-recovery-night-1600x900.png",
+      "box": {
+        "x": 440,
+        "y": 66,
+        "width": 720,
+        "height": 768
+      }
+    },
+    {
+      "state": "06-recovery",
+      "theme": "day",
+      "width": 1280,
+      "height": 720,
+      "file": "06-recovery-day-1280x720.png",
+      "box": {
+        "x": 280,
+        "y": 16,
+        "width": 720,
+        "height": 688
+      }
+    },
+    {
+      "state": "06-recovery",
+      "theme": "night",
+      "width": 1280,
+      "height": 720,
+      "file": "06-recovery-night-1280x720.png",
+      "box": {
+        "x": 280,
+        "y": 16,
+        "width": 720,
+        "height": 688
+      }
+    },
+    {
+      "state": "06-recovery",
+      "theme": "day",
+      "width": 390,
+      "height": 844,
+      "file": "06-recovery-day-390x844.png",
+      "box": {
+        "x": 8,
+        "y": 8,
+        "width": 374,
+        "height": 828
+      }
+    },
+    {
+      "state": "06-recovery",
+      "theme": "night",
+      "width": 390,
+      "height": 844,
+      "file": "06-recovery-night-390x844.png",
+      "box": {
+        "x": 8,
+        "y": 8,
+        "width": 374,
+        "height": 828
+      }
+    },
+    {
+      "state": "04-my-maps",
+      "theme": "day",
+      "width": 1600,
+      "height": 900,
+      "file": "04-my-maps-day-1600x900.png",
+      "box": {
+        "x": 440,
+        "y": 66,
+        "width": 720,
+        "height": 768
+      }
+    },
+    {
+      "state": "04-my-maps",
+      "theme": "night",
+      "width": 1600,
+      "height": 900,
+      "file": "04-my-maps-night-1600x900.png",
+      "box": {
+        "x": 440,
+        "y": 66,
+        "width": 720,
+        "height": 768
+      }
+    },
+    {
+      "state": "04-my-maps",
+      "theme": "day",
+      "width": 1280,
+      "height": 720,
+      "file": "04-my-maps-day-1280x720.png",
+      "box": {
+        "x": 280,
+        "y": 16,
+        "width": 720,
+        "height": 688
+      }
+    },
+    {
+      "state": "04-my-maps",
+      "theme": "night",
+      "width": 1280,
+      "height": 720,
+      "file": "04-my-maps-night-1280x720.png",
+      "box": {
+        "x": 280,
+        "y": 16,
+        "width": 720,
+        "height": 688
+      }
+    },
+    {
+      "state": "04-my-maps",
+      "theme": "day",
+      "width": 390,
+      "height": 844,
+      "file": "04-my-maps-day-390x844.png",
+      "box": {
+        "x": 8,
+        "y": 8,
+        "width": 374,
+        "height": 828
+      }
+    },
+    {
+      "state": "04-my-maps",
+      "theme": "night",
+      "width": 390,
+      "height": 844,
+      "file": "04-my-maps-night-390x844.png",
+      "box": {
+        "x": 8,
+        "y": 8,
+        "width": 374,
+        "height": 828
+      }
+    }
+  ],
+  "accessibility_violations": [],
+  "states": 6,
+  "screenshots": 36,
+  "advanced_scroll_to_progress_reset": "PASS (scrolled body to bottom before acquisition; running app reset to status card)"
+}

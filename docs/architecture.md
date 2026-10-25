@@ -454,9 +454,12 @@ transactions use it. Existing raw/ACK, quality, SOS, LIVE, controls and projecti
 are untouched. Source cache is disposable, SHA-verified and bounded to four full tiles;
 regions can contain more than four tiles through sequential reuse and eviction.
 
-The existing browser renderer lazily loads up to eight visible chunk grids and
-100,000 vector coordinates, shares contour levels across them, clips halos at core
-bounds and preserves void transparency. All overlays share its authoritative WGS84
+The existing browser renderer progressively loads saved vectors from every visible
+chunk with a fair shared 100,000-coordinate budget, retaining source vertices for
+one-pixel line overview and exact polygon rings. Deferred features are explicit and
+zoom restores detail; a ninth chunk cannot clear all geographic features. Superseded
+local reads are cancelled. DEM remains independently bounded to eight visible grids,
+shares contour levels, clips halos at core bounds and preserves void transparency. All overlays share its authoritative WGS84
 positions. Source/coverage metadata and render availability remain separate. See the
 Command README for API/resource/operator details and UI acceptance for evidence limits.
 
@@ -474,9 +477,14 @@ Exact verified chunks and covering source indexes precede Overpass. Failure trig
 bounded machine-readable Geofabrik discovery with polygon/hole checks and a single
 regional attempt. Publisher-declared PBF extent/revision/ways-only scope is distinct
 from actual saved chunk envelopes and browser terrain derivation. Streaming PBF
-framing uses the published generated OSM protobuf schema; bounded two-pass indexing
-writes disposable source rows into additive `offline_osm_sources/nodes/ways` tables
-in the same SQLite file. Only completed source rows are reused; unpromoted index
+framing uses the published generated OSM protobuf schema. Full extent retains bounded
+two-pass SQLite node indexing. Crop extraction uses disposable 24-byte node records
+in bounded disk partitions (512 MiB aggregate, 8 MiB each, 32 open writers, 512 cached 3 KiB lookup
+pages (1.5 MiB)), then publishes intersecting original way geometry and its actual crop
+scope into the same `offline_osm_sources/ways` tables. Both paths use the same sparse/
+dense decoding and reference/geometry validation. Crops preserve crossing ways even
+when neither endpoint lies inside the crop. Immutable source SHA plus crop bounds
+separate partial source coverage from full-source identity. Only completed source rows are reused; unpromoted index
 rows are cleaned on startup/retry. Original GNSS/SOS tables are never modified by map
 operations. Node writes yield every 256 rows; way lookup/geometry work uses the
 existing read connection outside the receiver mutex.
@@ -530,3 +538,13 @@ these handlers and source adapters through local providers, immutable pinned rea
 HGT/PBF inputs, actual browser confirmation and offline production restart.
 Public-provider acceptance has its own job and truthful failure reports; it is
 independent of the deterministic software and controlled recovery gates.
+
+Issue #49 admits declared local coverage/plan feasibility before indexing and checks
+regional disk/source-cache capacity before a budgeted response can request consent.
+The later disk recheck remains. Approved regional retries resume that verified source
+path without re-running Overpass. The 5 MB initial ledger and 1 GB hard ceiling remain
+enforced; impossible cumulative requirements cannot produce an approval prompt.
+Unpromoted temporary crop/upload/download work older than eleven minutes can be
+removed during subsequent map admission; validated HGT/catalog/SQLite assets are
+never included. Existing source publication, map transactions and GNSS/SOS/LIVE
+ownership remain unchanged.

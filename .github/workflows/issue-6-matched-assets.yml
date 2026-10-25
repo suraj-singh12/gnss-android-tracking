@@ -51,8 +51,10 @@ jobs:
       - name: Deterministic acquisition and controlled failure/recovery
         run: |
           mkdir -p "$RUNNER_TEMP/map-software-evidence"
+          test "$(git rev-parse HEAD)" = "$SOURCE_REVISION"
+          git rev-parse HEAD > "$RUNNER_TEMP/map-software-evidence/source-sha.txt"
           set -o pipefail
-          (cd command && go test -race -v ./internal/core -run 'Test(Map|Radius|DEM)' -count=1) | tee "$RUNNER_TEMP/map-software-evidence/acquisition-race.txt"
+          (cd command && GNSS_LARGE_CROP=1 go test -race -v ./internal/core -run 'Test(Map|Radius|DEM|CompactCrop|CropWorkRecovery|PBFCompact|PBFImport|OverpassLocal|LargeCompact)' -count=1) | tee "$RUNNER_TEMP/map-software-evidence/acquisition-race.txt"
           node --test test-tools/integration/map-acquisition-support.test.cjs
           (cd command && go build -o "$GNSS_COMMAND_BINARY" ./cmd/party-tracker && go test -c -o "$GNSS_MAP_REFERENCE_BINARY" ./internal/core)
       - name: Production pipeline browser approval, real samples and offline restart
@@ -90,6 +92,8 @@ jobs:
           GNSS_TERRAIN_PROVIDER_REPORT: ${{ runner.temp }}/dem-evidence/dem-source-probe.json
         run: |
           mkdir -p "$RUNNER_TEMP/dem-evidence"
+          test "$(git rev-parse HEAD)" = "$SOURCE_REVISION"
+          git rev-parse HEAD > "$RUNNER_TEMP/dem-evidence/source-sha.txt"
           node test-tools/integration/dem-acquisition.cjs
       - name: Real automatic DEM acquisition, geographic alignment and offline restart
         if: always()
