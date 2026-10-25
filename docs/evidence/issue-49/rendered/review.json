@@ -473,5 +473,6 @@
   ],
   "accessibility_violations": [],
   "states": 6,
-  "screenshots": 36
+  "screenshots": 36,
+  "advanced_scroll_to_progress_reset": "PASS (scrolled body to bottom before acquisition; running app reset to status card)"
 }

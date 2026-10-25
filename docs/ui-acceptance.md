@@ -784,7 +784,9 @@ since Preview & Download now also validates an unprepared selection.
   preserves prior maps. Empty acquisition is not labeled an available partial map.
   Changed selections clear stale previews. Library counts refresh after acquisition;
   the current-map strip uses the saved source name, without a stale size copied
-  from a pre-acquisition dropdown label.
+  from a pre-acquisition dropdown label. Task transitions and tab navigation reset
+  the shared body scroll so source/budget and recovery messages remain visible
+  after working in advanced details.
 
 ### Engineering evidence and limits
 

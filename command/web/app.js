@@ -3189,6 +3189,7 @@ function initializeMapModal() {
       updateImportPreview().catch(showError);
     }
     dialog.dataset.mapTab = id;
+    body.scrollTop = 0;
     for (const [panel] of panels) {
       const selected = panel.id === id;
       panel.open = selected;
@@ -3462,6 +3463,7 @@ function initializeMapModal() {
   $("source-map-mode").options[1].textContent = "Entire file · if feasible";
   library.insertBefore(el("h2", "Your offline maps"), library.children[1]);
   function updateTask() {
+    const previousState = dialog.dataset.mapState;
     const transfer = radiusManifest?.transfer;
     const acquiring = !!downloadAbort;
     const busy = acquiring || mapImportPending || transferApprovalPending;
@@ -3496,6 +3498,11 @@ function initializeMapModal() {
         : partial
           ? "recovery"
           : "idle";
+    if (
+      previousState !== dialog.dataset.mapState &&
+      ["progress", "approval", "recovery"].includes(dialog.dataset.mapState)
+    )
+      body.scrollTop = 0;
     form.hidden = acquiring || approval;
     optional.hidden = acquiring || approval;
     precise.hidden = acquiring || approval;
