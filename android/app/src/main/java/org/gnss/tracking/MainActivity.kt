@@ -2432,7 +2432,8 @@ class MainActivity : Activity() {
         )
         val secretInput =
             EditText(this).apply {
-                hint = "Private enrollment credential"
+                id = View.generateViewId()
+                hint = "Private credential"
                 inputType =
                     android.text.InputType.TYPE_CLASS_TEXT or
                         android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
@@ -2441,7 +2442,7 @@ class MainActivity : Activity() {
                 minHeight = dp(56)
             }
         enrollmentInput = secretInput
-        ui.add(entry, secretInput, 16)
+        labeledField(entry, "Private enrollment credential", secretInput)
         val entryError = ui.label("", 14f)
         ui.add(
             entry,

@@ -121,7 +121,7 @@ class CommandEnrollmentUiTest {
                 capture("private-entry-empty")
                 val input =
                     nativeViews(root).filterIsInstance<EditText>().single {
-                        it.hint == "Private enrollment credential"
+                        it.hint == "Private credential"
                     }
                 input.setText("invalid")
                 click("Review authorization")
@@ -319,7 +319,7 @@ class CommandEnrollmentUiTest {
                 fun capture(label: String) {
                     val scroll =
                         nativeViews(root).filterIsInstance<android.widget.ScrollView>().first()
-                    scroll.fullScroll(View.FOCUS_DOWN)
+                    scroll.scrollTo(0, scroll.getChildAt(0).height)
                     assertTrue(
                         "Content remains scrollable inside the window",
                         scroll.height > 0 && scroll.height <= root.height,
@@ -367,7 +367,7 @@ class CommandEnrollmentUiTest {
                     settle()
                     val field =
                         nativeViews(root).filterIsInstance<EditText>().single {
-                            it.hint == "Private enrollment credential"
+                            it.hint == "Private credential"
                         }
                     field.setText("draft")
                     field.requestFocus()
@@ -388,7 +388,7 @@ class CommandEnrollmentUiTest {
                     val restored =
                         nativeViews(controller.get().findViewById(android.R.id.content))
                             .filterIsInstance<EditText>()
-                            .single { it.hint == "Private enrollment credential" }
+                            .single { it.hint == "Private credential" }
                     assertEquals("", restored.text.toString())
                     assertTrue("Review recreation returns to private entry", restored.isShown)
                 } finally {
