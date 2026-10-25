@@ -230,3 +230,25 @@ historical Figma prerequisite; no populated Figma artifact is claimed.
 | Opacity, diagnostic observations, dot interval | My Maps display settings | Existing display controls |
 | Diagnostics/copy/export | Active task details | Existing download report |
 | Separate Layers popup | Existing quick Layers | Existing independent visibility/availability |
+
+## Issue #48 · Command identity and guided authorization
+
+Approved source: operator-approved [issue48-final-design-review.zip](design/issue48-final-design-review.zip) (guided-enrollment.svg,
+day-night-states.svg, command-phone-controls.svg, proposal.md); final approval given in the
+implementation request. Parent `5f33368344cfb1e69cf55a6a051d0a09f333cf64` includes #47.
+Canonical guidance `3b60b6d6228ca208df75765e2008c9b9abba8a69` matches this branch.
+
+| Existing capability | Presentation / evidence mapping | Preserved authority |
+| --- | --- | --- |
+| Command access / Advanced settings | Direct Settings entry opens the same route; compare phone, private entry, public-ID review and existing explicit consent | Existing credential parser, Keystore and bind; no auto-pairing |
+| Command trust and diagnostics | Identity & verification details plus expandable canonical reasons; existing trust route retained | Existing journal; Instruction ID is distinct from persistent Command ID |
+| Local disable / re-enroll | Protected local disable; guided re-authorization; pending results retained | Same bind/disable and endpoint generation; persisted disabled flag distinguishes fresh install |
+| Contact status | Six compact Day/Night states; current process evidence from actual verified responses, including empty polls | Same MAC/nonce/authority/target verifier; monotonic 30-second freshness; historical Room timestamp only |
+| Phone controls | Public Command ID from protected /local/control; enrollment separate from accepted phone-request timestamp | Existing authority UUID, per-phone credential/revoke and loopback/same-origin guards |
+| Reporting, adaptive, Sync, alerts, SOS, history | Existing controls and owners retained; #47 switch handling untouched | No sender, acquisition, policy, alert or SOS replacement |
+| #39 V3/V4 | Native shared components, scalable scrolling and Day/Night; no pause UI, stable actions/SOS, subdued error palette, icon-only theme switch | Existing NativeUi/resources/navigation and protected native notifications |
+
+Verification uses CommandControlTest, CommandEnrollmentUiTest, existing console/settings and
+migration tests, Go control tests and actual-server browser/bridge suites. Screenshots are
+synthetic-state native software renders and real-server Chromium evidence, not physical
+Android or native macOS/Windows acceptance. No pixel-diff baseline is introduced.

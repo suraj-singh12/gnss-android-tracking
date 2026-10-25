@@ -153,6 +153,70 @@ class CommandControlTest {
         db.close()
     }
 
+    @Test
+    fun emptyAuthenticatedPollPersistsHistoryButRestartRequiresFreshContact() = runBlocking {
+        engine.step()
+        val state = repository.state()
+        assertEquals(clock.now, state.controlLastSuccess)
+        assertEquals(state.endpointGeneration, state.controlLastGeneration)
+        assertTrue(engine.contactFresh(state))
+        assertEquals("Contact verified", commandContactLabel(state, engine.contact, clock.now))
+        assertEquals(
+            "Contact unavailable",
+            commandContactLabel(state, engine.contact, clock.now + 30_000),
+        )
+        assertEquals("Contact unavailable", commandContactLabel(state, null, clock.now))
+        clock.now += 5000
+        forged = true
+        engine.step()
+        assertFalse(engine.contactFresh(repository.state()))
+        assertEquals(
+            "Authentication failed",
+            commandContactLabel(repository.state(), engine.contact, clock.now),
+        )
+        assertEquals(state.controlLastSuccess, repository.state().controlLastSuccess)
+        forged = false
+        clock.now += 31000
+        engine.step()
+        assertTrue(engine.contactFresh(repository.state()))
+        repository.settings("test", "test", "http://192.168.1.3:8080", 10)
+        assertFalse(engine.contactFresh(repository.state()))
+        engine.disable()
+        assertEquals(
+            "Disabled on this phone",
+            commandContactLabel(repository.state(), engine.contact, clock.now),
+        )
+        engine.bind(key) {}
+        assertEquals(
+            "Credential enrolled",
+            commandContactLabel(repository.state(), engine.contact, clock.now),
+        )
+        assertNotNull(repository.state().controlLastSuccess)
+        assertNotEquals(
+            repository.state().endpointGeneration,
+            repository.state().controlLastGeneration,
+        )
+    }
+
+    @Test
+    fun contactFreshnessIsMonotonicAndCannotCrossBindings() {
+        val state =
+            Installation(
+                controlAuthority = "authority",
+                controlEnrollment = "enrollment",
+                endpointGeneration = 4,
+            )
+        val evidence = AuthenticatedContact(4, "authority", "enrollment", 100000, 5000)
+        assertTrue(evidence.fresh(state, 34999))
+        assertFalse(evidence.fresh(state, 35000))
+        assertFalse(evidence.fresh(state, 4999))
+        assertTrue(evidence.copy(receivedUtc = -1000000).fresh(state, 5001))
+        assertFalse(evidence.fresh(state.copy(controlAuthority = "other"), 5001))
+        assertFalse(evidence.fresh(state.copy(controlEnrollment = "other"), 5001))
+        assertFalse(evidence.fresh(state.copy(endpointGeneration = 5), 5001))
+        assertFalse(evidence.copy(failure = ContactFailure.TRANSPORT).fresh(state, 5001))
+    }
+
     private fun ins(
         op: String = "adaptive",
         order: Long = 1,
@@ -423,7 +487,7 @@ class CommandControlTest {
         }
         val migrated =
             Room.databaseBuilder(context, TrackingDatabase::class.java, name)
-                .addMigrations(TrackingDatabase.MIGRATION_5_6)
+                .addMigrations(TrackingDatabase.MIGRATION_5_6, TrackingDatabase.MIGRATION_6_7)
                 .build()
         try {
             val restored = Repository(migrated, clock)

@@ -1482,3 +1482,14 @@ fieldset {
   > :not(#cancel-download) {
   display: none;
 }
+
+/* Public identity, authorization and directional contact are separate facts (#48). */
+.control-identity { padding: 12px 16px; background: var(--background); border: 1px solid var(--line); border-radius: 8px; margin: 12px 0; overflow-wrap: anywhere; }
+.control-identity strong, .control-enrollment > span, .control-evidence > span { font-size: 12px; color: var(--muted); }
+#control-phones { max-height: 36vh; }
+#control-phones > div { display: block; padding: 12px 0; }
+#control-phones label { font-size: 14px; }
+#control-phones p { margin: 6px 0; overflow-wrap: anywhere; }
+.control-enrollment, .control-evidence { margin: 10px 0 0 24px; }
+.control-enrollment button { margin-right: 6px; }
+.control-evidence small { color: var(--muted); }

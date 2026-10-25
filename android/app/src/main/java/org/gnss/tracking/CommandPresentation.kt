@@ -22,9 +22,9 @@ internal fun commandOutcomeExplanation(state: String): String =
     }
 
 internal fun commandInstructionDetails(row: CommandRecord): String = buildString {
-    appendLine("${if (row.trusted) "Command UUID" else "Security event ID"}: ${row.id}")
+    appendLine("${if (row.trusted) "Instruction ID" else "Security event ID"}: ${row.id}")
     appendLine("Type: ${row.operation} · outcome: ${row.state}")
-    appendLine("${if (row.trusted) "Trusted" else "Unverified"} Command identity: ${row.authority}")
+    appendLine("${if (row.trusted) "Authorized" else "Unverified"} Command ID: ${row.authority}")
     appendLine("Phone: ${row.device}")
     appendLine("Received: ${utc(row.received)}")
     appendLine(
@@ -56,6 +56,7 @@ internal fun commandTrustDescription(
     state: Installation?,
     rows: List<CommandRecord>,
     availability: String,
+    contact: AuthenticatedContact? = null,
 ): String {
     val lastEvidence =
         rows
@@ -67,6 +68,13 @@ internal fun commandTrustDescription(
                     it.authority == state.controlAuthority
             }
             .maxOfOrNull { maxOf(it.received, it.confirmedAt) }
+    val lastResponse =
+        state?.let { st ->
+            contact?.takeIf { it.matches(st) }?.receivedUtc
+                ?: st.controlLastSuccess?.takeIf {
+                    st.controlLastGeneration == st.endpointGeneration
+                }
+        }
     return buildString {
         appendLine(
             if (state == null) "Enrollment unknown · loading local storage"
@@ -83,10 +91,10 @@ internal fun commandTrustDescription(
                 )
             }
         appendLine(
-            "Last successful authenticated contact: ${if (availability.startsWith("Authenticated Command")) availability.substringAfter(" · ") else "Unknown; current connection is unconfirmed"}"
+            "Last verified response: ${lastResponse?.let(::utc) ?: "Unknown; current connection is unconfirmed"}"
         )
         append(
-            "Last retained authenticated instruction/result evidence: ${lastEvidence?.let(::utc) ?: "None"}. Empty authenticated polls are not retained in the journal. Wi-Fi and message ACK do not establish remote-control trust."
+            "Last retained authenticated instruction/result evidence: ${lastEvidence?.let(::utc) ?: "None"}. Empty authenticated polls update response evidence, not the instruction journal. Wi-Fi and message ACK do not establish remote-control trust."
         )
     }
 }
@@ -167,3 +175,22 @@ internal fun reportingRequestSummary(state: Installation, rows: List<CommandReco
             .getOrDefault("Unknown")
     return "$request · ${commandStateLabel(row.state)}"
 }
+
+internal fun commandContactLabel(
+    state: Installation?,
+    contact: AuthenticatedContact?,
+    elapsed: Long,
+): String =
+    when {
+        state == null -> "Loading…"
+        state.controlDisabled -> "Disabled on this phone"
+        state.controlEnrollment == null -> "Not enrolled"
+        contact?.takeIf { it.matches(state) }?.failure == ContactFailure.AUTHENTICATION ->
+            "Authentication failed"
+        contact?.fresh(state, elapsed) == true -> "Contact verified"
+        contact?.takeIf { it.matches(state) }?.failure != null ||
+            contact?.takeIf { it.matches(state) }?.receivedUtc != null ||
+            (state.controlLastGeneration == state.endpointGeneration &&
+                state.controlLastSuccess != null) -> "Contact unavailable"
+        else -> "Credential enrolled"
+    }

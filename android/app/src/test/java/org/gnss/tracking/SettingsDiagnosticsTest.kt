@@ -245,7 +245,7 @@ class SettingsDiagnosticsTest {
             assertFalse(
                 all()
                     .filterIsInstance<EditText>()
-                    .single { it.hint?.startsWith("Command credential") == true }
+                    .single { it.hint?.startsWith("Private enrollment credential") == true }
                     .isShown
             )
         } finally {

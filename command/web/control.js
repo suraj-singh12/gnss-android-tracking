@@ -15,6 +15,12 @@ async function refreshControl() {
   const response = await fetch("/local/control");
   if(!response.ok) throw new Error("Phone control state unavailable");
   controlView = await response.json();
+  $("control-authority").textContent = controlView.authority_id ? `Command ID: ${controlView.authority_id}` : "Command ID unavailable";
+  $("control-copy-authority").disabled = !controlView.authority_id;
+  $("control-copy-authority").onclick = async () => {
+    try { await navigator.clipboard.writeText(controlView.authority_id); $("control-copy-status").textContent = "Command ID copied"; }
+    catch (_) { $("control-copy-status").textContent = "Copy unavailable; select the public Command ID above."; }
+  };
   const list = $("control-phones"); list.replaceChildren();
   const devices = Object.values(state?.devices || {});
   const known=new Set(devices.map(phone=>phone.device_id));
@@ -27,17 +33,24 @@ async function refreshControl() {
     check.disabled=!enrollment?.enabled;
     check.onchange=()=>{if(check.checked)controlTargets.add(id);else controlTargets.delete(id);};
     const seen = enrollment?.last_seen;
-    label.append(check, document.createTextNode(`${phone.snapshot.party.id} · ${id} · ${!enrollment?.enabled ? "remote control unavailable / legacy or revoked" : !seen ? "remote control unavailable: enrollment not yet authenticated" : Date.now()-seen>30000 ? "offline / last authenticated "+new Date(seen).toISOString() : "authenticated contact "+new Date(seen).toISOString()}`));
+    const identity = el("div");
+    identity.append(el("strong",phone.snapshot.party.id),el("p",`Phone ID: ${id}`));
+    label.append(check, identity);
+    const enrollmentInfo = el("div"); enrollmentInfo.className="control-enrollment";
+    enrollmentInfo.append(el("span","Enrollment"),el("p",!enrollment ? "Not enrolled" : !enrollment.enabled ? "Revoked on this Command" : "Credential issued · authorization enabled"));
+    const evidence = el("div"); evidence.className="control-evidence";
+    evidence.append(el("span","Authenticated contact evidence"),el("p", !seen ? "No authenticated phone request received" : `Phone request received · ${new Date(seen).toISOString()}${Date.now()-seen>=30000 ? " · stale" : " · recent"}`),el("small","Android response verification is separate."));
     const enroll = el("button", enrollment ? "Replace credential" : "Enroll remote control");
     enroll.onclick=async()=>{try {
       if(!confirm(`Verify phone UUID ${id} directly in Android Settings. Generate a private credential? Replacing it revokes previous authorization. Saved history is retained.`))return;
       const value=await controlPost("enroll",{device:id,confirmed:true});
       // Deliberately shown only in the local provisioning dialog; no storage/log.
-      prompt("Privately enter this credential in Android Settings → Authenticated remote control. Compare the phone UUID; never send through an unverified LAN service. Close after transfer.",value.credential);
+      prompt("Privately enter this credential in Android Settings → Command access → Enter credential. Compare the phone ID and Command ID; never send through an unverified LAN service. Close after transfer.",value.credential);
       await refreshControl();
     }catch(error){controlError(error);}};
-    row.append(label,enroll);
-    if(enrollment?.enabled){const revoke=el("button","Revoke");revoke.onclick=async()=>{try{if(confirm(`Revoke remote authorization for ${id}? In-flight effects remain uncertain.`)){await controlPost("revoke",{device:id,confirmed:true});controlTargets.delete(id);await refreshControl();}}catch(error){controlError(error);}};row.append(revoke);}
+    row.append(label,enrollmentInfo);enrollmentInfo.append(enroll);
+    if(enrollment?.enabled){const revoke=el("button","Revoke");revoke.onclick=async()=>{try{if(confirm(`Revoke remote authorization for ${id}? In-flight effects remain uncertain.`)){await controlPost("revoke",{device:id,confirmed:true});controlTargets.delete(id);await refreshControl();}}catch(error){controlError(error);}};enrollmentInfo.append(revoke);}
+    row.append(evidence);
     list.append(row);
   }
   if(!devices.length)list.append(el("p","No phones have contacted this Command. Configure its IP:port in Android first."));
@@ -51,7 +64,7 @@ async function refreshControl() {
     const result=entry.result;
     const meanings={queued:"Queued / phone may be offline",sent_unknown:"Sent; phone receipt unknown",received:"Delivered and durably received",output_attempted:"Notification/output attempted; heard/felt unknown",alert_blocked:"OS blocked output; local acknowledgement pending",recipient_acknowledged:"Human recipient locally acknowledged (authenticated result stored by Command)",cancel_requested_unknown:"Cancel requested by operator; phone Stop pending/unknown",cancelled:result?"Cancellation confirmed by Android":"Cancelled before delivery; no phone receipt claimed",expired:"Expired / duration ended",unknown:"Unknown / unresolved"};
     detail.append(el("p",meanings[entry.state]||entry.state));
-    detail.append(title,el("p",`Command ${entry.id} · authority ${entry.authority} · created ${new Date(entry.created).toISOString()} · expires ${new Date(entry.expires).toISOString()}`),el("p",`Requested ${JSON.stringify(entry.payload)} · effective ${result?.effective || "unknown"}`),el("p",result ? `${new Date(result.received).toISOString()} phone durable receipt · ${result.attempted ? "Execution attempted" : "No execution attempt"} · ${result.reason} · authenticated result revision ${result.revision} stored` : "No authenticated Android execution result. Queued, expired or cancelled is not proof of receipt or effect."));
+    detail.append(title,el("p",`Instruction ID ${entry.id} · Command ID ${entry.authority} · created ${new Date(entry.created).toISOString()} · expires ${new Date(entry.expires).toISOString()}`),el("p",`Requested ${JSON.stringify(entry.payload)} · effective ${result?.effective || "unknown"}`),el("p",result ? `${new Date(result.received).toISOString()} phone durable receipt · ${result.attempted ? "Execution attempted" : "No execution attempt"} · ${result.reason} · authenticated result revision ${result.revision} stored` : "No authenticated Android execution result. Queued, expired or cancelled is not proof of receipt or effect."));
     if(["queued","sent_unknown","received","output_attempted","alert_blocked"].includes(entry.state)){const cancel=el("button","Cancel safely");cancel.onclick=async()=>{try{if(confirm("Request cancellation? An offline phone may keep alerting until its duration/expiry. Only authenticated phone evidence confirms Stop. Earlier recipient acknowledgement remains valid.")){await controlPost("cancel",{id:entry.id});await refreshControl();}}catch(error){controlError(error);}};detail.append(cancel);}
     const retry=el("button","Review new request");retry.onclick=()=>{controlTargets.clear();controlTargets.add(entry.device);$("control-operation").value=entry.operation;showAlertOptions();$("control-status").textContent="New request selected. Review values and expiry, then issue deliberately. Automatic delivery retries preserve the original command ID.";};detail.append(retry);history.append(detail);
   }

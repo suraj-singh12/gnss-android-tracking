@@ -996,7 +996,16 @@ laptop, use the exact PR-head workflow executable and checksum manifest:
 
 ## Authenticated phone controls (Issue #25)
 
-Use **Phone controls** in the toolbar or selected party detail. Verify a phone UUID
+Use **Phone controls** in the toolbar or selected party detail. **This Command** displays
+its persistent public authority UUID as **Command ID**; **Copy Command ID** copies only
+that UUID. This read-only field is projected through existing loopback-protected
+`GET /local/control`, never a new LAN endpoint or a presumed top-level `/local/state`
+field. Per-phone **Enrollment** is distinct from **Authenticated contact evidence**:
+the latter records an accepted authenticated phone request, not proof that Android
+verified Command's response. Older than 30 seconds is labelled stale. Ordinary GNSS
+uploads cannot establish either direction of authentication.
+
+Verify a phone UUID
 at Android before generating its private enrollment credential. Transfer it directly
 into Android Settings, explicitly authorize, then await authenticated contact. The
 ordinary configured address and persistent authority UUID are reused; they do not

@@ -449,6 +449,18 @@ local console/OS access. Revocation prevents future authenticated exchange, but
 cannot undo an instruction already received/executed by a disconnected phone.
 GNSS v1's device_id remains forgeable and is never execution evidence.
 
+### Operator identity and contact presentation (#48)
+
+Command ID always means persistent `authority_id`; phone ID is the separate Android
+installation UUID; Instruction ID identifies one command. Public UUID copy never includes
+private enrollment credentials. Enrollment is explicit authorization, not connectivity.
+Android current-contact evidence is recorded only after existing response verification,
+including empty authenticated polls, for the same endpoint generation and binding. It
+expires at 30 monotonic seconds or immediately after failure; process restart requires
+fresh verification. Persisted UTC last-success is historical evidence only. Command's
+accepted phone-request timestamp is directional evidence, independent of Android response
+verification. None of this changes the wire protocol, credential bootstrap or key store.
+
 ### Wire envelope and replay protection
 
 Both directions carry JSON `{device,enrollment,data,mac}`. `data` is standard padded

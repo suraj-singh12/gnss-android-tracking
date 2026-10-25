@@ -478,3 +478,41 @@ func TestPhoneAlertSharedFixtures(t *testing.T) {
 		controlAPI(t, s, "issue", map[string]any{"targets": []string{device}, "operation": "alert", "payload": fixtures[name], "ttl": 300, "confirmed": true}, want)
 	}
 }
+
+func TestControlPublicIdentityProjection(t *testing.T) {
+	s, _, _ := open(t)
+	// Identity is read from existing persistent authority, not an enrollment or instruction ID.
+	w := httptest.NewRecorder()
+	s.LocalHandler(nil).ServeHTTP(w, controlLoopback(httptest.NewRequest("GET", "http://localhost/local/control", nil)))
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var projection struct {
+		Authority string `json:"authority_id"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &projection); err != nil {
+		t.Fatal(err)
+	}
+	s.mu.Lock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		s.mu.Unlock()
+		t.Fatal(err)
+	}
+	state, err := loadReceiptState(tx)
+	tx.Rollback()
+	s.mu.Unlock()
+	if err != nil || projection.Authority == "" || projection.Authority != state.Authority {
+		t.Fatal("persistent authority projection mismatch", err)
+	}
+	if strings.Contains(w.Body.String(), "credential") || strings.Contains(w.Body.String(), "secret") {
+		t.Fatal("private provisioning leaked")
+	}
+	w = httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "http://localhost/local/control", nil)
+	r.RemoteAddr = "192.168.1.2:12345"
+	s.LocalHandler(nil).ServeHTTP(w, r)
+	if w.Code != 403 {
+		t.Fatal("identity projection must retain loopback boundary", w.Code)
+	}
+}
