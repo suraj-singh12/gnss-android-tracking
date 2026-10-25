@@ -198,6 +198,9 @@ async function port() {
           evidence.layers[layer] = {
             status: "FAIL",
             completed,
+            ...(layer === "vector"
+              ? { feature_occurrences: featureOccurrences }
+              : {}),
             outcome: classify(error),
             error: String(error),
           };
@@ -320,7 +323,13 @@ async function port() {
               "offline restart changed persisted geographic features",
             );
           }
-          if ((c.layers.vector?.feature_occurrences || 0) > 0)
+          // A partial layer can still contain verified features. Await the
+          // progressive generation before measuring or capturing its display.
+          await page.waitForFunction(
+            (id) => terrainGeneration?.id === id,
+            c.id,
+          );
+          if ((c.vector_assets || []).some((asset) => asset.features > 0))
             await page.waitForFunction(
               () =>
                 document.querySelector('[data-layer="offline-map"]')?.children
