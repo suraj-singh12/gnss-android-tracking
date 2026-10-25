@@ -257,4 +257,127 @@ class CommandEnrollmentUiTest {
             }
         }
     }
+
+    @Test
+    fun enrollmentLayoutsScrollAndKeepPrivateDraftFocusAtLargeText() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<TrackingApp>()
+        val output = System.getenv("GNSS_SCREENSHOT_DIR")?.let { File(it).apply { mkdirs() } }
+        try {
+            for (night in listOf(false, true)) for ((width, height) in
+                listOf(360 to 800, 800 to 360)) {
+                app.getSharedPreferences("appearance", 0).edit().putBoolean("night", night).commit()
+                org.robolectric.RuntimeEnvironment.setQualifiers(
+                    "w${width}dp-h${height}dp-${if(width>height) "land" else "port"}"
+                )
+                @Suppress("DEPRECATION")
+                app.resources.updateConfiguration(
+                    android.content.res.Configuration(app.resources.configuration).apply {
+                        fontScale = 1.5f
+                    },
+                    app.resources.displayMetrics,
+                )
+                val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+                val activity = controller.get()
+                app.activityVisible = false
+                val root = activity.findViewById<ViewGroup>(android.R.id.content)
+                suspend fun settle() {
+                    repeat(12) {
+                        shadowOf(Looper.getMainLooper()).idle()
+                        delay(10)
+                    }
+                    val density = activity.resources.displayMetrics.density
+                    root.measure(
+                        View.MeasureSpec.makeMeasureSpec(
+                            (width * density).toInt(),
+                            View.MeasureSpec.EXACTLY,
+                        ),
+                        View.MeasureSpec.makeMeasureSpec(
+                            (height * density).toInt(),
+                            View.MeasureSpec.EXACTLY,
+                        ),
+                    )
+                    root.layout(0, 0, root.measuredWidth, root.measuredHeight)
+                }
+                fun click(label: String) {
+                    nativeViews(root)
+                        .filterIsInstance<Button>()
+                        .single { it.isShown && it.text == label }
+                        .performClick()
+                }
+                fun capture(label: String) {
+                    val scroll =
+                        nativeViews(root).filterIsInstance<android.widget.ScrollView>().first()
+                    scroll.fullScroll(View.FOCUS_DOWN)
+                    assertTrue(
+                        "Content remains scrollable inside the window",
+                        scroll.height > 0 && scroll.height <= root.height,
+                    )
+                    if (output != null) {
+                        val image =
+                            Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
+                        root.draw(Canvas(image))
+                        File(
+                                output,
+                                "enrollment-${if(night) "night" else "day"}-${width}x${height}-1.5-$label.png",
+                            )
+                            .outputStream()
+                            .use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                        image.recycle()
+                    }
+                }
+                try {
+                    settle()
+                    click("Settings")
+                    settle()
+                    nativeViews(root)
+                        .single {
+                            it.isShown &&
+                                it.contentDescription?.startsWith("Command access.") == true
+                        }
+                        .performClick()
+                    settle()
+                    nativeViews(root)
+                        .single {
+                            it.isShown &&
+                                it.contentDescription?.startsWith(
+                                    "Identity & verification details."
+                                ) == true
+                        }
+                        .performClick()
+                    settle()
+                    capture("details-bottom")
+                    click("‹ Command access")
+                    settle()
+                    click("How to authorize this Command")
+                    settle()
+                    capture("compare-bottom")
+                    click("I have the private credential")
+                    settle()
+                    val field =
+                        nativeViews(root).filterIsInstance<EditText>().single {
+                            it.hint == "Private enrollment credential"
+                        }
+                    field.setText("draft")
+                    field.requestFocus()
+                    field.setSelection(3)
+                    app.operational.value = Operational(health = Health(wifi_connected = true))
+                    settle()
+                    assertTrue(field.hasFocus())
+                    assertEquals(3, field.selectionStart)
+                    field.text.clear()
+                    capture("entry-bottom")
+                    controller.recreate()
+                    val restored =
+                        nativeViews(controller.get().findViewById(android.R.id.content))
+                            .filterIsInstance<EditText>()
+                            .single { it.hint == "Private enrollment credential" }
+                    assertEquals("", restored.text.toString())
+                } finally {
+                    controller.pause().stop().destroy()
+                }
+            }
+        } finally {
+            app.finishForTests()
+        }
+    }
 }
