@@ -1031,7 +1031,7 @@ func (s *Store) stagedSave(r presentationRequest) (any, error) {
 	if e != nil {
 		return nil, e
 	}
-	if !owner(l, r, now) {
+	if !owner(l, r, s.Now().UTC()) {
 		return nil, errors.New("browser owner fenced")
 	}
 	if r.RequestID != "" {

@@ -558,3 +558,40 @@ func TestPresentationRejectsReboundHostAndUnauthenticatedPublisher(t *testing.T)
 		t.Fatal("unauthorized publisher accepted")
 	}
 }
+
+// Ownership must use transaction-time liveness, independently of the earlier
+// operator boundary preserved while waiting for projection work.
+func TestPresentationHeartbeatDuringOperatorProjectionWait(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "command.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	r := claimPresentation(t, s)
+	if err = s.actionModeOwned("start", "from_now", r.Token, r.Epoch, "", nil); err != nil {
+		t.Fatal(err)
+	}
+	captured := make(chan struct{})
+	var once sync.Once
+	s.Now = func() time.Time {
+		at := time.Now()
+		once.Do(func() { close(captured) })
+		return at
+	}
+	s.projectionMu.Lock()
+	result := make(chan error, 1)
+	go func() { result <- s.actionModeOwned("pause", "", r.Token, r.Epoch, "", nil) }()
+	<-captured
+	beat, err := s.presentationOperation("heartbeat", r)
+	s.projectionMu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = <-result; err != nil {
+		t.Fatalf("same owner fenced by newer heartbeat: %v", err)
+	}
+	st := snapshot(t, s)
+	if st.Recording.Status != "paused" || st.Recording.Windows[0].Stop.After(beat.(presentationLease).Seen) {
+		t.Fatal("Pause lost its original pre-wait operator boundary")
+	}
+}

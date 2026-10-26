@@ -939,7 +939,9 @@ func (s *Store) actionModeOwned(action, mode, token, epoch, operatorAt string, b
 			if e != nil {
 				return e
 			}
-			if !owner(l, presentationRequest{Token: token, Epoch: epoch}, now) {
+			// The operator boundary precedes projection/lock waits. A heartbeat
+			// committed during that wait must not fence the same authorized owner.
+			if !owner(l, presentationRequest{Token: token, Epoch: epoch}, s.Now().UTC()) {
 				return fmt.Errorf("browser owner fenced")
 			}
 		}
@@ -1031,7 +1033,7 @@ func (s *Store) actionModeOwned(action, mode, token, epoch, operatorAt string, b
 			return e
 		}
 		if token != "" && (action == "start" || action == "resume") {
-			return presentationBoundary(tx, r, boundary, token, epoch, now, receivedAt)
+			return presentationBoundary(tx, r, boundary, token, epoch, now, s.Now().UTC())
 		}
 		return nil
 	})
