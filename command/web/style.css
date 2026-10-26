@@ -1618,3 +1618,34 @@ body {
     grid-template-rows: 100px 90px minmax(0, 1fr) 22px;
   }
 }
+
+/* Keep the approved Save form's party choices on one compact line per card. */
+#snapshot-parties label {
+  flex-direction: row;
+  margin: 0;
+  min-height: 32px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+#snapshot-parties input {
+  margin: 0;
+  flex: 0 0 auto;
+}
+#snapshot-form fieldset {
+  border: 0;
+  padding: 0;
+  margin: 12px 0 8px;
+}
+#snapshot-form legend {
+  font-size: 13px;
+  font-weight: 650;
+}
+#snapshot-total {
+  font-size: 12px;
+  margin: 4px 0 10px;
+}
+#snapshot-form > .controls {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 14px;
+}

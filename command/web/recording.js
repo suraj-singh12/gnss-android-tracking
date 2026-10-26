@@ -225,12 +225,7 @@
       input.value = id;
       input.checked = true;
       input.onchange = subset;
-      label.append(
-        input,
-        document.createTextNode(
-          d.snapshot.party.id + " · " + d.snapshot.party.name,
-        ),
-      );
+      label.append(input, document.createTextNode(d.snapshot.party.id));
       $("snapshot-parties").append(label);
     }
     $("snapshot-total").textContent =
