@@ -8,9 +8,13 @@
     pending,
     lastState,
     lastConfirmed = 0;
-  let capturedRecording, capturedActive, lastPresented;
+  let capturedRecording,
+    capturedActive,
+    lastPresented,
+    presenceReported = false;
   let generation = 0,
-    stopped = false;
+    stopped = false,
+    claiming = false;
   const headers = () =>
     lease
       ? {
@@ -34,23 +38,37 @@
       throw Error(body.message || "Presentation evidence unconfirmed");
     return body;
   }
+  let failureReportedFor;
   function health(text) {
     $("capture-health").textContent = text;
   }
   async function claim() {
+    if (claiming) return;
+    claiming = true;
     try {
       lease = await request("claim");
       revision = 0;
+      presenceReported = false;
+      failureReportedFor = undefined;
       pending = undefined;
       lastState = undefined;
+      lastPresented = undefined;
       $("browser-occupied").close();
       dirty = true;
       stopped = false;
       await pump();
     } catch (e) {
       lease = undefined;
-      health("Unverified presentation evidence · browser occupied");
+      health("Unverified presentation evidence · " + e.message);
+      $("browser-ownership-reason").textContent = e.message;
       if (!$("browser-occupied").open) $("browser-occupied").showModal();
+      // pagehide is best effort. A returning browser must also recover after
+      // lease expiry when the old page disappeared without sending Close.
+      setTimeout(() => {
+        if (!lease && !stopped) claim();
+      }, 1000);
+    } finally {
+      claiming = false;
     }
   }
   // Two animation frames surround a rendering opportunity. A task following the
@@ -59,6 +77,11 @@
   const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
   async function pump() {
     if (pumping || !lease || stopped) return;
+    if ($("tracks").clientWidth <= 0 || $("tracks").clientHeight <= 0) {
+      health("Unverified presentation evidence · map has no renderable area");
+      return;
+    }
+    const ownerEpoch = lease.epoch;
     const rec = window.recordingLiveState?.()?.recording;
     const capturing = rec?.active && rec.status !== "stopped";
     pumping = true;
@@ -70,6 +93,7 @@
         const presented = new Date().toISOString();
         await frame();
         await new Promise((resolve) => setTimeout(resolve, 0));
+        if (lease?.epoch !== ownerEpoch) return;
         if (before !== generation) {
           dirty = true;
           if (capturing)
@@ -89,6 +113,13 @@
           encoded,
         };
         if (!capturing) {
+          if (!presenceReported) {
+            await request("present", {
+              presented_at: presented,
+              opportunity_at: lastPresented.opportunity_at,
+            });
+            presenceReported = true;
+          }
           dirty = false;
           return;
         }
@@ -106,14 +137,28 @@
         dirty = false;
       }
       if (pending) {
+        if (lease?.epoch !== ownerEpoch) return;
         const ack = await request("confirm", pending);
+        if (lease?.epoch !== ownerEpoch) return;
         lastConfirmed = Date.now();
+        presenceReported = true;
         if (window.recordingLiveState?.()?.recording?.active)
           health(`Display state confirmed · revision ${ack.revision}`);
         pending = undefined;
       }
     } catch (e) {
       health("Unverified presentation evidence · " + e.message);
+      if (pending && failureReportedFor !== pending.revision) {
+        try {
+          await request("gap", {
+            from: pending.presented_at,
+            until: new Date().toISOString(),
+            reason:
+              "Browser confirmation outcome unavailable; durable outcome may be unknown until retry",
+          });
+          failureReportedFor = pending.revision;
+        } catch {}
+      }
     } finally {
       pumping = false;
     }
@@ -170,6 +215,7 @@
       }
       dirty = true;
       generation++;
+      updateOpenParticipants();
     },
     pump,
   };
@@ -208,32 +254,124 @@
   };
   function subset() {
     const n = $("snapshot-parties").querySelectorAll("input:checked").length;
+    $("snapshot-submit").disabled = n === 0;
     $("snapshot-subset").textContent =
       `Saved subset: ${n} of ${$("snapshot-parties").children.length} parties. All remain listed in participation metadata.`;
   }
-  function openSave() {
+  async function openSave() {
     const state = window.recordingLiveState();
+    const rec = state.recording;
+    $("snapshot-discard").hidden = rec.status !== "stopped";
+    $("snapshot-evidence-facts").textContent =
+      `Source: ${rec.mode === "from_now" ? "From Now" : "From Beginning"} · Actual Start UTC: ${rec.started_at}${rec.stopped_at ? " · Final Stop UTC: " + rec.stopped_at : " · Cutoff: actual Save press"}. These facts are immutable; display date is descriptive.`;
+    const warnings = window.recordingAppliedState().asset_warnings || [];
+    $("snapshot-fidelity").hidden = warnings.length === 0;
+    $("snapshot-fidelity").textContent = warnings.join(" ");
+    $("snapshot-evidence-summary").textContent =
+      "Loading recorded interruption facts…";
+    fetch(
+      `/local/presentation/summary?recording_id=${encodeURIComponent(rec.recording_id)}`,
+    )
+      .then(async (response) => {
+        if (!response.ok) throw Error("summary unavailable");
+        const counts = await response.json();
+        if (
+          $("save-snapshot").open &&
+          window.recordingLiveState().recording?.recording_id ===
+            rec.recording_id
+        )
+          $("snapshot-evidence-summary").textContent =
+            `Recorded facts: ${counts.display || 0} display confirmations; ${counts.pause || 0} pauses; ${counts.browser_unavailable || 0} browser gaps; ${counts.command_unavailable || 0} Command gaps; ${counts.unverified || 0} unverified intervals. Overlapping facts are retained separately.`;
+      })
+      .catch(() => {
+        $("snapshot-evidence-summary").textContent =
+          "Interruption summary unavailable. Saved diagnostics retain known facts and uncertainty.";
+      });
     $("save-continuation").textContent =
       state.recording?.status === "stopped"
         ? "Recording is finally stopped. Dismissal preserves unsaved evidence."
-        : "The recording continues after saving.";
+        : state.recording?.status === "paused"
+          ? "Recording remains paused after saving."
+          : "The recording continues after saving.";
     $("snapshot-parties").replaceChildren();
-    for (const [id, d] of Object.entries(state.devices)) {
-      const label = document.createElement("label"),
-        input = document.createElement("input");
-      input.type = "checkbox";
-      input.value = id;
-      input.checked = true;
-      input.onchange = subset;
-      label.append(input, document.createTextNode(d.snapshot.party.id));
-      $("snapshot-parties").append(label);
-    }
-    $("snapshot-total").textContent =
-      `${Object.keys(state.devices).length} participated · Select at least one`;
-    subset();
+    choicesRecording = undefined;
+    $("snapshot-total").textContent = "Loading participating parties…";
+    $("snapshot-submit").disabled = true;
     $("snapshot-error").textContent = "";
     if (!$("save-snapshot").open) $("save-snapshot").showModal();
+    try {
+      const response = await fetch(
+        `/local/presentation/participants?recording_id=${encodeURIComponent(rec.recording_id)}`,
+      );
+      if (!response.ok)
+        throw Error(
+          "Participating-party manifest is unavailable; unsaved evidence is retained.",
+        );
+      const participants = await response.json();
+      if (
+        !$("save-snapshot").open ||
+        window.recordingLiveState().recording?.recording_id !== rec.recording_id
+      )
+        return;
+      for (const [id, party] of Object.entries(participants))
+        appendParticipant(id, party, true);
+      choicesRecording = rec.recording_id;
+      updateParticipantCount();
+    } catch (e) {
+      $("snapshot-error").textContent = e.message;
+    }
   }
+  let choicesRecording;
+  function appendParticipant(id, party, checked) {
+    const label = document.createElement("label"),
+      input = document.createElement("input");
+    input.type = "checkbox";
+    input.value = id;
+    input.checked = checked;
+    input.onchange = subset;
+    label.title = party.name + " · " + id;
+    label.append(input, document.createTextNode(party.id));
+    $("snapshot-parties").append(label);
+  }
+  function updateParticipantCount() {
+    $("snapshot-total").textContent =
+      `${$("snapshot-parties").children.length} participated · Select at least one`;
+    subset();
+  }
+  function updateOpenParticipants() {
+    const state = window.recordingLiveState();
+    if (
+      !$("save-snapshot").open ||
+      !state?.recording?.active ||
+      choicesRecording !== state.recording.recording_id
+    )
+      return;
+    const known = new Set(
+      [...$("snapshot-parties").querySelectorAll("input")].map((e) => e.value),
+    );
+    let added = false;
+    for (const [id, d] of Object.entries(state.devices)) {
+      if (!known.has(id)) {
+        appendParticipant(id, d.snapshot.party, false);
+        added = true;
+      }
+    }
+    if (added) updateParticipantCount();
+  }
+  $("snapshot-discard").onclick = async () => {
+    if (
+      !confirm(
+        "Discard this unsaved recording? Existing saved snapshots, original GNSS and SOS remain retained.",
+      )
+    )
+      return;
+    try {
+      await action("discard");
+      $("save-snapshot").close();
+    } catch (e) {
+      $("snapshot-error").textContent = e.message;
+    }
+  };
   $("save-recording").onclick = openSave;
   $("stopped-save").onclick = openSave;
   let saveRequest;
@@ -260,11 +398,12 @@
       $("save-snapshot").close();
       $("snapshot-receipt").hidden = false;
       $("snapshot-receipt").textContent =
-        `Saved ${receipt.name} · ${receipt.id} · ${receipt.confirmed_events} confirmed states · evidence limitations retained`;
+        `Saved ${receipt.name} · ${receipt.id} · ${receipt.confirmed_events} confirmed states · ${receipt.included.length} of ${receipt.total_parties} parties included · evidence limitations retained`;
     } catch (e) {
       $("snapshot-error").textContent = e.message;
     } finally {
-      $("snapshot-submit").disabled = false;
+      $("snapshot-submit").disabled =
+        !$("snapshot-parties").querySelector("input:checked");
     }
   };
   $("retry-owner").onclick = claim;

@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/http/httptest"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -240,6 +243,10 @@ func TestPresentationSavePublicationFailureAndRetry(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
+	r.Name = "Conflicting retry"
+	if _, e = s.presentationOperation("save", r); e == nil {
+		t.Fatal("Save key reused for different form")
+	}
 	if first.(map[string]any)["id"] != second.(map[string]any)["id"] {
 		t.Fatal("lost response duplicated Save")
 	}
@@ -470,5 +477,84 @@ func TestPresentationSavedSubsetDeltaReaderHasNoExcludedDetails(t *testing.T) {
 	_ = json.Unmarshal(state, &display)
 	if len(display.Parties) != 3 || scope == "" || bytes.Contains(state, []byte("party-4")) || bytes.Contains(state, []byte("party-5")) {
 		t.Fatal("excluded details entered sealed graph", string(state))
+	}
+}
+
+func TestPresentationRecoveryEndsOnPaintAndDistinguishesKnownClose(t *testing.T) {
+	for _, closed := range []bool{false, true} {
+		t.Run(fmt.Sprint(closed), func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "recovery.sqlite")
+			s, e := Open(path)
+			if e != nil {
+				t.Fatal(e)
+			}
+			r := claimPresentation(t, s)
+			if e = s.Action("start"); e != nil {
+				t.Fatal(e)
+			}
+			if closed {
+				if _, e = s.presentationOperation("close", r); e != nil {
+					t.Fatal(e)
+				}
+			}
+			s.Close()
+			s, e = Open(path)
+			if e != nil {
+				t.Fatal(e)
+			}
+			defer s.Close()
+			r = claimPresentation(t, s)
+			var count int
+			_ = s.db.QueryRow(`SELECT COUNT(*) FROM presentation_journal WHERE kind IN ('browser_unavailable','unverified') AND json_extract(data,'$.reason')='ownership recovery ends at browser rendering opportunity, not HTTP claim'`).Scan(&count)
+			if count != 0 {
+				t.Fatal("claim falsely ended presentation absence")
+			}
+			stamp := time.Now().UTC()
+			r.Presented = stamp.Format(time.RFC3339Nano)
+			r.Opportunity = r.Presented
+			if _, e = s.presentationOperation("present", r); e != nil {
+				t.Fatal(e)
+			}
+			var kind string
+			var data string
+			if e = s.db.QueryRow(`SELECT kind,data FROM presentation_journal WHERE json_extract(data,'$.reason')='ownership recovery ends at browser rendering opportunity, not HTTP claim' ORDER BY ordinal DESC LIMIT 1`).Scan(&kind, &data); e != nil {
+				t.Fatal(e)
+			}
+			if closed && kind != "browser_unavailable" || !closed && kind != "unverified" {
+				t.Fatal("lost known/unknown distinction", kind, data)
+			}
+			var interval map[string]any
+			_ = json.Unmarshal([]byte(data), &interval)
+			if interval["until"] != r.Opportunity {
+				t.Fatal("absence ended before paint", interval)
+			}
+		})
+	}
+}
+
+func TestPresentationRejectsReboundHostAndUnauthenticatedPublisher(t *testing.T) {
+	s, _, _ := open(t)
+	request := func(host, origin, path, body string) int {
+		r := httptest.NewRequest("POST", path, strings.NewReader(body))
+		r.Host = host
+		r.Header.Set("Origin", origin)
+		r.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		if !s.presentationHTTP(w, r) {
+			t.Fatal("presentation endpoint not handled")
+		}
+		return w.Code
+	}
+	if code := request("attacker.invalid:8081", "http://attacker.invalid:8081", "/local/presentation/claim", "{}"); code != 403 {
+		t.Fatal("rebound hostname claimed browser", code)
+	}
+	if code := request("127.0.0.1:8081", "https://attacker.invalid", "/local/presentation/claim", "{}"); code != 403 {
+		t.Fatal("cross-origin browser claimed ownership", code)
+	}
+	if code := request("127.0.0.1:8081", "http://127.0.0.1:8081", "/local/presentation/claim", "{}"); code != 200 {
+		t.Fatal("local browser could not claim", code)
+	}
+	if code := request("127.0.0.1:8081", "http://127.0.0.1:8081", "/local/presentation/confirm", `{"token":"unauthorized","epoch":"fake","revision":1}`); code == 200 {
+		t.Fatal("unauthorized publisher accepted")
 	}
 }

@@ -3,20 +3,7 @@ const $ = (id) => document.getElementById(id),
   hidden = new Set(),
   svgNS = "http://www.w3.org/2000/svg";
 let state, policyRevision;
-const recordingMapAssets = new Map();
-async function mapAssetFetch(url, options) {
-  const response = await fetch(url, options);
-  const mapID = decodeURIComponent(String(url).split("/")[3] || "");
-  if (response.ok) {
-    const hash = response.headers.get("X-Presentation-Asset");
-    if (hash) {
-      if (!recordingMapAssets.has(mapID))
-        recordingMapAssets.set(mapID, new Set());
-      recordingMapAssets.get(mapID).add(hash);
-    }
-  }
-  return response;
-}
+const mapAssetFetch = (url, options) => fetch(url, options);
 let liveConnection = "Connecting to Command…";
 const uiTimings = {};
 function uiTiming(stage, started, failed = false) {
@@ -1023,12 +1010,13 @@ async function refreshMaps(selected) {
     );
   if (selected) $("saved-maps").value = selected;
 }
-function useMap(text, source, id) {
+function useMap(text, source, id, recordingAsset = "") {
   const job = JSON.parse(text).plan;
   const previousWrap = GeoMap.setWrap(job?.request.lon || 0);
   let parsed;
   try {
     parsed = GeoMap.parse(text, source);
+    parsed._recordingAsset = recordingAsset;
   } catch (e) {
     GeoMap.setWrap(previousWrap);
     throw e;
@@ -1067,7 +1055,12 @@ async function loadSavedMap(id) {
   const source =
     [...$("saved-maps").options].find((option) => option.value === id)?.dataset
       .source || "Saved offline map";
-  useMap(await response.text(), source, id);
+  useMap(
+    await response.text(),
+    source,
+    id,
+    response.headers.get("X-Presentation-Asset") || "",
+  );
   if (offlineMap?.plan) {
     await loadRadiusManifest(id);
     return;
@@ -1144,7 +1137,10 @@ async function loadTerrain(id) {
   if (activeMapID !== id) return;
   const generationStart = performance.now();
   try {
-    terrain = Terrain.prepare(grid);
+    terrain = {
+      ...Terrain.prepare(grid),
+      _recordingAsset: r.headers.get("X-Presentation-Asset") || "",
+    };
   } catch (e) {
     if (lastDownloadReport)
       showDownloadReport({
@@ -1654,7 +1650,7 @@ $("map-file").onchange = async () => {
       data: JSON.parse(text),
     });
     await refreshMaps(saved.id);
-    useMap(text, file.name, saved.id);
+    await loadSavedMap(saved.id);
   } catch (e) {
     offlineMap = undefined;
     $("map-mode").value = "blank";
@@ -2456,6 +2452,8 @@ $("export-runtime").onclick = async () => {
       browser: {
         timings: uiTimings,
         live_connection: liveConnection,
+        map_status: $("map-detail-status").textContent,
+        map_warning: $("map-warning").textContent,
         history_pending: state?.projection_pending,
         displayed_points: state?.points?.length ?? 0,
       },
@@ -2554,6 +2552,7 @@ async function loadRadiusManifest(id) {
   const manifest = await r.json();
   if (activeMapID !== id) return;
   radiusManifest = manifest;
+  radiusManifest._recordingAsset = r.headers.get("X-Presentation-Asset") || "";
   radiusViewKey = undefined;
   radiusViewVersion++;
   globalThis.radiusGrids = [];
@@ -2880,6 +2879,7 @@ function scheduleRadiusView(w, h) {
   );
   radiusViewTimer = setTimeout(async () => {
     const shapes = [],
+      appliedVectorAssets = [],
       grids = [],
       detailWarnings = [];
     let count = 0,
@@ -2916,8 +2916,15 @@ function scheduleRadiusView(w, h) {
             count += detail.count;
             omittedFeatures += detail.omitted;
             shapes.push(...detail.shapes);
+            appliedVectorAssets.push(
+              r.headers.get("X-Presentation-Asset") || "",
+            );
             loadedVectors++;
-            offlineMap = { ...offlineMap, shapes: shapes.slice() };
+            offlineMap = {
+              ...offlineMap,
+              shapes: shapes.slice(),
+              _recordingVectors: appliedVectorAssets.slice(),
+            };
             $("map-detail-status").textContent =
               `Loading local overview: ${loadedVectors}/${vectorChunks} saved vector chunks; ${omittedFeatures} features deferred by the display budget. Zoom in for more detail.`;
             draw();
@@ -2936,6 +2943,7 @@ function scheduleRadiusView(w, h) {
             );
             if (!r.ok) throw Error("Saved DEM chunk read failed");
             const grid = await r.json();
+            grid._recordingAsset = r.headers.get("X-Presentation-Asset") || "";
             if (
               !Array.isArray(grid.samples) ||
               !Number.isInteger(grid.columns) ||
@@ -2972,7 +2980,10 @@ function scheduleRadiusView(w, h) {
       const prepared = [];
       for (const grid of grids) {
         try {
-          prepared.push(Terrain.prepare(grid, interval, grids));
+          prepared.push({
+            ...Terrain.prepare(grid, interval, grids),
+            _recordingAsset: grid._recordingAsset,
+          });
         } catch (error) {
           detailWarnings.push(
             `${grid.chunk_key}: DEM processing failed: ${error.message}`,
@@ -3011,7 +3022,11 @@ function scheduleRadiusView(w, h) {
       visible_chunks: chunks.length,
       coordinates: count,
     };
-    offlineMap = { ...offlineMap, shapes };
+    offlineMap = {
+      ...offlineMap,
+      shapes,
+      _recordingVectors: appliedVectorAssets,
+    };
     globalThis.radiusGrids = grids;
     terrain = grids.length
       ? {
@@ -3719,12 +3734,34 @@ function initializeMapModal() {
 }
 initializeMapModal();
 
+function recordingAppliedAssets() {
+  if ($("map-mode").value !== "offline" || !offlineMap)
+    return { assets: [], warnings: [] };
+  const references = [
+    offlineMap._recordingAsset,
+    ...(offlineMap._recordingVectors || []),
+  ];
+  if (radiusManifest) references.push(radiusManifest._recordingAsset);
+  if (terrain)
+    for (const grid of terrain.grids || [terrain])
+      references.push(grid._recordingAsset);
+  return {
+    assets: [...new Set(references.filter(Boolean))],
+    warnings: references.some((h) => !h)
+      ? [
+          "Some applied map/terrain response revisions could not be pinned; map fidelity is incomplete.",
+        ]
+      : [],
+  };
+}
 window.recordingAppliedState = () => {
   const applied = window.recordingRenderedModel || {};
+  const assetEvidence = recordingAppliedAssets();
   return {
     version: 1,
     map_id: $("map-mode").value === "offline" ? activeMapID || "" : "",
-    assets: [...(recordingMapAssets.get(activeMapID) || [])],
+    assets: assetEvidence.assets,
+    asset_warnings: assetEvidence.warnings,
     common: {
       receipt_version: applied.receipt_version,
       projection_version: applied.projection_version,
@@ -3752,6 +3789,8 @@ window.recordingAppliedState = () => {
         ),
       ),
       connection: liveConnection,
+      map_status: $("map-detail-status").textContent,
+      map_warning: $("map-warning").textContent,
       projection_pending: applied.projection_pending,
       projection_error: applied.projection_error,
       // Common map geometry contains no party GNSS data.
@@ -3759,7 +3798,9 @@ window.recordingAppliedState = () => {
         .filter(
           (e) =>
             e.tagName.toLowerCase() === "defs" ||
-            ["offline-map", "hillshade", "contours"].includes(e.dataset.layer),
+            ["offline-map", "hillshade", "contours", "coverage"].includes(
+              e.dataset.layer,
+            ),
         )
         .map((e) => e.outerHTML)
         .join(""),

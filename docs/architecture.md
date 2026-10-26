@@ -638,3 +638,29 @@ saved states remain readable without rewriting historical snapshots.
 and resolves its filtered checkpoint with hash verification. It reads no later GNSS.
 The default ID diagnostic recomputes the immutable reference stream hash. Payload
 storage bytes count compressed blobs; receipt reference bytes are reported separately.
+
+Recovery availability intervals end at the first confirmed rendering opportunity,
+not ownership claim/HTTP success. A paused browser may confirm presence without
+creating a presentation clip. Known pagehide gaps are split around Command downtime;
+an owner that might still be open is treated as unverified, never declared closed
+from heartbeat expiry or process restart alone. Save preserves a trailing unverified
+active-clip interval when no later presentation was durably confirmed at its boundary.
+Supporting projection policy/raw/projection versions are frozen as audit-only metadata.
+
+Asset identities attach when vector/terrain data is applied, not when response headers
+arrive. Partial or failed source pinning remains explicit in the frame, Save form and
+receipt. The bounded saved diagnostic can retrieve a referenced asset with
+`&asset=SHA256`; it checks snapshot membership and recomputes the exact stored hash.
+
+The Save party picker reads the durable participation registry, rather than today's
+fleet: a phone joining after final Stop cannot become a member of that recording.
+During an active form, newly displayed late joins appear unchecked for an explicit
+operator choice. Party label updates remain tied to the existing device identity;
+Stop freezes the final participation labels. Snapshot receipts report included count
+against the actual total manifest, including parties not selected by the operator.
+
+Publishing endpoints also reject arbitrary hostname origins to prevent DNS rebinding;
+use localhost or the Command IP address for the presentation console. This protection
+supplements same-origin JSON, the random owner capability and restart/lease fencing.
+It does not claim attestation against an OS administrator who controls the private
+Command database or the authorized browser itself.

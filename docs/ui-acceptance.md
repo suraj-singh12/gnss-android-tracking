@@ -868,3 +868,10 @@ checkboxes and compact names, with Cancel/Save separated. These are synthetic
 five-phone runtime fixtures, not physical GNSS or native OS acceptance. The linked
 browser report records delayed actual map application, ownership, recovery and
 snapshot results; no test reads these images as pixel-diff baselines.
+
+The expanded Recording browser oracle also drops a confirmation ACK while changing
+the viewport, injects a real SQLite display-commit failure, and verifies a saved map
+asset after ordinary library deletion. It pages the sealed event stream and compares
+reconstructed selected-party checkpoints against the instrumented browser-submitted
+presentation sequence, with unique ordered ordinals. This is semantic/geometry evidence,
+not pixel-diff baselines or human-attention proof.

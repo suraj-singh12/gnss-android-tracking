@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"strings"
 )
 
 const presentationDeltaDepth = 32
@@ -201,4 +202,48 @@ func putPresentationBlob(db snapshotSQL, state []byte, baseHash, scope string) (
 	}
 	_, e := db.Exec(`INSERT OR IGNORE INTO presentation_blobs VALUES(?,?,?)`, hash, packed, len(packed))
 	return hash, e
+}
+
+// Short bounded staging transactions amortize fsync without monopolizing receipt.
+// Ordinals and original identities are explicit, so batching changes no evidence order.
+type presentationBatch struct {
+	db      snapshotSQL
+	table   string
+	columns int
+	args    []any
+	rows    int
+	bytes   int
+}
+
+func (b *presentationBatch) add(values ...any) error {
+	size := 0
+	for _, v := range values {
+		switch value := v.(type) {
+		case string:
+			size += len(value)
+		case []byte:
+			size += len(value)
+		}
+	}
+	if b.rows > 0 && (b.rows >= 32 || b.bytes+size > 256*1024) {
+		if e := b.flush(); e != nil {
+			return e
+		}
+	}
+	b.args = append(b.args, values...)
+	b.rows++
+	b.bytes += size
+	return nil
+}
+func (b *presentationBatch) flush() error {
+	if b.rows == 0 {
+		return nil
+	}
+	row := "(" + strings.TrimSuffix(strings.Repeat("?,", b.columns), ",") + ")"
+	query := "INSERT INTO " + b.table + " VALUES" + strings.TrimSuffix(strings.Repeat(row+",", b.rows), ",")
+	_, e := b.db.Exec(query, b.args...)
+	b.args = nil
+	b.rows = 0
+	b.bytes = 0
+	return e
 }

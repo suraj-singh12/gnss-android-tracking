@@ -198,6 +198,8 @@
         <p id="snapshot-subset" class="muted"></p>
         <details>
           <summary>Optional description and display date</summary>
+          <p id="snapshot-evidence-facts" class="muted"></p>
+          <p id="snapshot-evidence-summary" class="muted"></p>
           <label
             >Description<textarea
               id="snapshot-description"
@@ -214,17 +216,21 @@
           Snapshot captures confirmed display evidence. Missing confirmations
           remain unverified.
         </p>
+        <p id="snapshot-fidelity" role="status" class="muted" hidden></p>
         <p id="snapshot-error" role="alert"></p>
         <div class="controls">
           <button type="button" data-close="save-snapshot">Cancel</button
-          ><button id="snapshot-submit" class="primary">Save snapshot</button>
+          ><button id="snapshot-discard" type="button" class="danger" hidden>
+            Discard unsaved recording
+          </button>
+          <button id="snapshot-submit" class="primary">Save snapshot</button>
         </div>
       </form>
     </dialog>
     <output id="snapshot-receipt" hidden></output>
     <dialog id="browser-occupied" aria-labelledby="browser-occupied-title">
-      <h1 id="browser-occupied-title">Command browser occupied</h1>
-      <p>
+      <h1 id="browser-occupied-title">Command browser access</h1>
+      <p id="browser-ownership-reason">
         Only one dashboard browser can own presentation capture. Close the other
         dashboard and wait for ownership recovery.
       </p>

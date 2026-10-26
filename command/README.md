@@ -1135,3 +1135,10 @@ confirmation is not OS scanout proof, asset reads are revision-bound by exact pi
 from a frozen read snapshot with short yielding writes. Sustained large-fleet Save
 latency and multi-day capture remain unverified.
 The UI and saved receipts must retain those limitations; #27 is not certified complete.
+
+Use localhost or the Command IP address for the Recording console; arbitrary hostname
+origins cannot acquire publication ownership. Save's optional details disclose actual
+UTC boundaries, source mode and recorded interruption facts separately from descriptive
+date. A finally stopped recording's party picker uses its frozen participation list,
+so later phone arrivals cannot silently alter the selection. Missing applied-map pins
+are shown in Save and retained in receipt diagnostics.

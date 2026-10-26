@@ -766,9 +766,16 @@ func (s *Store) ingestMessage(tx receiptSQL, st *State, m Message, b []byte, rec
 	if received > d.Contact {
 		d.Contact = received
 	}
+	previousParty := d.Snapshot.Party
 	if !futureCapture(m, received, st.Policy) && (futureCapture(d.Snapshot, received, st.Policy) || less(d.Snapshot, m, false)) {
 		d.Snapshot = m
 	}
+	if d.Snapshot.Party != previousParty && st.Recording != nil && st.Recording.Status != "stopped" {
+		if _, err = tx.Exec(`UPDATE presentation_participants SET party=? WHERE recording=? AND device=?`, marshal(d.Snapshot.Party), st.Recording.ID, m.Device); err != nil {
+			return Ack{}, err
+		}
+	}
+
 	if m.Fix != nil && !futureCandidate(m, received, st.Policy) && (d.Location == nil || futureCandidate(*d.Location, received, st.Policy) || lessLive(*d.Location, m)) {
 		copy := m
 		d.Location = &copy
