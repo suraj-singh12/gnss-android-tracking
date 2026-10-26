@@ -618,8 +618,10 @@ software concurrency evidence, not sustained multi-day fleet/native certificatio
 #37 playback/library and #38 recording packages remain outside this implementation.
 
 
-Boundary limitation: the current browser confirms its first available state after
-Start/Resume. It does not yet preserve an independently verified copy of the exact
-pre-action displayed state at the operator press. The interval to the first confirmed
-state is explicitly unverified, rather than reconstructed from backend receipt. This
-is an unresolved #27 acceptance requirement, even when subsequent capture passes.
+Start/Resume can atomically retain the browser's last stable pre-action rendering
+opportunity when the browser verifies the applied state is still identical at the
+press. The checkpoint records both its original rendered/opportunity timestamps and
+its effective recording boundary; the timeline never starts before Start. If no
+stable proof exists (including rapid changes or background throttling), the boundary
+is explicitly unverified until the next confirmed display. No backend response is
+substituted for that evidence.

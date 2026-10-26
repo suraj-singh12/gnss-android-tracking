@@ -8,7 +8,7 @@
     pending,
     lastState,
     lastConfirmed = 0;
-  let capturedRecording, capturedActive;
+  let capturedRecording, capturedActive, lastPresented;
   let generation = 0,
     stopped = false;
   const headers = () =>
@@ -60,7 +60,7 @@
   async function pump() {
     if (pumping || !lease || stopped) return;
     const rec = window.recordingLiveState?.()?.recording;
-    if (!rec?.active || rec.status === "stopped") return;
+    const capturing = rec?.active && rec.status !== "stopped";
     pumping = true;
     try {
       if (!pending && dirty && document.visibilityState === "visible") {
@@ -72,15 +72,26 @@
         await new Promise((resolve) => setTimeout(resolve, 0));
         if (before !== generation) {
           dirty = true;
-          await request("gap", {
-            from: presented,
-            until: new Date().toISOString(),
-            reason:
-              "Display changed before rendering-opportunity confirmation; transient state unverified",
-          });
+          if (capturing)
+            await request("gap", {
+              from: presented,
+              until: new Date().toISOString(),
+              reason:
+                "Display changed before rendering-opportunity confirmation; transient state unverified",
+            });
           return;
         }
         const encoded = JSON.stringify(applied);
+        lastPresented = {
+          state: applied,
+          presented_at: presented,
+          opportunity_at: new Date().toISOString(),
+          encoded,
+        };
+        if (!capturing) {
+          dirty = false;
+          return;
+        }
         if (encoded === lastState) {
           dirty = false;
           return;
@@ -117,6 +128,25 @@
   });
   window.RecordingCapture = {
     headers,
+    boundary(pressed) {
+      if (
+        !lease ||
+        !lastPresented ||
+        document.visibilityState !== "visible" ||
+        lastPresented.opportunity_at > pressed
+      )
+        return undefined;
+      if (
+        JSON.stringify(window.recordingAppliedState()) !== lastPresented.encoded
+      )
+        return undefined;
+      return {
+        state: lastPresented.state,
+        presented_at: lastPresented.presented_at,
+        opportunity_at: lastPresented.opportunity_at,
+        revision: ++revision,
+      };
+    },
     changed() {
       const rec = window.recordingLiveState?.()?.recording;
       if (
@@ -144,12 +174,18 @@
     pump,
   };
   async function action(action) {
+    const pressed = new Date().toISOString();
+    const boundary =
+      action === "resume"
+        ? window.RecordingCapture.boundary(pressed)
+        : undefined;
     const r = await fetch("/local/recording", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...headers() },
       body: JSON.stringify({
         action,
-        operator_at: new Date().toISOString(),
+        operator_at: pressed,
+        boundary,
         confirmed: action === "discard",
       }),
     });

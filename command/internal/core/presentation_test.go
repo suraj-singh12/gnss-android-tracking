@@ -316,3 +316,36 @@ func TestPresentationSaveAllowsConcurrentReceiptAndFreezesReadBoundary(t *testin
 	}
 	t.Logf("receipt while Save staged 600 originals: %s", latency)
 }
+
+func TestPresentationExactStartAndResumeBoundaryProof(t *testing.T) {
+	s, now, _ := open(t)
+	r := claimPresentation(t, s)
+	ingest(t, s, message(t, 1, -10, 0, 0, 1))
+	proof := presentationRequest{Revision: 1, Presented: now.Add(-time.Second).Format(time.RFC3339Nano), Opportunity: now.Add(-500 * time.Millisecond).Format(time.RFC3339Nano), State: displayState{Version: 1, Common: json.RawMessage(`{"receipt_version":1}`), Parties: map[string]json.RawMessage{device: json.RawMessage(`{"visible":true}`)}}}
+	if e := s.actionModeOwned("start", "from_now", r.Token, r.Epoch, now.Format(time.RFC3339Nano), &proof); e != nil {
+		t.Fatal(e)
+	}
+	var data string
+	if e := s.db.QueryRow(`SELECT data FROM presentation_journal WHERE kind='display'`).Scan(&data); e != nil {
+		t.Fatal(e)
+	}
+	var event map[string]any
+	_ = json.Unmarshal([]byte(data), &event)
+	if event["boundary_state"] != true || event["presented_at"] != proof.Presented || event["effective_at"] != now.Format(time.RFC3339Nano) {
+		t.Fatal(event)
+	}
+	*now = now.Add(2 * time.Second)
+	action(t, s, "pause")
+	*now = now.Add(time.Second)
+	proof.Revision = 2
+	proof.Presented = now.Add(-500 * time.Millisecond).Format(time.RFC3339Nano)
+	proof.Opportunity = now.Add(-100 * time.Millisecond).Format(time.RFC3339Nano)
+	if e := s.actionModeOwned("resume", "from_now", r.Token, r.Epoch, now.Format(time.RFC3339Nano), &proof); e != nil {
+		t.Fatal(e)
+	}
+	var count int
+	_ = s.db.QueryRow(`SELECT COUNT(*) FROM presentation_journal WHERE kind='display'`).Scan(&count)
+	if count != 2 {
+		t.Fatal("boundary states not durable", count)
+	}
+}

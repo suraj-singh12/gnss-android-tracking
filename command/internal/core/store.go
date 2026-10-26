@@ -923,9 +923,9 @@ func (s *Store) AcknowledgeSOS(device, event string) error {
 
 func (s *Store) Action(action string) error { return s.ActionMode(action, "from_now") }
 func (s *Store) ActionMode(action, mode string) error {
-	return s.actionModeOwned(action, mode, "", "", "")
+	return s.actionModeOwned(action, mode, "", "", "", nil)
 }
-func (s *Store) actionModeOwned(action, mode, token, epoch, operatorAt string) error {
+func (s *Store) actionModeOwned(action, mode, token, epoch, operatorAt string, boundary *presentationRequest) error {
 	return s.change("recording_"+action, "", func(st *State, now time.Time, tx *sql.Tx) error {
 		if token != "" {
 			l, e := getLease(tx)
@@ -1020,7 +1020,13 @@ func (s *Store) actionModeOwned(action, mode, token, epoch, operatorAt string) e
 				return e
 			}
 		}
-		return presentationAction(tx, r, action, now, receivedAt)
+		if e := presentationAction(tx, r, action, now, receivedAt); e != nil {
+			return e
+		}
+		if token != "" && (action == "start" || action == "resume") {
+			return presentationBoundary(tx, r, boundary, token, epoch, now, receivedAt)
+		}
+		return nil
 	})
 }
 func (s *Store) SetPolicy(p Policy) error {

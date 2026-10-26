@@ -227,7 +227,11 @@ func (s *Store) LocalHandler(assets http.Handler) http.Handler {
 			failure(w, 415, "unsupported_media_type", errors.New("use application/json"))
 			return
 		}
-		b, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 65536))
+		bodyLimit := int64(65536)
+		if r.URL.Path == "/local/recording" {
+			bodyLimit = presentationLimit
+		}
+		b, err := io.ReadAll(http.MaxBytesReader(w, r.Body, bodyLimit))
 		if err != nil {
 			failure(w, 400, "invalid_setting", err)
 			return
@@ -250,7 +254,16 @@ func (s *Store) LocalHandler(assets http.Handler) http.Handler {
 				if mode == "" {
 					mode = "from_now"
 				}
-				err = s.actionModeOwned(str(v["action"]), mode, r.Header.Get("X-Presentation-Token"), r.Header.Get("X-Presentation-Epoch"), str(v["operator_at"]))
+				var boundary *presentationRequest
+				if value := v["boundary"]; value != nil {
+					var parsed presentationRequest
+					if e := json.Unmarshal([]byte(marshal(value)), &parsed); e != nil {
+						failure(w, 400, "invalid_boundary", e)
+						return
+					}
+					boundary = &parsed
+				}
+				err = s.actionModeOwned(str(v["action"]), mode, r.Header.Get("X-Presentation-Token"), r.Header.Get("X-Presentation-Epoch"), str(v["operator_at"]), boundary)
 			}
 		case "/local/quality":
 			var p Policy

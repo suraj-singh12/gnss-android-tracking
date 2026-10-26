@@ -888,3 +888,64 @@ func (a *assetResponse) Write(b []byte) (int, error) {
 	}
 	return a.Body.Write(b)
 }
+
+// A stable browser rendering opportunity preceding the press can establish the
+// state visible at Start/Resume without pretending it was first rendered then.
+// Its effective recording time is the operator boundary; original render times
+// remain separate. If no such proof exists, preserve an explicit uncertainty.
+func presentationBoundary(tx *sql.Tx, rec *Recording, proof *presentationRequest, token, epoch string, pressed, received time.Time) error {
+	unverified := func(reason string) error {
+		_, e := journal(tx, rec.ID, "unverified", pressed, "", 0, map[string]any{"from": pressed, "reason": reason})
+		return e
+	}
+	if proof == nil {
+		return unverified("no stable pre-action browser rendering opportunity; awaiting first confirmed state")
+	}
+	l, e := getLease(tx)
+	if e != nil {
+		return e
+	}
+	if !owner(l, presentationRequest{Token: token, Epoch: epoch}, received) {
+		return errors.New("browser owner fenced")
+	}
+	rendered, e1 := time.Parse(time.RFC3339Nano, proof.Presented)
+	opportunity, e2 := time.Parse(time.RFC3339Nano, proof.Opportunity)
+	if e1 != nil || e2 != nil || rendered.After(opportunity) || opportunity.After(pressed) || pressed.Sub(opportunity) > 30*time.Second || proof.State.Version != 1 || proof.Revision <= l.Revision {
+		return unverified("pre-action browser proof outside ordering or timing bounds")
+	}
+	b := []byte(marshal(proof.State))
+	if len(b) > presentationLimit {
+		return unverified("pre-action browser state exceeds capture limit")
+	}
+	var used int64
+	if e = tx.QueryRow(`SELECT bytes FROM presentation_usage WHERE id=1`).Scan(&used); e != nil {
+		return e
+	}
+	if used+int64(len(b)) > presentationQuota {
+		return unverified("pre-action capture quota reached")
+	}
+	hash := digest(b)
+	inserted, e := tx.Exec(`INSERT OR IGNORE INTO presentation_blobs VALUES(?,?,?)`, hash, compressed(b), len(b))
+	if e != nil {
+		return e
+	}
+	n, _ := inserted.RowsAffected()
+	if n > 0 {
+		if _, e = tx.Exec(`UPDATE presentation_usage SET bytes=bytes+? WHERE id=1`, len(b)); e != nil {
+			return e
+		}
+	}
+	var common map[string]any
+	_ = json.Unmarshal(proof.State.Common, &common)
+	ordinal, e := journal(tx, rec.ID, "display", pressed, epoch, proof.Revision, map[string]any{"hash": hash, "epoch": epoch, "revision": proof.Revision, "effective_at": pressed, "presented_at": proof.Presented, "render_opportunity_at": proof.Opportunity, "committed_at": received, "boundary_state": true, "displayed_receipt_version": common["receipt_version"], "timing_uncertainty": "stable applied browser state preceding operator boundary; no OS scanout or attention claim"})
+	if e != nil {
+		return e
+	}
+	if e = pinPresentationAssets(tx, rec.ID, ordinal, proof.State.MapID, proof.State.Assets, received); e != nil {
+		return e
+	}
+	l.Revision = proof.Revision
+	l.LastDisplay = rendered
+	l.Recording = rec.ID
+	return putLease(tx, l)
+}

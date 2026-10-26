@@ -91,6 +91,12 @@ function showError(e) {
   $("error").textContent = e ? e.message : "";
 }
 async function post(path, data) {
+  const pressed = new Date().toISOString();
+  const boundary =
+    path === "recording" &&
+    (data.action === "start" || data.action === "resume")
+      ? window.RecordingCapture?.boundary(pressed)
+      : undefined;
   const response = await fetch("/local/" + path, {
     method: "POST",
     headers: {
@@ -99,9 +105,7 @@ async function post(path, data) {
     },
     body: JSON.stringify({
       ...data,
-      ...(path === "recording"
-        ? { operator_at: new Date().toISOString() }
-        : {}),
+      ...(path === "recording" ? { operator_at: pressed, boundary } : {}),
     }),
   });
   const b = await response.json();
