@@ -1,0 +1,13 @@
+{
+  "source": "b14edf4588783a837fe2e04a963d69d6ab606668",
+  "os_scanout_verified": false,
+  "human_attention_verified": false,
+  "first_confirmation_delay_ms": 3282,
+  "delayed_actual_map_application_ms": 778,
+  "receipt_did_not_establish_delayed_display": true,
+  "secondary_denied": true,
+  "browser_recovery": true,
+  "command_crash_recovery": true,
+  "snapshot_immutable": true,
+  "passed": true
+}

@@ -857,3 +857,14 @@ establishes browser-applied state, not OS compositor scanout. Exact pinned asset
 revisions, failed publication/retry and concurrent receipt while Save stages are tested.
 Long-running 20+ fleets, sustained large-Save latency and native/physical
 acceptance remain open. No automated pixel-diff baseline is introduced.
+
+Running-app review at code source `b14edf4588783a837fe2e04a963d69d6ab606668`:
+[Day recording](evidence/issue27/rendered/issue27-day-recording.png),
+[Night paused](evidence/issue27/rendered/issue27-night-paused.png),
+[Day Save](evidence/issue27/rendered/issue27-day-save.png) and
+[Night Save](evidence/issue27/rendered/issue27-night-save.png) were inspected against
+the approved originals. The rail occupies 44 px; party cards in Save use inline
+checkboxes and compact names, with Cancel/Save separated. These are synthetic
+five-phone runtime fixtures, not physical GNSS or native OS acceptance. The linked
+browser report records delayed actual map application, ownership, recovery and
+snapshot results; no test reads these images as pixel-diff baselines.
