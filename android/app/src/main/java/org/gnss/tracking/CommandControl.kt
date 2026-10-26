@@ -175,6 +175,33 @@ class ControlKeyStore(context: android.content.Context) {
             .getOrNull()
 }
 
+// Process evidence is deliberately separate from durable historical timestamps.
+enum class ContactFailure {
+    TRANSPORT,
+    AUTHENTICATION,
+}
+
+data class AuthenticatedContact(
+    val generation: Long,
+    val authority: String?,
+    val enrollment: String?,
+    val receivedUtc: Long? = null,
+    val receivedElapsed: Long? = null,
+    val failure: ContactFailure? = null,
+) {
+    fun matches(state: Installation) =
+        generation == state.endpointGeneration &&
+            authority == state.controlAuthority &&
+            enrollment == state.controlEnrollment
+
+    fun fresh(state: Installation, elapsed: Long) =
+        state.controlEnrollment != null &&
+            !state.controlDisabled &&
+            matches(state) &&
+            failure == null &&
+            receivedElapsed?.let { elapsed - it in 0 until 30_000 } == true
+}
+
 class CommandControl(
     private val repository: Repository,
     private val transport: Transport,
@@ -187,6 +214,31 @@ class CommandControl(
     private val alertOutput: PhoneAlertOutput? = null,
     private val alertRuntimeAllowed: () -> Boolean = { true },
 ) {
+    private val contactState = kotlinx.coroutines.flow.MutableStateFlow<AuthenticatedContact?>(null)
+    val contactUpdates: kotlinx.coroutines.flow.StateFlow<AuthenticatedContact?>
+        get() = contactState
+
+    @Volatile
+    var contact: AuthenticatedContact? = null
+        private set(value) {
+            field = value
+            contactState.value = value
+        }
+
+    fun contactFresh(state: Installation) = contact?.fresh(state, clock.elapsedMillis()) == true
+
+    private fun failedContact(state: Installation, reason: ContactFailure) {
+        val prior = contact?.takeIf { it.matches(state) }
+        contact =
+            (prior
+                    ?: AuthenticatedContact(
+                        state.endpointGeneration,
+                        state.controlAuthority,
+                        state.controlEnrollment,
+                    ))
+                .copy(failure = reason)
+    }
+
     private val gson = Gson()
     private val mutex = Mutex()
     private var next = 0L
@@ -222,6 +274,7 @@ class CommandControl(
                     controlRequired = true,
                     controlAuthority = value.authority,
                     controlEnrollment = value.enrollment,
+                    controlDisabled = false,
                     authority = value.authority,
                     version = 0,
                     overrideSeconds = null,
@@ -229,6 +282,7 @@ class CommandControl(
                     endpointGeneration = it.endpointGeneration + 1,
                 )
             }
+            contact = null
             next = 0
             availability = "Enrolled; awaiting authenticated Command"
         }
@@ -240,9 +294,11 @@ class CommandControl(
                 it.copy(
                     controlAuthority = null,
                     controlEnrollment = null,
+                    controlDisabled = true,
                     endpointGeneration = it.endpointGeneration + 1,
                 )
             }
+            contact = null
             availability = "Remote control disabled locally; secure configuration still required"
         }
 
@@ -265,6 +321,7 @@ class CommandControl(
             val state = repository.state()
             val key = credential()
             if (key == null) {
+                failedContact(state, ContactFailure.AUTHENTICATION)
                 availability = "Remote control unavailable: secure credential missing or unreadable"
                 return@withLock
             }
@@ -275,6 +332,14 @@ class CommandControl(
                     state.endpoint.isBlank() ||
                     !transport.wifiAvailable()
             ) {
+                val bindingMismatch =
+                    state.controlAuthority != key.authority ||
+                        state.controlEnrollment != key.enrollment ||
+                        state.deviceId != key.device
+                failedContact(
+                    state,
+                    if (bindingMismatch) ContactFailure.AUTHENTICATION else ContactFailure.TRANSPORT,
+                )
                 availability =
                     if (!transport.wifiAvailable()) "Offline: waiting for Wi-Fi; results retained"
                     else "Remote control unavailable: local authorization or endpoint required"
@@ -284,6 +349,7 @@ class CommandControl(
             if (dao.pendingSosExists()) return@withLock
             next = clock.elapsedMillis() + 5000
             var receivedEnvelope = false
+            var authenticationRejected = false
             var sentResults = emptyList<CommandRecord>()
             try {
                 refreshSync(key.enrollment)
@@ -319,13 +385,18 @@ class CommandControl(
                     )
                 val exchangeStarted = clock.elapsedMillis()
                 val response =
-                    transport.control(state.endpoint, gson.toJson(env)) ?: return@withLock
+                    transport.control(state.endpoint, gson.toJson(env))
+                        ?: throw java.io.IOException("Control transport unavailable")
+                val responseReceivedUtc = clock.wallMillis()
+                val responseReceivedElapsed = clock.elapsedMillis()
                 if (response.code != 200 || !response.json) {
+                    authenticationRejected = response.code == 401 || response.code == 403
                     availability =
                         "Remote control unavailable: authentication denied or unsupported receiver (${response.code})"
                     throw IllegalStateException("unavailable")
                 }
                 receivedEnvelope = true
+                authenticationRejected = true
                 val outer = Protocol.parse(response.body)
                 val reply = gson.fromJson(outer, ControlEnvelope::class.java)
                 val expected =
@@ -354,6 +425,7 @@ class CommandControl(
                 val commands = body["commands"].asJsonArray
                 require(commands.size() <= 8)
                 require(body["confirmed"].isJsonObject)
+                authenticationRejected = false
                 receivedEnvelope = false // Later storage/effect failures are not forged responses.
                 // Endpoint edits/re-enrollment invalidate in-flight authenticated replies.
                 if (repository.state().endpointGeneration != state.endpointGeneration)
@@ -395,11 +467,38 @@ class CommandControl(
                     }
                 }
                 dao.pruneCommands()
+                val current = repository.state()
+                if (
+                    current.endpointGeneration != state.endpointGeneration ||
+                        current.controlEnrollment != key.enrollment ||
+                        current.controlAuthority != key.authority
+                )
+                    return@withLock
+                val receipt = responseReceivedUtc
+                repository.edit {
+                    it.copy(
+                        controlLastSuccess = receipt,
+                        controlLastGeneration = state.endpointGeneration,
+                    )
+                }
+                contact =
+                    AuthenticatedContact(
+                        state.endpointGeneration,
+                        key.authority,
+                        key.enrollment,
+                        receipt,
+                        responseReceivedElapsed,
+                    )
                 failures = 0
                 availability = "Authenticated Command · ${utc(clock.wallMillis())}"
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (_: Exception) {
+                failedContact(
+                    state,
+                    if (authenticationRejected) ContactFailure.AUTHENTICATION
+                    else ContactFailure.TRANSPORT,
+                )
                 if (receivedEnvelope) denied("invalid_or_untrusted_control_response")
                 for (row in sentResults) {
                     val current = dao.command(row.id)

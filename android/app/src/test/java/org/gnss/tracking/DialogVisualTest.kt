@@ -26,9 +26,20 @@ class DialogVisualTest {
     @Test
     fun appOwnedWindowsRenderAndCancelWithoutMutatingOperations() = runBlocking {
         val app = ApplicationProvider.getApplicationContext<TrackingApp>()
-        withContext(Dispatchers.IO) { app.repository.state() }
+        val initial = withContext(Dispatchers.IO) { app.repository.state() }
+        val authority = Protocol.newId()
+        val enrollment = Protocol.newId()
         val output = System.getenv("GNSS_SCREENSHOT_DIR")?.let { File(it).apply { mkdirs() } }
         for (night in listOf(false, true)) for (font in listOf(1f, 1.5f)) {
+            withContext(Dispatchers.IO) {
+                app.repository.edit {
+                    it.copy(
+                        controlAuthority = authority,
+                        controlEnrollment = enrollment,
+                        controlDisabled = false,
+                    )
+                }
+            }
             app.operational.value = Operational()
             app.getSharedPreferences("appearance", 0).edit().putBoolean("night", night).commit()
             @Suppress("DEPRECATION")
@@ -95,10 +106,20 @@ class DialogVisualTest {
                 click("Confirm change")
                 capture("change-command")
                 openNativeScreen(a, "Command access")
-                click("Authorize Command")
+                click("How to authorize this Command")
+                click("I have the private credential")
+                all()
+                    .filterIsInstance<EditText>()
+                    .single { it.hint == "Private credential" }
+                    .setText("gnss1:$authority:${initial.deviceId}:$enrollment:${"01".repeat(32)}")
+                click("Review authorization")
+                click("Continue")
                 capture("authorize")
+                assertEquals(enrollment, app.repository.state().controlEnrollment)
+                click("Cancel")
                 click("Disable remote control locally")
                 capture("disable-command")
+                assertEquals(enrollment, app.repository.state().controlEnrollment)
                 openNativeScreen(a, "Tracking")
                 app.operational.value = Operational(tracking = true)
                 settle()

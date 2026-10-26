@@ -102,6 +102,13 @@ async function wait(check) {
   await page.waitForFunction(()=>document.querySelectorAll(".device").length===20);
   await page.locator("#open-control").click();
   await page.waitForFunction(()=>document.querySelectorAll("#control-phones label").length===20);
+  const publicIdentity=(await (await fetch(local+"/local/control")).json()).authority_id;
+  assert.match(publicIdentity,/^[0-9a-f-]{36}$/);
+  assert.equal(await page.locator("#control-authority").textContent(),`Command ID: ${publicIdentity}`);
+  await page.context().grantPermissions(["clipboard-read","clipboard-write"]);
+  await page.locator("#control-copy-authority").click();
+  assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),publicIdentity);
+  assert.equal((await page.locator("#control-authority").textContent()).includes("gnss1:"),false);
   let provisioningPrompts=0;
   const credentials=new Map(), confirmations=[];
   page.on("dialog",async dialog=>{if(dialog.type()==="prompt"){provisioningPrompts++;assert.match(dialog.defaultValue(),/^gnss1:/);credentials.set(dialog.defaultValue().split(":")[2],dialog.defaultValue());}else confirmations.push(dialog.message());await dialog.accept();});
@@ -191,8 +198,19 @@ async function wait(check) {
   assert.equal((await (await fetch(local+"/local/control")).json()).commands.find(c=>c.id===alert.id).state,"recipient_acknowledged");
   await alertDetail.scrollIntoViewIfNeeded();
   await page.screenshot({path:path.join(out,"command-phone-alert-human-ack.png"),fullPage:true});
+  const clockShiftEvidence = await page.evaluate(async () => {
+    const originalNow = Date.now;
+    Date.now = () => originalNow() - 60000;
+    try { await refreshControl(); return document.querySelector("#control-phones").textContent; }
+    finally { Date.now = originalNow; }
+  });
+  assert.match(clockShiftEvidence, /age unconfirmed \(check clock\)/);
+  await page.evaluate(() => refreshControl());
   await page.locator("#phone-control").evaluate(dialog=>dialog.scrollTop=0);
   await page.screenshot({path:path.join(out,"command-phone-controls.png"),fullPage:true});
+  await page.evaluate(()=>{document.documentElement.dataset.appearance="night";});
+  await page.screenshot({path:path.join(out,"command-phone-controls-night.png"),fullPage:true});
+  await page.evaluate(()=>{document.documentElement.dataset.appearance="day";});
   const accessibility=await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa"]).analyze();
   fs.writeFileSync(path.join(out,"control-accessibility.json"),JSON.stringify(accessibility.violations,null,2));
   assert.deepEqual(accessibility.violations.map(v=>v.id),[]);assert.deepEqual(errors,[]);

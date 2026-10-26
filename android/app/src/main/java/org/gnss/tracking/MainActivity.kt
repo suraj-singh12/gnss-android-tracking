@@ -99,6 +99,10 @@ class MainActivity : Activity() {
     private lateinit var settingsFeedback: TextView
     private lateinit var commandTrust: TextView
     private lateinit var commandTrustEvidence: TextView
+    private var enrollmentSecret: ControlCredential? = null
+    private var enrollmentInput: EditText? = null
+    private var refreshCommandAccess: (() -> Unit)? = null
+    private var contactExpiry: kotlinx.coroutines.Job? = null
     private lateinit var reportingPolicy: TextView
     private lateinit var reportingDetails: TextView
     private lateinit var healthHeadline: TextView
@@ -254,12 +258,19 @@ class MainActivity : Activity() {
         fun navigate(name: String) {
             if (::sosHold.isInitialized) sosHold.cancel()
             if (route != name) {
+                if (name !in listOf("Enter credential", "Review authorization")) {
+                    enrollmentSecret = null
+                    enrollmentInput?.text?.clear()
+                }
                 currentFocus?.let { focused ->
                     getSystemService(android.view.inputmethod.InputMethodManager::class.java)
                         .hideSoftInputFromWindow(focused.windowToken, 0)
                     focused.clearFocus()
                 }
             }
+            if (name in listOf("Enter credential", "Review authorization"))
+                window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+            else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
             route = name
             var top = name
             while (routeParents.containsKey(top)) top = routeParents.getValue(top)
@@ -874,13 +885,15 @@ class MainActivity : Activity() {
                 renderingAdaptive = false
             }
             val fallback = app.observationPersistence.samplingState.fallback ?: policy.error
-            val status = when {
-                pending != null -> "Saving · ${if (pending) "Adaptive ON" else "Dense OFF"}"
-                app.adaptiveSaveFailed -> "Not saved · Dense fallback · check storage · saved ${if (policy.enabled) "ON" else "OFF"}"
-                fallback != null -> "Dense fallback · $fallback"
-                policy.enabled -> "ON · Adaptive storage"
-                else -> "OFF · Dense storage"
-            }
+            val status =
+                when {
+                    pending != null -> "Saving · ${if (pending) "Adaptive ON" else "Dense OFF"}"
+                    app.adaptiveSaveFailed ->
+                        "Not saved · Dense fallback · check storage · saved ${if (policy.enabled) "ON" else "OFF"}"
+                    fallback != null -> "Dense fallback · $fallback"
+                    policy.enabled -> "ON · Adaptive storage"
+                    else -> "OFF · Dense storage"
+                }
             if (policyStatus.text.toString() != status) policyStatus.text = status
         }
         adaptive.setOnCheckedChangeListener { _, enabled ->
@@ -1006,69 +1019,6 @@ class MainActivity : Activity() {
         commandTrustEvidence = text("Loading trust evidence…", 14f)
         content = enrollmentSettings
 
-        val controlPhoneIdentity = text("Loading phone identity…")
-        controlPhoneIdentity.setTextIsSelectable(true)
-        scope.launch {
-            controlPhoneIdentity.text =
-                try {
-                    "Phone UUID: " + withContext(Dispatchers.IO) { app.repository.state().deviceId }
-                } catch (_: Exception) {
-                    "Phone identity unavailable: check storage before enrolling"
-                }
-        }
-        val commandCredential =
-            EditText(this).apply {
-                hint = "Command credential"
-                inputType =
-                    android.text.InputType.TYPE_CLASS_TEXT or
-                        android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-                importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
-                minHeight = dp(48)
-                contentDescription = hint
-                setSaveEnabled(false)
-            }
-        content.addView(commandCredential)
-        val enrollmentStatus = text("Verify phone identity at Command first.", 13f)
-        button("Authorize Command") {
-            val value = commandCredential.text.toString()
-            commandCredential.text.clear()
-            AlertDialog.Builder(this)
-                .setTitle("Authorize remote control?")
-                .setMessage(
-                    "Only continue after verifying the phone identity and credential directly at your local Command console. Allows reporting, adaptive persistence, sync, phone alerts and OS-permitted tracking controls."
-                )
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Authorize") { _, _ ->
-                    scope.launch {
-                        enrollmentStatus.text =
-                            try {
-                                withContext(Dispatchers.IO) {
-                                    val key = ControlCrypto.parseCredential(value)
-                                    app.commandControl.bind(key) { app.controlKeys.save(key) }
-                                }
-                                "Remote control enrolled; awaiting authenticated contact"
-                            } catch (_: Exception) {
-                                "Enrollment failed: check phone identity, credential and secure key storage"
-                            }
-                    }
-                }
-                .show()
-        }
-        button("Disable remote control locally") {
-            AlertDialog.Builder(this)
-                .setTitle("Disable remote control?")
-                .setMessage(
-                    "New remote instructions will be unavailable. Pending results are retained."
-                )
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Disable") { _, _ ->
-                    scope.launch {
-                        withContext(Dispatchers.IO) { app.commandControl.disable() }
-                        enrollmentStatus.text = "Remote control disabled · Results retained"
-                    }
-                }
-                .show()
-        }
         content = pages.getValue("Diagnostics")
         val commandGroup = group("Command Instructions", false)
         content = commandGroup
@@ -1350,27 +1300,23 @@ class MainActivity : Activity() {
                     }
                 }
             }
+            val binding = savedInstallation
+            val trustState =
+                commandContactLabel(
+                    binding,
+                    app.commandControl.contact,
+                    SystemClock.elapsedMillis(),
+                )
             if (::partyAuthenticated.isInitialized)
-                partyAuthenticated.text =
-                    "Authenticated contact · " +
-                        if (app.commandControl.availability.startsWith("Authenticated Command"))
-                            app.commandControl.availability.substringAfter(" · ")
-                        else "Unknown"
+                partyAuthenticated.text = "Authenticated contact · $trustState"
             commandTrustEvidence.text =
                 commandTrustDescription(
                     savedInstallation,
                     commandHistory,
-                    app.commandControl.availability,
+                    "Current state: $trustState",
+                    app.commandControl.contact,
                 )
-            val binding = savedInstallation
-            val trustState =
-                when {
-                    binding == null -> "Unknown"
-                    binding.controlEnrollment == null -> "Unenrolled"
-                    app.commandControl.availability.startsWith("Authenticated Command") ->
-                        "Verified"
-                    else -> "Unverified"
-                }
+            refreshCommandAccess?.invoke()
             commandTrust.text = "Command access · $trustState"
             diagnosticTrust.text = commandTrustEvidence.text
             healthRows
@@ -1379,13 +1325,16 @@ class MainActivity : Activity() {
                     trustState,
                     if (binding?.controlEnrollment == null) "Enrollment required"
                     else "Authority bound",
-                    if (trustState == "Verified") R.color.accent else R.color.muted,
+                    if (trustState == "Contact verified") R.color.accent else R.color.muted,
                 )
         }
         scope.launch {
             try {
-                combine(app.repository.dao.observeCommands(), app.commandControl.updates) { rows, _
-                        ->
+                combine(
+                        app.repository.dao.observeCommands(),
+                        app.commandControl.updates,
+                        app.commandControl.contactUpdates,
+                    ) { rows, _, _ ->
                         rows
                     }
                     .collect {
@@ -1394,6 +1343,16 @@ class MainActivity : Activity() {
                                 it.sortedByDescending { row -> row.received }
                             }
                         commandHistoryLoaded = true
+                        contactExpiry?.cancel()
+                        app.commandControl.contact?.receivedElapsed?.let { at ->
+                            val remaining = 30_000 - (SystemClock.elapsedMillis() - at)
+                            if (remaining > 0)
+                                contactExpiry =
+                                    scope.launch {
+                                        delay(remaining)
+                                        refreshTrust?.invoke()
+                                    }
+                        }
                         refreshTrust?.invoke()
                         renderCommands()
                         if (route == "Instruction details")
@@ -1469,9 +1428,10 @@ class MainActivity : Activity() {
             ::navigate,
         )
         navigate(
-            savedInstanceState?.getString("route")
-                ?: savedInstanceState?.getString("destination")
-                ?: "Tracking"
+            savedInstanceState?.getString("route")?.let {
+                // Review candidates are private process memory, never restored form state.
+                if (it == "Review authorization") "Enter credential" else it
+            } ?: savedInstanceState?.getString("destination") ?: "Tracking"
         )
         scope.launch {
             try {
@@ -2099,9 +2059,14 @@ class MainActivity : Activity() {
             )
             ui.add(
                 instructionDetailsPage,
-                ui.button(if (row.trusted) "Copy command ID" else "Copy security event ID") {
+                ui.button(if (row.trusted) "Copy instruction ID" else "Copy security event ID") {
                     getSystemService(android.content.ClipboardManager::class.java)
-                        .setPrimaryClip(android.content.ClipData.newPlainText("Command ID", row.id))
+                        .setPrimaryClip(
+                            android.content.ClipData.newPlainText(
+                                if (row.trusted) "Instruction ID" else "Security event ID",
+                                row.id,
+                            )
+                        )
                     Toast.makeText(this, "ID copied", Toast.LENGTH_SHORT).show()
                 },
                 12,
@@ -2265,6 +2230,8 @@ class MainActivity : Activity() {
         settings.setPadding(dp(20), 0, dp(20), dp(24))
         title(settings, "Settings")
         menu(settings, "Party & Command", "Identity, connection and trust")
+        val accessEntry =
+            ui.menu(settings, "Command access", "Loading…") { navigate("Command access") }
         menu(settings, "Tracking & GNSS", "Reporting interval and storage policy")
         menu(settings, "Field readiness", "Permissions and battery")
         menu(settings, "Appearance & SOS", "Theme and emergency controls")
@@ -2384,7 +2351,295 @@ class MainActivity : Activity() {
         val advancedSettings = newPage("Advanced settings", "Settings")
         menu(advancedSettings, "Command access", "Authorize or disable remote control")
         menu(advancedSettings, "Command trust", "Phone identity and trust evidence")
-        addRoute("Command access", "Advanced settings", enrollment)
+        val access = newPage("Command access", "Advanced settings")
+        val accessCard = ui.card(access, 18)
+        val accessTitle = ui.label("Loading…", 20f, bold = true)
+        val accessSubtitle = ui.label("", 14f, muted = true)
+        ui.add(accessCard, accessTitle)
+        ui.add(accessCard, accessSubtitle, 8)
+        val accessAddress = ui.fact(ui.card(access), "Command address", "Loading…")
+        val primaryAccess =
+            ui.button("Set up Command access") {
+                    if (accessTitle.text in listOf("Contact verified", "Contact unavailable"))
+                        navigate("Identity & verification details")
+                    else navigate("Compare this phone")
+                }
+                .apply { ui.style(this, primary = true) }
+        ui.add(access, primaryAccess, 16)
+        menu(
+            access,
+            "Identity & verification details",
+            "Public identities and authenticated evidence",
+        )
+        val disableAccess =
+            ui.button("Disable remote control locally") {
+                AlertDialog.Builder(this)
+                    .setTitle("Disable remote control?")
+                    .setMessage(
+                        "New remote instructions will be unavailable. Pending results are retained."
+                    )
+                    .setNegativeButton("Cancel", null)
+                    .setPositiveButton("Disable") { _, _ ->
+                        scope.launch {
+                            withContext(Dispatchers.IO) { app.commandControl.disable() }
+                        }
+                    }
+                    .show()
+            }
+        ui.add(access, disableAccess, 8)
+        ui.add(
+            access,
+            ui.button("How to authorize this Command") { navigate("Compare this phone") },
+            8,
+        )
+        fun publicCopy(label: String, value: () -> String?) =
+            ui.button(label) {
+                value()?.let { id ->
+                    (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager)
+                        .setPrimaryClip(android.content.ClipData.newPlainText(label, id))
+                }
+            }
+        val compare = newPage("Compare this phone", "Command access")
+        val steps = ui.card(compare, 18)
+        ui.add(steps, ui.label("On the Command computer", 18f, bold = true))
+        ui.add(
+            steps,
+            ui.label("Open http://127.0.0.1:8081 → Phone controls → select this phone.", 15f),
+            8,
+        )
+        val phoneSetup = ui.label("Loading phone ID…", 16f).apply { setTextIsSelectable(true) }
+        ui.add(ui.card(compare), phoneSetup)
+        ui.add(compare, publicCopy("Copy phone ID") { savedInstallation?.deviceId }, 8)
+        ui.add(
+            compare,
+            ui.label(
+                "Compare the full phone ID, then choose Enroll remote control on Command. Transfer the per-phone credential privately.",
+                14f,
+            ),
+            12,
+        )
+        ui.add(
+            compare,
+            ui.button("I have the private credential") { navigate("Enter credential") }
+                .apply { ui.style(this, primary = true) },
+            16,
+        )
+        val entry = newPage("Enter credential", "Compare this phone")
+        ui.add(
+            entry,
+            ui.label("Transfer the per-phone credential privately from Phone controls.", 15f),
+            18,
+        )
+        val secretInput =
+            EditText(this).apply {
+                id = View.generateViewId()
+                hint = "Private credential"
+                inputType =
+                    android.text.InputType.TYPE_CLASS_TEXT or
+                        android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+                setSaveEnabled(false)
+                minHeight = dp(56)
+            }
+        enrollmentInput = secretInput
+        labeledField(entry, "Private enrollment credential", secretInput)
+        val entryError = ui.label("", 14f)
+        ui.add(
+            entry,
+            ui.label(
+                "Private authorization secret. Never include it in screenshots or diagnostics.",
+                14f,
+                muted = true,
+            ),
+            8,
+        )
+        val review = newPage("Review authorization", "Enter credential")
+        val reviewIdentity = ui.label("", 16f).apply { setTextIsSelectable(true) }
+        ui.add(ui.card(review, 18), reviewIdentity)
+        ui.add(
+            review,
+            ui.label(
+                "Compare the full Command ID with This Command ID in Phone controls. A matching public ID alone does not prove trust.",
+                15f,
+            ),
+            12,
+        )
+        ui.add(
+            entry,
+            ui.button("Review authorization") {
+                    try {
+                        val parsed = ControlCrypto.parseCredential(secretInput.text.toString())
+                        require(parsed.device == savedInstallation?.deviceId) { "phone" }
+                        enrollmentSecret = parsed
+                        secretInput.text.clear()
+                        entryError.text = ""
+                        reviewIdentity.text =
+                            "Command ID from credential\n${parsed.authority}\n\nThis phone ID\n${parsed.device}\n\nThis phone ID matches the credential."
+                        navigate("Review authorization")
+                    } catch (_: Exception) {
+                        enrollmentSecret = null
+                        entryError.text =
+                            "Credential invalid or for a different phone. Check the phone ID and private credential."
+                    }
+                }
+                .apply { ui.style(this, primary = true) },
+            16,
+        )
+        ui.add(entry, entryError, 8)
+        ui.add(
+            review,
+            ui.button("Continue") {
+                    val key = enrollmentSecret
+                    if (key == null) {
+                        navigate("Enter credential")
+                        return@button
+                    }
+                    AlertDialog.Builder(this)
+                        .setTitle("Authorize remote control?")
+                        .setMessage(
+                            "Only authorize after comparing the phone and Command IDs directly on your Command computer. Allows reporting, adaptive storage, Sync, phone alerts and OS-permitted tracking controls. Saved data stays on this phone."
+                        )
+                        .setNegativeButton("Cancel") { _, _ -> enrollmentSecret = null }
+                        .setPositiveButton("Authorize Command") { _, _ ->
+                            val approved = enrollmentSecret
+                            if (approved == null) {
+                                entryError.text =
+                                    "Private credential cleared. Enter it again to authorize."
+                                navigate("Enter credential")
+                                return@setPositiveButton
+                            }
+                            enrollmentSecret = null
+                            scope.launch {
+                                try {
+                                    withContext(Dispatchers.IO) {
+                                        app.commandControl.bind(approved) {
+                                            app.controlKeys.save(approved)
+                                        }
+                                    }
+                                    navigate("Command access")
+                                } catch (_: Exception) {
+                                    entryError.text =
+                                        "Authorization failed. Check phone identity and secure key storage."
+                                    navigate("Enter credential")
+                                }
+                            }
+                        }
+                        .show()
+                }
+                .apply { ui.style(this, primary = true) },
+            16,
+        )
+        ui.add(
+            review,
+            ui.button("Cancel") {
+                enrollmentSecret = null
+                navigate("Command access")
+            },
+            8,
+        )
+        val details = newPage("Identity & verification details", "Command access")
+        val detailsIdentity = ui.label("Loading…", 15f).apply { setTextIsSelectable(true) }
+        ui.add(ui.card(details, 18), detailsIdentity)
+        val copyAuthority = publicCopy("Copy Command ID") { savedInstallation?.controlAuthority }
+        ui.add(details, copyAuthority, 8)
+        ui.add(details, publicCopy("Copy phone ID") { savedInstallation?.deviceId }, 8)
+        val contactDetails = ui.label("", 14f)
+        ui.add(ui.card(details), contactDetails)
+        val moreEvidence = ui.column().apply { visibility = View.GONE }
+        ui.add(
+            moreEvidence,
+            ui.label("", 14f).also { evidence ->
+                commandTrustEvidence.addTextChangedListener(
+                    object : android.text.TextWatcher {
+                        override fun beforeTextChanged(
+                            s: CharSequence?,
+                            start: Int,
+                            count: Int,
+                            after: Int,
+                        ) {}
+
+                        override fun onTextChanged(
+                            s: CharSequence?,
+                            start: Int,
+                            before: Int,
+                            count: Int,
+                        ) {
+                            evidence.text = s
+                        }
+
+                        override fun afterTextChanged(s: android.text.Editable?) {}
+                    }
+                )
+            },
+        )
+        ui.add(
+            details,
+            ui.button("More evidence & rejection reasons") {
+                moreEvidence.visibility =
+                    if (moreEvidence.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+            },
+            8,
+        )
+        ui.add(details, moreEvidence, 8)
+        refreshCommandAccess = {
+            val state = savedInstallation
+            val evidence = app.commandControl.contact
+            val label = commandContactLabel(state, evidence, SystemClock.elapsedMillis())
+            copyAuthority.isEnabled = state?.controlAuthority != null
+            accessTitle.text = label
+            accessSubtitle.text =
+                when (label) {
+                    "Not enrolled" -> "Authorize this Command to control this phone."
+                    "Credential enrolled" -> "Waiting for authenticated contact."
+                    "Contact verified" -> "Authenticated response received."
+                    "Contact unavailable" ->
+                        if (
+                            evidence?.takeIf { state != null && it.matches(state) }?.receivedUtc !=
+                                null ||
+                                (state?.controlLastSuccess != null &&
+                                    state.controlLastGeneration == state.endpointGeneration)
+                        )
+                            "Previously verified. Waiting to reconnect."
+                        else "Current authenticated contact unavailable."
+                    "Authentication failed" -> "Check Command identity and enrollment."
+                    "Disabled on this phone" -> "New remote instructions are disabled."
+                    else -> "Reading local storage…"
+                }
+            primaryAccess.text =
+                when (label) {
+                    "Not enrolled" -> "Set up Command access"
+                    "Credential enrolled" -> "View setup steps"
+                    "Authentication failed" -> "Review enrollment"
+                    "Disabled on this phone" -> "Authorize Command"
+                    else -> "View verification details"
+                }
+            accessEntry.contentDescription = "Command access. $label. Open"
+            (accessEntry.getChildAt(0) as? LinearLayout)?.let { column ->
+                (column.getChildAt(1) as? TextView)?.text = label
+            }
+            accessAddress.text = state?.endpoint?.ifBlank { "Not configured" } ?: "Unknown"
+            disableAccess.visibility =
+                if (state?.controlEnrollment != null) View.VISIBLE else View.GONE
+            phoneSetup.text = "This phone ID\n${state?.deviceId ?: "Unknown"}"
+            detailsIdentity.text =
+                "Authorized Command ID\n${state?.controlAuthority ?: "Not enrolled"}\n\nThis phone ID\n${state?.deviceId ?: "Unknown"}\n\nSaved Command address\n${state?.endpoint?.ifBlank { "Not configured" } ?: "Unknown"}"
+            val matching = state?.let { st -> evidence?.takeIf { it.matches(st) } }
+            val last =
+                matching?.receivedUtc
+                    ?: state?.controlLastSuccess?.takeIf {
+                        state.controlLastGeneration == state.endpointGeneration
+                    }
+            val age =
+                matching?.receivedElapsed?.let {
+                    (SystemClock.elapsedMillis() - it).coerceAtLeast(0) / 1000
+                }
+            val previousBinding =
+                state?.controlLastSuccess?.takeIf {
+                    state.controlLastGeneration != state.endpointGeneration
+                }
+            contactDetails.text =
+                "Current state: $label\nLast verified response: ${last?.let(::utc) ?: "None for this binding"}${age?.let { " · $it s ago" } ?: ""}${previousBinding?.let { "\nPrevious binding response: ${utc(it)} · historical only" } ?: ""}\nRecent means less than 30 seconds with no later failure. After process restart, current contact is unconfirmed until a new verified response. Enrollment, Wi-Fi and GNSS delivery do not prove current contact."
+        }
         val trust = newPage("Command trust", "Party & Command")
         ui.add(ui.card(trust, 18), commandTrustEvidence)
         val change = newPage("Change trusted Command", "Party & Command")
@@ -3106,6 +3361,8 @@ class MainActivity : Activity() {
             DiagnosticEvent.ACTIVITY_RESUMED,
             app.diagnostics.value?.serviceGeneration,
         )
+        // Re-evaluate elapsed time after sleep even if the UI deadline could not run.
+        refreshTrust?.invoke()
         refreshPreflight()
         promptMissingPermissions()
         dispatchNotificationAction()
@@ -3114,6 +3371,8 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         sosHold.cancel()
+        enrollmentSecret = null
+        enrollmentInput?.text?.clear()
         app.physicalButtonTest.activityPaused()
         resumed = false
         volumePattern.reset()

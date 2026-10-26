@@ -37,6 +37,9 @@ data class Installation(
     @ColumnInfo(defaultValue = "1") val controlRequired: Boolean = true,
     val controlAuthority: String? = null,
     val controlEnrollment: String? = null,
+    val controlLastSuccess: Long? = null,
+    val controlLastGeneration: Long? = null,
+    @ColumnInfo(defaultValue = "0") val controlDisabled: Boolean = false,
 ) {
     fun config() = ConfigState(authority, version, overrideSeconds, localInterval)
 }
@@ -324,7 +327,7 @@ CASE WHEN EXISTS(SELECT 1 FROM outbox_summary WHERE `key`=1) THEN (SELECT delive
             CommandRecord::class,
             CommandWatermark::class,
         ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 abstract class TrackingDatabase : RoomDatabase() {
@@ -339,6 +342,7 @@ abstract class TrackingDatabase : RoomDatabase() {
                     MIGRATION_3_4,
                     MIGRATION_4_5,
                     MIGRATION_5_6,
+                    MIGRATION_6_7,
                 )
                 .addCallback(SUMMARY_CALLBACK)
                 .build()
@@ -365,6 +369,16 @@ abstract class TrackingDatabase : RoomDatabase() {
             object : Callback() {
                 override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                     initializeSummary(db)
+                }
+            }
+        val MIGRATION_6_7 =
+            object : androidx.room.migration.Migration(6, 7) {
+                override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE installation ADD COLUMN controlLastSuccess INTEGER")
+                    db.execSQL("ALTER TABLE installation ADD COLUMN controlLastGeneration INTEGER")
+                    db.execSQL(
+                        "ALTER TABLE installation ADD COLUMN controlDisabled INTEGER NOT NULL DEFAULT 0"
+                    )
                 }
             }
         val MIGRATION_5_6 =
@@ -963,6 +977,7 @@ class Repository(val db: TrackingDatabase, private val clock: Clock = SystemCloc
                     authority = if (reenroll) null else old.authority,
                     controlAuthority = if (reenroll) null else old.controlAuthority,
                     controlEnrollment = if (reenroll) null else old.controlEnrollment,
+                    controlDisabled = if (reenroll) false else old.controlDisabled,
                     version = if (reenroll) 0 else old.version,
                     overrideSeconds = if (reenroll) null else old.overrideSeconds,
                     configError = if (reenroll) null else old.configError,

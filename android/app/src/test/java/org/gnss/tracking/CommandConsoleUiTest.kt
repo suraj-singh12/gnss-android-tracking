@@ -108,9 +108,19 @@ class CommandConsoleUiTest {
                     delay(10)
                 }
             }
+            assertTrue(
+                views(root).filterIsInstance<TextView>().any {
+                    it.isShown && it.text.toString().contains("Instruction ID: $id")
+                }
+            )
+            assertFalse(
+                views(root).filterIsInstance<TextView>().any {
+                    it.isShown && it.text.toString().contains("Command UUID:")
+                }
+            )
             views(root)
                 .filterIsInstance<Button>()
-                .single { it.text == "Copy command ID" }
+                .single { it.text == "Copy instruction ID" }
                 .performClick()
             assertEquals(
                 id,

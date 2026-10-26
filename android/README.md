@@ -470,7 +470,7 @@ original recording/quality rules or human SOS acknowledgement.
 
 In existing Settings configure the Command IP:port, then compare this installation's
 phone UUID directly at the local Command → Phone controls console. Generate a private
-per-phone credential there, enter it under **Authenticated remote control**, and
+per-phone credential there, enter it under **Settings → Command access → Enter credential**, and
 explicitly authorize. Address/authority first contact never authorizes commands.
 Keystore-sealed credentials are excluded from backups and diagnostic exports.
 Disable remote control locally to remove authorization; **Enroll with a different
@@ -588,3 +588,29 @@ writes. Saving feedback describes the request; completion restores the policy
 owner's saved value without invoking the listener. Failed commits retain the last
 saved consent/revision, with the existing dense error fallback until a successful
 save. Historical observations and tracking-service lifecycle are unchanged.
+
+### Command access and identity (#48)
+
+Settings → **Command access** opens the same destination as Advanced settings. Use
+**Set up Command access**, compare **This phone ID** with Phone controls on the Command
+computer (`http://127.0.0.1:8081`), generate its credential there and transfer it privately.
+Enter the credential, review the public **Command ID**, compare it directly with Command,
+then explicitly **Authorize Command**. Command ID is the persistent authority UUID;
+phone ID is this Android installation; Instruction ID identifies one instruction. The
+configured LAN address routes traffic and does not prove trust. Public copy actions copy
+only the selected UUID. Never share credentials in screenshots, logs or diagnostic ZIPs.
+
+**Credential enrolled** means local authorization only. **Contact verified** requires an
+actual verified response (an empty poll also qualifies) for the current binding, less than
+30 monotonic seconds old with no subsequent failed exchange. **Contact unavailable**
+keeps historical evidence separate from current contact; **Authentication failed** does
+not by itself establish remote revocation. Details shows exact UTC receipt, process age,
+identity and rejection context. Restart requires fresh contact; stored history and ordinary
+GNSS ACKs cannot establish it. **Disabled on this phone** survives restart; re-enrollment
+requires consent. Credential rotation/revocation semantics and pending results are unchanged.
+
+The existing sender provides control opportunities (five-second control interval while
+its existing lifecycle permits); this screen never starts GNSS or another poller. A
+one-shot UI deadline expires the status even when no further telemetry arrives. Room v7
+adds only historical last-success/generation and local-disable metadata, migrating v6
+without changing saved observations, journal or credential storage.

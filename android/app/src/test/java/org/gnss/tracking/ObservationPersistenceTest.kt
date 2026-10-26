@@ -259,6 +259,7 @@ class ObservationPersistenceTest {
                     TrackingDatabase.MIGRATION_3_4,
                     TrackingDatabase.MIGRATION_4_5,
                     TrackingDatabase.MIGRATION_5_6,
+                    TrackingDatabase.MIGRATION_6_7,
                 )
                 .build()
         try {
@@ -292,7 +293,7 @@ class ObservationPersistenceTest {
         val db = Room.inMemoryDatabaseBuilder(app, TrackingDatabase::class.java).build()
         try {
             val repo = Repository(db, clock)
-            val receiverAuthority=Protocol.newId()
+            val receiverAuthority = Protocol.newId()
             val current =
                 repo.snapshot(clock.now, observation(clock.now).fix, Health(gnss_status = "fix"))
             repo.accept(
@@ -415,6 +416,7 @@ class ObservationPersistenceTest {
                     TrackingDatabase.MIGRATION_3_4,
                     TrackingDatabase.MIGRATION_4_5,
                     TrackingDatabase.MIGRATION_5_6,
+                    TrackingDatabase.MIGRATION_6_7,
                 )
                 .build()
         try {
@@ -520,7 +522,11 @@ class ObservationPersistenceTest {
                 }
             db =
                 Room.databaseBuilder(app, TrackingDatabase::class.java, name)
-                    .addMigrations(TrackingDatabase.MIGRATION_4_5, TrackingDatabase.MIGRATION_5_6)
+                    .addMigrations(
+                        TrackingDatabase.MIGRATION_4_5,
+                        TrackingDatabase.MIGRATION_5_6,
+                        TrackingDatabase.MIGRATION_6_7,
+                    )
                     .build()
             repo = Repository(db, clock)
             assertEquals(identity, repo.state().deviceId)

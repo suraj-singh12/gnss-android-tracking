@@ -399,7 +399,12 @@ func (s *Store) controlLocal(w http.ResponseWriter, r *http.Request) bool {
 			failure(w, 503, "storage", e)
 			return true
 		}
-		respond(w, 200, map[string]any{"phones": phones, "commands": history})
+		identity, e := loadReceiptState(tx)
+		if e != nil {
+			failure(w, 503, "storage", e)
+			return true
+		}
+		respond(w, 200, map[string]any{"authority_id": identity.Authority, "phones": phones, "commands": history})
 		return true
 	}
 	if r.Method != "POST" || (r.Header.Get("Origin") != "" && r.Header.Get("Origin") != "http://"+r.Host && r.Header.Get("Origin") != "https://"+r.Host) || !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
