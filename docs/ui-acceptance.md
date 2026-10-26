@@ -858,7 +858,7 @@ revisions, failed publication/retry and concurrent receipt while Save stages are
 Long-running 20+ fleets, sustained large-Save latency and native/physical
 acceptance remain open. No automated pixel-diff baseline is introduced.
 
-Running-app review at code source `b14edf4588783a837fe2e04a963d69d6ab606668`:
+Running-app review at code source `cead27f3a373c5d1135357cb7f79f67fd2845a2e`:
 [Day recording](evidence/issue27/rendered/issue27-day-recording.png),
 [Night paused](evidence/issue27/rendered/issue27-night-paused.png),
 [Day Save](evidence/issue27/rendered/issue27-day-save.png) and

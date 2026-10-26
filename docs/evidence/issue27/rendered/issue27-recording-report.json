@@ -1,13 +1,18 @@
 {
-  "source": "b14edf4588783a837fe2e04a963d69d6ab606668",
+  "source": "cead27f3a373c5d1135357cb7f79f67fd2845a2e",
   "os_scanout_verified": false,
   "human_attention_verified": false,
-  "first_confirmation_delay_ms": 3282,
-  "delayed_actual_map_application_ms": 778,
+  "first_confirmation_delay_ms": 1352,
+  "delayed_actual_map_application_ms": 763,
   "receipt_did_not_establish_delayed_display": true,
+  "lost_ack_retry_preserved_frozen_state": true,
+  "failed_durable_commit_was_unconfirmed": true,
   "secondary_denied": true,
+  "pinned_map_survived_library_deletion": true,
+  "replayed_browser_checkpoints_verified": 6,
   "browser_recovery": true,
   "command_crash_recovery": true,
+  "stopped_participation_manifest_excludes_later_arrivals": true,
   "snapshot_immutable": true,
   "passed": true
 }
