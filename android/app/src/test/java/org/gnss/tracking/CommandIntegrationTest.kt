@@ -56,16 +56,30 @@ class CommandIntegrationTest {
         http.dispatcher.executorService.shutdown()
     }
 
-    private fun request(url: String, body: String? = null): Response {
-        val builder = Request.Builder().url(url).header("Accept", "application/json")
-        if (body != null) builder.post(body.toRequestBody("application/json".toMediaType()))
-        http.newCall(builder.build()).execute().use {
-            return Response(
-                it.code,
-                it.body!!.string(),
-                it.header("Retry-After"),
-                it.header("Content-Type")?.substringBefore(';') == "application/json",
-            )
+    private fun request(url: String, body: String? = null, headers: Map<String, String> = emptyMap()): Response {
+        // Fixture-driven controls acquire the same exclusive ownership as the
+        // browser. No production authorization bypass is added to the bridge.
+        val lease = if (url.endsWith("/local/recording")) {
+            val claimed = request(bridge.local + "/local/presentation/claim", "{}", mapOf("Origin" to bridge.local))
+            assertEquals(claimed.body, 200, claimed.code)
+            JSONObject(claimed.body)
+        } else null
+        try {
+            val builder = Request.Builder().url(url).header("Accept", "application/json")
+            headers.forEach { (name, value) -> builder.header(name, value) }
+            if (lease != null) {
+                builder.header("X-Presentation-Token", lease.getString("token"))
+                builder.header("X-Presentation-Epoch", lease.getString("epoch"))
+            }
+            if (body != null) builder.post(body.toRequestBody("application/json".toMediaType()))
+            http.newCall(builder.build()).execute().use {
+                return Response(it.code, it.body!!.string(), it.header("Retry-After"),
+                    it.header("Content-Type")?.substringBefore(';') == "application/json")
+            }
+        } finally {
+            if (lease != null) request(bridge.local + "/local/presentation/close",
+                JSONObject().put("token", lease.getString("token")).put("epoch", lease.getString("epoch")).toString(),
+                mapOf("Origin" to bridge.local))
         }
     }
 
@@ -1128,7 +1142,7 @@ class CommandIntegrationTest {
         assertEquals("duplicate", Protocol.parse(p.responses.last().body)["result"].asString)
         assertEquals(firstReceipt, p.db.dao().row(sos.sequence)!!.deliveredAt)
         assertEquals(5, p.repository.state().config().effective_reporting_interval_s)
-        recording("stop")
+        recording("pause")
         recording("resume")
         recording("clear", true)
         assertEquals(1, state()["sos_alerts"].asJsonArray.size())
@@ -1357,7 +1371,7 @@ class CommandIntegrationTest {
         p.snapshot(10.0)
         p.sender.step()
         at(20)
-        recording("stop")
+        recording("pause")
         val stopped = points()
         at(30)
         val live = p.snapshot(1000.0)
