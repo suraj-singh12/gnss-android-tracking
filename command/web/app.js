@@ -3,6 +3,20 @@ const $ = (id) => document.getElementById(id),
   hidden = new Set(),
   svgNS = "http://www.w3.org/2000/svg";
 let state, policyRevision;
+const recordingMapAssets = new Map();
+async function mapAssetFetch(url, options) {
+  const response = await fetch(url, options);
+  const mapID = decodeURIComponent(String(url).split("/")[3] || "");
+  if (response.ok) {
+    const hash = response.headers.get("X-Presentation-Asset");
+    if (hash) {
+      if (!recordingMapAssets.has(mapID))
+        recordingMapAssets.set(mapID, new Set());
+      recordingMapAssets.get(mapID).add(hash);
+    }
+  }
+  return response;
+}
 let liveConnection = "Connecting to Command…";
 const uiTimings = {};
 function uiTiming(stage, started, failed = false) {
@@ -1043,7 +1057,7 @@ function useMap(text, source, id) {
   localStorage.setItem("gnss-map-mode", "offline");
 }
 async function loadSavedMap(id) {
-  const response = await fetch("/local/maps/" + encodeURIComponent(id));
+  const response = await mapAssetFetch("/local/maps/" + encodeURIComponent(id));
   if (!response.ok)
     throw Error("Saved map unavailable; blank canvas remains available");
   const source =
@@ -1111,7 +1125,9 @@ function updateLayers() {
       `/local/maps/${encodeURIComponent(activeMapID)}/terrain-file`;
 }
 async function loadTerrain(id) {
-  const r = await fetch(`/local/maps/${encodeURIComponent(id)}/terrain`);
+  const r = await mapAssetFetch(
+    `/local/maps/${encodeURIComponent(id)}/terrain`,
+  );
   if (activeMapID !== id) return;
   if (r.status === 404) {
     terrain = undefined;
@@ -2223,7 +2239,10 @@ function drawMap() {
   $("scale-label").textContent = "WGS84 / Web Mercator · north up";
   if (locatedSOS?.fix) {
     const [x, y] = xy({ fix: locatedSOS.fix });
-    const layer = svg("g", { "data-layer": "located-sos" });
+    const layer = svg("g", {
+      "data-layer": "located-sos",
+      "data-device": locatedSOS.device_id,
+    });
     const marker = svg("path", {
       d: "M0,-9L9,0L0,9L-9,0Z",
       transform: `translate(${x} ${y})`,
@@ -2256,6 +2275,7 @@ function drawMap() {
 }
 let polling = false;
 let inspectionCursor = "";
+let inspectionDevice;
 async function inspectHistory(cursor = "") {
   const device = selectedParty;
   if (!device) return;
@@ -2271,6 +2291,7 @@ async function inspectHistory(cursor = "") {
     inspectionCursor = page.next_cursor || "";
     $("inspection-next").disabled = !inspectionCursor;
     $("inspection-data").textContent = JSON.stringify(page, null, 2);
+    inspectionDevice = device;
     $("inspection-status").textContent =
       layer === "raw"
         ? "Original capture/envelope and Command receipt times; transport sequence order. No distance derived here."
@@ -2522,7 +2543,9 @@ function radiusDescription(manifest) {
   );
 }
 async function loadRadiusManifest(id) {
-  const r = await fetch(`/local/maps/${encodeURIComponent(id)}/manifest`);
+  const r = await mapAssetFetch(
+    `/local/maps/${encodeURIComponent(id)}/manifest`,
+  );
   if (!r.ok) throw Error("Saved coverage manifest unavailable");
   const manifest = await r.json();
   if (activeMapID !== id) return;
@@ -2873,7 +2896,7 @@ function scheduleRadiusView(w, h) {
         if (version !== radiusViewVersion || activeMapID !== id) return;
         if (c.vector.status === "complete") {
           try {
-            const r = await fetch(
+            const r = await mapAssetFetch(
               `/local/maps/${encodeURIComponent(id)}/chunks/${c.key}?layer=vector`,
               { signal: controller.signal },
             );
@@ -2903,7 +2926,7 @@ function scheduleRadiusView(w, h) {
         }
         if (c.terrain.status === "complete" && grids.length < 8) {
           try {
-            const r = await fetch(
+            const r = await mapAssetFetch(
               `/local/maps/${encodeURIComponent(id)}/chunks/${c.key}?layer=terrain`,
               { signal: controller.signal },
             );
@@ -3697,8 +3720,10 @@ window.recordingAppliedState = () => {
   return {
     version: 1,
     map_id: $("map-mode").value === "offline" ? activeMapID || "" : "",
-    assets: [],
+    assets: [...(recordingMapAssets.get(activeMapID) || [])],
     common: {
+      receipt_version: applied.receipt_version,
+      projection_version: applied.projection_version,
       viewport,
       appearance: document.documentElement.dataset.appearance,
       width: $("tracks").clientWidth,
@@ -3707,6 +3732,9 @@ window.recordingAppliedState = () => {
       selected_party: selectedParty,
       hidden: [...hidden],
       panels: {
+        open_dialogs: [...document.querySelectorAll("dialog[open]")].map(
+          (e) => e.id,
+        ),
         parties: !document
           .querySelector("main")
           .classList.contains("parties-closed"),
@@ -3752,7 +3780,7 @@ window.recordingAppliedState = () => {
           panel:
             id === selectedParty ? $("selected-detail")?.innerText : undefined,
           inspection:
-            id === selectedParty && $("history-inspection").open
+            id === inspectionDevice && $("history-inspection").open
               ? $("inspection-data").textContent
               : undefined,
         },

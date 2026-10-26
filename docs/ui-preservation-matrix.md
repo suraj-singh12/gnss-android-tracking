@@ -262,5 +262,6 @@ Pause/Resume is primary, Save separate and Stop final. No floating dock is intro
 `recording-foundation.cjs` covers actual server/SQLite/Chromium flows and captures
 Day recording, Night paused and both Save dialogs without pixel-diff baselines.
 Exclusive browser fencing protects recording publication. GNSS/ACK/SOS retain their
-existing authorities. Exact compositor presentation, concurrent asset revision binding,
-large-Save latency and long-running fleet acceptance remain unverified; see architecture.
+existing authorities. OS compositor scanout is outside the claim. Asset read revisions and concurrent
+Save receipt have targeted tests; sustained large-Save latency and long-running fleet
+acceptance remain unverified; see architecture.

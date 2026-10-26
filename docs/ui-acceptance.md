@@ -851,7 +851,9 @@ Start, repeated Pause/Resume, active/paused subset Save, exclusive ownership,
 refresh/browser return, SIGKILL/restart, final Stop dismissal and Discard. Its
 Day/Night screenshots are running-app evidence; approved mockups are not tests.
 Delayed animation callbacks cannot produce confirmation at backend receipt time.
-This oracle establishes the implemented rendering-opportunity bound, not compositor
-scanout or a delayed actual-map-paint proof. Exact original-asset read revisions,
-long-running 20+ fleets, receiver latency under large Save and native/physical
+A second oracle deliberately blocks actual map application after receipt and checks
+the old revision remains authoritative until map application and confirmation. This
+establishes browser-applied state, not OS compositor scanout. Exact pinned asset read
+revisions, failed publication/retry and concurrent receipt while Save stages are tested.
+Long-running 20+ fleets, sustained large-Save latency and native/physical
 acceptance remain open. No automated pixel-diff baseline is introduced.

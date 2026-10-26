@@ -26,7 +26,7 @@
         token: lease?.token,
         epoch: lease?.epoch,
       }),
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(op === "save" ? 120000 : 5000),
     });
     const body = await response.json();
     if (!response.ok)

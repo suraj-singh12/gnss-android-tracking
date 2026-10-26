@@ -89,9 +89,21 @@ func (s *Store) initPresentation() error {
 	}
 	for _, table := range []string{"saved_recordings", "saved_presentation", "saved_originals", "saved_assets", "presentation_blobs", "presentation_assets", "presentation_journal"} {
 		for _, op := range []string{"UPDATE", "DELETE"} {
-			if _, e := s.db.Exec(fmt.Sprintf(`CREATE TRIGGER IF NOT EXISTS immutable_%s_%s BEFORE %s ON %s BEGIN SELECT RAISE(ABORT,'immutable recording evidence'); END`, table, op, op, table)); e != nil {
+			if _, e := s.db.Exec(fmt.Sprintf("DROP TRIGGER IF EXISTS immutable_%s_%s", table, op)); e != nil {
 				return e
 			}
+			condition := ""
+			if strings.HasPrefix(table, "saved_") && table != "saved_recordings" {
+				condition = " WHEN EXISTS(SELECT 1 FROM saved_recordings WHERE id=OLD.snapshot)"
+			}
+			if _, e := s.db.Exec(fmt.Sprintf(`CREATE TRIGGER IF NOT EXISTS immutable_%s_%s BEFORE %s ON %s%s BEGIN SELECT RAISE(ABORT,'immutable recording evidence'); END`, table, op, op, table, condition)); e != nil {
+				return e
+			}
+		}
+	}
+	for _, table := range []string{"saved_presentation", "saved_originals", "saved_assets"} {
+		if _, e := s.db.Exec("DELETE FROM " + table + " WHERE NOT EXISTS(SELECT 1 FROM saved_recordings WHERE id=" + table + ".snapshot)"); e != nil {
+			return e
 		}
 	}
 	tx, e := s.db.Begin()
@@ -143,7 +155,9 @@ func (s *Store) initPresentation() error {
 	}
 	return tx.Commit()
 }
-func journal(tx *sql.Tx, recording, kind string, at time.Time, epoch string, rev int64, data any) (int64, error) {
+func journal(tx interface {
+	Exec(string, ...any) (sql.Result, error)
+}, recording, kind string, at time.Time, epoch string, rev int64, data any) (int64, error) {
 	// Non-browser facts have unique epochs so multiple lifecycle actions can coexist.
 	if epoch == "" {
 		epoch = id()
@@ -175,13 +189,31 @@ func putLease(tx *sql.Tx, l presentationLease) error {
 	return e
 }
 func owner(l presentationLease, r presentationRequest, now time.Time) bool {
-	return l.Token != "" && r.Token == l.Token && r.Epoch == l.Epoch && !l.Closed && now.Sub(l.Seen) < 15*time.Second
+	return l.Token != "" && r.Token == l.Token && r.Epoch == l.Epoch && !l.Closed && now.Sub(l.Seen) >= 0 && now.Sub(l.Seen) < 15*time.Second
 }
 func (s *Store) presentationHTTP(w http.ResponseWriter, r *http.Request) bool {
 	if !strings.HasPrefix(r.URL.Path, "/local/presentation/") {
 		return false
 	}
 	if r.Method == "GET" {
+		if r.URL.Path == "/local/presentation/status" {
+			db := s.liveDB
+			if db == nil {
+				db = s.db
+			}
+			var data string
+			err := db.QueryRowContext(r.Context(), `SELECT data FROM presentation_journal WHERE kind='display' ORDER BY ordinal DESC LIMIT 1`).Scan(&data)
+			if errors.Is(err, sql.ErrNoRows) {
+				respond(w, 200, map[string]any{"confirmed": false})
+				return true
+			}
+			if err != nil {
+				failure(w, 503, "storage_unavailable", err)
+				return true
+			}
+			respond(w, 200, json.RawMessage(data))
+			return true
+		}
 		if r.URL.Path == "/local/presentation/saved" {
 			s.savedDiagnostics(w, r)
 			return true
@@ -211,6 +243,9 @@ func (s *Store) presentationHTTP(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 func (s *Store) presentationOperation(op string, r presentationRequest) (any, error) {
+	if op == "save" && s.path != ":memory:" {
+		return s.stagedSave(r)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, e := s.db.Begin()
@@ -229,7 +264,7 @@ func (s *Store) presentationOperation(op string, r presentationRequest) (any, er
 	}
 	var result any
 	if op == "claim" {
-		if !l.Closed && now.Sub(l.Seen) < 15*time.Second {
+		if !l.Closed && now.Sub(l.Seen) >= 0 && now.Sub(l.Seen) < 15*time.Second {
 			return nil, errors.New("Command is occupied by another browser; close it or wait for its lease to expire")
 		}
 		if st.Recording != nil && st.Recording.Status != "stopped" {
@@ -299,6 +334,9 @@ func (s *Store) presentationOperation(op string, r presentationRequest) (any, er
 			if err != nil || opportunity.Before(presented) || opportunity.After(now.Add(5*time.Second)) {
 				return nil, errors.New("invalid browser rendering opportunity timestamps")
 			}
+			if !l.LastDisplay.IsZero() && presented.Before(l.LastDisplay) {
+				return nil, errors.New("browser presentation clock moved backwards; evidence unverified")
+			}
 			if presented.Before(st.Recording.Started) {
 				return nil, errors.New("presentation predates Start")
 			}
@@ -332,13 +370,15 @@ func (s *Store) presentationOperation(op string, r presentationRequest) (any, er
 				}
 			}
 			l.LastDisplay = presented
-			data := map[string]any{"hash": hash, "presented_at": r.Presented, "render_opportunity_at": r.Opportunity, "committed_at": now, "revision": r.Revision, "epoch": r.Epoch, "timing_uncertainty": "browser clock and rendering-opportunity bounds; no OS scanout or human attention claim"}
+			var common map[string]any
+			_ = json.Unmarshal(r.State.Common, &common)
+			data := map[string]any{"displayed_receipt_version": common["receipt_version"], "hash": hash, "presented_at": r.Presented, "render_opportunity_at": r.Opportunity, "committed_at": now, "revision": r.Revision, "epoch": r.Epoch, "timing_uncertainty": "browser clock and rendering-opportunity bounds; no OS scanout or human attention claim"}
 			var ordinal int64
 			ordinal, e = journal(tx, st.Recording.ID, "display", now, r.Epoch, r.Revision, data)
 			if e != nil {
 				return nil, e
 			}
-			if e = pinPresentationMap(tx, st.Recording.ID, ordinal, r.State.MapID); e != nil {
+			if e = pinPresentationAssets(tx, st.Recording.ID, ordinal, r.State.MapID, r.State.Assets, now); e != nil {
 				return nil, e
 			}
 			l.Revision = r.Revision
@@ -374,47 +414,36 @@ func (s *Store) presentationOperation(op string, r presentationRequest) (any, er
 	}
 	return result, nil
 }
-func pinPresentationMap(tx *sql.Tx, recording string, ordinal int64, mapID string) error {
+func pinPresentationAssets(tx *sql.Tx, recording string, ordinal int64, mapID string, assets []string, now time.Time) error {
 	if mapID == "" {
 		return nil
 	}
-	// Retain immutable bytes at confirmed presentation, before ordinary library edits.
-	rows, e := tx.Query(`SELECT data FROM offline_maps WHERE id=? UNION ALL SELECT data FROM offline_terrain WHERE map_id=? UNION ALL SELECT vector FROM offline_map_chunks WHERE map_id=? AND vector IS NOT NULL UNION ALL SELECT terrain FROM offline_map_chunks WHERE map_id=? AND terrain IS NOT NULL`, mapID, mapID, mapID, mapID)
-	if e != nil {
-		return e
-	}
-	var assets [][]byte
-	for rows.Next() {
-		var b []byte
-		if e = rows.Scan(&b); e != nil {
-			break
-		}
-		assets = append(assets, b)
-	}
-	err := rows.Err()
-	rows.Close()
-	if e != nil {
-		return e
-	}
-	if err != nil {
-		return err
-	}
 	if len(assets) == 0 {
-		_, e = journal(tx, recording, "missing_map_asset", time.Now(), "", 0, map[string]any{"map_id": mapID})
+		_, e := journal(tx, recording, "missing_map_asset", now, "", 0, map[string]any{"map_id": mapID, "reason": "browser supplied no immutable asset response revisions"})
 		return e
 	}
-	for _, b := range assets {
-		h := digest(b)
-		if _, e = tx.Exec(`INSERT OR IGNORE INTO presentation_assets VALUES(?,?,?)`, h, b, len(b)); e != nil {
+	if len(assets) > 8192 {
+		return errors.New("asset reference limit exceeded")
+	}
+	for _, hash := range assets {
+		var present int
+		if e := tx.QueryRow(`SELECT COUNT(*) FROM presentation_assets WHERE hash=?`, hash).Scan(&present); e != nil {
 			return e
 		}
-		if _, e = tx.Exec(`INSERT OR IGNORE INTO presentation_asset_refs VALUES(?,?,?)`, recording, ordinal, h); e != nil {
+		if present == 0 {
+			_, e := journal(tx, recording, "missing_map_asset", now, "", 0, map[string]any{"hash": hash, "map_id": mapID})
+			if e != nil {
+				return e
+			}
+			continue
+		}
+		if _, e := tx.Exec(`INSERT OR IGNORE INTO presentation_asset_refs VALUES(?,?,?)`, recording, ordinal, hash); e != nil {
 			return e
 		}
 	}
 	return nil
 }
-func sealRecording(tx *sql.Tx, st State, r presentationRequest, now time.Time) (any, error) {
+func sealRecording(tx snapshotSQL, st State, r presentationRequest, now time.Time) (any, error) {
 	rec := st.Recording
 	if rec == nil {
 		return nil, ErrAction
@@ -524,13 +553,48 @@ func sealRecording(tx *sql.Tx, st State, r presentationRequest, now time.Time) (
 	}
 	rows.Close()
 	for d := range selected {
-		if _, e = tx.Exec(`INSERT INTO saved_originals SELECT ?,device,message,wire,known,received FROM raw WHERE device=?`, sid, d); e != nil {
+		originals, e := tx.Query(`SELECT device,message,wire,known,received FROM raw WHERE device=? ORDER BY sequence`, d)
+		if e != nil {
+			return nil, e
+		}
+		for originals.Next() {
+			var device, message, known, received string
+			var wire []byte
+			if e = originals.Scan(&device, &message, &wire, &known, &received); e != nil {
+				originals.Close()
+				return nil, e
+			}
+			if _, e = tx.Exec(`INSERT INTO saved_originals VALUES(?,?,?,?,?,?)`, sid, device, message, wire, known, received); e != nil {
+				originals.Close()
+				return nil, e
+			}
+		}
+		if e = originals.Err(); e != nil {
+			originals.Close()
+			return nil, e
+		}
+		originals.Close()
+	}
+	assetRows, e := tx.Query(`SELECT DISTINCT hash FROM presentation_asset_refs WHERE recording=? AND ordinal IN (SELECT ordinal FROM presentation_journal WHERE recording=? AND at<=?)`, rec.ID, rec.ID, cutoff.UTC().Format("2006-01-02T15:04:05.000000000Z"))
+	if e != nil {
+		return nil, e
+	}
+	for assetRows.Next() {
+		var hash string
+		if e = assetRows.Scan(&hash); e != nil {
+			assetRows.Close()
+			return nil, e
+		}
+		if _, e = tx.Exec(`INSERT INTO saved_assets VALUES(?,?)`, sid, hash); e != nil {
+			assetRows.Close()
 			return nil, e
 		}
 	}
-	if _, e = tx.Exec(`INSERT INTO saved_assets SELECT DISTINCT ?,hash FROM presentation_asset_refs WHERE recording=? AND ordinal IN (SELECT ordinal FROM presentation_journal WHERE recording=? AND at<=?)`, sid, rec.ID, rec.ID, cutoff.UTC().Format("2006-01-02T15:04:05.000000000Z")); e != nil {
+	if e = assetRows.Err(); e != nil {
+		assetRows.Close()
 		return nil, e
 	}
+	assetRows.Close()
 	var assetBytes, rawBytes int64
 	if e = tx.QueryRow(`SELECT COALESCE(SUM(bytes),0) FROM presentation_assets WHERE hash IN (SELECT hash FROM saved_assets WHERE snapshot=?)`, sid).Scan(&assetBytes); e != nil {
 		return nil, e
@@ -538,7 +602,7 @@ func sealRecording(tx *sql.Tx, st State, r presentationRequest, now time.Time) (
 	if e = tx.QueryRow(`SELECT COALESCE(SUM(length(wire)),0) FROM saved_originals WHERE snapshot=?`, sid).Scan(&rawBytes); e != nil {
 		return nil, e
 	}
-	metadata := map[string]any{"version": 1, "id": sid, "recording_id": rec.ID, "name": strings.TrimSpace(r.Name), "description": r.Description, "display_date": r.DisplayDate, "source_mode": rec.Mode, "started_at": rec.Started, "cutoff_at": cutoff, "saved_at": now, "operator_save_at": r.OperatorAt, "stopped_at": rec.Stopped, "total_parties": len(manifest), "participation": manifest, "included": r.Included, "operator_selected_subset": len(selected) < len(manifest), "confirmed_events": confirmed, "stream_sha256": hex.EncodeToString(stream.Sum(nil)), "presentation_bytes": streamBytes, "original_bytes": rawBytes, "pinned_asset_bytes": assetBytes, "incomplete_evidence": true, "asset_revision_verification": "Library bytes pinned at display confirmation; concurrent library replacement versus already-loaded browser assets remains unverified.", "limitations": []string{"Rendering opportunities confirm browser-applied state, not OS pixel scanout or human attention.", "Unconfirmed transitions and process-death boundaries remain uncertain; no later GNSS backfill repairs presentation evidence."}}
+	metadata := map[string]any{"version": 1, "id": sid, "recording_id": rec.ID, "name": strings.TrimSpace(r.Name), "description": r.Description, "display_date": r.DisplayDate, "source_mode": rec.Mode, "started_at": rec.Started, "cutoff_at": cutoff, "saved_at": now, "operator_save_at": r.OperatorAt, "stopped_at": rec.Stopped, "total_parties": len(manifest), "participation": manifest, "included": r.Included, "operator_selected_subset": len(selected) < len(manifest), "confirmed_events": confirmed, "stream_sha256": hex.EncodeToString(stream.Sum(nil)), "presentation_bytes": streamBytes, "original_bytes": rawBytes, "pinned_asset_bytes": assetBytes, "incomplete_evidence": true, "asset_revision_verification": "Exact successful map/terrain/manifest response bytes are pinned before delivery; missing browser revision references are disclosed as gaps.", "limitations": []string{"Rendering opportunities confirm browser-applied state, not OS pixel scanout or human attention.", "Unconfirmed transitions and process-death boundaries remain uncertain; no later GNSS backfill repairs presentation evidence."}}
 	if _, e = tx.Exec(`INSERT INTO saved_recordings VALUES(?,?)`, sid, marshal(metadata)); e != nil {
 		return nil, e
 	}
@@ -643,4 +707,166 @@ func (s *Store) presentationRuntime() {
 			_, _ = s.db.Exec(`UPDATE presentation_runtime SET last_alive=? WHERE id=1`, time.Now().UTC().Format(time.RFC3339Nano))
 		}
 	}
+}
+
+// Freeze the exact successful asset response before delivering its bytes to the
+// browser. This closes the load-versus-library-replacement race: the browser names
+// the response hash it used, not merely the mutable map library identity.
+func (s *Store) pinServedAsset(b []byte) (string, error) {
+	if len(b) > mapLimit+65536 {
+		return "", errors.New("asset response exceeds recording pin bound")
+	}
+	hash := digest(b)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, e := s.db.Exec(`INSERT OR IGNORE INTO presentation_assets VALUES(?,?,?)`, hash, b, len(b))
+	return hash, e
+}
+func presentationAssetPath(r *http.Request) bool {
+	if r.Method != "GET" || !strings.HasPrefix(r.URL.Path, "/local/maps/") {
+		return false
+	}
+	tail := strings.TrimPrefix(r.URL.Path, "/local/maps/")
+	parts := strings.Split(tail, "/")
+	return len(parts) == 1 || (len(parts) == 2 && (parts[1] == "terrain" || parts[1] == "manifest")) || (len(parts) == 3 && parts[1] == "chunks")
+}
+
+// Source reads retain one WAL snapshot. Staging writes are individually committed
+// and invisible to consumers until the immutable header is atomically published.
+// No Save transaction holds the receiver mutex while scanning a recording.
+type snapshotSQL interface {
+	Exec(string, ...any) (sql.Result, error)
+	Query(string, ...any) (*sql.Rows, error)
+	QueryRow(string, ...any) *sql.Row
+}
+type stagedStatement struct {
+	query string
+	args  []any
+}
+type stagedSnapshot struct {
+	store    *Store
+	source   *sql.Tx
+	publish  []stagedStatement
+	snapshot string
+}
+type stagedResult struct{}
+
+func (stagedResult) LastInsertId() (int64, error) { return 0, nil }
+func (stagedResult) RowsAffected() (int64, error) { return 1, nil }
+func (v *stagedSnapshot) Query(q string, args ...any) (*sql.Rows, error) {
+	return v.source.Query(q, args...)
+}
+func (v *stagedSnapshot) QueryRow(q string, args ...any) *sql.Row {
+	if strings.Contains(q, "saved_") {
+		return v.store.db.QueryRow(q, args...)
+	}
+	return v.source.QueryRow(q, args...)
+}
+func (v *stagedSnapshot) Exec(q string, args ...any) (sql.Result, error) {
+	if strings.HasPrefix(q, "INSERT INTO saved_") && len(args) > 0 {
+		v.snapshot, _ = args[0].(string)
+	}
+	if strings.HasPrefix(q, "INSERT INTO saved_recordings") || strings.HasPrefix(q, "INSERT INTO presentation_requests") || strings.HasPrefix(q, "INSERT INTO presentation_journal") {
+		v.publish = append(v.publish, stagedStatement{q, args})
+		return stagedResult{}, nil
+	}
+	v.store.mu.Lock()
+	defer v.store.mu.Unlock()
+	return v.store.db.Exec(q, args...)
+}
+func (s *Store) stagedSave(r presentationRequest) (any, error) {
+	if !s.saveMu.TryLock() {
+		return nil, errors.New("another snapshot is being sealed; retry after it completes")
+	}
+	defer s.saveMu.Unlock()
+	now := s.Now().UTC()
+	dsn, e := privateDSN(s.path)
+	if e != nil {
+		return nil, e
+	}
+	reader, e := sql.Open("sqlite3", dsn)
+	if e != nil {
+		return nil, e
+	}
+	defer reader.Close()
+	reader.SetMaxOpenConns(1)
+	if _, e = reader.Exec(`PRAGMA query_only=ON`); e != nil {
+		return nil, e
+	}
+	source, e := reader.Begin()
+	if e != nil {
+		return nil, e
+	}
+	defer source.Rollback()
+	l, e := getLease(source)
+	if e != nil {
+		return nil, e
+	}
+	if !owner(l, r, now) {
+		return nil, errors.New("browser owner fenced")
+	}
+	if r.RequestID != "" {
+		var b string
+		e = source.QueryRow(`SELECT metadata FROM saved_recordings WHERE id=(SELECT snapshot FROM presentation_requests WHERE request=?)`, r.RequestID).Scan(&b)
+		if e == nil {
+			var v map[string]any
+			_ = json.Unmarshal([]byte(b), &v)
+			return v, nil
+		}
+		if !errors.Is(e, sql.ErrNoRows) {
+			return nil, e
+		}
+	}
+	st, e := loadReceiptState(source)
+	if e != nil {
+		return nil, e
+	}
+	stage := &stagedSnapshot{store: s, source: source}
+	published := false
+	defer func() {
+		if !published && stage.snapshot != "" {
+			for _, table := range []string{"saved_presentation", "saved_originals", "saved_assets"} {
+				_, _ = s.db.Exec("DELETE FROM "+table+" WHERE snapshot=?", stage.snapshot)
+			}
+		}
+	}()
+	result, e := sealRecording(stage, st, r, now)
+	if e != nil {
+		return nil, e
+	}
+	source.Rollback() // Release WAL snapshot before the short publication transaction.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, e := s.db.Begin()
+	if e != nil {
+		return nil, e
+	}
+	defer tx.Rollback()
+	for _, statement := range stage.publish {
+		if _, e = tx.Exec(statement.query, statement.args...); e != nil {
+			return nil, e
+		}
+	}
+	if e = tx.Commit(); e != nil {
+		return nil, e
+	}
+	published = true
+	return result, nil
+}
+
+type assetResponse struct {
+	headers  http.Header
+	Code     int
+	Body     bytes.Buffer
+	overflow bool
+}
+
+func (a *assetResponse) Header() http.Header  { return a.headers }
+func (a *assetResponse) WriteHeader(code int) { a.Code = code }
+func (a *assetResponse) Write(b []byte) (int, error) {
+	if a.Body.Len()+len(b) > mapLimit+65536 {
+		a.overflow = true
+		return 0, errors.New("recording asset response exceeds pin bound")
+	}
+	return a.Body.Write(b)
 }

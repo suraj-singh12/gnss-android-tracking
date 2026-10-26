@@ -128,6 +128,7 @@ type State struct {
 	Provisional                  []Point            `json:"provisional_points,omitempty"`
 }
 type Store struct {
+	saveMu               sync.Mutex
 	presentationDone     chan struct{}
 	walBudget            int64
 	path                 string

@@ -1129,6 +1129,7 @@ Stop never resumes. Backgrounding is unverified rendering, not browser closure.
 Snapshot tables are immutable. Saved playback UI and recording ZIP packages belong
 to #37/#38. See the Recording presentation foundation section in architecture for
 precise evidence bounds and unresolved acceptance. In particular, rendering-opportunity
-confirmation is not OS scanout proof, concurrent map-library replacement is not yet
-revision-bound to browser reads, and large Save writer latency remains unverified.
+confirmation is not OS scanout proof, asset reads are revision-bound by exact pinned response hashes, and Save stages
+from a frozen read snapshot with short yielding writes. Sustained large-fleet Save
+latency and multi-day capture remain unverified.
 The UI and saved receipts must retain those limitations; #27 is not certified complete.

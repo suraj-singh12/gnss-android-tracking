@@ -115,6 +115,30 @@ func (s *Store) LocalHandler(assets http.Handler) http.Handler {
 		if s.controlLocal(w, r) {
 			return
 		}
+		if presentationAssetPath(r) {
+			response := &assetResponse{headers: make(http.Header), Code: http.StatusOK}
+			if s.mapRequest(response, r, maps) {
+				for k, values := range response.Header() {
+					for _, v := range values {
+						w.Header().Add(k, v)
+					}
+				}
+				if response.overflow {
+					failure(w, 503, "asset_read_limit", errors.New("map response exceeds bounded recording asset read"))
+					return
+				}
+				if response.Code == http.StatusOK {
+					if hash, e := s.pinServedAsset(response.Body.Bytes()); e == nil {
+						w.Header().Set("X-Presentation-Asset", hash)
+					} else {
+						w.Header().Set("X-Presentation-Asset-Warning", "Original asset pin unavailable; recording map fidelity incomplete")
+					}
+				}
+				w.WriteHeader(response.Code)
+				_, _ = w.Write(response.Body.Bytes())
+				return
+			}
+		}
 		if s.mapRequest(w, r, maps) {
 			return
 		}

@@ -576,9 +576,10 @@ opportunity; intervening display changes invalidate confirmation and create an
 unverified event. This establishes browser-applied state at a completed rendering
 opportunity. It does **not** establish OS pixel scanout, pixel-perfect screenshots or
 human attention. Chromium integration deliberately delays animation callbacks and
-asserts no confirmation from receipt alone. Stronger compositor/paint verification
-and a delayed-map-paint oracle remain acceptance work; these events must not be
-represented as stronger evidence than their recorded bounds.
+asserts no confirmation from receipt alone. An additional instrumented oracle blocks actual synchronous map application after
+a durable receipt and checks the journal still identifies the old displayed revision
+until application and its rendering opportunity complete. OS compositor scanout
+remains outside the evidence claim.
 
 Confirmed events have a browser epoch/revision, server ordinal and SHA-256 checkpoint
 identity. Exact retry is idempotent; conflicting or older revisions fail. Only FULL
@@ -590,19 +591,28 @@ full workload acceptance; no retention/deletion policy silently drops evidence.
 
 Save seals version 1 immutable headers, ordered selected-party display checkpoints,
 complete participation metadata and included-party original wire/receipt records in
-one transaction. No excluded-party detailed checkpoints or original rows are copied.
+one frozen WAL read snapshot. Data is staged with short individual writes, then the
+header/request mapping/Save fact publish in one atomic transaction. Unpublished rows
+are inaccessible through receipts and reclaimed after failed publication or restart.
+No excluded-party detailed checkpoints or original rows are copied.
 Descriptive date never changes original times. Multiple Saves have independent IDs;
 a request ID makes a lost-response retry idempotent. Final Stop bounds the snapshot;
 dismissal leaves its choice durable. Discard retires the unsaved selection and retains
 original GNSS, saved snapshots, pinned assets and SOS. SQLite triggers reject changes
 to sealed tables. Diagnostics list saved receipts and recompute stream hashes.
 
-Original map, terrain and chunk bytes are content-addressed and retained when a
-presentation is confirmed. Referenced copies survive ordinary library deletion.
-**Concurrent library replacement versus assets already loaded in the browser is
-not yet bound to an exact read revision** and is disclosed in every saved receipt.
-Snapshots currently always carry incomplete-evidence limitations. Atomic Save still
-holds the existing SQLite writer while copying selected evidence; large-Save receiver
-latency and bounded multi-day behavior are unverified acceptance gates. These limits
-must be resolved before #27 is considered complete. #37 playback/library and #38
-recording packages are outside this implementation.
+Successful original map, terrain, manifest and chunk responses are content-addressed
+and pinned **before their exact bytes are delivered**. The browser records the response
+hashes it loaded, and each confirmed checkpoint references those immutable assets.
+Concurrent map replacement cannot retarget an earlier read. Terrain JSON responses
+are a durable equivalent copy of original samples/metadata; no renderer-generated
+pixels are substituted for the original source. Missing pin/revision references remain
+explicit map-fidelity gaps. Pinned copies survive ordinary library deletion.
+
+Snapshots currently always carry incomplete-evidence limitations: frame opportunities
+can be invalidated or lost, and exact OS scanout/physical attention is not inferred.
+Save scans a frozen read transaction without holding the receiver mutex; writes yield
+between staging records. A local test receives and commits another observation while
+600 originals are being staged and verifies it cannot expand that snapshot. This is
+software concurrency evidence, not sustained multi-day fleet/native certification.
+#37 playback/library and #38 recording packages remain outside this implementation.

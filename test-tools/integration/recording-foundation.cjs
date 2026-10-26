@@ -130,6 +130,60 @@ async function captureCount() {
   await wait(async () => (await captureCount()) > 0);
   report.first_confirmation_delay_ms = Date.now() - startAt;
   assert(report.first_confirmation_delay_ms >= 450);
+  // Delay actual synchronous map application after a newly durable receipt.
+  // While the renderer is blocked, the journal must still identify the old view.
+  let paintStarted;
+  const painting = new Promise((resolve) => (paintStarted = resolve));
+  await page.exposeFunction("recordingPaintStarted", () => paintStarted());
+  const changed = structuredClone(base);
+  changed.device_id = ids[0];
+  changed.message_id = randomUUID();
+  changed.sequence = 2;
+  changed.captured_at = changed.fix.observed_at = new Date().toISOString();
+  changed.fix.longitude += 0.02;
+  const received = await fetch(phone + "/api/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(changed),
+  });
+  assert.equal(received.status, 200);
+  const target = (await state()).receipt_version;
+  const receiptAt = Date.now();
+  await page.evaluate(() => {
+    const original = drawMap;
+    window.delayNextPaint = true;
+    drawMap = () => {
+      if (window.delayNextPaint) {
+        window.delayNextPaint = false;
+        window.recordingPaintStarted();
+        const until = performance.now() + 750;
+        while (performance.now() < until) {}
+        original();
+        window.actualMapAppliedAt = new Date().toISOString();
+      } else original();
+    };
+    pollLive();
+  });
+  await painting;
+  const during = await (
+    await fetch(local + "/local/presentation/status")
+  ).json();
+  assert(
+    during.displayed_receipt_version < target,
+    "durable receipt must not substitute for delayed map application",
+  );
+  await wait(async () => {
+    const s = await (await fetch(local + "/local/presentation/status")).json();
+    return s.displayed_receipt_version >= target;
+  });
+  const after = await (
+    await fetch(local + "/local/presentation/status")
+  ).json();
+  const appliedAt = await page.evaluate(() => window.actualMapAppliedAt);
+  assert(Date.parse(after.presented_at) >= Date.parse(appliedAt));
+  assert(Date.parse(appliedAt) >= receiptAt + 650);
+  report.delayed_actual_map_application_ms = Date.parse(appliedAt) - receiptAt;
+  report.receipt_did_not_establish_delayed_display = true;
   await page.screenshot({
     path: path.join(out, "issue27-day-recording.png"),
     fullPage: true,

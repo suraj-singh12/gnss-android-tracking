@@ -189,6 +189,11 @@ func TestPresentationPinnedMapSurvivesDelete(t *testing.T) {
 	r = confirmPresentation(t, s, r, 1, *now)
 	r.Revision = 2
 	r.State.MapID = "map"
+	h, err := s.pinServedAsset([]byte(`{"type":"FeatureCollection","features":[]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.State.Assets = []string{h}
 	if _, e = s.presentationOperation("confirm", r); e != nil {
 		t.Fatal(e)
 	}
@@ -198,4 +203,116 @@ func TestPresentationPinnedMapSurvivesDelete(t *testing.T) {
 	if n != 1 {
 		t.Fatal("asset not retained", n)
 	}
+}
+
+func TestPresentationSavePublicationFailureAndRetry(t *testing.T) {
+	s, now, _ := open(t)
+	r := claimPresentation(t, s)
+	ingest(t, s, message(t, 1, 0, 0, 0, 1))
+	action(t, s, "start")
+	r = confirmPresentation(t, s, r, 1, *now)
+	r.Name = "Retry"
+	r.RequestID = "stable-request"
+	r.Included = []string{device}
+	_, e := s.db.Exec(`CREATE TRIGGER fail_seal BEFORE INSERT ON saved_recordings BEGIN SELECT RAISE(ABORT,'injected seal failure'); END`)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = s.presentationOperation("save", r); e == nil {
+		t.Fatal("failed publication reported success")
+	}
+	var n int
+	_ = s.db.QueryRow(`SELECT COUNT(*) FROM saved_recordings`).Scan(&n)
+	if n != 0 {
+		t.Fatal("partial snapshot published")
+	}
+	_ = s.db.QueryRow(`SELECT COUNT(*) FROM saved_originals`).Scan(&n)
+	if n != 0 {
+		t.Fatal("failed staging not reclaimed")
+	}
+	_, _ = s.db.Exec(`DROP TRIGGER fail_seal`)
+	first, e := s.presentationOperation("save", r)
+	if e != nil {
+		t.Fatal(e)
+	}
+	second, e := s.presentationOperation("save", r)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if first.(map[string]any)["id"] != second.(map[string]any)["id"] {
+		t.Fatal("lost response duplicated Save")
+	}
+}
+func TestPresentationVariableFleetAndLateJoin(t *testing.T) {
+	for _, fleet := range []int{1, 5, 21} {
+		t.Run(fmt.Sprint(fleet), func(t *testing.T) {
+			s, now, _ := open(t)
+			r := claimPresentation(t, s)
+			action(t, s, "start")
+			r.Included = nil
+			for d := 0; d < fleet; d++ {
+				m := message(t, 1, float64(-d*86400), 0, 0, 1)
+				m.Device = fmt.Sprintf("%08d-1111-4111-8111-111111111111", d+1)
+				ingest(t, s, m)
+				r.Included = append(r.Included, m.Device)
+			}
+			r = confirmPresentation(t, s, r, 1, *now)
+			r.Name = "Variable fleet"
+			v, e := s.presentationOperation("save", r)
+			if e != nil {
+				t.Fatal(e)
+			}
+			if v.(map[string]any)["total_parties"] != fleet {
+				t.Fatal(v)
+			}
+			action(t, s, "stop")
+			m := message(t, 1, 0, 0, 0, 1)
+			m.Device = "99999999-1111-4111-8111-111111111111"
+			ingest(t, s, m)
+			v, e = s.presentationOperation("save", r)
+			if e != nil {
+				t.Fatal(e)
+			}
+			if v.(map[string]any)["total_parties"] != fleet {
+				t.Fatal("party arriving after Stop changed participation", v)
+			}
+		})
+	}
+}
+func TestPresentationSaveAllowsConcurrentReceiptAndFreezesReadBoundary(t *testing.T) {
+	s, now, _ := open(t)
+	r := claimPresentation(t, s)
+	action(t, s, "start")
+	for n := 1; n <= 600; n++ {
+		ingest(t, s, message(t, n, float64(n), float64(n), 0, 1))
+	}
+	r = confirmPresentation(t, s, r, 1, *now)
+	r.Name = "Concurrent"
+	r.Included = []string{device}
+	done := make(chan error, 1)
+	go func() { _, e := s.presentationOperation("save", r); done <- e }()
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		var n int
+		_ = s.db.QueryRow(`SELECT COUNT(*) FROM saved_originals`).Scan(&n)
+		if n > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("Save did not begin staging")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	started := time.Now()
+	ingest(t, s, message(t, 601, 601, 601, 0, 1))
+	latency := time.Since(started)
+	if e := <-done; e != nil {
+		t.Fatal(e)
+	}
+	var n int
+	_ = s.db.QueryRow(`SELECT COUNT(*) FROM saved_originals`).Scan(&n)
+	if n != 600 {
+		t.Fatal("late arrival expanded sealed read boundary", n)
+	}
+	t.Logf("receipt while Save staged 600 originals: %s", latency)
 }
