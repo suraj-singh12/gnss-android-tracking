@@ -333,7 +333,7 @@ default **Current Time** on every opening. Confirm uses `from_now` or
 `from_beginning`; Cancel/Escape is a no-op. From Beginning selects all retained
 source sessions and works before any phone has connected; it does **not** require
 `recording_session_available`. Server validation/errors remain authoritative.
-Stop/Resume/Clear and recording distance calculation retain their established semantics.
+Pause/Resume retains gap-safe recording distance; final Stop and immutable Save follow #27.
 
 ### Automatic terrain preparation and provider boundary
 
@@ -598,7 +598,7 @@ receipt gaps within ±30% of effective interval (otherwise FAIL with enough samp
 INCONCLUSIVE without them). ACK offered records generation, **not phone receipt**;
 the later config echo proves adoption. Restart dedupe PASS requires a pre-open-boundary
 stored identity retried identically afterward, original receipt preserved, and unchanged
-point count/distance during that retry. Stop/Resume checks reconciled first-point
+point count/distance during that retry. Pause/Resume checks reconciled first-point
 cumulative distance against pre-window geometry; insufficient geometry is INCONCLUSIVE.
 Phone queue drain is PASS only for an explicit recent zero-pending report with contiguous durable identities; missing/stale reports are INCONCLUSIVE. Correlate Android's cached timeline for the full outage/drain sequence.
 No automatic verdict certifies GNSS hardware, screen-off continuity or the physical LAN.

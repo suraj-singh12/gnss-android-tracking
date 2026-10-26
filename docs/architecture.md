@@ -72,7 +72,7 @@ an untested dependency now. Kotlin + Room/SQLite is the Android direction.
   segment. Track rejection never deletes raw data. Store reasons and policy revision
   with derived results so deterministic rebuilds are explainable. An explicit quality edit
   reprojects the full current recording from unchanged raw observations with one
-  new policy revision. Preserve recording Start/Stop/Resume boundaries; remove
+  new policy revision. Preserve recording Start/Pause/Resume/Stop boundaries; remove
   obsolete policy-only boundaries. This is an intentional Issue #4 field-driven
   amendment of the earlier frozen-window policy, not a wire-format change.
 
@@ -275,7 +275,7 @@ raw-ingestion transaction. Legacy reserved SOS envelopes are projected during
 additive database opening; no raw data is rewritten. Identical retries return the
 first receipt and cannot reset human acknowledgement. A local-only, same-origin
 JSON control acknowledges exactly `(device_id,event_id)` in a transaction, retaining
-the first acknowledgement time. Recording Start/Stop/Resume/Clear never changes
+the first acknowledgement time. Recording Start/Pause/Resume/Stop/Save/Discard never changes
 alerts. Neither acknowledgement nor any phone control cancels/deletes an event.
 All operational SOS and raw dedupe rows are retained indefinitely under the existing
 store policy, including ACKed Android rows; storage exhaustion must be corrected
@@ -616,3 +616,10 @@ between staging records. A local test receives and commits another observation w
 600 originals are being staged and verifies it cannot expand that snapshot. This is
 software concurrency evidence, not sustained multi-day fleet/native certification.
 #37 playback/library and #38 recording packages remain outside this implementation.
+
+
+Boundary limitation: the current browser confirms its first available state after
+Start/Resume. It does not yet preserve an independently verified copy of the exact
+pre-action displayed state at the operator press. The interval to the first confirmed
+state is explicitly unverified, rather than reconstructed from backend receipt. This
+is an unresolved #27 acceptance requirement, even when subsequent capture passes.

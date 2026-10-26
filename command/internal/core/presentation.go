@@ -21,6 +21,7 @@ const presentationLimit = 4 << 20
 const presentationQuota = 1 << 30
 
 type presentationLease struct {
+	Recording   string    `json:"recording_id"`
 	LastDisplay time.Time `json:"last_display_at"`
 	Token       string    `json:"token"`
 	Epoch       string    `json:"epoch"`
@@ -363,6 +364,23 @@ func (s *Store) presentationOperation(op string, r presentationRequest) (any, er
 			}
 			if e != nil {
 				return nil, e
+			}
+			if l.Recording != st.Recording.ID {
+				gapFrom := st.Recording.Started
+				var prior string
+				if err := tx.QueryRow(`SELECT data FROM presentation_journal WHERE recording=? AND kind='display' ORDER BY ordinal DESC LIMIT 1`, st.Recording.ID).Scan(&prior); err == nil {
+					var previous map[string]any
+					_ = json.Unmarshal([]byte(prior), &previous)
+					if stamp, ok := previous["render_opportunity_at"].(string); ok {
+						if at, err := time.Parse(time.RFC3339Nano, stamp); err == nil {
+							gapFrom = at
+						}
+					}
+				}
+				if _, e = journal(tx, st.Recording.ID, "unverified", now, "", 0, map[string]any{"from": gapFrom, "until": presented, "reason": "display unverified since previous confirmation or operator Start; newly confirmed state only"}); e != nil {
+					return nil, e
+				}
+				l.Recording = st.Recording.ID
 			}
 			if !l.LastDisplay.IsZero() && presented.Sub(l.LastDisplay) > 5*time.Second {
 				if _, e = journal(tx, st.Recording.ID, "unverified", now, "", 0, map[string]any{"from": l.LastDisplay, "until": presented, "reason": "no durable display confirmation in interval"}); e != nil {

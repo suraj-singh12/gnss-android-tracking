@@ -8,6 +8,7 @@
     pending,
     lastState,
     lastConfirmed = 0;
+  let capturedRecording, capturedActive;
   let generation = 0,
     stopped = false;
   const headers = () =>
@@ -96,7 +97,8 @@
       if (pending) {
         const ack = await request("confirm", pending);
         lastConfirmed = Date.now();
-        health(`Display state confirmed · revision ${ack.revision}`);
+        if (window.recordingLiveState?.()?.recording?.active)
+          health(`Display state confirmed · revision ${ack.revision}`);
         pending = undefined;
       }
     } catch (e) {
@@ -116,6 +118,26 @@
   window.RecordingCapture = {
     headers,
     changed() {
+      const rec = window.recordingLiveState?.()?.recording;
+      if (
+        rec?.recording_id !== capturedRecording ||
+        rec?.active !== capturedActive
+      ) {
+        capturedRecording = rec?.recording_id;
+        capturedActive = rec?.active;
+        pending = undefined;
+        lastConfirmed = 0;
+        lastState = undefined;
+        health(
+          rec?.active
+            ? "Unverified presentation evidence · awaiting initial state"
+            : rec?.status === "paused"
+              ? "Operator paused · GNSS continues"
+              : rec?.status === "stopped"
+                ? "Finally stopped · unsaved evidence retained"
+                : "Ready · GNSS independent",
+        );
+      }
       dirty = true;
       generation++;
     },
@@ -240,7 +262,10 @@
     try {
       await request("heartbeat");
       await pump();
-      if (Date.now() - lastConfirmed > 5000)
+      if (
+        window.recordingLiveState?.()?.recording?.active &&
+        Date.now() - lastConfirmed > 5000
+      )
         health(
           "Unverified presentation evidence · awaiting rendering confirmation",
         );
