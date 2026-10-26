@@ -33,13 +33,14 @@ async function refreshControl() {
     check.disabled=!enrollment?.enabled;
     check.onchange=()=>{if(check.checked)controlTargets.add(id);else controlTargets.delete(id);};
     const seen = enrollment?.last_seen;
+    const requestAge = seen ? Date.now() - seen : null;
     const identity = el("div");
     identity.append(el("strong",phone.snapshot.party.id),el("p",`Phone ID: ${id}`));
     label.append(check, identity);
     const enrollmentInfo = el("div"); enrollmentInfo.className="control-enrollment";
     enrollmentInfo.append(el("span","Enrollment"),el("p",!enrollment ? "Not enrolled" : !enrollment.enabled ? "Revoked on this Command" : "Credential issued · authorization enabled"));
     const evidence = el("div"); evidence.className="control-evidence";
-    evidence.append(el("span","Authenticated contact evidence"),el("p", !seen ? "No authenticated phone request received" : `Phone request received · ${new Date(seen).toISOString()}${Date.now()-seen>=30000 ? " · stale" : " · recent"}`),el("small","Android response verification is separate."));
+    evidence.append(el("span","Authenticated contact evidence"),el("p", !seen ? "No authenticated phone request received" : `Phone request received · ${new Date(seen).toISOString()}${requestAge < 0 ? " · age unconfirmed (check clock)" : requestAge >= 30000 ? " · stale" : ` · ${Math.floor(requestAge/1000)} s ago`}`),el("small","Android response verification is separate."));
     const enroll = el("button", enrollment ? "Replace credential" : "Enroll remote control");
     enroll.onclick=async()=>{try {
       if(!confirm(`Verify phone UUID ${id} directly in Android Settings. Generate a private credential? Replacing it revokes previous authorization. Saved history is retained.`))return;

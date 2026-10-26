@@ -198,6 +198,14 @@ async function wait(check) {
   assert.equal((await (await fetch(local+"/local/control")).json()).commands.find(c=>c.id===alert.id).state,"recipient_acknowledged");
   await alertDetail.scrollIntoViewIfNeeded();
   await page.screenshot({path:path.join(out,"command-phone-alert-human-ack.png"),fullPage:true});
+  const clockShiftEvidence = await page.evaluate(async () => {
+    const originalNow = Date.now;
+    Date.now = () => originalNow() - 60000;
+    try { await refreshControl(); return document.querySelector("#control-phones").textContent; }
+    finally { Date.now = originalNow; }
+  });
+  assert.match(clockShiftEvidence, /age unconfirmed \(check clock\)/);
+  await page.evaluate(() => refreshControl());
   await page.locator("#phone-control").evaluate(dialog=>dialog.scrollTop=0);
   await page.screenshot({path:path.join(out,"command-phone-controls.png"),fullPage:true});
   await page.evaluate(()=>{document.documentElement.dataset.appearance="night";});
