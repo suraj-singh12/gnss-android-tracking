@@ -470,7 +470,7 @@ original recording/quality rules or human SOS acknowledgement.
 
 In existing Settings configure the Command IP:port, then compare this installation's
 phone UUID directly at the local Command → Phone controls console. Generate a private
-per-phone credential there, enter it under **Authenticated remote control**, and
+per-phone credential there, enter it under **Settings → Command access → Enter credential**, and
 explicitly authorize. Address/authority first contact never authorizes commands.
 Keystore-sealed credentials are excluded from backups and diagnostic exports.
 Disable remote control locally to remove authorization; **Enroll with a different
