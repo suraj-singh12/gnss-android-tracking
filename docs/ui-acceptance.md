@@ -841,3 +841,17 @@ those results do not establish an upstream outage or GitHub-run acceptance. The
 actual large Uttar Pradesh source remains unverified unless the Actions evidence
 substantiate it within authorized transfer/resource limits. Physical Android and
 native macOS/Windows acceptance remain separately tracked in #23/#7.
+
+
+## Issue #27 Recording foundation acceptance
+
+Approved original control images are in `docs/design/issue27/` and linked from #27.
+`recording-foundation.cjs` uses production Command HTTP, SQLite and Chromium for
+Start, repeated Pause/Resume, active/paused subset Save, exclusive ownership,
+refresh/browser return, SIGKILL/restart, final Stop dismissal and Discard. Its
+Day/Night screenshots are running-app evidence; approved mockups are not tests.
+Delayed animation callbacks cannot produce confirmation at backend receipt time.
+This oracle establishes the implemented rendering-opportunity bound, not compositor
+scanout or a delayed actual-map-paint proof. Exact original-asset read revisions,
+long-running 20+ fleets, receiver latency under large Save and native/physical
+acceptance remain open. No automated pixel-diff baseline is introduced.

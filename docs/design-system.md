@@ -23,7 +23,7 @@ restrained borders, without decorative panels competing with the canvas.
 
 One primary action per group. Start/Stop Tracking is a single native control;
 Cancel Start is available while permission/configuration gating is pending. Command
-Recording is separate from Android Tracking. Clear Recording and enrollment/retry
+Recording is separate from Android Tracking. Discard Recording and enrollment/retry
 have explicit confirmations. Forms validate numeric ranges; failed backend requests
 leave state unchanged and show an error. Polling preserves focused reporting edits
 and event-specific SOS buttons. Quality application shows progress and consumes
@@ -81,8 +81,7 @@ not imply human ACK; human acknowledgement remains Command-only.
 The workspace is viewport-bound, with no document scroll. Only party/event lists
 and dialogs scroll. With selected details closed and sidebar open, the geographic
 canvas occupies about 82.5% at 1280 px and 84.4% at 1440 px. Both secondary panels
-collapse; narrow layouts use bounded overlays. Recording controls are geometrically
-centred, state/duration left. Start opens the mode-selection dialog; no permanent
+collapse; narrow layouts use bounded overlays. Recording controls use the approved compact horizontal rail, state/duration left. Start opens the mode-selection dialog; no permanent
 Start From selector remains.
 
 Left: compact selectable parties, stable colour, independent contact/GNSS/history
@@ -91,7 +90,7 @@ live, historical, provisional and diagnostic raw layers. Right: selected party's
 coordinates, original observation time, accuracy, last contact, battery, queue state,
 qualified distance and reporting override. Technical evidence is in a disclosure.
 
-Persistent recording toolbar has Start/Stop/Resume/Clear and both start modes.
+Persistent compact recording rail has Start, Pause/Resume, separate Save and final Stop, with both start modes. Stop retains a durable Save/Discard choice. Save requires a name and at least one party; excluded identities remain participation metadata. Day/Night references are preserved in `docs/design/issue27/`.
 Duration is supplied by Command's backend recording windows. Quality dialog exposes
 all eight enabled/value/unit controls and short descriptions; applying invokes the
 existing full reprojection. Raw mode is clearly diagnostic and never changes qualified

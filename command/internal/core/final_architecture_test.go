@@ -366,7 +366,7 @@ func TestSessionModeLateJoinAndResumeKeepBoundaries(t *testing.T) {
 		t.Fatal("late joining identified session excluded", st.Points)
 	}
 	*now = base.Add(15 * time.Second)
-	action(t, s, "stop")
+	action(t, s, "pause")
 	middle := observationMessage(t, 20, session)
 	ingest(t, s, middle)
 	*now = base.Add(25 * time.Second)

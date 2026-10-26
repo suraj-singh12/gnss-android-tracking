@@ -155,15 +155,16 @@ window, including observations predating Start and source sessions not yet known
 It has no lower observation-time bound and can start with zero connected devices.
 The former `session_beginning` request value is a compatibility alias. New
 source sessions and delayed history are discovered without relying on a currently
-reported live session or inventing continuity. Stop still limits the initial
-window from above; Resume creates a new lower time boundary.
+reported live session or inventing continuity. Pause/Stop limit the current window from above; Resume after Pause creates a new lower time boundary. Stop is final.
 
 | Action          | Effect                                                                                                                                                                                    |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Start Recording | From no current recording, create recording + active segment/window. While already active, no-op. While stopped, use Resume.                                                              |
-| Stop Recording  | Close active window; stop extending live-time recording, continue positions/status/SOS reception. Already stopped is a no-op.                                                             |
-| Resume          | Same recording, new segment/window; no line or distance edge across stop. Already active is a no-op.                                                                                      |
-| Clear Recording | Require UI confirmation; delete current derived tracks/distances and retire its recording/windows. Retain identities, configuration and raw observations. Return to no current recording. |
+| Start Recording | Create active recording/window; From Now or From Beginning. Presentation always starts at the operator press. |
+| Pause | Close active window; GNSS, LIVE, ACK, SOS and history continue. |
+| Resume | Open a new window in the same operator-paused recording; never connect across the pause. |
+| Stop | Finally close recording; persist the Save/Discard choice across dismissal/restart. Resume is rejected. |
+| Save | Seal an immutable snapshot without interrupting active/paused capture; after Stop preserve the Stop endpoint. |
+| Discard | Confirm and retire only the unsaved selection; retain original GNSS, saved snapshots, devices and SOS. |
 
 For `from_now` and every Resume window, observations measured before that
 window's Start or after its Stop have no membership even if received later.
@@ -548,3 +549,60 @@ Unpromoted temporary crop/upload/download work older than eleven minutes can be
 removed during subsequent map admission; validated HGT/catalog/SQLite assets are
 never included. Existing source publication, map transactions and GNSS/SOS/LIVE
 ownership remain unchanged.
+
+## Recording presentation foundation (Issue #27)
+
+The recording projection still uses the existing raw SQLite observations, identity,
+quality policy and gap-safe windows. A separate **presentation journal in that same
+SQLite database** records what the authorized browser applied. Original observed,
+Command receipt, browser applied/rendering-opportunity, durable confirmation and
+operator press/receipt times are distinct. Late observations cannot be inserted into
+an earlier presentation checkpoint. Both start modes begin the presentation timeline
+at Start; From Beginning only changes the original-history projection selection.
+
+The local dashboard acquires a server-mediated random credential and fencing epoch.
+SQLite serializes claims; fifteen-second leases and two-second heartbeats fence old
+publishers, including after restart. Refresh/pagehide releases ownership. Lease expiry
+alone is uncertain rendering/ownership loss, not proof of closure. Backgrounding
+reports unverified presentation while retaining heartbeats. Process heartbeats are
+independent of browser liveness; restart records the last durable process heartbeat
+to startup as an explicitly uncertain downtime bound. Active intention survives;
+operator Pause and final Stop remain authoritative.
+
+The browser freezes the source model after synchronous map application, together with
+actual SVG geometry, selection/visibility, viewport, layers, panel contents, status,
+quality and SOS. Two animation frames and a subsequent task bracket a rendering
+opportunity; intervening display changes invalidate confirmation and create an
+unverified event. This establishes browser-applied state at a completed rendering
+opportunity. It does **not** establish OS pixel scanout, pixel-perfect screenshots or
+human attention. Chromium integration deliberately delays animation callbacks and
+asserts no confirmation from receipt alone. Stronger compositor/paint verification
+and a delayed-map-paint oracle remain acceptance work; these events must not be
+represented as stronger evidence than their recorded bounds.
+
+Confirmed events have a browser epoch/revision, server ordinal and SHA-256 checkpoint
+identity. Exact retry is idempotent; conflicting or older revisions fail. Only FULL
+SQLite commit produces success. Compressed content-addressed checkpoints share
+unchanged payloads; the payload admission limit is 4 MiB per request and 1 GiB for
+checkpoint content. Quota/storage errors leave GNSS receipt independent and report
+unconfirmed evidence. Journal/event growth and multi-day capacity still require the
+full workload acceptance; no retention/deletion policy silently drops evidence.
+
+Save seals version 1 immutable headers, ordered selected-party display checkpoints,
+complete participation metadata and included-party original wire/receipt records in
+one transaction. No excluded-party detailed checkpoints or original rows are copied.
+Descriptive date never changes original times. Multiple Saves have independent IDs;
+a request ID makes a lost-response retry idempotent. Final Stop bounds the snapshot;
+dismissal leaves its choice durable. Discard retires the unsaved selection and retains
+original GNSS, saved snapshots, pinned assets and SOS. SQLite triggers reject changes
+to sealed tables. Diagnostics list saved receipts and recompute stream hashes.
+
+Original map, terrain and chunk bytes are content-addressed and retained when a
+presentation is confirmed. Referenced copies survive ordinary library deletion.
+**Concurrent library replacement versus assets already loaded in the browser is
+not yet bound to an exact read revision** and is disclosed in every saved receipt.
+Snapshots currently always carry incomplete-evidence limitations. Atomic Save still
+holds the existing SQLite writer while copying selected evidence; large-Save receiver
+latency and bounded multi-day behavior are unverified acceptance gates. These limits
+must be resolved before #27 is considered complete. #37 playback/library and #38
+recording packages are outside this implementation.

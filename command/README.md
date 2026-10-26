@@ -1107,3 +1107,28 @@ The existing CI cumulative ceiling remains 30 MB per map job; a larger source re
 is recorded truthfully rather than silently increasing consent. Native macOS/Windows
 and Android field acceptance remain separate in #23/#7. See the existing UI acceptance
 and preservation matrix for exact references, screenshots, evidence and limitations.
+
+
+## Recording foundation (#27)
+
+Start offers From Now / From Beginning. Both presentation timelines begin at Start.
+Use Pause/Resume without affecting phone GNSS, LIVE, durable receipt/ACK or SOS.
+Save creates an independent immutable snapshot while active or paused. Name and at
+least one participating party are required; description and descriptive date/timezone
+are optional. The full participation manifest records included/excluded parties.
+Stop is final and keeps its Save/Discard choice after dismissal or restart. Discard
+requires confirmation and retains original GNSS, saved snapshots and SOS.
+
+Only one dashboard can publish presentation evidence. Another browser shows an
+occupied dialog. Refresh/reopening recovers ownership; active intention continues
+when a new browser-applied state is confirmed, while paused stays paused and final
+Stop never resumes. Backgrounding is unverified rendering, not browser closure.
+
+`GET /local/presentation/saved` lists up to 100 durable receipts.
+`GET /local/presentation/saved?id=UUID` recomputes the sealed event stream SHA-256.
+Snapshot tables are immutable. Saved playback UI and recording ZIP packages belong
+to #37/#38. See the Recording presentation foundation section in architecture for
+precise evidence bounds and unresolved acceptance. In particular, rendering-opportunity
+confirmation is not OS scanout proof, concurrent map-library replacement is not yet
+revision-bound to browser reads, and large Save writer latency remains unverified.
+The UI and saved receipts must retain those limitations; #27 is not certified complete.

@@ -157,12 +157,8 @@ async function stop() {
   assert.equal(restored.sos_alerts[0].operator_acknowledged_at, ack);
   assert.equal(restored.sos_alerts[0].received_at, first.received_at);
   assert.equal(restored.sos_alerts[1].operator_acknowledged_at, null);
-  for (const action of ["start", "stop", "resume", "clear"]) {
-    const response = await fetch(local + "/local/recording", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, confirmed: action === "clear" }),
-    });
+  for (const action of ["start", "pause", "resume", "stop", "discard"]) {
+    const response = await require("./recording-control.cjs").recordingPost(local, {action,confirmed: action === "discard"},browser);
     assert.equal(response.status, 200);
   }
   await page.reload();

@@ -246,6 +246,7 @@ jobs:
           export GNSS_SCREENSHOT_DIR="$RUNNER_TEMP/gnss-assets/visual-evidence"
           node test-tools/integration/sos-dashboard.cjs
           node test-tools/integration/ui-dashboard.cjs
+          node test-tools/integration/recording-foundation.cjs
           node test-tools/integration/control-ui.cjs
           node test-tools/integration/history-dashboard.cjs
           GNSS_STABILITY_REPORT="$RUNNER_TEMP/gnss-assets/windows-stability.json" node test-tools/integration/windows-stability.cjs

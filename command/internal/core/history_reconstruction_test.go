@@ -234,7 +234,7 @@ func TestHistoryLifecycleOriginalTimesAndClockUncertainty(t *testing.T) {
 		t.Fatal(err)
 	}
 	*now = base.Add(2 * time.Hour)
-	action(t, s, "stop")
+	action(t, s, "pause")
 	*now = base.Add(3 * time.Hour)
 	action(t, s, "resume")
 	all := []Candidate{}
@@ -469,7 +469,6 @@ func TestHistoryVariableDevicePopulationIncludingTwenty(t *testing.T) {
 		})
 	}
 }
-
 
 // A fresh Command B has no prior Android receipts. The phone sends only pending
 // observations from the middle of a tracking session; missing earlier sequences

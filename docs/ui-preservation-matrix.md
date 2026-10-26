@@ -8,7 +8,7 @@ recording/SOS ownership changes are introduced by terrain or themes.
 | Capability                      | Previous location          | Extended location                                      | Authoritative API/state                                                      | Regression                                                                       |
 | ------------------------------- | -------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | Recording start modes           | Permanent toolbar selector | Explicit Start modal, Current Time default             | Existing recording action/modes/windows; read-only session-availability flag | Browser cancel/errors/both modes; original Go/bridge recording tests             |
-| Stop/Resume/Clear               | Recording toolbar          | Same centred toolbar                                   | Existing recording state machine                                             | Existing browser, Go and bridge suites                                           |
+| Pause/Resume/Stop/Save/Discard               | Recording toolbar          | Approved reduced-height rail                                   | Existing recording state machine                                             | Existing browser, Go and bridge suites                                           |
 | Vector maps/import/export       | Map & layers               | Same library/downloader/import/export                  | Existing offline_maps/renderer; vector bytes unchanged                       | Existing OSM fixture/browser tests; terrain isolation/export test                |
 | Terrain (new)                   | Not available              | Local DEM preparation and Layers beside Focus selected | Additive offline_terrain binary grid; no tracking dependency                 | HGT guards/roundtrip/restart/delete, Node processing and browser offline restart |
 | Appearance (new)                | Day only                   | Android Settings; Command header                       | Independent native/browser preference                                        | Native resources/renders, browser persisted Night restart/axe                    |
@@ -32,7 +32,7 @@ final regression evidence is recorded in `ui-acceptance.md`.
 | Settings, readiness, permissions, battery exceptions, reenrollment | Flat Settings list           | Labelled native sections and advanced enrollment   | FieldPreflight / repository.settings    | FieldPreflightTest, UiNavigationVisualTest                  |
 | Diagnostics, sender/storage/queues, SOS details, retry, export     | Technical text and tools     | Readable summaries, expandable raw evidence, tools | existing recorder / Room flows          | DiagnosticsExportApi26/28/35Test, PhysicalButton tests      |
 | Parties, selected evidence, override, visibility                   | Permanent left/right panels  | Collapsible sidebar and contextual detail          | /local/state, /local/override           | ui-dashboard.cjs                                            |
-| Recording modes/lifecycle/duration                                 | Right-aligned controls       | Geometrically centred toolbar                      | /local/recording, authoritative windows | ui-dashboard.cjs, Go recording tests                        |
+| Recording modes/lifecycle/duration                                 | Right-aligned controls       | Approved compact horizontal rail                      | /local/recording, authoritative windows | ui-dashboard.cjs, Go recording tests                        |
 | Active SOS / audio / locate / per-event ACK                        | Large top banner             | Header counter, overlay drawer and arrival toast   | sos_alerts / /local/sos/acknowledge     | sos-alarm-test.cjs, sos-dashboard.cjs                       |
 | Ordinary evidence and acknowledged SOS                             | Export / selected disclosure | Separate Event History drawer + export             | existing field_evidence / sos_alerts    | event history API and browser tests                         |
 | Quality eight rules / raw observations / dot interval              | Quality and map dialogs      | Header tools, existing dialogs                     | /local/quality, raw_points              | ui-dashboard.cjs                                            |
@@ -63,7 +63,7 @@ contains PR #11 native observation/history work. Neither dependency is merged.
 | Hold SOS / accessible long click                                    | app.activateSos(SCREEN)                                   | Persistent Tracking emergency control                                                          |
 | Opt-in triple Volume Up in foreground                               | existing TripleVolumeUp / central SOS engine              | Settings; foreground scope explicit                                                            |
 | SOS saved/pending/durable receipt; Command-only human ACK           | observeSos + sosDescription                               | Tracking SOS status                                                                            |
-| Recording Start/Stop/Resume/Clear                                   | POST /local/recording                                     | Persistent Command recording toolbar                                                           |
+| Recording Start/Pause/Resume/Stop/Save/Discard                                   | POST /local/recording                                     | Persistent Command recording toolbar                                                           |
 | From now / Android session beginning                                | ActionMode                                                | Recording start selector                                                                       |
 | Stable colour / show-hide / dot interval                            | backend colour; presentation only                         | Party overview / canvas tools                                                                  |
 | Live marker, qualified history, provisional segments                | /local/state existing derived points                      | Geographic canvas                                                                              |
@@ -252,3 +252,15 @@ Verification uses CommandControlTest, CommandEnrollmentUiTest, existing console/
 migration tests, Go control tests and actual-server browser/bridge suites. Screenshots are
 synthetic-state native software renders and real-server Chromium evidence, not physical
 Android or native macOS/Windows acceptance. No pixel-diff baseline is introduced.
+
+
+## Issue #27 recording foundation
+
+Approved images: `docs/design/issue27/` (original bytes; mockups, not runtime proof).
+The rail preserves dashboard/navigation/SOS/map/party panels and Day/Night tokens;
+Pause/Resume is primary, Save separate and Stop final. No floating dock is introduced.
+`recording-foundation.cjs` covers actual server/SQLite/Chromium flows and captures
+Day recording, Night paused and both Save dialogs without pixel-diff baselines.
+Exclusive browser fencing protects recording publication. GNSS/ACK/SOS retain their
+existing authorities. Exact compositor presentation, concurrent asset revision binding,
+large-Save latency and long-running fleet acceptance remain unverified; see architecture.

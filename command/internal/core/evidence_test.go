@@ -232,7 +232,7 @@ func TestEvidenceRecordingWindowsClearRetainsEvidence(t *testing.T) {
 	*now = base.Add(5 * time.Second)
 	ingest(t, s, message(t, 2, 5, 5, 0, 1))
 	*now = base.Add(6 * time.Second)
-	action(t, s, "stop")
+	action(t, s, "pause")
 	*now = base.Add(10 * time.Second)
 	ingest(t, s, message(t, 3, 10, 100, 0, 1))
 	*now = base.Add(15 * time.Second)
@@ -400,7 +400,7 @@ func TestEvidenceRecordingAssessmentAfterClear(t *testing.T) {
 	*now = base
 	ingest(t, s, message(t, 1, 0, 0, 0, 1))
 	*now = base.Add(time.Second)
-	action(t, s, "stop")
+	action(t, s, "pause")
 	*now = base.Add(2 * time.Second)
 	action(t, s, "resume")
 	*now = base.Add(3 * time.Second)

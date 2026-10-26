@@ -49,7 +49,7 @@ func TestSOSDurableReceiptAcknowledgementAndRecordingIndependence(t *testing.T) 
 	if duplicate.Result != "duplicate" || duplicate.Received != first.Received || !reflect.DeepEqual(acknowledged, snapshot(t, s).Alerts[0]) {
 		t.Fatal(duplicate)
 	}
-	for _, a := range []string{"start", "stop", "resume", "clear"} {
+	for _, a := range []string{"start", "pause", "resume", "clear"} {
 		action(t, s, a)
 		if !reflect.DeepEqual(acknowledged, snapshot(t, s).Alerts[0]) {
 			t.Fatal(a)

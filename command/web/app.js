@@ -79,27 +79,21 @@ function showError(e) {
 async function post(path, data) {
   const response = await fetch("/local/" + path, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+    headers: {
+      "Content-Type": "application/json",
+      ...window.RecordingCapture?.headers(),
+    },
+    body: JSON.stringify({
+      ...data,
+      ...(path === "recording"
+        ? { operator_at: new Date().toISOString() }
+        : {}),
+    }),
   });
   const b = await response.json();
   if (!response.ok) throw Error(b.message || "Command operation failed");
   await poll();
 }
-for (const action of ["stop", "resume", "clear"])
-  $(action).onclick = () => {
-    if (
-      action === "clear" &&
-      !confirm(
-        "Clear this Recording and its tracks, distances and windows? Raw observations, devices, reporting settings and all SOS alerts are retained.",
-      )
-    )
-      return;
-    post("recording", {
-      action,
-      confirmed: action === "clear",
-    }).catch(showError);
-  };
 function updateSessionChoice() {
   // From Beginning selects all retained sessions; no current session report needed.
   $("session-mode").disabled = false;
@@ -370,6 +364,7 @@ function render() {
     renderDashboard();
   } finally {
     uiTiming("render", started);
+    globalThis.RecordingCapture?.changed();
   }
 }
 function renderDashboard() {
@@ -390,15 +385,16 @@ function renderDashboard() {
       " · Map preview only (bounded points); use Inspect selected history for every full-resolution point and original observation. Distance remains full resolution.";
   const recording = state.recording;
   $("recording").textContent = recording
-    ? recording.active
-      ? "Recording active · " + duration(recording.duration_s)
-      : "Recording stopped · " + duration(recording.duration_s)
-    : "No recording";
+    ? `${recording.status === "stopped" ? "STOPPED" : recording.active ? "● REC" : "PAUSED"} · ${duration(recording.duration_s)}`
+    : "Ready to record";
   if ($("recording-start").open) updateSessionChoice();
-  $("start").disabled = !!recording;
-  $("stop").disabled = !recording?.active;
-  $("resume").disabled = !recording || recording.active;
-  $("clear").disabled = !recording;
+  $("start").hidden = !!recording;
+  $("pause").hidden = !recording?.active;
+  $("resume").hidden =
+    !recording || recording.active || recording.status === "stopped";
+  $("stop").disabled = !recording || recording.status === "stopped";
+  $("save-recording").disabled = !recording;
+  $("stopped-choice").hidden = recording?.status !== "stopped";
   const devices = Object.values(state.devices).sort((a, b) =>
     a.device_id.localeCompare(b.device_id),
   );
@@ -1766,8 +1762,10 @@ function draw() {
   const started = performance.now();
   try {
     drawMap();
+    window.recordingRenderedModel = structuredClone(state);
   } finally {
     uiTiming("draw", started);
+    globalThis.RecordingCapture?.changed();
   }
 }
 function drawMap() {
@@ -2192,6 +2190,7 @@ function drawMap() {
       "stroke-width": 3,
       tabindex: 0,
       role: "button",
+      "data-device": p.device_id,
       "data-point-key": p.device_id + "/live",
       "data-live-device": p.live ? p.device_id : "",
       "aria-label": `${d.snapshot.party.id} ${gnssLabel(d)}${bearing == null ? " · direction unavailable or stationary" : ` · course ${bearing} degrees`}`,
@@ -2217,6 +2216,7 @@ function drawMap() {
       fill: color(p.device_id),
       "font-size": 12,
     });
+    label.setAttribute("data-device", p.device_id);
     label.textContent = d.snapshot.party.id + (p.live ? "" : " · last known");
     liveLayer.append(label);
   }
@@ -3691,3 +3691,73 @@ function initializeMapModal() {
   previewRadius().catch(showError);
 }
 initializeMapModal();
+
+window.recordingAppliedState = () => {
+  const applied = window.recordingRenderedModel || {};
+  return {
+    version: 1,
+    map_id: $("map-mode").value === "offline" ? activeMapID || "" : "",
+    assets: [],
+    common: {
+      viewport,
+      appearance: document.documentElement.dataset.appearance,
+      width: $("tracks").clientWidth,
+      height: $("tracks").clientHeight,
+      policy: applied.policy,
+      selected_party: selectedParty,
+      hidden: [...hidden],
+      panels: {
+        parties: !document
+          .querySelector("main")
+          .classList.contains("parties-closed"),
+        details: !document
+          .querySelector("main")
+          .classList.contains("details-closed"),
+      },
+      layers: Object.fromEntries(
+        [...document.querySelectorAll("#layers input, #layers select")].map(
+          (e) => [e.id, e.type === "checkbox" ? e.checked : e.value],
+        ),
+      ),
+      connection: liveConnection,
+      projection_pending: applied.projection_pending,
+      projection_error: applied.projection_error,
+      // Common map geometry contains no party GNSS data.
+      map_svg: [...$("tracks").children]
+        .filter(
+          (e) =>
+            e.tagName.toLowerCase() === "defs" ||
+            ["offline-map", "hillshade", "contours"].includes(e.dataset.layer),
+        )
+        .map((e) => e.outerHTML)
+        .join(""),
+    },
+    parties: Object.fromEntries(
+      Object.entries(applied.devices || {}).map(([id, d]) => [
+        id,
+        {
+          device: structuredClone(d),
+          visible: !hidden.has(id),
+          selected: id === selectedParty,
+          points: (applied.points || []).filter((p) => p.device_id === id),
+          provisional: (applied.provisional_points || []).filter(
+            (p) => p.device_id === id,
+          ),
+          raw: (applied.raw_points || []).filter((p) => p.device_id === id),
+          sos: (applied.sos_alerts || []).filter((a) => a.device_id === id),
+          svg: [...$("tracks").querySelectorAll("[data-device]")]
+            .filter((e) => e.dataset.device === id)
+            .map((e) => e.outerHTML)
+            .join(""),
+          panel:
+            id === selectedParty ? $("selected-detail")?.innerText : undefined,
+          inspection:
+            id === selectedParty && $("history-inspection").open
+              ? $("inspection-data").textContent
+              : undefined,
+        },
+      ]),
+    ),
+  };
+};
+window.recordingLiveState = () => state;

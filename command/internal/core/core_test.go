@@ -368,7 +368,7 @@ func TestRecordingWindowsPolicyClear(t *testing.T) {
 	late := message(t, 1, 5, 0, 10, 1)
 	late.Device = "22222222-2222-4222-8222-222222222222"
 	ingest(t, s, late)
-	action(t, s, "stop")
+	action(t, s, "pause")
 	*now = base.Add(120 * time.Second)
 	ingest(t, s, message(t, 3, 20, 20, 0, 1))
 	ingest(t, s, message(t, 4, 60, 999, 0, 1))
@@ -480,9 +480,12 @@ func TestHTTPAPIAndDurableFailure(t *testing.T) {
 		}
 	}
 	local := s.LocalHandler(web.Handler())
+	lease := claimPresentation(t, s)
 	request := func(path string, body any) *httptest.ResponseRecorder {
 		r := httptest.NewRequest("POST", path, bytes.NewReader(encode(t, body)))
 		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("X-Presentation-Token", lease.Token)
+		r.Header.Set("X-Presentation-Epoch", lease.Epoch)
 		w := httptest.NewRecorder()
 		local.ServeHTTP(w, r)
 		return w
@@ -648,7 +651,7 @@ func TestRestartStoppedClearAndRemoteOverride(t *testing.T) {
 	if err := s.SetOverride(device, &v); err != nil {
 		t.Fatal(err)
 	}
-	action(t, s, "stop")
+	action(t, s, "pause")
 	before := snapshot(t, s)
 	s.Close()
 	r, err := Open(path)

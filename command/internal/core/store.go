@@ -62,10 +62,13 @@ type Window struct {
 	Sessions   map[string]string `json:"sessions,omitempty"`
 }
 type Recording struct {
-	ID      string   `json:"recording_id"`
-	Active  bool     `json:"active"`
-	Windows []Window `json:"windows"`
-	Mode    string   `json:"mode"`
+	ID      string     `json:"recording_id"`
+	Status  string     `json:"status"`
+	Started time.Time  `json:"started_at"`
+	Stopped *time.Time `json:"stopped_at,omitempty"`
+	Active  bool       `json:"active"`
+	Windows []Window   `json:"windows"`
+	Mode    string     `json:"mode"`
 }
 type SOSAlert struct {
 	Device       string  `json:"device_id"`
@@ -125,6 +128,7 @@ type State struct {
 	Provisional                  []Point            `json:"provisional_points,omitempty"`
 }
 type Store struct {
+	presentationDone     chan struct{}
 	walBudget            int64
 	path                 string
 	historyGate          sync.Mutex
@@ -405,6 +409,11 @@ func Open(path string) (*Store, error) {
 			return fail(err)
 		}
 	}
+	if err = s.initPresentation(); err != nil {
+		return fail(err)
+	}
+	s.presentationDone = make(chan struct{})
+	go s.presentationRuntime()
 	s.cleanProjectionChunks("", "")
 	go s.projectionLoop()
 	s.notifyProjection()
@@ -414,6 +423,7 @@ func (s *Store) Close() error {
 	s.closeOnce.Do(func() {
 		close(s.stop)
 		<-s.done
+		<-s.presentationDone
 		if s.viewDB != nil {
 			s.closeError = s.viewDB.Close()
 		}
@@ -733,6 +743,9 @@ func (s *Store) ingestMessage(tx receiptSQL, st *State, m Message, b []byte, rec
 		index := len(st.Devices)
 		d = &Device{ID: m.Device, Snapshot: m, Desired: Config{Authority: &authority}, Color: palette[index%len(palette)], Dash: styles[(index/len(palette))%len(styles)]}
 		st.Devices[m.Device] = d
+		if err = presentationParticipants(tx, *st); err != nil {
+			return Ack{}, err
+		}
 	}
 	var reported *ReportedSession
 	captureAge := instant(received).Sub(instant(m.Captured)).Seconds()
@@ -909,10 +922,31 @@ func (s *Store) AcknowledgeSOS(device, event string) error {
 
 func (s *Store) Action(action string) error { return s.ActionMode(action, "from_now") }
 func (s *Store) ActionMode(action, mode string) error {
+	return s.actionModeOwned(action, mode, "", "", "")
+}
+func (s *Store) actionModeOwned(action, mode, token, epoch, operatorAt string) error {
 	return s.change("recording_"+action, "", func(st *State, now time.Time, tx *sql.Tx) error {
+		if token != "" {
+			l, e := getLease(tx)
+			if e != nil {
+				return e
+			}
+			if !owner(l, presentationRequest{Token: token, Epoch: epoch}, now) {
+				return fmt.Errorf("browser owner fenced")
+			}
+		}
+		receivedAt := now
+		if operatorAt != "" {
+			pressed, e := time.Parse(time.RFC3339Nano, operatorAt)
+			if e != nil || pressed.After(now.Add(5*time.Second)) || now.Sub(pressed) > 30*time.Second {
+				return fmt.Errorf("operator clock outside accepted uncertainty bounds")
+			}
+			now = pressed.UTC()
+		}
 		r := st.Recording
 		open := func(reason string) {
 			r.Active = true
+			r.Status = "active"
 			w := Window{ID: id(), Start: now, Policy: st.Policy, Reason: reason}
 			w.AllHistory = r.Mode == "from_beginning" && reason == "start"
 			r.Windows = append(r.Windows, w)
@@ -931,25 +965,33 @@ func (s *Store) ActionMode(action, mode string) error {
 			if mode != "from_now" && mode != "from_beginning" {
 				return fmt.Errorf("unknown recording mode")
 			}
-			r = &Recording{ID: id(), Mode: mode}
+			r = &Recording{ID: id(), Mode: mode, Status: "active", Started: now}
 			st.Recording = r
 			open("start")
-		case "stop":
-			if r == nil {
+		case "pause", "stop":
+			if r == nil || (action == "pause" && r.Status == "stopped") {
 				return ErrAction
 			}
 			if r.Active {
 				r.Windows[len(r.Windows)-1].Stop = &now
 				r.Active = false
 			}
+			if action == "stop" {
+				r.Status = "stopped"
+				if r.Stopped == nil {
+					r.Stopped = &now
+				}
+			} else if r.Status != "stopped" {
+				r.Status = "paused"
+			}
 		case "resume":
-			if r == nil {
+			if r == nil || r.Status == "stopped" {
 				return ErrAction
 			}
 			if !r.Active {
 				open("resume")
 			}
-		case "clear":
+		case "clear", "discard":
 			if r != nil {
 				b, _ := json.Marshal(r)
 				if _, err := tx.Exec("INSERT INTO retired VALUES(?,?)", r.ID, string(b)); err != nil {
@@ -965,7 +1007,19 @@ func (s *Store) ActionMode(action, mode string) error {
 		default:
 			return ErrAction
 		}
-		return nil
+		if r != nil {
+			copy := *st
+			copy.Recording = r
+			if action == "stop" {
+				rr := *r
+				rr.Status = "active"
+				copy.Recording = &rr
+			}
+			if e := presentationParticipants(tx, copy); e != nil {
+				return e
+			}
+		}
+		return presentationAction(tx, r, action, now, receivedAt)
 	})
 }
 func (s *Store) SetPolicy(p Policy) error {
