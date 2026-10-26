@@ -66,7 +66,7 @@
       if (!pending && dirty && document.visibilityState === "visible") {
         const before = generation;
         await frame();
-        const applied = window.recordingAppliedState();
+        const applied = structuredClone(window.recordingAppliedState());
         const presented = new Date().toISOString();
         await frame();
         await new Promise((resolve) => setTimeout(resolve, 0));
