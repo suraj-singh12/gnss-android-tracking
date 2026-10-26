@@ -228,7 +228,7 @@ in #1. The [fixtures](../protocol/fixtures/README.md) and
 [test tools](../test-tools/README.md) let #2/#3 prove serialization, ACK/config and
 identity independently. Their later deterministic suites must cover jitter,
 uncertainty, turns/reversals, stale fixes, jumps, last-accepted comparison, geographic
-distance, dynamic join, Stop/Resume/Clear, retries, arrival permutations, config
+distance, dynamic join, Pause/Resume, final Stop, Save/Discard, retries, arrival permutations, config
 convergence and restart. #4 adds real LAN integration; #5 implements SOS triggers;
 #6 adds diagnostics/UI/offline map; #7 proves field acceptance and portable releases.
 

@@ -196,8 +196,9 @@ from the extracted application hashes. A failed or pending run is not a matched 
 5. Tracking → Start Tracking. Follow precise location, notifications, GPS and power
    guidance. Verify GNSS separately from Command contact, then lock the phone.
 6. Command → choose Recording start mode, Start Recording. Use party selection,
-   visibility, Fit/Focus and quality settings. Stop/Resume retains original boundaries;
-   Clear requires confirmation and retains raw observations/settings/SOS.
+   visibility, Fit/Focus and quality settings. Pause/Resume retains original boundaries;
+   Stop is final with a durable Save/Discard choice. Discard requires confirmation
+   and retains raw observations, saved snapshots, settings and SOS.
 7. Map & layers → optionally load RFC 7946 `.geojson`. Inspect CRS/coverage, point
    coordinates and background opacity. Blank canvas needs no map. Missing, incompatible
    or corrupt maps fall back without affecting GNSS data.

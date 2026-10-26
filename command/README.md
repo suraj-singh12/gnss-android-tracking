@@ -513,7 +513,7 @@ browser requests. These are Command-local controls, never a second phone protoco
 | Endpoint                             | Purpose                                                                                                                                                                      |
 | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET /local/state?dot_interval_s=30` | Current recording, devices and projected geographic points                                                                                                                   |
-| `POST /local/recording`              | `{ "action": "start" / "stop" / "resume" / "clear", "confirmed": true, "mode": "from_now" / "from_beginning" }` (mode selected on Start; confirmation required for Clear) |
+| `POST /local/recording`              | Owner token/epoch headers; `action`: `start`, `pause`, `resume`, `stop`, `discard`; `mode`: `from_now` / `from_beginning` on Start. Discard requires confirmation; `clear` is its legacy API alias. See Recording foundation below for browser proof and snapshots. |
 | `POST /local/override`               | `{ "device_id": UUID, "reporting_interval_override_s": 30 / null }`                                                                                                          |
 | `POST /local/quality`                | Complete quality snapshot using the field names in `GET /local/state`                                                                                                        |
 
@@ -558,7 +558,7 @@ ordered metadata for stored/identical retry/conflicting attempts, offered ACK co
 pre/post live observation time, point count/distance, database-open boundaries,
 configuration requests and recording/policy operations. Operation snapshots retain
 recording IDs, windows/policies, accepted point identities/times/segments, participation
-and distances before/after Clear. Resume remains the same recording with another
+and distances before/after Discard (legacy Clear). Resume after Pause remains the same recording with another
 window. Closed windows can reconcile late backlog; operation snapshots describe
 what was known at that operation, while current recording evidence is reconciled.
 Raw rows are not duplicated; evidence persists with the same DB through restart.
@@ -626,7 +626,7 @@ that exact Device/event pair. It keeps the event and its first receipt timestamp
 repeated clicks/retries are idempotent. A duplicate phone packet cannot reset an
 acknowledgement. Multiple independent events have separate controls/statuses.
 Unacknowledged events remain prominent when a device loses contact, on browser
-reload and after restarting Command with the same SQLite database. Recording Clear
+reload and after restarting Command with the same SQLite database. Recording Discard (legacy Clear)
 retains all emergencies. There is no cancellation/delete control. Acknowledged
 history remains visible and stored under existing indefinite raw/state retention.
 
@@ -747,10 +747,11 @@ From Beginning has no lower observation-time boundary for its initial window,
 includes all retained received observations across every Android tracking session,
 and can begin with zero known phones. The old API value `"session_beginning"`
 remains an alias. From Now uses the persisted Command operator-time boundary and
-excludes earlier measurements regardless of when they arrive. Stop closes the
-active window, while delayed qualifying history can still be received and rebuilt
-inside that window. Resume creates a separate time-bounded segment of the same
-recording. Clear retains original raw GNSS, device identities and configuration.
+excludes earlier measurements regardless of when they arrive. Pause closes the
+active window resumably; final Stop cannot resume. Delayed qualifying history can
+still be received and rebuilt inside closed windows without changing saved snapshots.
+Resume after Pause creates a separate time-bounded segment of the same recording.
+Discard (legacy Clear) retains original raw GNSS, saved snapshots, SOS, device identities and configuration.
 A missing sequence or session gap never creates an invented distance connector.
 
 The phone listener adds GET /api/v1/capabilities and POST /api/v1/history. Batch version 1
@@ -777,7 +778,7 @@ counts/distances after derivation; raw ACK evidence explicitly labels pending wo
 Historical-only late joins and earlier Android sessions become eligible for From
 Beginning as their original observations arrive. No current-session inventory or
 fresh live fix is needed. The first From Beginning window accepts the full retained
-observation history (before its Stop boundary); Resume always starts at the new
+observation history (before its Pause/Stop boundary); Resume after Pause starts at the new
 Command-clock boundary. Source sessions, missing original sequences and recording
 windows cannot share a distance connector. Successful qualified partial route sections
 appear even beyond unresolved sequence gaps and are reconciled on later delivery.
