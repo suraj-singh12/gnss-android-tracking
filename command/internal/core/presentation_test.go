@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -347,5 +348,127 @@ func TestPresentationExactStartAndResumeBoundaryProof(t *testing.T) {
 	_ = s.db.QueryRow(`SELECT COUNT(*) FROM presentation_journal WHERE kind='display'`).Scan(&count)
 	if count != 2 {
 		t.Fatal("boundary states not durable", count)
+	}
+}
+
+func TestPresentationDeltaOrderingBoundsAndSubsetIsolation(t *testing.T) {
+	s, _, path := open(t)
+	payload := map[string]any{"unicode": "Δ 北京 🛰", "tick": 0, "parties": map[string]any{}}
+	parties := payload["parties"].(map[string]any)
+	for d := 0; d < 21; d++ {
+		points := []any{}
+		for n := 0; n < 80; n++ {
+			points = append(points, map[string]any{"x": d*1000 + n*7, "y": n * 19, "id": fmt.Sprintf("%d/%d", d, n)})
+		}
+		parties[fmt.Sprint(d)] = map[string]any{"points": points, "age": 0}
+	}
+	hashes := []string{}
+	originals := [][]byte{}
+	previous := ""
+	for tick := 0; tick < 120; tick++ {
+		payload["tick"] = tick
+		parties["7"].(map[string]any)["age"] = tick
+		b := []byte(marshal(payload))
+		tx, e := s.db.Begin()
+		if e != nil {
+			t.Fatal(e)
+		}
+		hash, e := putPresentationBlob(tx, b, previous, "")
+		if e != nil {
+			tx.Rollback()
+			t.Fatal(e)
+		}
+		if e = tx.Commit(); e != nil {
+			t.Fatal(e)
+		}
+		hashes = append(hashes, hash)
+		originals = append(originals, b)
+		previous = hash
+	}
+	var stored int64
+	_ = s.db.QueryRow(`SELECT SUM(length(data)) FROM presentation_blobs`).Scan(&stored)
+	var logical int64
+	for _, b := range originals {
+		logical += int64(len(b))
+	}
+	if stored > logical/5 {
+		t.Fatalf("changed ages repeated full routes: stored=%d full=%d", stored, logical)
+	}
+	for i, hash := range hashes {
+		b, depth, _, e := readPresentationBlob(s.db, hash)
+		if e != nil || !bytes.Equal(b, originals[i]) || depth > presentationDeltaDepth {
+			t.Fatalf("event %d depth=%d: %v", i, depth, e)
+		}
+	}
+	// Namespaced subset chains never use an all-party checkpoint as their base.
+	tx, e := s.db.Begin()
+	if e != nil {
+		t.Fatal(e)
+	}
+	subset := []byte(`{"parties":{"7":{"visible":true}}}`)
+	h, e := putPresentationBlob(tx, subset, previous, "only-party-7")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e = tx.Commit(); e != nil {
+		t.Fatal(e)
+	}
+	_, depth, scope, e := readPresentationBlob(s.db, h)
+	if e != nil || depth != 0 || scope != "only-party-7" {
+		t.Fatal("subset linked excluded evidence", depth, scope, e)
+	}
+	s.Close()
+	next, e := Open(path)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer next.Close()
+	b, _, _, e := readPresentationBlob(next.db, hashes[119])
+	if e != nil || !bytes.Equal(b, originals[119]) {
+		t.Fatal("restart did not preserve exact delta reconstruction", e)
+	}
+	t.Logf("21-party 120-frame changing-state delta: logical=%d stored=%d", logical, stored)
+}
+
+func TestPresentationSavedSubsetDeltaReaderHasNoExcludedDetails(t *testing.T) {
+	s, now, _ := open(t)
+	r := claimPresentation(t, s)
+	action(t, s, "start")
+	r.State = displayState{Version: 1, Common: json.RawMessage(`{"viewport":[1,2,3]}`), Parties: map[string]json.RawMessage{}}
+	for i := 1; i <= 5; i++ {
+		m := message(t, 1, 0, float64(i), 0, 1)
+		m.Device = fmt.Sprintf("%08d-1111-4111-8111-111111111111", i)
+		ingest(t, s, m)
+		r.State.Parties[m.Device] = json.RawMessage(fmt.Sprintf(`{"latitude":%d,"private_detail":"party-%d"}`, i, i))
+		if i <= 3 {
+			r.Included = append(r.Included, m.Device)
+		}
+	}
+	r.Revision = 1
+	r.Presented = now.Format(time.RFC3339Nano)
+	r.Opportunity = r.Presented
+	if _, e := s.presentationOperation("confirm", r); e != nil {
+		t.Fatal(e)
+	}
+	r.Name = "Subset graph"
+	v, e := s.presentationOperation("save", r)
+	if e != nil {
+		t.Fatal(e)
+	}
+	sid := v.(map[string]any)["id"].(string)
+	var encoded string
+	if e = s.db.QueryRow(`SELECT data FROM saved_presentation WHERE snapshot=? AND json_extract(data,'$.Kind')='display'`, sid).Scan(&encoded); e != nil {
+		t.Fatal(e)
+	}
+	var event struct{ Data map[string]any }
+	_ = json.Unmarshal([]byte(encoded), &event)
+	state, _, scope, e := readPresentationBlob(s.db, event.Data["hash"].(string))
+	if e != nil {
+		t.Fatal(e)
+	}
+	var display displayState
+	_ = json.Unmarshal(state, &display)
+	if len(display.Parties) != 3 || scope == "" || bytes.Contains(state, []byte("party-4")) || bytes.Contains(state, []byte("party-5")) {
+		t.Fatal("excluded details entered sealed graph", string(state))
 	}
 }

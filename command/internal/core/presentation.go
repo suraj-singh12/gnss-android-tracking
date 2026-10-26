@@ -11,16 +11,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
 
 const presentationLimit = 4 << 20
-const presentationQuota = 1 << 30
+const presentationQuota = 64 << 30
 
 type presentationLease struct {
+	Hash        string    `json:"state_hash"`
 	Recording   string    `json:"recording_id"`
 	LastDisplay time.Time `json:"last_display_at"`
 	Token       string    `json:"token"`
@@ -81,7 +83,8 @@ func (s *Store) initPresentation() error {
 		`CREATE TABLE IF NOT EXISTS saved_originals(snapshot TEXT NOT NULL,device TEXT NOT NULL,message TEXT NOT NULL,wire BLOB NOT NULL,known TEXT NOT NULL,received TEXT NOT NULL,PRIMARY KEY(snapshot,device,message))`,
 		`CREATE TABLE IF NOT EXISTS presentation_assets(hash TEXT PRIMARY KEY,data BLOB NOT NULL,bytes INTEGER NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS presentation_asset_refs(recording TEXT NOT NULL,ordinal INTEGER NOT NULL,hash TEXT NOT NULL,PRIMARY KEY(recording,ordinal,hash))`,
-		`INSERT OR IGNORE INTO presentation_usage SELECT 1,COALESCE(SUM(bytes),0) FROM presentation_blobs`,
+		`INSERT INTO presentation_usage SELECT 1,COALESCE(SUM(length(data)),0) FROM presentation_blobs WHERE true ON CONFLICT(id) DO UPDATE SET bytes=excluded.bytes`,
+		`CREATE TRIGGER IF NOT EXISTS presentation_blob_usage AFTER INSERT ON presentation_blobs BEGIN UPDATE presentation_usage SET bytes=bytes+length(NEW.data) WHERE id=1; END`,
 		`CREATE TABLE IF NOT EXISTS saved_assets(snapshot TEXT NOT NULL,hash TEXT NOT NULL,PRIMARY KEY(snapshot,hash))`,
 	} {
 		if _, e := s.db.Exec(q); e != nil {
@@ -244,6 +247,11 @@ func (s *Store) presentationHTTP(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 func (s *Store) presentationOperation(op string, r presentationRequest) (any, error) {
+	if op == "confirm" {
+		if e := mapDiskReserve(s.path, 136*1024*1024); e != nil {
+			return nil, e
+		}
+	}
 	if op == "save" && s.path != ":memory:" {
 		return s.stagedSave(r)
 	}
@@ -347,24 +355,11 @@ func (s *Store) presentationOperation(op string, r presentationRequest) (any, er
 					return nil, e
 				}
 			}
-			var used int64
-			if e = tx.QueryRow(`SELECT bytes FROM presentation_usage WHERE id=1`).Scan(&used); e != nil {
-				return nil, e
-			}
-			if used+int64(len(b)) > presentationQuota {
-				return nil, errors.New("presentation quota reached; capture incomplete; GNSS remains available")
-			}
-			inserted, err := tx.Exec(`INSERT OR IGNORE INTO presentation_blobs VALUES(?,?,?)`, hash, compressed(b), len(b))
-			e = err
-			if e == nil {
-				n, _ := inserted.RowsAffected()
-				if n > 0 {
-					_, e = tx.Exec(`UPDATE presentation_usage SET bytes=bytes+? WHERE id=1`, len(b))
-				}
-			}
+			hash, e = putPresentationBlob(tx, b, l.Hash, "")
 			if e != nil {
 				return nil, e
 			}
+			l.Hash = hash
 			if l.Recording != st.Recording.ID {
 				gapFrom := st.Recording.Started
 				var prior string
@@ -523,6 +518,13 @@ func sealRecording(tx snapshotSQL, st State, r presentationRequest, now time.Tim
 	confirmed := 0
 	stream := sha256.New()
 	streamBytes := 0
+	previousFiltered := ""
+	ids := append([]string(nil), r.Included...)
+	sort.Strings(ids)
+	scope := ""
+	if len(selected) < len(manifest) {
+		scope = digest([]byte(marshal(ids)))
+	}
 	for rows.Next() {
 		var v event
 		var encoded string
@@ -533,18 +535,13 @@ func sealRecording(tx snapshotSQL, st State, r presentationRequest, now time.Tim
 		if v.Kind == "display" {
 			var detail map[string]any
 			_ = json.Unmarshal(v.Data, &detail)
-			var packed []byte
-			if e = tx.QueryRow(`SELECT data FROM presentation_blobs WHERE hash=?`, detail["hash"]).Scan(&packed); e != nil {
-				return nil, e
+			originalHash, ok := detail["hash"].(string)
+			if !ok {
+				return nil, errors.New("invalid display reference")
 			}
-			rd, err := zlib.NewReader(bytes.NewReader(packed))
+			b, _, _, err := readPresentationBlob(tx, originalHash)
 			if err != nil {
 				return nil, err
-			}
-			b, err := io.ReadAll(io.LimitReader(rd, presentationLimit+1))
-			rd.Close()
-			if err != nil || len(b) > presentationLimit {
-				return nil, errors.New("invalid checkpoint")
 			}
 			var display displayState
 			if e = json.Unmarshal(b, &display); e != nil {
@@ -555,7 +552,14 @@ func sealRecording(tx snapshotSQL, st State, r presentationRequest, now time.Tim
 					delete(display.Parties, d)
 				}
 			}
-			detail["state"] = display
+			filtered, e := putPresentationBlob(tx, []byte(marshal(display)), previousFiltered, scope)
+			if e != nil {
+				return nil, e
+			}
+			previousFiltered = filtered
+			detail["original_display_sha256"] = originalHash
+			detail["hash"] = filtered
+			detail["state_encoding"] = "content-addressed-v2"
 			v.Data = json.RawMessage(marshal(detail))
 			confirmed++
 		}
@@ -620,7 +624,7 @@ func sealRecording(tx snapshotSQL, st State, r presentationRequest, now time.Tim
 	if e = tx.QueryRow(`SELECT COALESCE(SUM(length(wire)),0) FROM saved_originals WHERE snapshot=?`, sid).Scan(&rawBytes); e != nil {
 		return nil, e
 	}
-	metadata := map[string]any{"version": 1, "id": sid, "recording_id": rec.ID, "name": strings.TrimSpace(r.Name), "description": r.Description, "display_date": r.DisplayDate, "source_mode": rec.Mode, "started_at": rec.Started, "cutoff_at": cutoff, "saved_at": now, "operator_save_at": r.OperatorAt, "stopped_at": rec.Stopped, "total_parties": len(manifest), "participation": manifest, "included": r.Included, "operator_selected_subset": len(selected) < len(manifest), "confirmed_events": confirmed, "stream_sha256": hex.EncodeToString(stream.Sum(nil)), "presentation_bytes": streamBytes, "original_bytes": rawBytes, "pinned_asset_bytes": assetBytes, "incomplete_evidence": true, "asset_revision_verification": "Exact successful map/terrain/manifest response bytes are pinned before delivery; missing browser revision references are disclosed as gaps.", "limitations": []string{"Rendering opportunities confirm browser-applied state, not OS pixel scanout or human attention.", "Unconfirmed transitions and process-death boundaries remain uncertain; no later GNSS backfill repairs presentation evidence."}}
+	metadata := map[string]any{"version": 2, "id": sid, "recording_id": rec.ID, "name": strings.TrimSpace(r.Name), "description": r.Description, "display_date": r.DisplayDate, "source_mode": rec.Mode, "started_at": rec.Started, "cutoff_at": cutoff, "saved_at": now, "operator_save_at": r.OperatorAt, "stopped_at": rec.Stopped, "total_parties": len(manifest), "participation": manifest, "included": r.Included, "operator_selected_subset": len(selected) < len(manifest), "confirmed_events": confirmed, "stream_sha256": hex.EncodeToString(stream.Sum(nil)), "presentation_reference_bytes": streamBytes, "presentation_encoding": "bounded-delta-v2", "original_bytes": rawBytes, "pinned_asset_bytes": assetBytes, "incomplete_evidence": true, "asset_revision_verification": "Exact successful map/terrain/manifest response bytes are pinned before delivery; missing browser revision references are disclosed as gaps.", "limitations": []string{"Rendering opportunities confirm browser-applied state, not OS pixel scanout or human attention.", "Unconfirmed transitions and process-death boundaries remain uncertain; no later GNSS backfill repairs presentation evidence."}}
 	if _, e = tx.Exec(`INSERT INTO saved_recordings VALUES(?,?)`, sid, marshal(metadata)); e != nil {
 		return nil, e
 	}
@@ -643,6 +647,49 @@ func (s *Store) savedDiagnostics(w http.ResponseWriter, r *http.Request) {
 		var meta string
 		if e := db.QueryRowContext(r.Context(), `SELECT metadata FROM saved_recordings WHERE id=?`, sid).Scan(&meta); e != nil {
 			failure(w, 404, "snapshot_not_found", e)
+			return
+		}
+		if r.URL.Query().Has("event_cursor") {
+			cursor, e := strconv.ParseInt(r.URL.Query().Get("event_cursor"), 10, 64)
+			if e != nil || cursor < 0 {
+				failure(w, 400, "invalid_cursor", errors.New("non-negative event cursor required"))
+				return
+			}
+			var ordinal int64
+			var encoded string
+			e = db.QueryRowContext(r.Context(), `SELECT ordinal,data FROM saved_presentation WHERE snapshot=? AND ordinal>? ORDER BY ordinal LIMIT 1`, sid, cursor).Scan(&ordinal, &encoded)
+			if errors.Is(e, sql.ErrNoRows) {
+				respond(w, 200, map[string]any{"snapshot_id": sid, "event": nil, "next_cursor": ""})
+				return
+			}
+			if e != nil {
+				failure(w, 503, "storage_unavailable", e)
+				return
+			}
+			var event struct {
+				Kind string
+				Data map[string]json.RawMessage
+			}
+			if e = json.Unmarshal([]byte(encoded), &event); e != nil {
+				failure(w, 503, "snapshot_integrity_error", e)
+				return
+			}
+			result := map[string]any{"snapshot_id": sid, "event": json.RawMessage(encoded), "next_cursor": strconv.FormatInt(ordinal, 10)}
+			if event.Kind == "display" {
+				if inline := event.Data["state"]; len(inline) > 0 {
+					result["checkpoint"] = inline
+				} else {
+					var hash string
+					_ = json.Unmarshal(event.Data["hash"], &hash)
+					state, _, _, e := readPresentationBlob(db, hash)
+					if e != nil {
+						failure(w, 503, "snapshot_integrity_error", e)
+						return
+					}
+					result["checkpoint"] = json.RawMessage(state)
+				}
+			}
+			respond(w, 200, result)
 			return
 		}
 		rows, e := db.QueryContext(r.Context(), `SELECT data FROM saved_presentation WHERE snapshot=? ORDER BY ordinal`, sid)
@@ -734,6 +781,9 @@ func (s *Store) pinServedAsset(b []byte) (string, error) {
 	if len(b) > mapLimit+65536 {
 		return "", errors.New("asset response exceeds recording pin bound")
 	}
+	if e := mapDiskReserve(s.path, uint64(len(b))+136*1024*1024); e != nil {
+		return "", e
+	}
 	hash := digest(b)
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -775,7 +825,7 @@ func (v *stagedSnapshot) Query(q string, args ...any) (*sql.Rows, error) {
 	return v.source.Query(q, args...)
 }
 func (v *stagedSnapshot) QueryRow(q string, args ...any) *sql.Row {
-	if strings.Contains(q, "saved_") {
+	if strings.Contains(q, "saved_") || strings.Contains(q, "presentation_blobs") || strings.Contains(q, "presentation_usage") {
 		return v.store.db.QueryRow(q, args...)
 	}
 	return v.source.QueryRow(q, args...)
@@ -788,11 +838,17 @@ func (v *stagedSnapshot) Exec(q string, args ...any) (sql.Result, error) {
 		v.publish = append(v.publish, stagedStatement{q, args})
 		return stagedResult{}, nil
 	}
+	if e := mapDiskReserve(v.store.path, 136*1024*1024); e != nil {
+		return nil, e
+	}
 	v.store.mu.Lock()
 	defer v.store.mu.Unlock()
 	return v.store.db.Exec(q, args...)
 }
 func (s *Store) stagedSave(r presentationRequest) (any, error) {
+	if e := mapDiskReserve(s.path, 136*1024*1024); e != nil {
+		return nil, e
+	}
 	if !s.saveMu.TryLock() {
 		return nil, errors.New("another snapshot is being sealed; retry after it completes")
 	}
@@ -917,24 +973,11 @@ func presentationBoundary(tx *sql.Tx, rec *Recording, proof *presentationRequest
 	if len(b) > presentationLimit {
 		return unverified("pre-action browser state exceeds capture limit")
 	}
-	var used int64
-	if e = tx.QueryRow(`SELECT bytes FROM presentation_usage WHERE id=1`).Scan(&used); e != nil {
-		return e
-	}
-	if used+int64(len(b)) > presentationQuota {
-		return unverified("pre-action capture quota reached")
-	}
-	hash := digest(b)
-	inserted, e := tx.Exec(`INSERT OR IGNORE INTO presentation_blobs VALUES(?,?,?)`, hash, compressed(b), len(b))
+	hash, e := putPresentationBlob(tx, b, l.Hash, "")
 	if e != nil {
-		return e
+		return unverified(e.Error())
 	}
-	n, _ := inserted.RowsAffected()
-	if n > 0 {
-		if _, e = tx.Exec(`UPDATE presentation_usage SET bytes=bytes+? WHERE id=1`, len(b)); e != nil {
-			return e
-		}
-	}
+	l.Hash = hash
 	var common map[string]any
 	_ = json.Unmarshal(proof.State.Common, &common)
 	ordinal, e := journal(tx, rec.ID, "display", pressed, epoch, proof.Revision, map[string]any{"hash": hash, "epoch": epoch, "revision": proof.Revision, "effective_at": pressed, "presented_at": proof.Presented, "render_opportunity_at": proof.Opportunity, "committed_at": received, "boundary_state": true, "displayed_receipt_version": common["receipt_version"], "timing_uncertainty": "stable applied browser state preceding operator boundary; no OS scanout or attention claim"})

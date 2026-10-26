@@ -1126,7 +1126,9 @@ Stop never resumes. Backgrounding is unverified rendering, not browser closure.
 
 `GET /local/presentation/saved` lists up to 100 durable receipts.
 `GET /local/presentation/saved?id=UUID` recomputes the sealed event stream SHA-256.
-Snapshot tables are immutable. Saved playback UI and recording ZIP packages belong
+Snapshot tables are immutable. Add `&event_cursor=0` to read a bounded frozen event
+and its verified selected-party checkpoint; follow `next_cursor` until empty. The
+version 2 graph uses bounded lossless deltas and namespace isolation for subsets. Saved playback UI and recording ZIP packages belong
 to #37/#38. See the Recording presentation foundation section in architecture for
 precise evidence bounds and unresolved acceptance. In particular, rendering-opportunity
 confirmation is not OS scanout proof, asset reads are revision-bound by exact pinned response hashes, and Save stages

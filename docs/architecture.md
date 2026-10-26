@@ -583,13 +583,16 @@ remains outside the evidence claim.
 
 Confirmed events have a browser epoch/revision, server ordinal and SHA-256 checkpoint
 identity. Exact retry is idempotent; conflicting or older revisions fail. Only FULL
-SQLite commit produces success. Compressed content-addressed checkpoints share
-unchanged payloads; the payload admission limit is 4 MiB per request and 1 GiB for
-checkpoint content. Quota/storage errors leave GNSS receipt independent and report
+SQLite commit produces success. Content-addressed byte deltas share unchanged payload spans, with a full checkpoint
+at most every 32 links. SHA-256 verification reconstructs the exact document bytes;
+copy bounds, expansion limits, chain depth and scope are checked. The request limit
+is 4 MiB; stored compressed checkpoint/delta content has a 64 GiB admission cap and
+a 136 MiB free-space guard protecting the receiver reserve. Storage limits are explicit
+unverified capture conditions, never silent evidence truncation. Quota/storage errors leave GNSS receipt independent and report
 unconfirmed evidence. Journal/event growth and multi-day capacity still require the
 full workload acceptance; no retention/deletion policy silently drops evidence.
 
-Save seals version 1 immutable headers, ordered selected-party display checkpoints,
+Save seals version 2 immutable headers, ordered selected-party display references,
 complete participation metadata and included-party original wire/receipt records in
 one frozen WAL read snapshot. Data is staged with short individual writes, then the
 header/request mapping/Save fact publish in one atomic transaction. Unpublished rows
@@ -625,3 +628,13 @@ its effective recording boundary; the timeline never starts before Start. If no
 stable proof exists (including rapid changes or background throttling), the boundary
 is explicitly unverified until the next confirmed display. No backend response is
 substituted for that evidence.
+
+Saved display references resolve through immutable bounded checkpoint/delta graphs.
+Subset graphs use a namespace derived from the included identity set; they cannot
+inherit an all-party graph containing excluded details. Repeated all-party Saves can
+share the original immutable display blobs. Version 1 full checkpoints and inline
+saved states remain readable without rewriting historical snapshots.
+`GET /local/presentation/saved?id=UUID&event_cursor=0` pages one frozen event at a time
+and resolves its filtered checkpoint with hash verification. It reads no later GNSS.
+The default ID diagnostic recomputes the immutable reference stream hash. Payload
+storage bytes count compressed blobs; receipt reference bytes are reported separately.
