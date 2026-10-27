@@ -196,8 +196,9 @@ from the extracted application hashes. A failed or pending run is not a matched 
 5. Tracking → Start Tracking. Follow precise location, notifications, GPS and power
    guidance. Verify GNSS separately from Command contact, then lock the phone.
 6. Command → choose Recording start mode, Start Recording. Use party selection,
-   visibility, Fit/Focus and quality settings. Stop/Resume retains original boundaries;
-   Clear requires confirmation and retains raw observations/settings/SOS.
+   visibility, Fit/Focus and quality settings. Pause/Resume retains original boundaries;
+   Stop is final with a durable Save/Discard choice. Discard requires confirmation
+   and retains raw observations, saved snapshots, settings and SOS.
 7. Map & layers → optionally load RFC 7946 `.geojson`. Inspect CRS/coverage, point
    coordinates and background opacity. Blank canvas needs no map. Missing, incompatible
    or corrupt maps fall back without affecting GNSS data.
@@ -841,3 +842,37 @@ those results do not establish an upstream outage or GitHub-run acceptance. The
 actual large Uttar Pradesh source remains unverified unless the Actions evidence
 substantiate it within authorized transfer/resource limits. Physical Android and
 native macOS/Windows acceptance remain separately tracked in #23/#7.
+
+
+## Issue #27 Recording foundation acceptance
+
+Approved original control images are in `docs/design/issue27/` and linked from #27.
+`recording-foundation.cjs` uses production Command HTTP, SQLite and Chromium for
+Start, repeated Pause/Resume, active/paused subset Save, exclusive ownership,
+refresh/browser return, SIGKILL/restart, final Stop dismissal and Discard. Its
+Day/Night screenshots are running-app evidence; approved mockups are not tests.
+Delayed animation callbacks cannot produce confirmation at backend receipt time.
+A second oracle deliberately blocks actual map application after receipt and checks
+the old revision remains authoritative until map application and confirmation. This
+establishes browser-applied state, not OS compositor scanout. Exact pinned asset read
+revisions, failed publication/retry and concurrent receipt while Save stages are tested.
+Long-running 20+ fleets, sustained large-Save latency and native/physical
+acceptance remain open. No automated pixel-diff baseline is introduced.
+
+Running-app review at code source `cead27f3a373c5d1135357cb7f79f67fd2845a2e`:
+[Day recording](evidence/issue27/rendered/issue27-day-recording.png),
+[Night paused](evidence/issue27/rendered/issue27-night-paused.png),
+[Day Save](evidence/issue27/rendered/issue27-day-save.png) and
+[Night Save](evidence/issue27/rendered/issue27-night-save.png) were inspected against
+the approved originals. The rail occupies 44 px; party cards in Save use inline
+checkboxes and compact names, with Cancel/Save separated. These are synthetic
+five-phone runtime fixtures, not physical GNSS or native OS acceptance. The linked
+browser report records delayed actual map application, ownership, recovery and
+snapshot results; no test reads these images as pixel-diff baselines.
+
+The expanded Recording browser oracle also drops a confirmation ACK while changing
+the viewport, injects a real SQLite display-commit failure, and verifies a saved map
+asset after ordinary library deletion. It pages the sealed event stream and compares
+reconstructed selected-party checkpoints against the instrumented browser-submitted
+presentation sequence, with unique ordered ordinals. This is semantic/geometry evidence,
+not pixel-diff baselines or human-attention proof.

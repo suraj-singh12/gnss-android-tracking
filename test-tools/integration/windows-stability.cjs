@@ -14,7 +14,7 @@ async function wait(check){for(let i=0;i<300;i++){if(await check())return;await 
  const phone=`http://127.0.0.1:${await port()}`,local=`http://127.0.0.1:${await port()}`;
  command=spawn(process.env.GNSS_COMMAND_BINARY,["-db",path.join(work,"command.sqlite"),"-ingest-listen",phone.slice(7),"-dashboard-listen",local.slice(7)],{stdio:"ignore"});
  await wait(async()=>{try{return(await fetch(local+"/local/live")).ok}catch{return false}});
- async function post(url,body){const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});assert.equal(r.status,200,await r.text());}
+ async function post(url,body){const r=url.endsWith("/local/recording")?await require("./recording-control.cjs").recordingPost(local,body,browser):await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});assert.equal(r.status,200,await r.text());}
  await post(local+"/local/recording",{action:"start",mode:"from_beginning"});
  const start=Date.now()-3600000;
  for(let d=1;d<=5;d++)for(let n=1;n<=420;){
@@ -28,7 +28,7 @@ async function wait(check){for(let i=0;i<300;i++){if(await check())return;await 
   await post(phone+"/api/v1/history",{batch_version:1,messages});
  }
  await wait(async()=>!(await(await fetch(local+"/local/live")).json()).projection_pending);
- browser=await chromium.launch({executablePath:process.env.GNSS_CHROMIUM||undefined,headless:true,args:["--no-sandbox"]});
+ browser=await chromium.launch({executablePath:process.env.GNSS_CHROMIUM || undefined,executablePath:process.env.GNSS_CHROMIUM||undefined,headless:true,args:["--no-sandbox"]});
  const page=await browser.newPage({viewport:{width:1280,height:900}}),errors=[];page.on("pageerror",e=>errors.push(e.message));
  await page.addInitScript(()=>{window.testIntervals=[];const interval=window.setInterval;window.setInterval=(...args)=>{const id=interval(...args);window.testIntervals.push(id);return id;};});
  await page.goto(local);await page.waitForFunction(()=>document.querySelector("#tracks polyline[data-device]"));

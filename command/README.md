@@ -333,7 +333,7 @@ default **Current Time** on every opening. Confirm uses `from_now` or
 `from_beginning`; Cancel/Escape is a no-op. From Beginning selects all retained
 source sessions and works before any phone has connected; it does **not** require
 `recording_session_available`. Server validation/errors remain authoritative.
-Stop/Resume/Clear and recording distance calculation retain their established semantics.
+Pause/Resume retains gap-safe recording distance; final Stop and immutable Save follow #27.
 
 ### Automatic terrain preparation and provider boundary
 
@@ -513,7 +513,7 @@ browser requests. These are Command-local controls, never a second phone protoco
 | Endpoint                             | Purpose                                                                                                                                                                      |
 | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET /local/state?dot_interval_s=30` | Current recording, devices and projected geographic points                                                                                                                   |
-| `POST /local/recording`              | `{ "action": "start" / "stop" / "resume" / "clear", "confirmed": true, "mode": "from_now" / "from_beginning" }` (mode selected on Start; confirmation required for Clear) |
+| `POST /local/recording`              | Owner token/epoch headers; `action`: `start`, `pause`, `resume`, `stop`, `discard`; `mode`: `from_now` / `from_beginning` on Start. Discard requires confirmation; `clear` is its legacy API alias. See Recording foundation below for browser proof and snapshots. |
 | `POST /local/override`               | `{ "device_id": UUID, "reporting_interval_override_s": 30 / null }`                                                                                                          |
 | `POST /local/quality`                | Complete quality snapshot using the field names in `GET /local/state`                                                                                                        |
 
@@ -558,7 +558,7 @@ ordered metadata for stored/identical retry/conflicting attempts, offered ACK co
 pre/post live observation time, point count/distance, database-open boundaries,
 configuration requests and recording/policy operations. Operation snapshots retain
 recording IDs, windows/policies, accepted point identities/times/segments, participation
-and distances before/after Clear. Resume remains the same recording with another
+and distances before/after Discard (legacy Clear). Resume after Pause remains the same recording with another
 window. Closed windows can reconcile late backlog; operation snapshots describe
 what was known at that operation, while current recording evidence is reconciled.
 Raw rows are not duplicated; evidence persists with the same DB through restart.
@@ -598,7 +598,7 @@ receipt gaps within ±30% of effective interval (otherwise FAIL with enough samp
 INCONCLUSIVE without them). ACK offered records generation, **not phone receipt**;
 the later config echo proves adoption. Restart dedupe PASS requires a pre-open-boundary
 stored identity retried identically afterward, original receipt preserved, and unchanged
-point count/distance during that retry. Stop/Resume checks reconciled first-point
+point count/distance during that retry. Pause/Resume checks reconciled first-point
 cumulative distance against pre-window geometry; insufficient geometry is INCONCLUSIVE.
 Phone queue drain is PASS only for an explicit recent zero-pending report with contiguous durable identities; missing/stale reports are INCONCLUSIVE. Correlate Android's cached timeline for the full outage/drain sequence.
 No automatic verdict certifies GNSS hardware, screen-off continuity or the physical LAN.
@@ -626,7 +626,7 @@ that exact Device/event pair. It keeps the event and its first receipt timestamp
 repeated clicks/retries are idempotent. A duplicate phone packet cannot reset an
 acknowledgement. Multiple independent events have separate controls/statuses.
 Unacknowledged events remain prominent when a device loses contact, on browser
-reload and after restarting Command with the same SQLite database. Recording Clear
+reload and after restarting Command with the same SQLite database. Recording Discard (legacy Clear)
 retains all emergencies. There is no cancellation/delete control. Acknowledged
 history remains visible and stored under existing indefinite raw/state retention.
 
@@ -747,10 +747,11 @@ From Beginning has no lower observation-time boundary for its initial window,
 includes all retained received observations across every Android tracking session,
 and can begin with zero known phones. The old API value `"session_beginning"`
 remains an alias. From Now uses the persisted Command operator-time boundary and
-excludes earlier measurements regardless of when they arrive. Stop closes the
-active window, while delayed qualifying history can still be received and rebuilt
-inside that window. Resume creates a separate time-bounded segment of the same
-recording. Clear retains original raw GNSS, device identities and configuration.
+excludes earlier measurements regardless of when they arrive. Pause closes the
+active window resumably; final Stop cannot resume. Delayed qualifying history can
+still be received and rebuilt inside closed windows without changing saved snapshots.
+Resume after Pause creates a separate time-bounded segment of the same recording.
+Discard (legacy Clear) retains original raw GNSS, saved snapshots, SOS, device identities and configuration.
 A missing sequence or session gap never creates an invented distance connector.
 
 The phone listener adds GET /api/v1/capabilities and POST /api/v1/history. Batch version 1
@@ -777,7 +778,7 @@ counts/distances after derivation; raw ACK evidence explicitly labels pending wo
 Historical-only late joins and earlier Android sessions become eligible for From
 Beginning as their original observations arrive. No current-session inventory or
 fresh live fix is needed. The first From Beginning window accepts the full retained
-observation history (before its Stop boundary); Resume always starts at the new
+observation history (before its Pause/Stop boundary); Resume after Pause starts at the new
 Command-clock boundary. Source sessions, missing original sequences and recording
 windows cannot share a distance connector. Successful qualified partial route sections
 appear even beyond unresolved sequence gaps and are reconciled on later delivery.
@@ -1107,3 +1108,38 @@ The existing CI cumulative ceiling remains 30 MB per map job; a larger source re
 is recorded truthfully rather than silently increasing consent. Native macOS/Windows
 and Android field acceptance remain separate in #23/#7. See the existing UI acceptance
 and preservation matrix for exact references, screenshots, evidence and limitations.
+
+
+## Recording foundation (#27)
+
+Start offers From Now / From Beginning. Both presentation timelines begin at Start.
+Use Pause/Resume without affecting phone GNSS, LIVE, durable receipt/ACK or SOS.
+Save creates an independent immutable snapshot while active or paused. Name and at
+least one participating party are required; description and descriptive date/timezone
+are optional. The full participation manifest records included/excluded parties.
+Stop is final and keeps its Save/Discard choice after dismissal or restart. Discard
+requires confirmation and retains original GNSS, saved snapshots and SOS.
+
+Only one dashboard can publish presentation evidence. Another browser shows an
+occupied dialog. Refresh/reopening recovers ownership; active intention continues
+when a new browser-applied state is confirmed, while paused stays paused and final
+Stop never resumes. Backgrounding is unverified rendering, not browser closure.
+
+`GET /local/presentation/saved` lists up to 100 durable receipts.
+`GET /local/presentation/saved?id=UUID` recomputes the sealed event stream SHA-256.
+Snapshot tables are immutable. Add `&event_cursor=0` to read a bounded frozen event
+and its verified selected-party checkpoint; follow `next_cursor` until empty. The
+version 2 graph uses bounded lossless deltas and namespace isolation for subsets. Saved playback UI and recording ZIP packages belong
+to #37/#38. See the Recording presentation foundation section in architecture for
+precise evidence bounds and unresolved acceptance. In particular, rendering-opportunity
+confirmation is not OS scanout proof, asset reads are revision-bound by exact pinned response hashes, and Save stages
+from a frozen read snapshot with short yielding writes. Sustained large-fleet Save
+latency and multi-day capture remain unverified.
+The UI and saved receipts must retain those limitations; #27 is not certified complete.
+
+Use localhost or the Command IP address for the Recording console; arbitrary hostname
+origins cannot acquire publication ownership. Save's optional details disclose actual
+UTC boundaries, source mode and recorded interruption facts separately from descriptive
+date. A finally stopped recording's party picker uses its frozen participation list,
+so later phone arrivals cannot silently alter the selection. Missing applied-map pins
+are shown in Save and retained in receipt diagnostics.

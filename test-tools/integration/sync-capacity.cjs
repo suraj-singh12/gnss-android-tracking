@@ -61,8 +61,8 @@ c.rollback();c.close()`,database],{encoding:"utf8"});assert.equal(inspected.stat
  command=spawn(process.env.GNSS_COMMAND_BINARY,["-db",database,"-ingest-listen",phone.slice(7),"-dashboard-listen",local.slice(7)],{stdio:["ignore","ignore",fs.openSync(path.join(work,"command.log"),"w")],env:{...process.env,GOMAXPROCS:"2",GOMEMLIMIT:process.env.GNSS_COMMAND_MEMLIMIT||"768MiB"}});
  timer=setInterval(sample,100);
  await wait(async()=>{try{return(await fetch(phone+"/api/v1/capabilities")).ok}catch{return false}});
- const control=await fetch(local+"/local/recording",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"start",mode:"from_beginning"})});assert.equal(control.status,200,await control.text());
- browser=await chromium.launch({executablePath:process.env.GNSS_CHROMIUM||undefined,headless:true,args:["--no-sandbox"]});
+ const control=await require("./recording-control.cjs").recordingPost(local,{action:"start",mode:"from_beginning"},browser);assert.equal(control.status,200,await control.text());
+ browser=await chromium.launch({executablePath:process.env.GNSS_CHROMIUM || undefined,executablePath:process.env.GNSS_CHROMIUM||undefined,headless:true,args:["--no-sandbox"]});
  const page=await browser.newPage({viewport:{width:1280,height:900}}),errors=[];
  page.on("pageerror",e=>errors.push(e.message));
  await page.addInitScript(()=>{window.syncLongTasks=[];new PerformanceObserver(list=>{for(const e of list.getEntries())window.syncLongTasks.push(e.duration)}).observe({type:"longtask",buffered:true});});

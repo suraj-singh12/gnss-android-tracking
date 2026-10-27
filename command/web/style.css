@@ -1484,12 +1484,168 @@ fieldset {
 }
 
 /* Public identity, authorization and directional contact are separate facts (#48). */
-.control-identity { padding: 12px 16px; background: var(--background); border: 1px solid var(--line); border-radius: 8px; margin: 12px 0; overflow-wrap: anywhere; }
-.control-identity strong, .control-enrollment > span, .control-evidence > span { font-size: 12px; color: var(--muted); }
-#control-phones { max-height: 36vh; }
-#control-phones > div { display: block; padding: 12px 0; }
-#control-phones label { font-size: 14px; }
-#control-phones p { margin: 6px 0; overflow-wrap: anywhere; }
-.control-enrollment, .control-evidence { margin: 10px 0 0 24px; }
-.control-enrollment button { margin-right: 6px; }
-.control-evidence small { color: var(--muted); }
+.control-identity {
+  padding: 12px 16px;
+  background: var(--background);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 12px 0;
+  overflow-wrap: anywhere;
+}
+.control-identity strong,
+.control-enrollment > span,
+.control-evidence > span {
+  font-size: 12px;
+  color: var(--muted);
+}
+#control-phones {
+  max-height: 36vh;
+}
+#control-phones > div {
+  display: block;
+  padding: 12px 0;
+}
+#control-phones label {
+  font-size: 14px;
+}
+#control-phones p {
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
+.control-enrollment,
+.control-evidence {
+  margin: 10px 0 0 24px;
+}
+.control-enrollment button {
+  margin-right: 6px;
+}
+.control-evidence small {
+  color: var(--muted);
+}
+/* Issue 27 approved reduced-height rail; existing dashboard remains below it. */
+.recording-bar {
+  grid-template-columns: minmax(160px, 1fr) minmax(180px, 1fr) auto;
+  padding: 5px 16px;
+  gap: 12px;
+  min-height: 42px;
+}
+.recording-bar .controls {
+  grid-column: 3;
+}
+.recording-bar button {
+  padding: 5px 18px;
+  min-width: 90px;
+}
+#capture-health {
+  font-size: 11px;
+  color: var(--muted);
+}
+#pause,
+#resume {
+  min-width: 140px;
+}
+#snapshot-parties {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+#snapshot-parties label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+#snapshot-parties input {
+  width: auto;
+}
+#snapshot-form > label {
+  display: block;
+  margin: 12px 0;
+}
+#snapshot-name,
+#snapshot-description,
+#snapshot-date {
+  width: 100%;
+}
+#save-snapshot {
+  max-width: 560px;
+}
+#snapshot-receipt,
+#stopped-choice {
+  padding: 8px 16px;
+  background: var(--toolbar);
+  font-size: 12px;
+}
+@media (max-width: 760px) {
+  .recording-bar {
+    grid-template-columns: 1fr auto;
+    gap: 5px;
+  }
+  .recording-bar .controls {
+    grid-column: 1/-1;
+    grid-row: 2;
+    justify-content: center;
+  }
+  #capture-health {
+    grid-column: 2;
+  }
+  .recording-bar button {
+    min-width: 60px;
+    padding: 6px 10px;
+  }
+  #snapshot-parties {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+body {
+  grid-template-rows: 56px 44px minmax(0, 1fr) 26px;
+}
+#stopped-choice,
+#snapshot-receipt {
+  position: fixed;
+  bottom: 28px;
+  left: 16px;
+  z-index: 20;
+  max-width: calc(100vw - 32px);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+@media (max-width: 850px) {
+  body {
+    grid-template-rows: 100px 90px minmax(0, 1fr) 22px;
+  }
+}
+
+/* Keep the approved Save form's party choices on one compact line per card. */
+#snapshot-parties label {
+  flex-direction: row;
+  margin: 0;
+  min-height: 32px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+#snapshot-parties input {
+  margin: 0;
+  flex: 0 0 auto;
+}
+#snapshot-form fieldset {
+  border: 0;
+  padding: 0;
+  margin: 12px 0 8px;
+}
+#snapshot-form legend {
+  font-size: 13px;
+  font-weight: 650;
+}
+#snapshot-total {
+  font-size: 12px;
+  margin: 4px 0 10px;
+}
+#snapshot-form > .controls {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 14px;
+}

@@ -9,6 +9,7 @@
     <script src="/terrain.js" defer></script>
     <script src="/sos-alarm.js" defer></script>
     <script src="/app.js" defer></script>
+    <script src="/recording.js" defer></script>
     <script src="/control.js" defer></script>
   </head>
   <body>
@@ -157,13 +158,84 @@
     <div id="error" role="alert" hidden></div>
     <section class="recording-bar" aria-label="Recording controls">
       <span id="recording" role="status">Connecting…</span>
+      <span id="capture-health" role="status"
+        >Unverified presentation evidence</span
+      >
       <div class="controls">
-        <button id="start" class="primary">Start Recording</button
-        ><button id="stop">Stop Recording</button
-        ><button id="resume">Resume</button
-        ><button id="clear" class="quiet">Clear Recording</button>
+        <button id="start" class="primary">Start Recording</button>
+        <button id="pause" class="primary" hidden>Pause</button>
+        <button id="resume" class="primary" hidden>Resume</button>
+        <button id="save-recording">Save</button>
+        <button id="stop" class="danger">Stop</button>
       </div>
     </section>
+    <div id="stopped-choice" hidden role="status">
+      Recording finally stopped. Unsaved evidence is retained.
+      <button id="stopped-save">Save snapshot</button
+      ><button id="discard-recording">Discard unsaved recording</button>
+    </div>
+    <dialog id="save-snapshot" aria-labelledby="save-snapshot-title">
+      <div class="dialog-heading">
+        <h1 id="save-snapshot-title">Save snapshot</h1>
+        <button data-close="save-snapshot" aria-label="Close Save snapshot">
+          ×
+        </button>
+      </div>
+      <p id="save-continuation">The recording continues after saving.</p>
+      <form id="snapshot-form">
+        <label
+          >Recording name<input
+            id="snapshot-name"
+            required
+            maxlength="200"
+            autocomplete="off"
+        /></label>
+        <fieldset>
+          <legend>Include parties</legend>
+          <p id="snapshot-total"></p>
+          <div id="snapshot-parties"></div>
+        </fieldset>
+        <p id="snapshot-subset" class="muted"></p>
+        <details>
+          <summary>Optional description and display date</summary>
+          <p id="snapshot-evidence-facts" class="muted"></p>
+          <p id="snapshot-evidence-summary" class="muted"></p>
+          <label
+            >Description<textarea
+              id="snapshot-description"
+              maxlength="16000"
+            ></textarea>
+          </label>
+          <label
+            >Descriptive date/time/timezone<input
+              id="snapshot-date"
+              placeholder="Optional; true event times remain unchanged"
+          /></label>
+        </details>
+        <p class="muted">
+          Snapshot captures confirmed display evidence. Missing confirmations
+          remain unverified.
+        </p>
+        <p id="snapshot-fidelity" role="status" class="muted" hidden></p>
+        <p id="snapshot-error" role="alert"></p>
+        <div class="controls">
+          <button type="button" data-close="save-snapshot">Cancel</button
+          ><button id="snapshot-discard" type="button" class="danger" hidden>
+            Discard unsaved recording
+          </button>
+          <button id="snapshot-submit" class="primary">Save snapshot</button>
+        </div>
+      </form>
+    </dialog>
+    <output id="snapshot-receipt" hidden></output>
+    <dialog id="browser-occupied" aria-labelledby="browser-occupied-title">
+      <h1 id="browser-occupied-title">Command browser access</h1>
+      <p id="browser-ownership-reason">
+        Only one dashboard browser can own presentation capture. Close the other
+        dashboard and wait for ownership recovery.
+      </p>
+      <button id="retry-owner">Retry</button>
+    </dialog>
     <dialog id="recording-start" aria-labelledby="recording-start-title">
       <div class="dialog-heading">
         <h1 id="recording-start-title">Start Recording from</h1>

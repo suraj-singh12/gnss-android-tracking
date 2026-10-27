@@ -72,7 +72,7 @@ an untested dependency now. Kotlin + Room/SQLite is the Android direction.
   segment. Track rejection never deletes raw data. Store reasons and policy revision
   with derived results so deterministic rebuilds are explainable. An explicit quality edit
   reprojects the full current recording from unchanged raw observations with one
-  new policy revision. Preserve recording Start/Stop/Resume boundaries; remove
+  new policy revision. Preserve recording Start/Pause/Resume/Stop boundaries; remove
   obsolete policy-only boundaries. This is an intentional Issue #4 field-driven
   amendment of the earlier frozen-window policy, not a wire-format change.
 
@@ -155,15 +155,16 @@ window, including observations predating Start and source sessions not yet known
 It has no lower observation-time bound and can start with zero connected devices.
 The former `session_beginning` request value is a compatibility alias. New
 source sessions and delayed history are discovered without relying on a currently
-reported live session or inventing continuity. Stop still limits the initial
-window from above; Resume creates a new lower time boundary.
+reported live session or inventing continuity. Pause/Stop limit the current window from above; Resume after Pause creates a new lower time boundary. Stop is final.
 
 | Action          | Effect                                                                                                                                                                                    |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Start Recording | From no current recording, create recording + active segment/window. While already active, no-op. While stopped, use Resume.                                                              |
-| Stop Recording  | Close active window; stop extending live-time recording, continue positions/status/SOS reception. Already stopped is a no-op.                                                             |
-| Resume          | Same recording, new segment/window; no line or distance edge across stop. Already active is a no-op.                                                                                      |
-| Clear Recording | Require UI confirmation; delete current derived tracks/distances and retire its recording/windows. Retain identities, configuration and raw observations. Return to no current recording. |
+| Start Recording | Create active recording/window; From Now or From Beginning. Presentation always starts at the operator press. |
+| Pause | Close active window; GNSS, LIVE, ACK, SOS and history continue. |
+| Resume | Open a new window in the same operator-paused recording; never connect across the pause. |
+| Stop | Finally close recording; persist the Save/Discard choice across dismissal/restart. Resume is rejected. |
+| Save | Seal an immutable snapshot without interrupting active/paused capture; after Stop preserve the Stop endpoint. |
+| Discard | Confirm and retire only the unsaved selection; retain original GNSS, saved snapshots, devices and SOS. |
 
 For `from_now` and every Resume window, observations measured before that
 window's Start or after its Stop have no membership even if received later.
@@ -227,7 +228,7 @@ in #1. The [fixtures](../protocol/fixtures/README.md) and
 [test tools](../test-tools/README.md) let #2/#3 prove serialization, ACK/config and
 identity independently. Their later deterministic suites must cover jitter,
 uncertainty, turns/reversals, stale fixes, jumps, last-accepted comparison, geographic
-distance, dynamic join, Stop/Resume/Clear, retries, arrival permutations, config
+distance, dynamic join, Pause/Resume, final Stop, Save/Discard, retries, arrival permutations, config
 convergence and restart. #4 adds real LAN integration; #5 implements SOS triggers;
 #6 adds diagnostics/UI/offline map; #7 proves field acceptance and portable releases.
 
@@ -274,7 +275,7 @@ raw-ingestion transaction. Legacy reserved SOS envelopes are projected during
 additive database opening; no raw data is rewritten. Identical retries return the
 first receipt and cannot reset human acknowledgement. A local-only, same-origin
 JSON control acknowledges exactly `(device_id,event_id)` in a transaction, retaining
-the first acknowledgement time. Recording Start/Stop/Resume/Clear never changes
+the first acknowledgement time. Recording Start/Pause/Resume/Stop/Save/Discard never changes
 alerts. Neither acknowledgement nor any phone control cancels/deletes an event.
 All operational SOS and raw dedupe rows are retained indefinitely under the existing
 store policy, including ACKed Android rows; storage exhaustion must be corrected
@@ -548,3 +549,118 @@ Unpromoted temporary crop/upload/download work older than eleven minutes can be
 removed during subsequent map admission; validated HGT/catalog/SQLite assets are
 never included. Existing source publication, map transactions and GNSS/SOS/LIVE
 ownership remain unchanged.
+
+## Recording presentation foundation (Issue #27)
+
+The recording projection still uses the existing raw SQLite observations, identity,
+quality policy and gap-safe windows. A separate **presentation journal in that same
+SQLite database** records what the authorized browser applied. Original observed,
+Command receipt, browser applied/rendering-opportunity, durable confirmation and
+operator press/receipt times are distinct. Late observations cannot be inserted into
+an earlier presentation checkpoint. Both start modes begin the presentation timeline
+at Start; From Beginning only changes the original-history projection selection.
+
+The local dashboard acquires a server-mediated random credential and fencing epoch.
+SQLite serializes claims; fifteen-second leases and two-second heartbeats fence old
+publishers, including after restart. Refresh/pagehide releases ownership. Lease expiry
+alone is uncertain rendering/ownership loss, not proof of closure. Backgrounding
+reports unverified presentation while retaining heartbeats. Process heartbeats are
+independent of browser liveness; restart records the last durable process heartbeat
+to startup as an explicitly uncertain downtime bound. Active intention survives;
+operator Pause and final Stop remain authoritative.
+
+The browser freezes the source model after synchronous map application, together with
+actual SVG geometry, selection/visibility, viewport, layers, panel contents, status,
+quality and SOS. Two animation frames and a subsequent task bracket a rendering
+opportunity; intervening display changes invalidate confirmation and create an
+unverified event. This establishes browser-applied state at a completed rendering
+opportunity. It does **not** establish OS pixel scanout, pixel-perfect screenshots or
+human attention. Chromium integration deliberately delays animation callbacks and
+asserts no confirmation from receipt alone. An additional instrumented oracle blocks actual synchronous map application after
+a durable receipt and checks the journal still identifies the old displayed revision
+until application and its rendering opportunity complete. OS compositor scanout
+remains outside the evidence claim.
+
+Confirmed events have a browser epoch/revision, server ordinal and SHA-256 checkpoint
+identity. Exact retry is idempotent; conflicting or older revisions fail. Only FULL
+SQLite commit produces success. Content-addressed byte deltas share unchanged payload spans, with a full checkpoint
+at most every 32 links. SHA-256 verification reconstructs the exact document bytes;
+copy bounds, expansion limits, chain depth and scope are checked. The request limit
+is 4 MiB; stored compressed checkpoint/delta content has a 64 GiB admission cap and
+a 136 MiB free-space guard protecting the receiver reserve. Storage limits are explicit
+unverified capture conditions, never silent evidence truncation. Quota/storage errors leave GNSS receipt independent and report
+unconfirmed evidence. Journal/event growth and multi-day capacity still require the
+full workload acceptance; no retention/deletion policy silently drops evidence.
+
+Save seals version 2 immutable headers, ordered selected-party display references,
+complete participation metadata and included-party original wire/receipt records in
+one frozen WAL read snapshot. Data is staged with short individual writes, then the
+header/request mapping/Save fact publish in one atomic transaction. Unpublished rows
+are inaccessible through receipts and reclaimed after failed publication or restart.
+No excluded-party detailed checkpoints or original rows are copied.
+Descriptive date never changes original times. Multiple Saves have independent IDs;
+a request ID makes a lost-response retry idempotent. Final Stop bounds the snapshot;
+dismissal leaves its choice durable. Discard retires the unsaved selection and retains
+original GNSS, saved snapshots, pinned assets and SOS. SQLite triggers reject changes
+to sealed tables. Diagnostics list saved receipts and recompute stream hashes.
+
+Successful original map, terrain, manifest and chunk responses are content-addressed
+and pinned **before their exact bytes are delivered**. The browser records the response
+hashes it loaded, and each confirmed checkpoint references those immutable assets.
+Concurrent map replacement cannot retarget an earlier read. Terrain JSON responses
+are a durable equivalent copy of original samples/metadata; no renderer-generated
+pixels are substituted for the original source. Missing pin/revision references remain
+explicit map-fidelity gaps. Pinned copies survive ordinary library deletion.
+
+Snapshots currently always carry incomplete-evidence limitations: frame opportunities
+can be invalidated or lost, and exact OS scanout/physical attention is not inferred.
+Save scans a frozen read transaction without holding the receiver mutex; writes yield
+between staging records. A local test receives and commits another observation while
+600 originals are being staged and verifies it cannot expand that snapshot. This is
+software concurrency evidence, not sustained multi-day fleet/native certification.
+#37 playback/library and #38 recording packages remain outside this implementation.
+
+
+Start/Resume can atomically retain the browser's last stable pre-action rendering
+opportunity when the browser verifies the applied state is still identical at the
+press. The checkpoint records both its original rendered/opportunity timestamps and
+its effective recording boundary; the timeline never starts before Start. If no
+stable proof exists (including rapid changes or background throttling), the boundary
+is explicitly unverified until the next confirmed display. No backend response is
+substituted for that evidence.
+
+Saved display references resolve through immutable bounded checkpoint/delta graphs.
+Subset graphs use a namespace derived from the included identity set; they cannot
+inherit an all-party graph containing excluded details. Repeated all-party Saves can
+share the original immutable display blobs. Version 1 full checkpoints and inline
+saved states remain readable without rewriting historical snapshots.
+`GET /local/presentation/saved?id=UUID&event_cursor=0` pages one frozen event at a time
+and resolves its filtered checkpoint with hash verification. It reads no later GNSS.
+The default ID diagnostic recomputes the immutable reference stream hash. Payload
+storage bytes count compressed blobs; receipt reference bytes are reported separately.
+
+Recovery availability intervals end at the first confirmed rendering opportunity,
+not ownership claim/HTTP success. A paused browser may confirm presence without
+creating a presentation clip. Known pagehide gaps are split around Command downtime;
+an owner that might still be open is treated as unverified, never declared closed
+from heartbeat expiry or process restart alone. Save preserves a trailing unverified
+active-clip interval when no later presentation was durably confirmed at its boundary.
+Supporting projection policy/raw/projection versions are frozen as audit-only metadata.
+
+Asset identities attach when vector/terrain data is applied, not when response headers
+arrive. Partial or failed source pinning remains explicit in the frame, Save form and
+receipt. The bounded saved diagnostic can retrieve a referenced asset with
+`&asset=SHA256`; it checks snapshot membership and recomputes the exact stored hash.
+
+The Save party picker reads the durable participation registry, rather than today's
+fleet: a phone joining after final Stop cannot become a member of that recording.
+During an active form, newly displayed late joins appear unchecked for an explicit
+operator choice. Party label updates remain tied to the existing device identity;
+Stop freezes the final participation labels. Snapshot receipts report included count
+against the actual total manifest, including parties not selected by the operator.
+
+Publishing endpoints also reject arbitrary hostname origins to prevent DNS rebinding;
+use localhost or the Command IP address for the presentation console. This protection
+supplements same-origin JSON, the random owner capability and restart/lease fencing.
+It does not claim attestation against an OS administrator who controls the private
+Command database or the authorized browser itself.

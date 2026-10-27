@@ -116,7 +116,7 @@ func TestQualityEditMergesLegacyPolicyOnlyWindows(t *testing.T) {
 		t.Fatal(err)
 	}
 	*now = base.Add(20 * time.Second)
-	action(t, s, "stop")
+	action(t, s, "pause")
 	*now = base.Add(30 * time.Second)
 	action(t, s, "resume")
 	p := DefaultPolicy()

@@ -109,8 +109,35 @@ func (s *Store) LocalHandler(assets http.Handler) http.Handler {
 			w, done = s.timeHTTP(w, "http_local_"+strings.TrimPrefix(r.URL.Path, "/local/"))
 			defer done()
 		}
+		if s.presentationHTTP(w, r) {
+			return
+		}
 		if s.controlLocal(w, r) {
 			return
+		}
+		if presentationAssetPath(r) {
+			response := &assetResponse{headers: make(http.Header), Code: http.StatusOK}
+			if s.mapRequest(response, r, maps) {
+				for k, values := range response.Header() {
+					for _, v := range values {
+						w.Header().Add(k, v)
+					}
+				}
+				if response.overflow {
+					failure(w, 503, "asset_read_limit", errors.New("map response exceeds bounded recording asset read"))
+					return
+				}
+				if response.Code == http.StatusOK {
+					if hash, e := s.pinServedAsset(response.Body.Bytes()); e == nil {
+						w.Header().Set("X-Presentation-Asset", hash)
+					} else {
+						w.Header().Set("X-Presentation-Asset-Warning", "Original asset pin unavailable; recording map fidelity incomplete")
+					}
+				}
+				w.WriteHeader(response.Code)
+				_, _ = w.Write(response.Body.Bytes())
+				return
+			}
 		}
 		if s.mapRequest(w, r, maps) {
 			return
@@ -200,7 +227,11 @@ func (s *Store) LocalHandler(assets http.Handler) http.Handler {
 			failure(w, 415, "unsupported_media_type", errors.New("use application/json"))
 			return
 		}
-		b, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 65536))
+		bodyLimit := int64(65536)
+		if r.URL.Path == "/local/recording" {
+			bodyLimit = presentationLimit
+		}
+		b, err := io.ReadAll(http.MaxBytesReader(w, r.Body, bodyLimit))
 		if err != nil {
 			failure(w, 400, "invalid_setting", err)
 			return
@@ -214,14 +245,25 @@ func (s *Store) LocalHandler(assets http.Handler) http.Handler {
 		case "/local/sos/acknowledge":
 			err = s.AcknowledgeSOS(str(v["device_id"]), str(v["event_id"]))
 		case "/local/recording":
-			if str(v["action"]) == "clear" && v["confirmed"] != true {
+			if r.Header.Get("X-Presentation-Token") == "" {
+				err = errors.New("authorized browser ownership required")
+			} else if (str(v["action"]) == "clear" || str(v["action"]) == "discard") && v["confirmed"] != true {
 				err = errors.New("clear requires explicit confirmation")
 			} else {
 				mode := str(v["mode"])
 				if mode == "" {
 					mode = "from_now"
 				}
-				err = s.ActionMode(str(v["action"]), mode)
+				var boundary *presentationRequest
+				if value := v["boundary"]; value != nil {
+					var parsed presentationRequest
+					if e := json.Unmarshal([]byte(marshal(value)), &parsed); e != nil {
+						failure(w, 400, "invalid_boundary", e)
+						return
+					}
+					boundary = &parsed
+				}
+				err = s.actionModeOwned(str(v["action"]), mode, r.Header.Get("X-Presentation-Token"), r.Header.Get("X-Presentation-Epoch"), str(v["operator_at"]), boundary)
 			}
 		case "/local/quality":
 			var p Policy
@@ -290,7 +332,7 @@ func dashboardView(st State, now time.Time) map[string]any {
 				seconds += end.Sub(window.Start).Seconds()
 			}
 		}
-		recording = map[string]any{"recording_id": st.Recording.ID, "active": st.Recording.Active, "mode": st.Recording.Mode, "duration_s": seconds}
+		recording = map[string]any{"recording_id": st.Recording.ID, "active": st.Recording.Active, "mode": st.Recording.Mode, "duration_s": seconds, "status": st.Recording.Status, "started_at": st.Recording.Started, "stopped_at": st.Recording.Stopped}
 	}
 	return map[string]any{"receipt_version": st.ReceiptVersion, "projection_version": st.ProjectionVersion, "recording_session_available": sessionAvailable, "sos_alerts": st.Alerts, "devices": devices, "recording": recording, "policy": st.Policy, "points": st.Points, "raw_points": st.RawPoints, "provisional_points": st.Provisional, "projection_pending": st.ProjectionPending, "projection_error": st.ProjectionError}
 }

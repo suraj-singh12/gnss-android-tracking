@@ -59,7 +59,7 @@ async function wait(check) {
     return (await fetch(local + "/local/state")).json();
   }
   async function post(route, body) {
-    const r = await fetch(local + "/local/" + route, {
+    const r = route === "recording" ? await require("./recording-control.cjs").recordingPost(local,body,browser) : await fetch(local + "/local/" + route, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -268,9 +268,10 @@ async function wait(check) {
           const box = document
             .querySelector(".recording-bar .controls")
             .getBoundingClientRect();
-          return Math.abs(box.x + box.width / 2 - innerWidth / 2) < 2;
+          const rail=document.querySelector(".recording-bar").getBoundingClientRect();
+          return box.right <= innerWidth && box.x > innerWidth / 2 && rail.height <= 48;
         }),
-        "Recording controls are geometrically centered",
+        "Approved compact recording rail fits and aligns controls on the right",
       );
     assert.equal(
       await page.evaluate(
@@ -915,15 +916,17 @@ async function wait(check) {
     await page.locator(`[data-live-device="${partyIds[0]}"]`).count(),
     0,
   );
-  await page.locator("#stop").click();
+  await page.locator("#pause").click();
   await wait(async () => !(await state()).recording.active);
   await page.locator("#resume").click();
   await wait(async () => (await state()).recording.active);
+  await page.locator("#stop").click();
+  await page.getByLabel("Close Save snapshot", {exact:true}).click();
   page.once("dialog", (d) => d.dismiss());
-  await page.locator("#clear").click();
+  await page.locator("#discard-recording").click();
   assert.ok((await state()).recording, "Canceled Clear must retain recording");
   page.on("dialog", (d) => d.accept());
-  await page.locator("#clear").click();
+  await page.locator("#discard-recording").click();
   await wait(async () => !(await state()).recording);
   await page.locator("#start").click();
   assert.equal(await page.locator("#current-mode").isChecked(), true);

@@ -59,7 +59,7 @@ async function wait(check) {
     return (await fetch(local + "/local/state")).json();
   }
   async function post(route, body) {
-    const r = await fetch(local + "/local/" + route, {
+    const r = route === "recording" ? await require("./recording-control.cjs").recordingPost(local,body,browser) : await fetch(local + "/local/" + route, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
