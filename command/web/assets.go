@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-//go:embed index.html style.css app.js recording.js control.js map.js terrain.js sos-alarm.js
+//go:embed index.html style.css app.js library.js recording.js control.js map.js terrain.js sos-alarm.js
 var files embed.FS
 
 func Handler() http.Handler { return http.FileServer(http.FS(files)) }

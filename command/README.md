@@ -1143,3 +1143,15 @@ UTC boundaries, source mode and recorded interruption facts separately from desc
 date. A finally stopped recording's party picker uses its frozen participation list,
 so later phone arrivals cannot silently alter the selection. Missing applied-map pins
 are shown in Save and retained in receipt diagnostics.
+
+### Saved-library metadata work in progress (#37)
+
+The Saved recordings header action opens a searchable, sortable library of #27
+receipts. Name, descriptive date/time/timezone and description edits persist in
+`saved_library`, separately from sealed actual timestamps and evidence. Confirmed
+Delete currently removes library visibility only; sealed evidence and pins remain
+retained. This is deliberately **not** the complete #37 resource-release policy.
+`GET /local/presentation/library` returns visible receipts with descriptive overlays;
+same-origin JSON `POST` accepts `edit` or confirmed `delete`. Existing saved diagnostics
+continue to expose the immutable original receipt. Historical Open/playback is not
+implemented by this work-in-progress change. Do not treat it as #37 acceptance.

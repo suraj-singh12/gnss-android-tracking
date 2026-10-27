@@ -10,6 +10,7 @@
     <script src="/sos-alarm.js" defer></script>
     <script src="/app.js" defer></script>
     <script src="/recording.js" defer></script>
+    <script src="/library.js" defer></script>
     <script src="/control.js" defer></script>
   </head>
   <body>
@@ -37,6 +38,7 @@
         <button id="open-quality">Quality settings</button
         ><button id="open-map">Map & layers</button
         ><a href="/local/field-report">Export diagnostics</a>
+        <button id="open-library">Saved recordings</button>
         <button id="open-history" aria-label="Events history">Events</button>
         <button id="appearance" aria-label="Switch to Night appearance">
           Night
@@ -337,6 +339,15 @@
         ×
       </button>
     </div>
+    <dialog id="saved-library" aria-labelledby="library-title">
+      <div class="dialog-heading"><h1 id="library-title">Saved recordings</h1><button data-close="saved-library" aria-label="Close Saved recordings">×</button></div>
+      <label>Search <input id="library-search" type="search" placeholder="Name, description or source" /></label>
+      <label>Sort <select id="library-sort"><option value="saved_at">Saved at</option><option value="started_at">Actual start</option><option value="name">Name</option><option value="display_date">Descriptive date</option><option value="source_mode">Source</option></select></label>
+      <p id="library-status" role="status"></p><div id="library-rows"></div>
+    </dialog>
+    <dialog id="library-edit" aria-labelledby="library-edit-title"><div class="dialog-heading"><h1 id="library-edit-title">Edit recording metadata</h1><button data-close="library-edit" aria-label="Close metadata editor">×</button></div>
+      <form id="library-edit-form"><label>Name<input id="library-name" required maxlength="256" /></label><label>Descriptive date / time / timezone<input id="library-date" maxlength="256" /></label><label>Description<textarea id="library-description" maxlength="8192"></textarea></label><p>Actual Start, Save and immutable evidence remain unchanged.</p><p id="library-edit-status" role="status"></p><button type="submit">Save metadata</button></form>
+    </dialog>
     <main class="details-closed">
       <aside class="party-overview">
         <div class="aside-title">

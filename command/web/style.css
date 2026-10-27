@@ -1649,3 +1649,11 @@ body {
   justify-content: space-between;
   margin-top: 14px;
 }
+
+#saved-library { width: min(850px, calc(100vw - 32px)); }
+.library-row { border-top: 1px solid var(--border); padding: 16px 0; overflow-wrap: anywhere; }
+.library-row h2 { font-size: 16px; }
+.library-row p { margin: 6px 0; }
+.library-row small { display: block; margin: 8px 0; color: var(--muted); }
+.library-row button { margin-right: 8px; }
+#library-edit textarea { width: 100%; min-height: 90px; }

@@ -84,6 +84,7 @@ func (s *Store) initPresentation() error {
 		`CREATE TABLE IF NOT EXISTS presentation_journal(ordinal INTEGER PRIMARY KEY AUTOINCREMENT,recording TEXT NOT NULL,kind TEXT NOT NULL,at TEXT NOT NULL,epoch TEXT NOT NULL DEFAULT '',revision INTEGER NOT NULL DEFAULT 0,data TEXT NOT NULL,UNIQUE(epoch,revision,kind))`,
 		`CREATE INDEX IF NOT EXISTS presentation_recording ON presentation_journal(recording,ordinal)`,
 		`CREATE TABLE IF NOT EXISTS saved_recordings(id TEXT PRIMARY KEY,metadata TEXT NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS saved_library(id TEXT PRIMARY KEY,metadata TEXT NOT NULL,deleted INTEGER NOT NULL DEFAULT 0)`,
 		`CREATE TABLE IF NOT EXISTS saved_presentation(snapshot TEXT NOT NULL,ordinal INTEGER NOT NULL,data TEXT NOT NULL,PRIMARY KEY(snapshot,ordinal))`,
 		`CREATE TABLE IF NOT EXISTS saved_originals(snapshot TEXT NOT NULL,device TEXT NOT NULL,message TEXT NOT NULL,wire BLOB NOT NULL,known TEXT NOT NULL,received TEXT NOT NULL,PRIMARY KEY(snapshot,device,message))`,
 		`CREATE TABLE IF NOT EXISTS presentation_assets(hash TEXT PRIMARY KEY,data BLOB NOT NULL,bytes INTEGER NOT NULL)`,
@@ -223,6 +224,10 @@ func (s *Store) presentationHTTP(w http.ResponseWriter, r *http.Request) bool {
 	host = strings.Trim(host, "[]")
 	if !strings.EqualFold(host, "localhost") && net.ParseIP(host) == nil {
 		failure(w, 403, "untrusted_dashboard_host", errors.New("Open Command using localhost or its IP address; arbitrary hostnames cannot access presentation evidence"))
+		return true
+	}
+	if r.URL.Path == "/local/presentation/library" {
+		s.libraryHTTP(w, r)
 		return true
 	}
 	if r.Method == "GET" {

@@ -265,3 +265,11 @@ Exclusive browser fencing protects recording publication. GNSS/ACK/SOS retain th
 existing authorities. OS compositor scanout is outside the claim. Asset read revisions and concurrent
 Save receipt have targeted tests; sustained large-Save latency and long-running fleet
 acceptance remain unverified; see architecture.
+
+## Issue #37 work in progress
+
+Saved recordings uses the existing Command header and dialog conventions, existing
+Day/Night tokens, and preserves the Recording rail, Parties/map/Details grid and
+operational controls. Search/sort and descriptive editing consume #27 SQLite receipts.
+The approved playback images remain a future acceptance contract: no historical
+player, Follow Original or timeline has been implemented in this draft.

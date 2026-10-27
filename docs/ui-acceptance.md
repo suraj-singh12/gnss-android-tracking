@@ -876,3 +876,11 @@ asset after ordinary library deletion. It pages the sealed event stream and comp
 reconstructed selected-party checkpoints against the instrumented browser-submitted
 presentation sequence, with unique ordered ordinals. This is semantic/geometry evidence,
 not pixel-diff baselines or human-attention proof.
+
+## Issue #37 work in progress — not accepted
+
+The initial library metadata implementation requires full browser regression and
+Day/Night verification. SQLite tests cover descriptive edits, restart, confirmation,
+same-origin rejection and retained sealed receipts/originals. Historical playback,
+interruption compression, visibility gates, bounded seeking, reference-safe deletion,
+required screenshot scenarios and physical/native acceptance remain outstanding.

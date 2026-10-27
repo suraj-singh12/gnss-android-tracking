@@ -664,3 +664,11 @@ use localhost or the Command IP address for the presentation console. This prote
 supplements same-origin JSON, the random owner capability and restart/lease fencing.
 It does not claim attestation against an OS administrator who controls the private
 Command database or the authorized browser itself.
+
+The in-progress #37 library adds `saved_library` to the existing Command SQLite
+store. It overlays descriptive metadata and library retirement without changing
+sealed #27 receipts, journals, originals, blobs or asset membership. Only whitelisted
+descriptive fields can be written through its same-origin JSON endpoint. Retirement
+currently retains all sealed storage; reference-safe resource reclamation and the
+historical rendering/read-only isolation boundary remain unimplemented. This change
+does not deliver the historical player and does not establish #37 acceptance.
