@@ -887,7 +887,10 @@ hidden restrictions, Follow Original inspection, four-second notices at 1×/20×
 read-only quality/SOS, descriptive edit/restart and map-library deletion survival.
 Runtime screenshots cover populated Day/Night library and playback at 1280×720,
 1440×900 and 960×720, open/collapsed panels, inspection and interruption. The timeline's
-bounds are checked against the actual map and panel rectangles. Existing UI, SOS,
+bounds are checked against the actual map and panel rectangles. `playback-clips.cjs` is an explicit component fixture for legacy omitted SVG
+clipping definitions, pinned native core bounds, dateline wrap and labelled
+unavailable layers. The main playback suite remains real persisted evidence.
+Existing UI, SOS,
 control, history and #27 browser suites remain regression gates. No pixel baselines
 are introduced.
 

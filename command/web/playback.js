@@ -87,6 +87,111 @@
       z,
     ];
   }
+  const pinnedClipMetadata = new Map();
+  async function restorePinnedClips(checkpoint, signal) {
+    if (!checkpoint?.common?.map_svg) return;
+    const c = checkpoint.common,
+      map = geometry(c.map_svg),
+      references = [...map.querySelectorAll("[clip-path]")]
+        .map(
+          (n) => n.getAttribute("clip-path").match(/^url\(#([^()]+)\)$/)?.[1],
+        )
+        .filter(Boolean),
+      missing = new Set(
+        references.filter(
+          (id) => !map.querySelector(`[id="${CSS.escape(id)}"]`),
+        ),
+      );
+    if (!missing.size) return;
+    const v = c.viewport,
+      clips = [];
+    let mapWrap = 0;
+    if (v && Number.isFinite(v.scale))
+      for (const hash of checkpoint.assets || []) {
+        let metadata = pinnedClipMetadata.get(hash);
+        if (metadata === undefined) {
+          const response = await fetch(
+            `/local/presentation/saved?id=${encodeURIComponent(session.metadata.id)}&asset=${encodeURIComponent(hash)}`,
+            { signal },
+          );
+          if (!response.ok) continue;
+          const reader = response.body.getReader(),
+            chunks = [];
+          let bytes = 0,
+            tooLarge = false;
+          for (;;) {
+            const part = await reader.read();
+            if (part.done) break;
+            bytes += part.value.length;
+            if (bytes > 32 * 1024 * 1024) {
+              tooLarge = true;
+              await reader.cancel();
+              break;
+            }
+            chunks.push(part.value);
+          }
+          metadata = null;
+          if (!tooLarge) {
+            const buffer = new Uint8Array(bytes);
+            let offset = 0;
+            for (const chunk of chunks) {
+              buffer.set(chunk, offset);
+              offset += chunk.length;
+            }
+            try {
+              const data = JSON.parse(new TextDecoder().decode(buffer));
+              if (
+                Array.isArray(data.core_bounds) &&
+                data.core_bounds.length === 4 &&
+                data.core_bounds.every(Number.isFinite) &&
+                typeof data.chunk_key === "string" &&
+                data.chunk_key.length <= 256 &&
+                /^[A-Za-z0-9_.:-]+$/.test(data.chunk_key)
+              )
+                metadata = {
+                  core_bounds: data.core_bounds,
+                  chunk_key: data.chunk_key,
+                };
+              if (Number.isFinite(data.plan?.request?.lon))
+                metadata = { ...(metadata || {}), wrap: data.plan.request.lon };
+            } catch {}
+          }
+          pinnedClipMetadata.set(hash, metadata);
+          if (pinnedClipMetadata.size > 8192)
+            pinnedClipMetadata.delete(pinnedClipMetadata.keys().next().value);
+        }
+        if (Number.isFinite(metadata?.wrap)) mapWrap = metadata.wrap;
+        if (metadata?.chunk_key && missing.has("clip-" + metadata.chunk_key))
+          clips.push(metadata);
+      }
+    if (v && clips.length) {
+      const previousWrap = GeoMap.setWrap(mapWrap);
+      try {
+        for (const metadata of clips) {
+          radiusClip(map, metadata, (p) => [
+            (p[0] - v.cx) * v.scale + c.width / 2,
+            c.height / 2 - (p[1] - v.cy) * v.scale,
+          ]);
+          missing.delete("clip-" + metadata.chunk_key);
+        }
+      } finally {
+        GeoMap.setWrap(previousWrap);
+      }
+    }
+    if (missing.size) {
+      checkpoint.asset_warnings = [
+        ...(checkpoint.asset_warnings || []),
+        "Some legacy recorded map clipping definitions are unavailable; affected layers are not substituted.",
+      ];
+      for (const node of map.querySelectorAll("[clip-path]")) {
+        const id = node
+          .getAttribute("clip-path")
+          .match(/^url\(#([^()]+)\)$/)?.[1];
+        if (missing.has(id)) node.remove();
+      }
+    }
+    c.map_svg = map.innerHTML;
+  }
   function geometry(source) {
     const doc = new DOMParser().parseFromString(
       `<svg xmlns="${ns}">${source || ""}</svg>`,
@@ -452,6 +557,8 @@
         `/local/presentation/playback?id=${encodeURIComponent(session.metadata.id)}&at=${Math.floor(target.wall)}`,
         controller.signal,
       );
+      if (token !== revision || !active) return;
+      await restorePinnedClips(next.checkpoint, controller.signal);
       if (token !== revision || !active) return;
       if (explicit) {
         filters.clear();

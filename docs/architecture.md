@@ -689,6 +689,10 @@ map and panels. SVG is sanitized to passive geometry; external resources and han
 cannot execute. Follow Original OFF compensates recorded viewport changes against a
 fixed inspector viewport. Extra terrain inspection reuses shared terrain preparation
 and drawing helpers with pinned response bytes, without touching live map selection.
+Older #27 map fragments that omitted clipping definitions recover those definitions
+from pinned native-grid core bounds through the existing radius clip helper; missing
+proof is labelled and affected layers are not silently substituted. New capture
+retains the actual SVG clipping definitions directly.
 Historical quality and details are text/read-only controls. Live render/capture cannot
 publish historical DOM as live evidence; returning to live creates #27's honest
 unverified interval. The timeline is an absolutely positioned child of the central

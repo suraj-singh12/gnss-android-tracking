@@ -1011,3 +1011,8 @@ opens the library/player, checks rewind, read-only controls, interruption durati
 responsive map-contained timeline and restart. `GNSS_SCREENSHOT_DIR` retains actual
 Day/Night runtime screenshots and a JSON report. It uses local deterministic fixtures,
 not public-provider or physical-device acceptance.
+
+`playback-clips.cjs` separately exercises legacy clipping compatibility as an explicit
+component fixture with synthetic pinned metadata responses. It tests the real shared
+clip helper and missing-proof handling; it is not a substitute for the real saved
+recording/terrain/deletion scenario above.
