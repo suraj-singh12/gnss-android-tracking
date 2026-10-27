@@ -47,6 +47,8 @@ func TestPlaybackFrozenClockVisibilityReadOnlyAndRestart(t *testing.T) {
 	publish(1, true, "first rendered")
 	publish(2, false, "SECRET hidden detail")
 	publish(3, true, "delayed redraw at presentation time")
+	publish(4, false, "hidden again")
+	publish(5, true, "revealed again")
 	r.Name = "Playback"
 	r.Included = []string{device}
 	v, e := s.presentationOperation("save", r)
@@ -81,6 +83,9 @@ func TestPlaybackFrozenClockVisibilityReadOnlyAndRestart(t *testing.T) {
 	last := read(start.Add(3 * time.Second))
 	if !strings.Contains(marshal(last), "delayed redraw") || strings.Contains(marshal(first), "delayed redraw") {
 		t.Fatal("wrong presentation chronology")
+	}
+	if first["visibility_epochs"].(map[string]any)[device] == last["visibility_epochs"].(map[string]any)[device] {
+		t.Fatal("reveal boundary lost")
 	}
 	if marshal(first) != marshal(read(start.Add(time.Second))) {
 		t.Fatal("rewind not deterministic")

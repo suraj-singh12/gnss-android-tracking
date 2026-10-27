@@ -186,6 +186,16 @@ async function wait(fn) {
     return { id: m.id, hash: window.recordingAppliedState().assets[0] };
   }, hgt.toString("base64"));
   await new Promise((r) => setTimeout(r, 800));
+  await page.evaluate((id) => {
+    hidden.add(id);
+    draw();
+  }, ids[2]);
+  await new Promise((r) => setTimeout(r, 900));
+  await page.evaluate((id) => {
+    hidden.delete(id);
+    draw();
+  }, ids[2]);
+  await new Promise((r) => setTimeout(r, 900));
   await page.locator("#pause").click();
   await new Promise((r) => setTimeout(r, 1100));
   await page.locator("#resume").click();
@@ -277,7 +287,8 @@ async function wait(fn) {
     await page.evaluate((t) => window.HistoricalPlayback.seek(t), t);
   }
   let cursor = "0",
-    hiddenStamp;
+    hiddenStamp,
+    visibility = [];
   for (let n = 0; n < 300; n++) {
     const part = await (
       await fetch(
@@ -287,6 +298,17 @@ async function wait(fn) {
     ).json();
     if (!part.event) break;
     cursor = part.next_cursor;
+    if (part.checkpoint?.parties?.[ids[2]]) {
+      const p = part.checkpoint.parties[ids[2]],
+        stamp = Date.parse(
+          part.event.Data.effective_at ||
+            part.event.Data.presented_at ||
+            part.event.Data.render_opportunity_at ||
+            part.event.At,
+        );
+      if (!visibility.length || visibility.at(-1).visible !== p.visible)
+        visibility.push({ visible: p.visible, at: stamp });
+    }
     if (part.checkpoint?.parties?.[ids[2]]?.visible === false)
       hiddenStamp = Date.parse(
         part.event.Data.effective_at ||
@@ -309,6 +331,50 @@ async function wait(fn) {
   await page.screenshot({
     path: path.join(out, "playback-hidden-restriction.png"),
   });
+  assert(
+    visibility.length >= 5,
+    "all original visibility boundaries must be confirmed",
+  );
+  const shift = (stamp) =>
+    (stamp - Date.parse(recording.started_at)) / 1000 + 0.01;
+  await page.evaluate(
+    (t) => window.HistoricalPlayback.seek(t, false),
+    shift(visibility[2].at),
+  );
+  assert.equal(
+    await page.locator('[aria-label="Show Charlie"]').isChecked(),
+    true,
+  );
+  await page.locator('[aria-label="Show Charlie"]').uncheck();
+  await page.evaluate(
+    (t) => window.HistoricalPlayback.seek(t, false),
+    shift(visibility[2].at) + 0.05,
+  );
+  assert.equal(
+    await page.locator('[aria-label="Show Charlie"]').isChecked(),
+    false,
+  );
+  await page.evaluate(
+    (t) => window.HistoricalPlayback.seek(t, false),
+    shift(visibility[3].at),
+  );
+  assert.equal(
+    await page.locator('[aria-label="Show Charlie"]').isEnabled(),
+    false,
+  );
+  await page.evaluate(
+    (t) => window.HistoricalPlayback.seek(t, false),
+    shift(visibility[4].at),
+  );
+  assert.equal(
+    await page.locator('[aria-label="Show Charlie"]').isChecked(),
+    true,
+  );
+  await seek(shift(visibility[1].at));
+  assert.equal(
+    await page.locator('[aria-label="Show Charlie"]').isEnabled(),
+    false,
+  );
   await page.locator("#follow-original").check();
   await seek(timeline.duration);
   assert(

@@ -250,7 +250,7 @@
     $("no-parties").hidden = true;
     $("devices").replaceChildren();
     $("count").textContent = checkpoint
-      ? `${Object.values(checkpoint.parties).filter((p) => p.visible).length} / ${Object.keys(checkpoint.parties).length}`
+      ? `${Object.keys(checkpoint.parties).filter((id) => permitted(id)).length} / ${Object.keys(checkpoint.parties).length}`
       : "0";
     if (!checkpoint) {
       $("playback-sos").hidden = true;
