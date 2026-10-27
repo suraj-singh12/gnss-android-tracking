@@ -223,6 +223,55 @@ async function wait(fn) {
       (await (await fetch(local + "/local/presentation/status")).json())
         .displayed_receipt_version >= sosReceipt,
   );
+  const recordingId = (await (await fetch(local + "/local/state")).json())
+    .recording.recording_id;
+  const closureCount = async () =>
+    (
+      await (
+        await fetch(
+          local + "/local/presentation/summary?recording_id=" + recordingId,
+        )
+      ).json()
+    ).browser_closed || 0;
+  let closedBefore = await closureCount();
+  await page.goto("about:blank");
+  await wait(async () => (await closureCount()) > closedBefore);
+  await page.goto(local);
+  await wait(async () =>
+    /revision \d+/.test(await page.locator("#capture-health").textContent()),
+  );
+  await page.locator("#pause").click();
+  await wait(
+    async () =>
+      (await (await fetch(local + "/local/state")).json()).recording.status ===
+      "paused",
+  );
+  const oldEpoch = (
+    await (await fetch(local + "/local/presentation/status")).json()
+  ).epoch;
+  closedBefore = await closureCount();
+  await page.goto("about:blank");
+  await wait(async () => (await closureCount()) > closedBefore);
+  command.kill("SIGKILL");
+  await once(command, "exit");
+  await new Promise((r) => setTimeout(r, 800));
+  await start();
+  await page.goto(local);
+  await page.locator("#resume").waitFor();
+  assert.equal(
+    (await (await fetch(local + "/local/state")).json()).recording.status,
+    "paused",
+  );
+  await page.locator("#resume").click();
+  await wait(async () => {
+    const status = await (
+      await fetch(local + "/local/presentation/status")
+    ).json();
+    return (
+      status.epoch !== oldEpoch &&
+      status.displayed_receipt_version >= sosReceipt
+    );
+  });
   await page.locator("#save-recording").click();
   await page.locator("#snapshot-name").fill("Matura field test · 20 of 21");
   await page.locator(`#snapshot-parties input[value="${ids[20]}"]`).uncheck();
@@ -282,6 +331,17 @@ async function wait(fn) {
     await fetch(local + `/local/presentation/playback?id=${recording.id}`)
   ).json();
   assert(timeline.groups.some((g) => g.Kind === "PAUSED"));
+  assert(timeline.groups.some((g) => g.Kind === "BROWSER NOT ACTIVE"));
+  assert(timeline.facts.some((f) => f.Kind === "command_unavailable"));
+  assert(
+    timeline.groups.some(
+      (g) =>
+        g.Facts.some((f) => f.Kind === "pause") &&
+        g.Facts.some((f) => f.Kind === "browser_closed") &&
+        g.Facts.some((f) => f.Kind === "command_unavailable"),
+    ),
+    "real overlapping Pause/browser/Command facts must share one notice",
+  );
   assert.equal(timeline.groups[0].Duration >= 1, true);
   async function seek(t) {
     await page.evaluate((t) => window.HistoricalPlayback.seek(t), t);
@@ -581,6 +641,7 @@ async function wait(fn) {
   report.process_restart = true;
   report.delayed_history_redraw = true;
   report.historical_sos_read_only = true;
+  report.real_command_browser_pause_overlap = true;
 })()
   .catch(async (e) => {
     report.error = e.stack;

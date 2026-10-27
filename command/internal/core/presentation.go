@@ -92,6 +92,7 @@ func (s *Store) initPresentation() error {
 		`CREATE TABLE IF NOT EXISTS saved_presentation(snapshot TEXT NOT NULL,ordinal INTEGER NOT NULL,data TEXT NOT NULL,PRIMARY KEY(snapshot,ordinal))`,
 		`DROP INDEX IF EXISTS saved_display_clock`,
 		`CREATE INDEX IF NOT EXISTS saved_display_clock_v2 ON saved_presentation(snapshot,json_extract(data,'$.Kind'),julianday(COALESCE(json_extract(data,'$.Data.effective_at'),json_extract(data,'$.Data.presented_at'),json_extract(data,'$.Data.render_opportunity_at'),json_extract(data,'$.At'))),ordinal)`,
+		`CREATE INDEX IF NOT EXISTS saved_confirmation_clock ON saved_presentation(snapshot,json_extract(data,'$.Kind'),julianday(COALESCE(json_extract(data,'$.Data.effective_at'),json_extract(data,'$.Data.render_opportunity_at'),json_extract(data,'$.Data.presented_at'),json_extract(data,'$.At'))),ordinal)`,
 		`CREATE TABLE IF NOT EXISTS saved_originals(snapshot TEXT NOT NULL,device TEXT NOT NULL,message TEXT NOT NULL,wire BLOB NOT NULL,known TEXT NOT NULL,received TEXT NOT NULL,PRIMARY KEY(snapshot,device,message))`,
 		`CREATE TABLE IF NOT EXISTS presentation_assets(hash TEXT PRIMARY KEY,data BLOB NOT NULL,bytes INTEGER NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS presentation_asset_refs(recording TEXT NOT NULL,ordinal INTEGER NOT NULL,hash TEXT NOT NULL,PRIMARY KEY(recording,ordinal,hash))`,
@@ -652,6 +653,7 @@ func sealRecording(tx snapshotSQL, st State, r presentationRequest, now time.Tim
 	streamBytes := 0
 	eventBatch := presentationBatch{db: tx, table: "saved_presentation", columns: 3}
 	previousFiltered := ""
+	visibility := map[string]bool{}
 	ids := append([]string(nil), r.Included...)
 	sort.Strings(ids)
 	scope := ""
@@ -693,6 +695,21 @@ func sealRecording(tx snapshotSQL, st State, r presentationRequest, now time.Tim
 			for d := range display.Parties {
 				if !selected[d] {
 					delete(display.Parties, d)
+				}
+			}
+			// Derive gates while the frozen checkpoint is already decoded for
+			// subset sealing; do not replay a large graph a second time at Save.
+			for device, raw := range display.Parties {
+				var party struct{ Visible bool }
+				if err := json.Unmarshal(raw, &party); err != nil {
+					return nil, err
+				}
+				prior, known := visibility[device]
+				if !known || prior != party.Visible {
+					if _, err := tx.Exec(`INSERT INTO saved_visibility VALUES(?,?,?,?)`, sid, device, v.Ordinal, party.Visible); err != nil {
+						return nil, err
+					}
+					visibility[device] = party.Visible
 				}
 			}
 			filtered, e := putPresentationBlob(tx, []byte(marshal(display)), previousFiltered, scope)
@@ -792,7 +809,7 @@ func sealRecording(tx snapshotSQL, st State, r presentationRequest, now time.Tim
 	metadata["map_fidelity_warning_events"] = assetWarnings
 	metadata["request_sha256"] = saveRequestHash(r)
 	metadata["supporting_projection"] = map[string]any{"policy": st.Policy, "raw_version": st.RawVersion, "projection_version": st.ProjectionVersion, "pending": st.ProjectionPending, "audit_only": true}
-	if e = indexVisibility(tx, sid); e != nil {
+	if _, e = tx.Exec(`INSERT INTO saved_visibility_ready VALUES(?)`, sid); e != nil {
 		return nil, e
 	}
 	if _, e = tx.Exec(`INSERT INTO saved_recordings VALUES(?,?)`, sid, marshal(metadata)); e != nil {

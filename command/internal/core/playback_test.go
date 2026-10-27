@@ -228,3 +228,50 @@ func TestPlaybackLargeIndexedSeek(t *testing.T) {
 		t.Fatal("unbounded response", maxBytes)
 	}
 }
+
+func TestPlaybackInterruptionResumesAtFirstConfirmedDisplay(t *testing.T) {
+	s, now, _ := open(t)
+	defer s.Close()
+	ingest(t, s, message(t, 1, 0, 0, 0, 1))
+	action(t, s, "start")
+	start := *now
+	r := claimPresentation(t, s)
+	*now = start.Add(time.Second)
+	r = confirmPresentation(t, s, r, 1, *now)
+	state := r.State
+	*now = start.Add(1500 * time.Millisecond)
+	if _, e := s.presentationOperation("close", r); e != nil {
+		t.Fatal(e)
+	}
+	*now = start.Add(1600 * time.Millisecond)
+	r = claimPresentation(t, s)
+	r.State = state
+	r.Revision = 1
+	r.Presented = start.Add(2 * time.Second).Format(time.RFC3339Nano)
+	r.Opportunity = start.Add(2100 * time.Millisecond).Format(time.RFC3339Nano)
+	*now = start.Add(2200 * time.Millisecond)
+	if _, e := s.presentationOperation("confirm", r); e != nil {
+		t.Fatal(e)
+	}
+	*now = start.Add(3 * time.Second)
+	r = confirmPresentation(t, s, r, 2, *now)
+	r.Name = "Availability boundary"
+	r.Included = []string{device}
+	v, e := s.presentationOperation("save", r)
+	if e != nil {
+		t.Fatal(e)
+	}
+	sid := v.(map[string]any)["id"].(string)
+	w := httptest.NewRecorder()
+	s.presentationHTTP(w, httptest.NewRequest("GET", "http://localhost/local/presentation/playback?id="+sid, nil))
+	if w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	var manifest struct{ Groups []playbackGroup }
+	if e = json.Unmarshal(w.Body.Bytes(), &manifest); e != nil {
+		t.Fatal(e)
+	}
+	if len(manifest.Groups) != 1 || !manifest.Groups[0].SkipUntil.Equal(start.Add(2*time.Second)) {
+		t.Fatalf("first resumed rendered state skipped: %+v", manifest.Groups)
+	}
+}

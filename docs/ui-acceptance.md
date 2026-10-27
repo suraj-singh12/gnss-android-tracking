@@ -881,7 +881,8 @@ not pixel-diff baselines or human-attention proof.
 
 `recording-playback.cjs` uses real persisted #27 browser confirmations and Command
 SQLite, 21 parties with a 20-party saved subset, actual hide/reveal, pinned offline
-vector/terrain, a real Pause and SOS. It verifies deterministic geometry after rewind,
+vector/terrain, real browser closure and Command SIGKILL/restart overlapping Pause,
+and SOS. It verifies deterministic geometry after rewind,
 hidden restrictions, Follow Original inspection, four-second notices at 1×/20×,
 read-only quality/SOS, descriptive edit/restart and map-library deletion survival.
 Runtime screenshots cover populated Day/Night library and playback at 1280×720,

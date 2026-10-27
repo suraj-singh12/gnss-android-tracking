@@ -16,6 +16,10 @@ import (
 
 const displayClock = `julianday(COALESCE(json_extract(data,'$.Data.effective_at'),json_extract(data,'$.Data.presented_at'),json_extract(data,'$.Data.render_opportunity_at'),json_extract(data,'$.At')))`
 
+// Availability is confirmed after rendering; the resumed display itself can
+// precede that confirmation by one frame opportunity.
+const confirmationClock = `julianday(COALESCE(json_extract(data,'$.Data.effective_at'),json_extract(data,'$.Data.render_opportunity_at'),json_extract(data,'$.Data.presented_at'),json_extract(data,'$.At')))`
+
 type playbackEvent struct {
 	Ordinal  int64 `json:"ordinal"`
 	Kind, At string
@@ -194,6 +198,8 @@ func (s *Store) playbackHTTP(w http.ResponseWriter, r *http.Request) {
 	intervals := []playbackInterval{}
 	facts := []playbackEvent{}
 	var pause *playbackEvent
+	var browserClosed *playbackEvent
+	browserFacts := []playbackEvent{}
 	var cutoff, start time.Time
 	_ = json.Unmarshal(meta["cutoff_at"], &cutoff)
 	_ = json.Unmarshal(meta["started_at"], &start)
@@ -208,6 +214,12 @@ func (s *Store) playbackHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		facts = append(facts, v)
 		switch v.Kind {
+		case "browser_closed":
+			if browserClosed == nil {
+				copy := v
+				browserClosed = &copy
+			}
+			browserFacts = append(browserFacts, v)
 		case "pause":
 			copy := v
 			pause = &copy
@@ -224,7 +236,22 @@ func (s *Store) playbackHTTP(w http.ResponseWriter, r *http.Request) {
 			if v.Kind == "command_unavailable" {
 				kind = "COMMAND NOT RUNNING"
 			}
-			intervals = append(intervals, playbackInterval{from, until, kind, []playbackEvent{v}})
+			if v.Kind == "browser_unavailable" && browserClosed != nil {
+				browserFacts = append(browserFacts, v)
+				var reason string
+				_ = json.Unmarshal(v.Data["reason"], &reason)
+				// #27 splits a known closed browser around process downtime.
+				// Retain those facts, but compare the full underlying browser
+				// absence against the overlapping Command/Pause intervals.
+				if reason == "known pagehide before Command last durable heartbeat" {
+					continue
+				}
+				intervals = append(intervals, playbackInterval{eventStamp(*browserClosed), until, kind, browserFacts})
+				browserClosed = nil
+				browserFacts = nil
+			} else {
+				intervals = append(intervals, playbackInterval{from, until, kind, []playbackEvent{v}})
+			}
 		}
 	}
 	if e == nil {
@@ -237,6 +264,9 @@ func (s *Store) playbackHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if pause != nil {
 		intervals = append(intervals, playbackInterval{eventStamp(*pause), cutoff, "PAUSED", []playbackEvent{*pause}})
+	}
+	if browserClosed != nil {
+		intervals = append(intervals, playbackInterval{eventStamp(*browserClosed), cutoff, "BROWSER NOT ACTIVE", browserFacts})
 	}
 	groups := interruptionGroups(intervals)
 	wall := start
@@ -251,7 +281,7 @@ func (s *Store) playbackHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		g.SkipUntil = g.Until
 		var next string
-		err := db.QueryRowContext(r.Context(), `SELECT data FROM saved_presentation WHERE snapshot=? AND json_extract(data,'$.Kind')='display' AND `+displayClock+`>=julianday(?) ORDER BY `+displayClock+`,ordinal LIMIT 1`, sid, g.Until.Format(time.RFC3339Nano)).Scan(&next)
+		err := db.QueryRowContext(r.Context(), `SELECT data FROM saved_presentation WHERE snapshot=? AND json_extract(data,'$.Kind')='display' AND `+confirmationClock+`>=julianday(?) ORDER BY `+confirmationClock+`,ordinal LIMIT 1`, sid, g.Until.Format(time.RFC3339Nano)).Scan(&next)
 		if err == nil {
 			var v playbackEvent
 			_ = json.Unmarshal([]byte(next), &v)

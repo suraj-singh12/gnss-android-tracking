@@ -694,7 +694,9 @@ publish historical DOM as live evidence; returning to live creates #27's honest
 unverified interval. The timeline is an absolutely positioned child of the central
 map grid cell, so panel collapse and resize determine its bounds directly.
 
-Interruption groups retain all frozen facts, real union boundaries, dominant longest
+Known browser-close facts spanning Command downtime retain one full underlying
+browser absence while preserving #27’s split facts. Interruption groups retain all
+frozen facts, real union boundaries, dominant longest
 cause and the specified tie order. Each group consumes four playback seconds; normal
 segments retain original presentation-time evolution. Skips land on actual evidence,
 never reconstructed movement. No source observation, policy or distance engine is
