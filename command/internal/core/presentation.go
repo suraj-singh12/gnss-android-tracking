@@ -80,18 +80,28 @@ func (s *Store) initPresentation() error {
 
 		`CREATE TABLE IF NOT EXISTS presentation_requests(request TEXT PRIMARY KEY,snapshot TEXT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS presentation_meta(id INTEGER PRIMARY KEY CHECK(id=1),lease TEXT NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS presentation_blob_links(hash TEXT PRIMARY KEY,base TEXT NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS presentation_gc(hash TEXT PRIMARY KEY)`,
 		`CREATE TABLE IF NOT EXISTS presentation_blobs(hash TEXT PRIMARY KEY, data BLOB NOT NULL, bytes INTEGER NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS presentation_journal(ordinal INTEGER PRIMARY KEY AUTOINCREMENT,recording TEXT NOT NULL,kind TEXT NOT NULL,at TEXT NOT NULL,epoch TEXT NOT NULL DEFAULT '',revision INTEGER NOT NULL DEFAULT 0,data TEXT NOT NULL,UNIQUE(epoch,revision,kind))`,
 		`CREATE INDEX IF NOT EXISTS presentation_recording ON presentation_journal(recording,ordinal)`,
 		`CREATE TABLE IF NOT EXISTS saved_recordings(id TEXT PRIMARY KEY,metadata TEXT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS saved_library(id TEXT PRIMARY KEY,metadata TEXT NOT NULL,deleted INTEGER NOT NULL DEFAULT 0)`,
+		`CREATE TABLE IF NOT EXISTS saved_gc_done(snapshot TEXT PRIMARY KEY)`,
+		`CREATE TABLE IF NOT EXISTS saved_library_revisions(id TEXT,revision INTEGER,metadata TEXT,deleted INTEGER,at TEXT,PRIMARY KEY(id,revision))`,
 		`CREATE TABLE IF NOT EXISTS saved_presentation(snapshot TEXT NOT NULL,ordinal INTEGER NOT NULL,data TEXT NOT NULL,PRIMARY KEY(snapshot,ordinal))`,
+		`DROP INDEX IF EXISTS saved_display_clock`,
+		`CREATE INDEX IF NOT EXISTS saved_display_clock_v2 ON saved_presentation(snapshot,json_extract(data,'$.Kind'),julianday(COALESCE(json_extract(data,'$.Data.effective_at'),json_extract(data,'$.Data.presented_at'),json_extract(data,'$.Data.render_opportunity_at'),json_extract(data,'$.At'))),ordinal)`,
 		`CREATE TABLE IF NOT EXISTS saved_originals(snapshot TEXT NOT NULL,device TEXT NOT NULL,message TEXT NOT NULL,wire BLOB NOT NULL,known TEXT NOT NULL,received TEXT NOT NULL,PRIMARY KEY(snapshot,device,message))`,
 		`CREATE TABLE IF NOT EXISTS presentation_assets(hash TEXT PRIMARY KEY,data BLOB NOT NULL,bytes INTEGER NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS presentation_asset_refs(recording TEXT NOT NULL,ordinal INTEGER NOT NULL,hash TEXT NOT NULL,PRIMARY KEY(recording,ordinal,hash))`,
 		`INSERT INTO presentation_usage SELECT 1,COALESCE(SUM(length(data)),0) FROM presentation_blobs WHERE true ON CONFLICT(id) DO UPDATE SET bytes=excluded.bytes`,
 		`CREATE TRIGGER IF NOT EXISTS presentation_blob_usage AFTER INSERT ON presentation_blobs BEGIN UPDATE presentation_usage SET bytes=bytes+length(NEW.data) WHERE id=1; END`,
 		`CREATE TABLE IF NOT EXISTS saved_assets(snapshot TEXT NOT NULL,hash TEXT NOT NULL,PRIMARY KEY(snapshot,hash))`,
+		`CREATE INDEX IF NOT EXISTS saved_asset_hash ON saved_assets(hash)`,
+		`CREATE INDEX IF NOT EXISTS recording_asset_hash ON presentation_asset_refs(hash,recording)`,
+		`CREATE TRIGGER IF NOT EXISTS immutable_library_revision_update BEFORE UPDATE ON saved_library_revisions BEGIN SELECT RAISE(ABORT,'immutable metadata revision'); END`,
+		`CREATE TRIGGER IF NOT EXISTS immutable_library_revision_delete BEFORE DELETE ON saved_library_revisions BEGIN SELECT RAISE(ABORT,'immutable metadata revision'); END`,
 	} {
 		if _, e := s.db.Exec(q); e != nil {
 			return e
@@ -105,6 +115,15 @@ func (s *Store) initPresentation() error {
 			condition := ""
 			if strings.HasPrefix(table, "saved_") && table != "saved_recordings" {
 				condition = " WHEN EXISTS(SELECT 1 FROM saved_recordings WHERE id=OLD.snapshot)"
+				if op == "DELETE" {
+					condition = " WHEN NOT EXISTS(SELECT 1 FROM saved_library WHERE id=OLD.snapshot AND deleted=1) AND EXISTS(SELECT 1 FROM saved_recordings WHERE id=OLD.snapshot)"
+				}
+			}
+			if table == "presentation_blobs" && op == "DELETE" {
+				condition = " WHEN NOT EXISTS(SELECT 1 FROM presentation_gc WHERE hash=OLD.hash)"
+			}
+			if table == "presentation_assets" && op == "DELETE" {
+				condition = " WHEN EXISTS(SELECT 1 FROM saved_assets WHERE hash=OLD.hash) OR EXISTS(SELECT 1 FROM presentation_asset_refs WHERE hash=OLD.hash AND recording=(SELECT json_extract(data,'$.recording.recording_id') FROM state WHERE id=1))"
 			}
 			if _, e := s.db.Exec(fmt.Sprintf(`CREATE TRIGGER IF NOT EXISTS immutable_%s_%s BEFORE %s ON %s%s BEGIN SELECT RAISE(ABORT,'immutable recording evidence'); END`, table, op, op, table, condition)); e != nil {
 				return e
@@ -224,6 +243,10 @@ func (s *Store) presentationHTTP(w http.ResponseWriter, r *http.Request) bool {
 	host = strings.Trim(host, "[]")
 	if !strings.EqualFold(host, "localhost") && net.ParseIP(host) == nil {
 		failure(w, 403, "untrusted_dashboard_host", errors.New("Open Command using localhost or its IP address; arbitrary hostnames cannot access presentation evidence"))
+		return true
+	}
+	if r.URL.Path == "/local/presentation/playback" {
+		s.playbackHTTP(w, r)
 		return true
 	}
 	if r.URL.Path == "/local/presentation/library" {
@@ -751,7 +774,7 @@ func sealRecording(tx snapshotSQL, st State, r presentationRequest, now time.Tim
 	if e = tx.QueryRow(`SELECT COALESCE(SUM(length(wire)),0) FROM saved_originals WHERE snapshot=?`, sid).Scan(&rawBytes); e != nil {
 		return nil, e
 	}
-	metadata := map[string]any{"version": 2, "id": sid, "recording_id": rec.ID, "name": strings.TrimSpace(r.Name), "description": r.Description, "display_date": r.DisplayDate, "source_mode": rec.Mode, "started_at": rec.Started, "cutoff_at": cutoff, "saved_at": now, "operator_save_at": r.OperatorAt, "stopped_at": rec.Stopped, "total_parties": len(manifest), "participation": manifest, "included": r.Included, "operator_selected_subset": len(selected) < len(manifest), "confirmed_events": confirmed, "stream_sha256": hex.EncodeToString(stream.Sum(nil)), "presentation_reference_bytes": streamBytes, "presentation_encoding": "bounded-delta-v2", "original_bytes": rawBytes, "pinned_asset_bytes": assetBytes, "incomplete_evidence": true, "asset_revision_verification": "Exact successful map/terrain/manifest response bytes are pinned before delivery; missing browser revision references are disclosed as gaps.", "limitations": []string{"Rendering opportunities confirm browser-applied state, not OS pixel scanout or human attention.", "Unconfirmed transitions and process-death boundaries remain uncertain; no later GNSS backfill repairs presentation evidence."}}
+	metadata := map[string]any{"version": 2, "id": sid, "recording_id": rec.ID, "name": strings.TrimSpace(r.Name), "description": r.Description, "display_date": r.DisplayDate, "source_mode": rec.Mode, "snapshot_status": rec.Status, "started_at": rec.Started, "cutoff_at": cutoff, "saved_at": now, "operator_save_at": r.OperatorAt, "stopped_at": rec.Stopped, "total_parties": len(manifest), "participation": manifest, "included": r.Included, "operator_selected_subset": len(selected) < len(manifest), "confirmed_events": confirmed, "stream_sha256": hex.EncodeToString(stream.Sum(nil)), "presentation_reference_bytes": streamBytes, "presentation_encoding": "bounded-delta-v2", "original_bytes": rawBytes, "pinned_asset_bytes": assetBytes, "incomplete_evidence": true, "asset_revision_verification": "Exact successful map/terrain/manifest response bytes are pinned before delivery; missing browser revision references are disclosed as gaps.", "limitations": []string{"Rendering opportunities confirm browser-applied state, not OS pixel scanout or human attention.", "Unconfirmed transitions and process-death boundaries remain uncertain; no later GNSS backfill repairs presentation evidence."}}
 	if len(rec.Windows) > 0 {
 		window := rec.Windows[len(rec.Windows)-1]
 		from := lastPresentation
@@ -769,6 +792,9 @@ func sealRecording(tx snapshotSQL, st State, r presentationRequest, now time.Tim
 	metadata["map_fidelity_warning_events"] = assetWarnings
 	metadata["request_sha256"] = saveRequestHash(r)
 	metadata["supporting_projection"] = map[string]any{"policy": st.Policy, "raw_version": st.RawVersion, "projection_version": st.ProjectionVersion, "pending": st.ProjectionPending, "audit_only": true}
+	if e = indexVisibility(tx, sid); e != nil {
+		return nil, e
+	}
 	if _, e = tx.Exec(`INSERT INTO saved_recordings VALUES(?,?)`, sid, marshal(metadata)); e != nil {
 		return nil, e
 	}
@@ -788,6 +814,12 @@ func (s *Store) savedDiagnostics(w http.ResponseWriter, r *http.Request) {
 		db = s.db
 	}
 	if sid := r.URL.Query().Get("id"); sid != "" {
+		var deleted int
+		_ = db.QueryRowContext(r.Context(), `SELECT deleted FROM saved_library WHERE id=?`, sid).Scan(&deleted)
+		if deleted == 1 {
+			failure(w, 404, "snapshot_not_found", errors.New("recording deleted"))
+			return
+		}
 		var meta string
 		if e := db.QueryRowContext(r.Context(), `SELECT metadata FROM saved_recordings WHERE id=?`, sid).Scan(&meta); e != nil {
 			failure(w, 404, "snapshot_not_found", e)
@@ -849,6 +881,22 @@ func (s *Store) savedDiagnostics(w http.ResponseWriter, r *http.Request) {
 					result["checkpoint"] = json.RawMessage(state)
 				}
 			}
+			if event.Kind == "display" {
+				raw, _ := json.Marshal(result["checkpoint"])
+				var checkpoint displayState
+				if e = json.Unmarshal(raw, &checkpoint); e != nil {
+					failure(w, 503, "snapshot_integrity_error", e)
+					return
+				}
+				gatePresentation(&checkpoint)
+				result["checkpoint"] = checkpoint
+				result["visibility_gated"] = true
+				var safe map[string]json.RawMessage
+				_ = json.Unmarshal([]byte(encoded), &safe)
+				delete(event.Data, "state")
+				safe["Data"] = json.RawMessage(marshal(event.Data))
+				result["event"] = json.RawMessage(marshal(safe))
+			}
 			respond(w, 200, result)
 			return
 		}
@@ -881,7 +929,7 @@ func (s *Store) savedDiagnostics(w http.ResponseWriter, r *http.Request) {
 		respond(w, 200, m)
 		return
 	}
-	rows, e := db.QueryContext(r.Context(), `SELECT metadata FROM saved_recordings ORDER BY rowid DESC LIMIT 100`)
+	rows, e := db.QueryContext(r.Context(), `SELECT metadata FROM saved_recordings WHERE NOT EXISTS(SELECT 1 FROM saved_library WHERE id=saved_recordings.id AND deleted=1) ORDER BY rowid DESC LIMIT 100`)
 	if e != nil {
 		failure(w, 503, "storage_unavailable", e)
 		return
@@ -1062,7 +1110,7 @@ func (s *Store) stagedSave(r presentationRequest) (any, error) {
 	published := false
 	defer func() {
 		if !published && stage.snapshot != "" {
-			for _, table := range []string{"saved_presentation", "saved_originals", "saved_assets"} {
+			for _, table := range []string{"saved_visibility", "saved_visibility_ready", "saved_presentation", "saved_originals", "saved_assets"} {
 				_, _ = s.db.Exec("DELETE FROM "+table+" WHERE snapshot=?", stage.snapshot)
 			}
 		}

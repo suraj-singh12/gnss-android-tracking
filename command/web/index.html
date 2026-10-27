@@ -10,6 +10,7 @@
     <script src="/sos-alarm.js" defer></script>
     <script src="/app.js" defer></script>
     <script src="/recording.js" defer></script>
+    <script src="/playback.js" defer></script>
     <script src="/library.js" defer></script>
     <script src="/control.js" defer></script>
   </head>
@@ -158,6 +159,17 @@
       <div id="control-history"></div>
     </dialog>
     <div id="error" role="alert" hidden></div>
+    <section id="playback-rail" hidden aria-label="Historical playback">
+      <div>
+        <strong>● VIEWING RECORDING</strong> <span id="playback-name"></span>
+      </div>
+      <label id="follow-label"
+        >Follow Original
+        <input id="follow-original" type="checkbox" role="switch" checked
+      /></label>
+      <span>Read-only evidence</span
+      ><button id="exit-playback">Exit playback</button>
+    </section>
     <section class="recording-bar" aria-label="Recording controls">
       <span id="recording" role="status">Connecting…</span>
       <span id="capture-health" role="status"
@@ -340,13 +352,63 @@
       </button>
     </div>
     <dialog id="saved-library" aria-labelledby="library-title">
-      <div class="dialog-heading"><h1 id="library-title">Saved recordings</h1><button data-close="saved-library" aria-label="Close Saved recordings">×</button></div>
-      <label>Search <input id="library-search" type="search" placeholder="Name, description or source" /></label>
-      <label>Sort <select id="library-sort"><option value="saved_at">Saved at</option><option value="started_at">Actual start</option><option value="name">Name</option><option value="display_date">Descriptive date</option><option value="source_mode">Source</option></select></label>
-      <p id="library-status" role="status"></p><div id="library-rows"></div>
+      <div class="dialog-heading">
+        <h1 id="library-title">Saved Recordings</h1>
+        <button data-close="saved-library" aria-label="Close Saved recordings">
+          ×
+        </button>
+      </div>
+      <p class="muted library-subtitle">Frozen snapshots from this Command</p>
+      <label class="library-search-label"
+        ><span class="sr-only">Search recordings</span
+        ><input
+          id="library-search"
+          type="search"
+          placeholder="⌕  Search recordings"
+      /></label>
+      <div class="library-sortline">
+        <strong>Saved recordings</strong
+        ><label
+          ><span class="sr-only">Sort saved recordings</span
+          ><select id="library-sort">
+            <option value="saved_at">Saved at · Newest</option>
+            <option value="started_at">Actual start · Newest</option>
+            <option value="name">Name · A–Z</option>
+            <option value="display_date">Descriptive date</option>
+            <option value="source_mode">Source · A–Z</option>
+          </select></label
+        >
+      </div>
+      <p id="library-status" role="status"></p>
+      <div id="library-rows"></div>
+      <section
+        id="library-selected"
+        aria-label="Selected recording facts"
+      ></section>
     </dialog>
-    <dialog id="library-edit" aria-labelledby="library-edit-title"><div class="dialog-heading"><h1 id="library-edit-title">Edit recording metadata</h1><button data-close="library-edit" aria-label="Close metadata editor">×</button></div>
-      <form id="library-edit-form"><label>Name<input id="library-name" required maxlength="256" /></label><label>Descriptive date / time / timezone<input id="library-date" maxlength="256" /></label><label>Description<textarea id="library-description" maxlength="8192"></textarea></label><p>Actual Start, Save and immutable evidence remain unchanged.</p><p id="library-edit-status" role="status"></p><button type="submit">Save metadata</button></form>
+    <dialog id="library-edit" aria-labelledby="library-edit-title">
+      <div class="dialog-heading">
+        <h1 id="library-edit-title">Edit recording metadata</h1>
+        <button data-close="library-edit" aria-label="Close metadata editor">
+          ×
+        </button>
+      </div>
+      <form id="library-edit-form">
+        <label>Name<input id="library-name" required maxlength="256" /></label
+        ><label
+          >Descriptive date / time / timezone<input
+            id="library-date"
+            maxlength="256" /></label
+        ><label
+          >Description<textarea
+            id="library-description"
+            maxlength="8192"
+          ></textarea>
+        </label>
+        <p>Actual Start, Save and immutable evidence remain unchanged.</p>
+        <p id="library-edit-status" role="status"></p>
+        <button type="submit">Save metadata</button>
+      </form>
     </dialog>
     <main class="details-closed">
       <aside class="party-overview">
@@ -399,6 +461,60 @@
             </button>
           </div>
         </div>
+        <div id="playback-status" role="status" hidden></div>
+        <div id="playback-notice" role="status" hidden></div>
+        <div id="playback-sos" hidden></div>
+        <section id="playback-timeline" hidden aria-label="Recording timeline">
+          <div class="playback-time">
+            <strong id="presentation-time"></strong
+            ><small>Presentation time</small>
+          </div>
+          <input
+            id="playback-seek"
+            type="range"
+            min="0"
+            max="1"
+            step="0.001"
+            value="0"
+            aria-label="Presentation timeline"
+          />
+          <strong id="playback-elapsed"></strong>
+          <div class="playback-buttons">
+            <button id="playback-first" aria-label="Beginning">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                aria-hidden="true"
+              >
+                <path fill="currentColor" d="M2 2h2v16H2zm14 0v16L5 10z" />
+              </svg></button
+            ><button id="playback-play" aria-label="Play" class="primary">
+              ▷</button
+            ><button id="playback-last" aria-label="End">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                aria-hidden="true"
+              >
+                <path fill="currentColor" d="M16 2h2v16h-2zM4 2l11 8-11 8z" />
+              </svg>
+            </button>
+          </div>
+          <label
+            >Speed
+            <select id="playback-speed">
+              <option value="1">1×</option>
+              <option value="5">5×</option>
+              <option value="20">20×</option>
+            </select></label
+          >
+          <small id="playback-start"></small
+          ><button id="playback-facts" aria-label="Inspect recording facts">
+            ⋮
+          </button>
+        </section>
         <div id="projection-status" role="status"></div>
         <div id="map-detail-status" role="status"></div>
 
@@ -459,6 +575,18 @@
         </div>
       </aside>
     </main>
+    <dialog id="historical-inspection" aria-labelledby="historical-title">
+      <div class="dialog-heading">
+        <h1 id="historical-title">Historical · READ ONLY</h1>
+        <button
+          data-close="historical-inspection"
+          aria-label="Close historical inspection"
+        >
+          ×
+        </button>
+      </div>
+      <div id="historical-content"></div>
+    </dialog>
     <dialog id="layers" aria-labelledby="layers-title">
       <div class="dialog-heading">
         <h1 id="layers-title">Layers</h1>

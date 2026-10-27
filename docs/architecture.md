@@ -665,10 +665,39 @@ supplements same-origin JSON, the random owner capability and restart/lease fenc
 It does not claim attestation against an OS administrator who controls the private
 Command database or the authorized browser itself.
 
-The in-progress #37 library adds `saved_library` to the existing Command SQLite
-store. It overlays descriptive metadata and library retirement without changing
-sealed #27 receipts, journals, originals, blobs or asset membership. Only whitelisted
-descriptive fields can be written through its same-origin JSON endpoint. Retirement
-currently retains all sealed storage; reference-safe resource reclamation and the
-historical rendering/read-only isolation boundary remain unimplemented. This change
-does not deliver the historical player and does not establish #37 acceptance.
+Saved-library descriptive metadata is an overlay in the existing Command SQLite
+store. `saved_library_revisions` is append-only; sealed #27 receipts are not renamed
+in place. Library retirement authorizes deletion of that snapshot's references and
+selected-original copies, never operational raw/SOS rows or another snapshot. Pin
+reclamation retains every remaining snapshot and the current unsaved recording's
+ownership. Blob mark/sweep retains all original journal roots, remaining saved roots
+and their bounded delta ancestors; only unreachable snapshot graphs can be released.
+Save and Delete share the existing Save mutex to protect unpublished staging. Row
+cleanup yields between batches, and incomplete retirement cleanup resumes at startup.
+
+Playback is a read-only consumer of #27. Its expression index selects by actual
+browser `effective_at`/`presented_at`, with rendering-opportunity/legacy fallback;
+GNSS timestamps and current projection are never chronology inputs. One frame uses
+the existing hash-checked, depth-bounded reader. A derived per-party visibility-boundary
+index is built during Save or upgrade, not by playback requests. Responses strip
+hidden detail/geometry and excluded/unseen original selections. Epochs reset inspector
+filters at original visibility changes, including skipped frames and rewind.
+
+Command keeps its live state and receiver/SOS loops. The historical controller owns
+only temporary presentation preferences and paints frozen passive SVG into the same
+map and panels. SVG is sanitized to passive geometry; external resources and handlers
+cannot execute. Follow Original OFF compensates recorded viewport changes against a
+fixed inspector viewport. Extra terrain inspection reuses shared terrain preparation
+and drawing helpers with pinned response bytes, without touching live map selection.
+Historical quality and details are text/read-only controls. Live render/capture cannot
+publish historical DOM as live evidence; returning to live creates #27's honest
+unverified interval. The timeline is an absolutely positioned child of the central
+map grid cell, so panel collapse and resize determine its bounds directly.
+
+Interruption groups retain all frozen facts, real union boundaries, dominant longest
+cause and the specified tie order. Each group consumes four playback seconds; normal
+segments retain original presentation-time evolution. Skips land on actual evidence,
+never reconstructed movement. No source observation, policy or distance engine is
+introduced. Missing assets, trailing/unverified evidence and rendering-opportunity
+limitations remain visible. Exact native/physical and sustained multi-day acceptance
+must not be inferred from deterministic browser/SQLite tests.

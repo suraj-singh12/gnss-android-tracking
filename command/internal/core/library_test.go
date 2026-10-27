@@ -79,7 +79,7 @@ func TestLibraryMetadataRestartAndEvidenceIsolation(t *testing.T) {
 		t.Fatal("delete altered sealed evidence")
 	}
 	var raw int
-	if err = s.db.QueryRow(`SELECT COUNT(*) FROM saved_originals WHERE snapshot=?`, id).Scan(&raw); err != nil || raw != 1 {
-		t.Fatal("saved originals lost", raw, err)
+	if err = s.db.QueryRow(`SELECT COUNT(*) FROM saved_originals WHERE snapshot=?`, id).Scan(&raw); err != nil || raw != 0 {
+		t.Fatal("snapshot originals not reclaimed", raw, err)
 	}
 }

@@ -374,6 +374,7 @@ function render() {
 }
 function renderDashboard() {
   renderSOS();
+  if (window.HistoricalPlayback?.active) return;
   if ($("event-history").open) renderEvents();
   $("projection-status").textContent = state.projection_error
     ? "Projection failed: " + state.projection_error
@@ -1774,6 +1775,7 @@ function terrainReadout(lon, lat) {
   return ` · Estimated ground elevation ${value === null ? "unavailable / out of coverage" : "~" + Math.round(value) + " m"} · ${terrain.vertical_datum} · ${terrain.arc_seconds} arc sec · not GNSS altitude`;
 }
 function draw() {
+  if (window.HistoricalPlayback?.active) { window.HistoricalPlayback.repaint(); return; }
   if (!state) return;
   const started = performance.now();
   try {
@@ -1915,63 +1917,7 @@ function drawMap() {
     for (const terrain of (
       globalThis.radiusGrids || [globalThis.legacyTerrainForDraw]
     ).filter(Boolean)) {
-      if (layerOn("hillshade") && terrain.shades) {
-        if (!terrain.image) {
-          const c = document.createElement("canvas");
-          c.width = terrain.columns;
-          c.height = terrain.rows;
-          const context = c.getContext("2d"),
-            image = context.createImageData(c.width, c.height);
-          const [west, south, east, north] = terrain.bounds,
-            pyNorth = GeoMap.project(west, north)[1],
-            pySouth = GeoMap.project(west, south)[1];
-          // Resample north-up rows to the existing Mercator projection, not a new CRS.
-          for (let y = 0; y < c.height; y++) {
-            const py = pyNorth - (y / (c.height - 1)) * (pyNorth - pySouth);
-            const lat = GeoMap.unproject(0, py)[1];
-            const row = Math.max(
-              0,
-              Math.min(
-                c.height - 1,
-                Math.round(((north - lat) / (north - south)) * (c.height - 1)),
-              ),
-            );
-            for (let x = 0; x < c.width; x++) {
-              const a = (y * c.width + x) * 4,
-                b = (row * c.width + x) * 4;
-              const shade = terrain.shades[b];
-              image.data[a] =
-                image.data[a + 1] =
-                image.data[a + 2] =
-                  night ? Math.round(25 + shade * 0.32) : shade;
-              image.data[a + 3] = terrain.shades[b + 3];
-            }
-          }
-          context.putImageData(image, 0, 0);
-          terrain.image = c.toDataURL("image/png");
-        }
-        const [west, south, east, north] = terrain.bounds,
-          tl = xyCoord(GeoMap.project(west, north)),
-          br = xyCoord(GeoMap.project(east, south)),
-          cellWidth = (br[0] - tl[0]) / (terrain.columns - 1),
-          cellHeight = (br[1] - tl[1]) / (terrain.rows - 1);
-        root.append(
-          svg("image", {
-            "data-layer": "hillshade",
-            "clip-path": radiusClip(root, terrain, xyCoord),
-            href: terrain.image,
-            // Raster pixels cover cells; their centres must coincide with DEM nodes.
-            // Horn's unsupported outer border is transparent, not invented coverage.
-            x: tl[0] - cellWidth / 2,
-            y: tl[1] - cellHeight / 2,
-            width: cellWidth * terrain.columns,
-            height: cellHeight * terrain.rows,
-            preserveAspectRatio: "none",
-            opacity: night ? 0.8 : 0.5,
-            "pointer-events": "none",
-          }),
-        );
-      }
+      if (layerOn("hillshade") && terrain.shades) appendPinnedHillshade(root, terrain, xyCoord, night);
     }
     $("map-mode-label").textContent = mapVisible
       ? "Offline geographic map"
@@ -2054,44 +2000,7 @@ function drawMap() {
     for (const terrain of (
       globalThis.radiusGrids || [globalThis.legacyTerrainForDraw]
     ).filter(Boolean)) {
-      if (layerOn("contours") && terrain.contour) {
-        const lines = svg("g", {
-          "data-layer": "contours",
-          "clip-path": radiusClip(root, terrain, xyCoord),
-          "pointer-events": "none",
-        });
-        for (const [i, segment] of terrain.contour.segments.entries()) {
-          const coords = segment.points.map((p) =>
-            xyCoord(GeoMap.project(...p)),
-          );
-          lines.append(
-            svg("polyline", {
-              points: coords.map((p) => p.join(",")).join(" "),
-              fill: "none",
-              stroke: night ? "#c4ab82" : "#79603d",
-              "stroke-width": 1,
-              opacity: 0.75,
-            }),
-          );
-          if (
-            i % 100 === 0 &&
-            Math.hypot(
-              coords[1][0] - coords[0][0],
-              coords[1][1] - coords[0][1],
-            ) > 35
-          ) {
-            const label = svg("text", {
-              x: coords[0][0],
-              y: coords[0][1] - 3,
-              fill: night ? "#ecd1a8" : "#614723",
-              "font-size": 10,
-            });
-            label.textContent = segment.level + " m";
-            lines.append(label);
-          }
-        }
-        root.append(lines);
-      }
+      if (layerOn("contours") && terrain.contour) appendPinnedContours(root, terrain, xyCoord, night);
     }
     if (mapVisible && offlineMap.plan) drawRadiusCoverage(root, xyCoord);
     const overlay = svg("g", { "data-layer": "tracks" });
@@ -3834,3 +3743,106 @@ window.recordingAppliedState = () => {
   };
 };
 window.recordingLiveState = () => state;
+
+window.restoreLiveDashboard = () => { const main=document.querySelector("main");$("toggle-parties").setAttribute("aria-expanded",String(!main.classList.contains("parties-closed")));$("toggle-details").setAttribute("aria-expanded",String(!main.classList.contains("details-closed"))); render(); draw(); };
+
+function appendPinnedHillshade(root,terrain,xyCoord,night) {
+        if (!terrain.image) {
+          const c = document.createElement("canvas");
+          c.width = terrain.columns;
+          c.height = terrain.rows;
+          const context = c.getContext("2d"),
+            image = context.createImageData(c.width, c.height);
+          const [west, south, east, north] = terrain.bounds,
+            pyNorth = GeoMap.project(west, north)[1],
+            pySouth = GeoMap.project(west, south)[1];
+          // Resample north-up rows to the existing Mercator projection, not a new CRS.
+          for (let y = 0; y < c.height; y++) {
+            const py = pyNorth - (y / (c.height - 1)) * (pyNorth - pySouth);
+            const lat = GeoMap.unproject(0, py)[1];
+            const row = Math.max(
+              0,
+              Math.min(
+                c.height - 1,
+                Math.round(((north - lat) / (north - south)) * (c.height - 1)),
+              ),
+            );
+            for (let x = 0; x < c.width; x++) {
+              const a = (y * c.width + x) * 4,
+                b = (row * c.width + x) * 4;
+              const shade = terrain.shades[b];
+              image.data[a] =
+                image.data[a + 1] =
+                image.data[a + 2] =
+                  night ? Math.round(25 + shade * 0.32) : shade;
+              image.data[a + 3] = terrain.shades[b + 3];
+            }
+          }
+          context.putImageData(image, 0, 0);
+          terrain.image = c.toDataURL("image/png");
+        }
+        const [west, south, east, north] = terrain.bounds,
+          tl = xyCoord(GeoMap.project(west, north)),
+          br = xyCoord(GeoMap.project(east, south)),
+          cellWidth = (br[0] - tl[0]) / (terrain.columns - 1),
+          cellHeight = (br[1] - tl[1]) / (terrain.rows - 1);
+        root.append(
+          svg("image", {
+            "data-layer": "hillshade",
+            "clip-path": radiusClip(root, terrain, xyCoord),
+            href: terrain.image,
+            // Raster pixels cover cells; their centres must coincide with DEM nodes.
+            // Horn's unsupported outer border is transparent, not invented coverage.
+            x: tl[0] - cellWidth / 2,
+            y: tl[1] - cellHeight / 2,
+            width: cellWidth * terrain.columns,
+            height: cellHeight * terrain.rows,
+            preserveAspectRatio: "none",
+            opacity: night ? 0.8 : 0.5,
+            "pointer-events": "none",
+          }),
+        );
+
+}
+
+function appendPinnedContours(root,terrain,xyCoord,night) {
+        const lines = svg("g", {
+          "data-layer": "contours",
+          "clip-path": radiusClip(root, terrain, xyCoord),
+          "pointer-events": "none",
+        });
+        for (const [i, segment] of terrain.contour.segments.entries()) {
+          const coords = segment.points.map((p) =>
+            xyCoord(GeoMap.project(...p)),
+          );
+          lines.append(
+            svg("polyline", {
+              points: coords.map((p) => p.join(",")).join(" "),
+              fill: "none",
+              stroke: night ? "#c4ab82" : "#79603d",
+              "stroke-width": 1,
+              opacity: 0.75,
+            }),
+          );
+          if (
+            i % 100 === 0 &&
+            Math.hypot(
+              coords[1][0] - coords[0][0],
+              coords[1][1] - coords[0][1],
+            ) > 35
+          ) {
+            const label = svg("text", {
+              x: coords[0][0],
+              y: coords[0][1] - 3,
+              fill: night ? "#ecd1a8" : "#614723",
+              "font-size": 10,
+            });
+            label.textContent = segment.level + " m";
+            lines.append(label);
+          }
+        }
+        root.append(lines);
+
+}
+
+window.PinnedTerrainRenderer = {hillshade:appendPinnedHillshade,contours:appendPinnedContours};

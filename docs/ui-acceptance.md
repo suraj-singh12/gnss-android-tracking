@@ -877,10 +877,30 @@ reconstructed selected-party checkpoints against the instrumented browser-submit
 presentation sequence, with unique ordered ordinals. This is semantic/geometry evidence,
 not pixel-diff baselines or human-attention proof.
 
-## Issue #37 work in progress — not accepted
+## Issue #37 · Saved recordings and playback
 
-The initial library metadata implementation requires full browser regression and
-Day/Night verification. SQLite tests cover descriptive edits, restart, confirmation,
-same-origin rejection and retained sealed receipts/originals. Historical playback,
-interruption compression, visibility gates, bounded seeking, reference-safe deletion,
-required screenshot scenarios and physical/native acceptance remain outstanding.
+`recording-playback.cjs` uses real persisted #27 browser confirmations and Command
+SQLite, 21 parties with a 20-party saved subset, actual hide/reveal, pinned offline
+vector/terrain, a real Pause and SOS. It verifies deterministic geometry after rewind,
+hidden restrictions, Follow Original inspection, four-second notices at 1×/20×,
+read-only quality/SOS, descriptive edit/restart and map-library deletion survival.
+Runtime screenshots cover populated Day/Night library and playback at 1280×720,
+1440×900 and 960×720, open/collapsed panels, inspection and interruption. The timeline's
+bounds are checked against the actual map and panel rectangles. Existing UI, SOS,
+control, history and #27 browser suites remain regression gates. No pixel baselines
+are introduced.
+
+Real SQLite Go tests cover clock-based delayed redraw/rewind, restart and rejected
+historical writes, visibility response filtering, connected interruption overlap/ties,
+shared/unshared reclamation and retained operational data. The 1,200-confirmed-state
+fixture reports indexed-seek elapsed time, largest response and peak heap growth for
+40 seeks; this is bounded-reader software evidence, not multi-day fleet certification.
+Integrated Actions runs the new browser suite alongside exact-source race/vet,
+Android/bridge and existing map/enrollment/settings/GNSS/SOS checks and matched assets.
+
+Rendering-opportunity confirmations cannot establish OS scanout/human attention.
+Unverified intervals, absent pins and uncertain process-death boundaries remain
+labelled. Local browser evidence is Linux Chromium; physical Android, native macOS and
+Windows operation, sustained dense multi-day capture and actual field SOS/audio remain
+operator acceptance work. Public-provider network/transfer failures must be reported
+separately from deterministic #37 failures.

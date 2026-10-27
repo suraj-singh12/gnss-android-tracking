@@ -181,6 +181,7 @@ func putPresentationBlob(db snapshotSQL, state []byte, baseHash, scope string) (
 	}
 	full := compressed([]byte(marshal(presentationEnvelope{Encoding: "checkpoint-v1", Scope: scope, State: state})))
 	packed := full
+	baseLink := ""
 	if baseHash != "" && baseHash != hash {
 		base, depth, baseScope, e := readPresentationBlob(db, baseHash)
 		if e != nil {
@@ -190,6 +191,7 @@ func putPresentationBlob(db snapshotSQL, state []byte, baseHash, scope string) (
 			delta := compressed([]byte(marshal(presentationEnvelope{Encoding: "delta-v1", Scope: scope, Base: baseHash, Depth: depth + 1, Spans: presentationDiff(base, state)})))
 			if len(delta) < len(full)*9/10 {
 				packed = delta
+				baseLink = baseHash
 			}
 		}
 	}
@@ -201,6 +203,9 @@ func putPresentationBlob(db snapshotSQL, state []byte, baseHash, scope string) (
 		return "", errors.New("presentation storage quota reached; capture incomplete")
 	}
 	_, e := db.Exec(`INSERT OR IGNORE INTO presentation_blobs VALUES(?,?,?)`, hash, packed, len(packed))
+	if e == nil {
+		_, e = db.Exec(`INSERT OR IGNORE INTO presentation_blob_links VALUES(?,?)`, hash, baseLink)
+	}
 	return hash, e
 }
 
@@ -245,5 +250,25 @@ func (b *presentationBatch) flush() error {
 	b.args = nil
 	b.rows = 0
 	b.bytes = 0
+	return e
+}
+
+func indexBlobLink(db interface {
+	Exec(string, ...any) (sql.Result, error)
+}, hash string, packed []byte) error {
+	rd, e := zlib.NewReader(bytes.NewReader(packed))
+	if e != nil {
+		return e
+	}
+	b, e := io.ReadAll(io.LimitReader(rd, presentationLimit*3+1))
+	rd.Close()
+	if e != nil {
+		return e
+	}
+	var envelope presentationEnvelope
+	if e = json.Unmarshal(b, &envelope); e != nil {
+		return e
+	}
+	_, e = db.Exec(`INSERT OR IGNORE INTO presentation_blob_links VALUES(?,?)`, hash, envelope.Base)
 	return e
 }

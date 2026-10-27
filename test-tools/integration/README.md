@@ -1001,3 +1001,13 @@ without corruption. Original samples and licensing live in Command's existing
 software acceptance. `map-software-acceptance`, `dem-provider` and `integrated`
 are independent jobs in the existing matched-assets workflow; the live-provider
 job retains failures and uploads reports even when another acquisition fails.
+
+## Saved recording playback (#37)
+
+`recording-playback.cjs` requires `GNSS_COMMAND_BINARY`, Playwright and optionally
+`GNSS_CHROMIUM` for a system browser. It creates real #27 browser-confirmed recordings,
+21 parties, hidden/reveal boundaries, immutable vector/terrain, Pause and SOS; then
+opens the library/player, checks rewind, read-only controls, interruption duration,
+responsive map-contained timeline and restart. `GNSS_SCREENSHOT_DIR` retains actual
+Day/Night runtime screenshots and a JSON report. It uses local deterministic fixtures,
+not public-provider or physical-device acceptance.
