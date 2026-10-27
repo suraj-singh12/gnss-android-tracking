@@ -3706,7 +3706,7 @@ window.recordingAppliedState = () => {
       map_svg: [...$("tracks").children]
         .filter(
           (e) =>
-            e.tagName.toLowerCase() === "defs" ||
+            ["defs","clippath","mask","lineargradient","radialgradient","pattern"].includes(e.tagName.toLowerCase()) ||
             ["offline-map", "hillshade", "contours", "coverage"].includes(
               e.dataset.layer,
             ),

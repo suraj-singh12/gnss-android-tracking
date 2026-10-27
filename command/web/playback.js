@@ -69,6 +69,24 @@
   }
   // SVG evidence is passive geometry only. Never execute stored DOM handlers or
   // resolve an external URL from a recording. Pinned data images are permitted.
+  function viewportTransform(current, basis) {
+    const a = basis?.viewport,
+      v = current?.viewport;
+    if (
+      !a ||
+      !v ||
+      !Number.isFinite(a.scale) ||
+      !Number.isFinite(v.scale) ||
+      v.scale <= 0
+    )
+      return [0, 0, 1];
+    const z = a.scale / v.scale;
+    return [
+      (v.cx - a.cx) * a.scale + basis.width / 2 - (current.width / 2) * z,
+      (a.cy - v.cy) * a.scale + basis.height / 2 - (current.height / 2) * z,
+      z,
+    ];
+  }
   function geometry(source) {
     const doc = new DOMParser().parseFromString(
       `<svg xmlns="${ns}">${source || ""}</svg>`,
@@ -110,7 +128,7 @@
           (/href$/i.test(a.name) &&
             !v.startsWith("#") &&
             !/^data:image\/(png|jpeg|webp);base64,/i.test(v)) ||
-          (/url\(/i.test(v) && !/url\(\s*#[\w-]+\s*\)/.test(v))
+          (/url\(/i.test(v) && !/^url\(\s*#[A-Za-z0-9_.:-]+\s*\)$/.test(v))
         )
           e.removeAttribute(a.name);
       }
@@ -272,15 +290,11 @@
       `translate(${transform[0]} ${transform[1]}) scale(${transform[2]}) rotate(${angle} ${w / 2} ${h / 2})`,
     );
     const evidence = document.createElementNS(ns, "g");
-    if (!follow && basis.viewport && c.viewport) {
-      const a = basis.viewport,
-        v = c.viewport,
-        z = a.scale / v.scale;
-      const dx = (v.cx - a.cx) * a.scale + w / 2 - ((c.width || w) / 2) * z,
-        dy = (a.cy - v.cy) * a.scale + h / 2 - ((c.height || h) / 2) * z;
+    if (!follow) {
+      const [dx, dy, z] = viewportTransform(c, basis);
       evidence.setAttribute("transform", `translate(${dx} ${dy}) scale(${z})`);
     }
-    const map = geometry(follow ? c.map_svg : inspectorMap || c.map_svg);
+    const map = geometry(follow ? c.map_svg : (inspectorMap ?? c.map_svg));
     for (const child of map.querySelectorAll("[data-layer]"))
       if (layers[child.dataset.layer] === false) child.remove();
     world.append(map);
@@ -591,6 +605,24 @@
         2,
       ),
     );
+  function addRecordedLayer(kind) {
+    const c = frame.checkpoint.common,
+      source = geometry(c.map_svg),
+      nodes = [...source.querySelectorAll(`[data-layer="${kind}"]`)];
+    if (!nodes.length)
+      throw Error(
+        "This layer was not available in the recorded presentation at this time.",
+      );
+    const group = document.createElementNS(ns, "g"),
+      [dx, dy, z] = viewportTransform(c, anchor || c);
+    group.setAttribute("transform", `translate(${dx} ${dy}) scale(${z})`);
+    for (const def of source.querySelectorAll("defs,clipPath"))
+      group.append(def.cloneNode(true));
+    for (const node of nodes) group.append(node.cloneNode(true));
+    const base = geometry(inspectorMap ?? (anchor || c).map_svg);
+    base.append(group);
+    inspectorMap = base.innerHTML;
+  }
   async function preparePinnedTerrain(kind) {
     const current = frame,
       token = revision,
@@ -643,7 +675,7 @@
       throw Error(
         "No pinned terrain samples were available to Command in this frame.",
       );
-    const original = geometry(inspectorMap || c.map_svg);
+    const original = geometry(inspectorMap ?? c.map_svg);
     for (const old of original.querySelectorAll(`[data-layer="${kind}"]`))
       old.remove();
     original.append(group);
@@ -675,12 +707,21 @@
           n.getBBox(),
         );
     boxes = boxes.filter((b) => b.width || b.height);
+    const basis = anchor || frame.checkpoint.common,
+      [dx, dy, ratio] = viewportTransform(frame.checkpoint.common, basis);
+    boxes = boxes.map((b) => ({
+      x: b.x * ratio + dx,
+      y: b.y * ratio + dy,
+      width: b.width * ratio,
+      height: b.height * ratio,
+    }));
     if (!boxes.length) return;
     const x = Math.min(...boxes.map((b) => b.x)),
       y = Math.min(...boxes.map((b) => b.y)),
       w = Math.max(...boxes.map((b) => b.x + b.width)) - x,
       h = Math.max(...boxes.map((b) => b.y + b.height)) - y,
-      c = frame.checkpoint.common;
+      c = basis;
+    angle = 0;
     const z =
       Math.min(c.width / Math.max(w, 100), c.height / Math.max(h, 100)) * 0.65;
     transform = [
@@ -743,22 +784,28 @@
           check.checked =
             layers[name] ??
             !!geometry(
-              inspectorMap || frame.checkpoint.common.map_svg,
+              inspectorMap ?? frame.checkpoint.common.map_svg,
             ).querySelector(`[data-layer="${name}"]`);
           check.disabled = follow;
           check.onchange = async () => {
             layers[name] = check.checked;
             if (
               check.checked &&
-              ["hillshade", "contours"].includes(name) &&
+              ["offline-map", "hillshade", "contours", "coverage"].includes(
+                name,
+              ) &&
               !geometry(
-                inspectorMap || frame.checkpoint.common.map_svg,
+                inspectorMap ?? frame.checkpoint.common.map_svg,
               ).querySelector(`[data-layer="${name}"]`)
             ) {
               check.disabled = true;
               try {
-                await preparePinnedTerrain(name);
+                if (["offline-map", "coverage"].includes(name))
+                  addRecordedLayer(name);
+                else await preparePinnedTerrain(name);
               } catch (e) {
+                layers[name] = false;
+                check.checked = false;
                 inspection("Historical map limitation", e.message);
               } finally {
                 check.disabled = follow;

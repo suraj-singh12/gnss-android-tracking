@@ -436,6 +436,37 @@ async function wait(fn) {
     false,
   );
   await page.locator("#follow-original").check();
+  await seek(shift(visibility[0].at));
+  await page.locator("#follow-original").uncheck();
+  await page
+    .getByRole("button", { name: "Details for Alpha", exact: true })
+    .click();
+  await page.locator("#zoom-in").click();
+  const inspectionTransform = await page
+    .locator("#historical-world")
+    .getAttribute("transform");
+  await page.evaluate(
+    (t) => window.HistoricalPlayback.seek(t, false),
+    timeline.duration,
+  );
+  assert.equal(
+    await page.locator("#historical-world").getAttribute("transform"),
+    inspectionTransform,
+    "recorded viewport changes must not disrupt inspection",
+  );
+  await page.locator("#focus-party").click();
+  const focus = await page.evaluate((id) => {
+    const p = document
+        .querySelector(`[data-historical-party="${id}"]`)
+        .getBoundingClientRect(),
+      m = document.querySelector(".canvas").getBoundingClientRect();
+    return (
+      Math.abs((p.left + p.right) / 2 - (m.left + m.right) / 2) < 5 &&
+      Math.abs((p.top + p.bottom) / 2 - (m.top + m.bottom) / 2) < 5
+    );
+  }, ids[0]);
+  assert(focus, "focus uses the inspector viewport");
+  await page.locator("#follow-original").check();
   await seek(timeline.duration);
   assert(
     (await page
