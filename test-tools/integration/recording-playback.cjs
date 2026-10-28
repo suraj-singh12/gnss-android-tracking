@@ -550,6 +550,7 @@ async function wait(fn) {
       path: path.join(out, `playback-collapsed-${width}.png`),
     });
     for (const control of ["toggle-details", "toggle-parties"]) {
+      await page.evaluate(() => document.querySelector("main").classList.add("details-closed", "parties-closed"));
       await page.locator("#" + control).click();
       const bounds = await page.evaluate(() => {
         const t = document
@@ -568,6 +569,7 @@ async function wait(fn) {
       await page.screenshot({ path: path.join(out, `playback-night-${control}-only-${width}.png`) });
       await page.locator("#appearance").click();
     }
+    await page.evaluate(() => document.querySelector("main").classList.remove("details-closed", "parties-closed"));
   }
   await page.locator("#follow-original").uncheck();
   await page.locator("#zoom-in").click();
