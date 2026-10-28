@@ -1,5 +1,6 @@
 /* Real Command API + Chromium. Fixture data is synthetic; no mocked state API. */
 "use strict";
+const { menuAction } = require("./menu-actions.cjs");
 const assert = require("node:assert/strict"),
   fs = require("node:fs"),
   os = require("node:os"),
@@ -170,7 +171,7 @@ async function wait(check) {
   assert.ok(Math.abs(st.devices[devices[1]].total_m-80)<1e-6);
   await page.reload();
   await page.waitForFunction(()=>document.querySelectorAll('polyline[data-qualified-points]').length===8);
-  await page.locator("#fit").click();
+  await menuAction(page, "fit");
   await page.screenshot({path:path.join(out,"history-five-devices-completed.png"),fullPage:true});
   // From Now persists the original-time boundary; late old data is receipt only.
   await post("recording",{action:"clear",confirmed:true});

@@ -253,3 +253,16 @@ App-owned dialogs and OS-owned notifications use native layouts. Tracking notifi
 Sync and confirmed Stop enter existing Activity workflows; alert ACK retains its
 original receiver/journal. Android owns system surfaces and background restrictions.
 Command web and its existing visual system remain unchanged.
+
+## Issue #59 Command map-first layout
+
+Command groups existing header actions into Workspace, Records, Tools and View;
+the SOS counter, browser alarm readiness and connection remain directly visible.
+Map tools are grouped beside the Parties and Details controls. Narrow layouts
+use bounded overlay panels and a compact header; opening Map tools dismisses
+narrow overlays so its actions remain reachable. Recording status is a compact
+disclosure. Playback remains read-only, uses the existing map cell and exposes
+unverified presentation intervals with the recorded reason and bounds when
+available. Browser sound readiness does not establish speaker volume or audibility.
+
+Live map labels use deterministic collision avoidance with selected and unacknowledged SOS parties prioritized. Markers remain selectable and keyboard accessible; a visible density notice explains omitted labels and suggests zoom or selection. Historical Follow Original retains the recorded presentation rather than reflowing immutable evidence.

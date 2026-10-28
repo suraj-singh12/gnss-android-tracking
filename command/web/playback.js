@@ -350,7 +350,7 @@
   function responsivePanels() {
     const main = document.querySelector("main");
     if (
-      innerWidth <= 700 &&
+      innerWidth <= 1100 &&
       !main.classList.contains("parties-closed") &&
       !main.classList.contains("details-closed")
     )
@@ -376,6 +376,7 @@
       ? `${Object.keys(checkpoint.parties).filter((id) => permitted(id)).length} / ${Object.keys(checkpoint.parties).length}`
       : "0";
     if (!checkpoint) {
+      $("playback-evidence").hidden = true;
       $("playback-sos").hidden = true;
       $("playback-status").textContent =
         "Unverified presentation evidence · no recorded rendered state yet";
@@ -491,27 +492,24 @@
     $("map-mode-label").textContent = checkpoint.map_id
       ? "Offline geographic map · recorded revision"
       : "Blank canvas";
-    const trailing = session.metadata.trailing_unverified_interval;
-    const limitation =
-      (trailing &&
-        Date.parse(trailing.from) <= locationAt(position).wall &&
-        Date.parse(trailing.until) >= locationAt(position).wall) ||
-      (session.facts || []).some(
-        (f) =>
-          f.Kind === "unverified" &&
-          Date.parse(f.Data?.from) <= locationAt(position).wall &&
-          Date.parse(f.Data?.until) >= locationAt(position).wall,
-      );
-    $("playback-status").textContent =
-      (follow
-        ? "Frozen display · original recorded viewport"
-        : "INSPECTION VIEW — MODIFIED DURING PLAYBACK") +
-      " · " +
-      (limitation ? "UNVERIFIED PRESENTATION INTERVAL" : "read-only evidence") +
-      (checkpoint.asset_warnings?.length
-        ? " · " + checkpoint.asset_warnings.join(" ")
-        : "");
+    updateEvidence(checkpoint);
     detail();
+  }
+  // Time can advance within a single checkpoint while crossing an evidence
+  // boundary; update the status even when no new frame fetch is necessary.
+  function updateEvidence(checkpoint) {
+    const trailing = session.metadata.trailing_unverified_interval;
+    const wall = locationAt(position).wall;
+    const intervals = [trailing, ...(session.facts || []).filter(f => f.Kind === "unverified").map(f => f.Data)].filter(Boolean);
+    const limitations = intervals.filter(f => Date.parse(f.from) <= wall && Date.parse(f.until) >= wall);
+    $("playback-evidence").hidden = !limitations.length;
+    if (limitations.length) {
+      const format = value => value ? new Date(value).toLocaleString(undefined, {timeZoneName: "short"}) : "unknown";
+      $("playback-evidence-detail").textContent = limitations.map(item => `${item.reason || "Reason unavailable"} · ${format(item.from)} – ${format(item.until)}`).join("; ") + ". Presentation status does not determine GNSS validity.";
+    }
+    $("playback-status").textContent =
+      (follow ? "Frozen display · original recorded viewport" : "INSPECTION VIEW — MODIFIED DURING PLAYBACK") +
+      " · read-only evidence" + (checkpoint.asset_warnings?.length ? " · " + checkpoint.asset_warnings.join(" ") : "");
   }
   let inspectorMap, anchor;
   let controller;
@@ -541,8 +539,10 @@
       frame?.checkpoint &&
       (!frame.next_at?.Valid || target.wall < frame.next_at.Float64) &&
       target.wall >= Date.parse(frame.presentation_at)
-    )
+    ) {
+      updateEvidence(frame.checkpoint);
       return;
+    }
     if (explicit) {
       frame = undefined;
       repaint();
@@ -628,6 +628,7 @@
     $("playback-seek").max = data.duration;
     follow = true;
     $("follow-original").checked = true;
+    $("follow-state").textContent = "ON";
     playing = false;
     frame = undefined;
     speed = 1;
@@ -644,6 +645,7 @@
       "playback-rail",
       "playback-timeline",
       "playback-status",
+      "playback-evidence",
       "playback-notice",
       "playback-sos",
     ])
@@ -676,6 +678,7 @@
     (speed = Number($("playback-speed").value));
   $("follow-original").onchange = () => {
     follow = $("follow-original").checked;
+    $("follow-state").textContent = follow ? "ON" : "OFF";
     if (!follow) {
       anchor = frame?.checkpoint?.common;
       inspectorMap = anchor?.map_svg;
@@ -847,6 +850,9 @@
       event.stopImmediatePropagation();
       event.preventDefault();
       const id = button.id;
+      for (let menu = button.closest(".menu"); menu; menu = menu.parentElement?.closest(".menu")) {
+        if (!menu.classList.contains("header-menu-root") || innerWidth <= 1100) menu.open = false;
+      }
       if (
         [
           "toggle-parties",
@@ -860,7 +866,7 @@
           key = left ? "parties-closed" : "details-closed";
         if (id === "close-details") main.classList.add(key);
         else main.classList.toggle(key);
-        if (innerWidth <= 700 && !main.classList.contains(key))
+        if (innerWidth <= 1100 && !main.classList.contains(key))
           main.classList.add(left ? "details-closed" : "parties-closed");
         repaint();
       } else if (id === "open-quality") showQuality();

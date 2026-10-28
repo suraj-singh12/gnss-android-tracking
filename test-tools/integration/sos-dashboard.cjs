@@ -1,6 +1,7 @@
 // Optional browser acceptance for the real embedded Command dashboard. No product
 // dependencies: Node + an externally supplied Playwright installation are test-only.
 "use strict";
+const { menuAction } = require("./menu-actions.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -108,7 +109,7 @@ async function stop() {
     () => document.querySelector("#sos-count").textContent === "0",
   );
   await page.locator('[data-close="sos-panel"]').click();
-  await page.locator("#open-history").click();
+  await menuAction(page, "open-history");
   await page.locator("#event-filter").selectOption("sos");
   await page.waitForSelector(".history-event");
   assert.match(
@@ -166,7 +167,7 @@ async function stop() {
   await page.waitForSelector(".sos-alert:not(.acknowledged)");
   assert.equal(await page.locator(".sos-alert").count(), 1);
   await page.locator('[data-close="sos-panel"]').click();
-  await page.locator("#open-history").click();
+  await menuAction(page, "open-history");
   await page.locator("#event-filter").selectOption("sos");
   await page.waitForFunction(
     () => document.querySelectorAll(".history-event").length === 2,

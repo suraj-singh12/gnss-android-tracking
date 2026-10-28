@@ -1,3 +1,4 @@
+const { menuAction } = require("./menu-actions.cjs");
 const {
   acquireChunk,
   transferBudget,
@@ -296,7 +297,7 @@ async function port() {
             errors = [];
           page.on("pageerror", (e) => errors.push(e.message));
           await page.goto(local);
-          await page.locator("#open-map").click();
+          await menuAction(page, "open-map");
           await page.waitForFunction(
             (id) =>
               Array.from(document.querySelector("#saved-maps").options).some(
@@ -363,14 +364,14 @@ async function port() {
           for (let i = 0; i < 5; i++) {
             await new Promise((r) => setTimeout(r, 800));
             if (!(await page.locator("#layer-hillshade").isDisabled())) break;
-            await page.locator("#zoom-in").click();
+            await menuAction(page, "zoom-in");
           }
           await page.waitForFunction(
             () => !document.querySelector("#layer-hillshade").disabled,
             null,
             { timeout: 30000 },
           );
-          await page.locator("#open-layers").click();
+          await menuAction(page, "open-layers");
           await page.locator("#layer-hillshade").check();
           if (!(await page.locator("#layer-contours").isDisabled()))
             await page.locator("#layer-contours").check();
@@ -393,7 +394,7 @@ async function port() {
             path: path.join(images, prefix + "-real-terrain-offline.png"),
             fullPage: true,
           });
-          await page.locator("#open-layers").click();
+          await menuAction(page, "open-layers");
           await page.locator("#layer-hillshade").uncheck();
           await page.locator('[data-close="layers"]').click();
           assert.equal(
@@ -404,7 +405,7 @@ async function port() {
             path: path.join(images, prefix + "-real-hillshade-off.png"),
             fullPage: true,
           });
-          await page.locator("#open-layers").click();
+          await menuAction(page, "open-layers");
           if (!(await page.locator("#layer-contours").isDisabled()))
             await page.locator("#layer-contours").uncheck();
           await page.locator('[data-close="layers"]').click();

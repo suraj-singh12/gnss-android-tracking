@@ -1,5 +1,6 @@
 /* Real Command API + Chromium. Fixture data is synthetic; no mocked state API. */
 "use strict";
+const { menuAction } = require("./menu-actions.cjs");
 const assert = require("node:assert/strict"),
   fs = require("node:fs"),
   os = require("node:os"),
@@ -100,7 +101,7 @@ async function wait(check) {
   for(let i=0;i<20;i++){const id=randomUUID();ids.push(id);const message=structuredClone(fixture);message.device_id=id;message.message_id=randomUUID();message.observation.observation_id=message.message_id;message.observation.tracking_session_id=randomUUID();message.party.id=`Remote ${i+1}`;await send(message);}
   await wait(async()=>Object.keys((await state()).devices).length===20);
   await page.waitForFunction(()=>document.querySelectorAll(".device").length===20);
-  await page.locator("#open-control").click();
+  await menuAction(page, "open-control");
   await page.waitForFunction(()=>document.querySelectorAll("#control-phones label").length===20);
   const publicIdentity=(await (await fetch(local+"/local/control")).json()).authority_id;
   assert.match(publicIdentity,/^[0-9a-f-]{36}$/);

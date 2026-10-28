@@ -27,6 +27,19 @@ async function port() {
   await new Promise((r) => s.close(r));
   return p;
 }
+async function headerAction(id) {
+  const target = page.locator(`#${id}`);
+  const root = page.locator(".header-menu-root");
+  if (!(await root.evaluate(e => e.open))) await root.locator(":scope > summary").click();
+  const group = target.locator("xpath=ancestor::details[contains(@class, 'menu')][1]");
+  if (!(await group.evaluate(e => e.open))) await group.locator(":scope > summary").click();
+  await target.click();
+}
+async function mapAction(id) {
+  const menu = page.locator(".map-tools");
+  if (!(await menu.evaluate(e => e.open))) await menu.locator(":scope > summary").click();
+  await page.locator(`#${id}`).click();
+}
 async function wait(fn) {
   for (let i = 0; i < 300; i++) {
     if (await fn().catch(() => false)) return;
@@ -97,6 +110,31 @@ async function wait(fn) {
       assert.equal(r.status, 200, await r.text());
     }
   await page.evaluate(() => poll());
+  for (const [width, height] of [[1920,1080],[1440,900],[1280,720],[960,720],[390,844]]) {
+    await page.setViewportSize({width, height});
+    await page.evaluate(() => draw());
+    const labels = await page.evaluate(() => {
+      const rects = [...document.querySelectorAll('[data-party-label]')].map(e => { const r=e.getBoundingClientRect(); return {left:r.left,right:r.right,top:r.top,bottom:r.bottom}; });
+      const overlaps = rects.some((a,i) => rects.slice(i+1).some(b => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top));
+      return {overlaps, count:rects.length, markers:document.querySelectorAll('[data-layer="live"] [data-point-key$="/live"]').length, notice:!document.querySelector('#label-density').hidden};
+    });
+    assert.equal(labels.markers, 21, "decluttering must retain all markers");
+    assert(labels.count > 0 && !labels.overlaps, `clustered labels: ${JSON.stringify(labels)}`);
+    const selectedVisible = await page.evaluate(() => {
+      const map = document.querySelector('.canvas').getBoundingClientRect();
+      const marker = [...document.querySelectorAll('[data-layer="live"] [data-point-key$="/live"]')].find(e => { const r=e.getBoundingClientRect(); return r.left > map.left+100 && r.right < map.right-100 && r.top > map.top+80 && r.bottom < map.bottom-80; });
+      if (!marker) return true;
+      const id=marker.getAttribute('data-device'); selectParty(id); draw();
+      return !!document.querySelector(`[data-party-label="${CSS.escape(id)}"]`);
+    });
+    assert(selectedVisible, "selected visible party must receive label priority");
+    await page.screenshot({path: path.join(out, `live-day-${width}.png`)});
+    await headerAction("appearance");
+    await page.screenshot({path: path.join(out, `live-night-${width}.png`)});
+    await headerAction("appearance");
+  }
+  await page.setViewportSize({width:1440,height:900});
+  if (await page.locator("#toggle-parties").getAttribute("aria-expanded") === "false") await page.locator("#toggle-parties").click();
   await page.locator("#start").click();
   await page
     .locator("#session-mode")
@@ -304,7 +342,7 @@ async function wait(fn) {
     .locator("#sos-toast-dismiss")
     .click()
     .catch(() => {});
-  await page.locator("#open-library").click();
+  await headerAction("open-library");
   await page.getByRole("button", { name: "Open", exact: true }).waitFor();
   for (const [width, height] of [
     [1280, 720],
@@ -313,15 +351,15 @@ async function wait(fn) {
     await page.setViewportSize({ width, height });
     await page.screenshot({ path: path.join(out, `library-day-${width}.png`) });
     await page.locator('[data-close="saved-library"]').click();
-    await page.locator("#appearance").click();
-    await page.locator("#open-library").click();
+    await headerAction("appearance");
+    await headerAction("open-library");
     await page.getByRole("button", { name: "Open", exact: true }).waitFor();
     await page.screenshot({
       path: path.join(out, `library-night-${width}.png`),
     });
     await page.locator('[data-close="saved-library"]').click();
-    await page.locator("#appearance").click();
-    await page.locator("#open-library").click();
+    await headerAction("appearance");
+    await headerAction("open-library");
     await page.getByRole("button", { name: "Open", exact: true }).waitFor();
   }
   await page.getByRole("button", { name: "Open", exact: true }).click();
@@ -441,7 +479,7 @@ async function wait(fn) {
   await page
     .getByRole("button", { name: "Details for Alpha", exact: true })
     .click();
-  await page.locator("#zoom-in").click();
+  await mapAction("zoom-in");
   const inspectionTransform = await page
     .locator("#historical-world")
     .getAttribute("transform");
@@ -454,7 +492,7 @@ async function wait(fn) {
     inspectionTransform,
     "recorded viewport changes must not disrupt inspection",
   );
-  await page.locator("#focus-party").click();
+  await mapAction("focus-party");
   const focus = await page.evaluate((id) => {
     const p = document
         .querySelector(`[data-historical-party="${id}"]`)
@@ -484,7 +522,9 @@ async function wait(fn) {
   for (const [width, height] of [
     [1280, 720],
     [1440, 900],
+    [1920, 1080],
     [960, 720],
+    [390, 844],
   ]) {
     await page.setViewportSize({ width, height });
     await page.locator("#toggle-details").click();
@@ -508,14 +548,15 @@ async function wait(fn) {
     });
     assert(boxes.timeline.x >= boxes.map.x);
     assert(boxes.timeline.right <= boxes.map.right);
-    assert(boxes.timeline.x >= boxes.left.right);
-    assert(boxes.timeline.right <= boxes.right.x);
+    const overlap = (a,b) => a.x < b.right && a.right > b.x && a.y < b.bottom && a.bottom > b.y;
+    assert(!overlap(boxes.timeline, boxes.left));
+    assert(!overlap(boxes.timeline, boxes.right));
     async function assertPlaybackLayout() {
       const problems = await page.evaluate(() => {
         const map = document.querySelector('.canvas').getBoundingClientRect();
         const timeline = document.querySelector('#playback-timeline').getBoundingClientRect();
         const toolbar = document.querySelector('.canvas-toolbar');
-        const items = [...toolbar.querySelectorAll('button'), toolbar.firstElementChild];
+        const items = [...toolbar.querySelectorAll('button, summary')].filter(e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden');
         const boxes = items.map(e => e.getBoundingClientRect());
         const overlap = (a, b) => a.left < b.right - 1 && a.right > b.left + 1 && a.top < b.bottom - 1 && a.bottom > b.top + 1;
         const errors = [];
@@ -538,17 +579,20 @@ async function wait(fn) {
     await page.screenshot({
       path: path.join(out, `playback-day-${width}.png`),
     });
-    await page.locator("#appearance").click();
+    await headerAction("appearance");
     await assertPlaybackLayout();
     await page.screenshot({
       path: path.join(out, `playback-night-${width}.png`),
     });
-    await page.locator("#appearance").click();
+    await headerAction("appearance");
     await page.locator("#toggle-parties").click();
     await page.locator("#toggle-details").click();
     await page.screenshot({
       path: path.join(out, `playback-collapsed-${width}.png`),
     });
+    await headerAction("appearance");
+    await page.screenshot({path: path.join(out, `playback-night-collapsed-${width}.png`)});
+    await headerAction("appearance");
     for (const control of ["toggle-details", "toggle-parties"]) {
       await page.evaluate(() => document.querySelector("main").classList.add("details-closed", "parties-closed"));
       await page.locator("#" + control).click();
@@ -564,16 +608,16 @@ async function wait(fn) {
       await page.screenshot({
         path: path.join(out, `playback-${control}-only-${width}.png`),
       });
-      await page.locator("#appearance").click();
+      await headerAction("appearance");
       await assertPlaybackLayout();
       await page.screenshot({ path: path.join(out, `playback-night-${control}-only-${width}.png`) });
-      await page.locator("#appearance").click();
+      await headerAction("appearance");
     }
     await page.evaluate(() => document.querySelector("main").classList.remove("details-closed", "parties-closed"));
   }
   await page.locator("#follow-original").uncheck();
-  await page.locator("#zoom-in").click();
-  await page.locator("#open-layers").click();
+  await mapAction("zoom-in");
+  await mapAction("open-layers");
   await page
     .locator("#historical-content")
     .getByLabel("contours", { exact: true })
@@ -627,7 +671,7 @@ async function wait(fn) {
     )
       writes.push(r.url());
   });
-  await page.locator("#open-quality").click();
+  await headerAction("open-quality");
   assert(await page.locator("#historical-inspection").isVisible());
   assert.equal(await page.locator("#historical-content input").count(), 0);
   await page.locator('[data-close="historical-inspection"]').click();
@@ -638,17 +682,17 @@ async function wait(fn) {
   assert(await page.locator("#playback-sos").isVisible());
   assert.equal(await page.locator("#playback-sos button").count(), 0);
   await page.locator("#exit-playback").click();
-  await page.locator("#appearance").click();
-  await page.locator("#open-library").click();
+  await headerAction("appearance");
+  await headerAction("open-library");
   await page.screenshot({ path: path.join(out, "library-night-960.png") });
   await page.locator('[data-close="saved-library"]').click();
   await page.reload();
-  await page.locator("#open-library").click();
+  await headerAction("open-library");
   await page.getByRole("button", { name: "Open", exact: true }).click();
   await page.waitForFunction(() => window.HistoricalPlayback?.active);
   await seek(timeline.duration);
   await page.locator("#exit-playback").click();
-  await page.locator("#open-library").click();
+  await headerAction("open-library");
   await page.locator(".library-more summary").click();
   await page
     .getByRole("button", { name: "Edit metadata", exact: true })
@@ -662,7 +706,7 @@ async function wait(fn) {
   await once(command, "exit");
   await start();
   await page.reload();
-  await page.locator("#open-library").click();
+  await headerAction("open-library");
   await page
     .getByText("Renamed persisted recording", { exact: true })
     .waitFor();
@@ -672,7 +716,7 @@ async function wait(fn) {
   assert(await page.locator("#playback-sos").isVisible());
   await page.locator("#exit-playback").click();
   const operationalBefore = await (await fetch(local + "/local/state")).json();
-  await page.locator("#open-library").click();
+  await headerAction("open-library");
   await page.locator(".library-more summary").click();
   page.once("dialog", (d) => d.accept());
   await page.getByRole("button", { name: "Delete", exact: true }).click();
@@ -691,8 +735,8 @@ async function wait(fn) {
   assert.equal(Object.keys(operationalAfter.devices).length, 21);
   await page.screenshot({ path: path.join(out, "library-night-empty.png") });
   await page.locator('[data-close="saved-library"]').click();
-  await page.locator("#appearance").click();
-  await page.locator("#open-library").click();
+  await headerAction("appearance");
+  await headerAction("open-library");
   await page.screenshot({ path: path.join(out, "library-day-empty.png") });
   assert.deepEqual(errors, []);
   report.passed = true;

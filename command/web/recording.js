@@ -119,6 +119,7 @@
               opportunity_at: lastPresented.opportunity_at,
             });
             presenceReported = true;
+            if (!rec) health("Ready · GNSS independent");
           }
           dirty = false;
           return;

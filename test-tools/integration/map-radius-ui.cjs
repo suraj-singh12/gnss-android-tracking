@@ -1,3 +1,4 @@
+const { menuAction } = require("./menu-actions.cjs");
 const crypto = require("node:crypto");
 /* Deterministic georeferenced fixture, real SQLite/server, offline Chromium restart. */
 const assert = require("node:assert/strict"),
@@ -104,7 +105,7 @@ async function wait(f) {
     r.request().url().startsWith(local) ? r.continue() : r.abort(),
   );
   await page.goto(local);
-  await page.locator("#open-map").click();
+  await menuAction(page, "open-map");
   await page.locator("#tab-map-preparation").click();
   await page.locator(".map-precise").evaluate((e) => (e.open = true));
   await page.getByRole("button", { name: "Custom", exact: true }).click();
@@ -165,7 +166,7 @@ async function wait(f) {
     Number.isFinite(Number(await page.locator("#map-lat").inputValue())),
   );
   await page.locator('[data-close="map-settings"]').click();
-  await page.locator("#open-layers").click();
+  await menuAction(page, "open-layers");
   await page.locator("#layer-contours").check();
   await page.locator("#layer-hillshade").check();
   await page.locator("#layers").evaluate((e) => e.close());
@@ -178,7 +179,7 @@ async function wait(f) {
     path: path.join(out, "radius-terrain-both-fixture.png"),
     fullPage: true,
   });
-  await page.locator("#open-layers").click();
+  await menuAction(page, "open-layers");
   await page.locator("#layer-contours").uncheck();
   await page.locator("#layers").evaluate((e) => e.close());
   assert.equal(await page.locator('[data-layer="contours"]').count(), 0);
@@ -186,7 +187,7 @@ async function wait(f) {
     path: path.join(out, "radius-hillshade-only-fixture.png"),
     fullPage: true,
   });
-  await page.locator("#open-layers").click();
+  await menuAction(page, "open-layers");
   await page.locator("#layer-contours").check();
   await page.locator("#layer-hillshade").uncheck();
   await page.locator("#layers").evaluate((e) => e.close());
@@ -264,7 +265,7 @@ async function wait(f) {
   );
   report.vector_failure_preserves_terrain = true;
 
-  await page.locator("#open-map").click();
+  await menuAction(page, "open-map");
   await page.locator("#tab-maps-library").click();
   assert.match(
     await page.locator("#export-map").getAttribute("href"),
@@ -329,7 +330,7 @@ async function wait(f) {
     path: path.join(out, "map-pbf-full-extent-offline-render.png"),
     fullPage: true,
   });
-  await page.locator("#open-map").click();
+  await menuAction(page, "open-map");
   await page.screenshot({
     path: path.join(out, "map-pbf-full-extent-fixture.png"),
     fullPage: true,
@@ -436,7 +437,7 @@ async function wait(f) {
     path: path.join(out, "real-pbf-crop-offline-after-crash.png"),
     fullPage: true,
   });
-  await page.locator("#open-map").click();
+  await menuAction(page, "open-map");
   await page.locator("#tab-maps-library").click();
   const panelAxe = await new Axe({ page }).analyze();
   assert.deepEqual(

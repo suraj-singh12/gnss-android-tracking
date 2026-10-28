@@ -178,7 +178,7 @@ async function sosSound(test = false) {
         audio.state === "running",
       );
       if (audio.state !== "running") {
-        $("sos-audio").textContent = "Enable SOS sound · currently blocked";
+        $("sos-audio").textContent = "SOS alarm: blocked";
         $("sos-audio-status").textContent =
           "Audio suspended / blocked. Enable sound; visual SOS stays active.";
       }
@@ -188,11 +188,11 @@ async function sosSound(test = false) {
     const pending = state?.sos_alerts?.some((a) => !a.operator_acknowledged_at);
     alarm.update(pending, true);
     if (test && !pending) beep();
-    $("sos-audio").textContent = "SOS sound enabled · Test";
+    $("sos-audio").textContent = "SOS alarm: ready";
     $("sos-audio-status").textContent =
       "Sound enabled · one shared beep every second until every SOS is acknowledged. Check speaker volume.";
   } catch (e) {
-    $("sos-audio").textContent = "Enable SOS sound · currently blocked";
+    $("sos-audio").textContent = (window.AudioContext || window.webkitAudioContext) ? "SOS alarm: blocked" : "SOS alarm: error";
     $("sos-audio-status").textContent =
       "Audible alert blocked / unavailable. Enable audio and check speaker volume; visible SOS remains active.";
     alarm.update(alarm.pending, false);
@@ -205,6 +205,10 @@ $("sos-toast-dismiss").onclick = () => {
   $("sos-toast").hidden = true;
 };
 function detailsOpen(open) {
+  if (open && innerWidth <= 1100) {
+    document.querySelector("main").classList.add("parties-closed");
+    $("toggle-parties").setAttribute("aria-expanded", "false");
+  }
   document.querySelector("main").classList.toggle("details-closed", !open);
   $("toggle-details").setAttribute("aria-expanded", String(open));
 }
@@ -212,19 +216,13 @@ $("toggle-details").onclick = () =>
   detailsOpen(
     document.querySelector("main").classList.contains("details-closed"),
   );
-$("close-details").onclick = () => detailsOpen(false);
-window.addEventListener("resize", () => {
-  if (innerWidth <= 850) detailsOpen(false);
-  if (innerWidth <= 550) {
-    document.querySelector("main").classList.add("parties-closed");
-    $("toggle-parties").setAttribute("aria-expanded", "false");
-  }
-});
+$("close-details").onclick = () => { detailsOpen(false); $("toggle-details").focus(); };
 $("toggle-parties").onclick = $("collapse-parties").onclick = () => {
   const closed = document
     .querySelector("main")
     .classList.toggle("parties-closed");
   $("toggle-parties").setAttribute("aria-expanded", String(!closed));
+  if (!closed && innerWidth <= 1100) detailsOpen(false);
 };
 function renderSOS() {
   const alerts = [...(state.sos_alerts || [])].sort(
@@ -381,7 +379,7 @@ function renderDashboard() {
     : state.projection_pending
       ? "Projection catching up — displayed history is not fully synchronized"
       : "";
-  $("connection").textContent = liveConnection;
+  updateConnectionLabel();
   $("connection").classList.toggle(
     "unavailable",
     liveConnection.includes("unavailable"),
@@ -1175,7 +1173,7 @@ $("layers").onkeydown = (event) => {
   if (event.key === "Escape") {
     event.preventDefault();
     $("layers").close();
-    $("open-layers").focus();
+    document.querySelector(".map-tools > summary").focus();
   }
 };
 for (const kind of terrainLayers)
@@ -2096,7 +2094,16 @@ function drawMap() {
   }
   const liveLayer = svg("g", { "data-layer": "live" });
   root.append(liveLayer);
-  for (const p of live) {
+  // Place high-priority labels first; markers and accessible identities are never
+  // removed. A stable device-id tie break keeps redraws deterministic.
+  const pendingSOS = new Set((state.sos_alerts || []).filter(a => !a.operator_acknowledged_at).map(a => a.device_id));
+  const ranked = [...live].sort((a, b) => {
+    const rank = p => (p.device_id === selectedParty ? 2 : 0) + (pendingSOS.has(p.device_id) ? 4 : 0);
+    return rank(b) - rank(a) || a.device_id.localeCompare(b.device_id);
+  });
+  const labelBoxes = [];
+  let hiddenLabels = 0;
+  for (const p of ranked) {
     const [x, y] = xy(p),
       d = state.devices[p.device_id];
     const bearing = GeoMap.liveHeading(p.fix, p.live);
@@ -2126,7 +2133,7 @@ function drawMap() {
       inspect(p);
       render();
     };
-    marker.onfocus = () => inspect(p);
+    marker.onfocus = marker.onmouseenter = () => inspect(p);
     marker.onkeydown = (e) => {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
@@ -2134,17 +2141,36 @@ function drawMap() {
       }
     };
     liveLayer.append(marker);
+    // Labels remain close to their own markers, so they cannot be mistaken
+    // for a route or another party. If no candidate fits, the marker retains
+    // its keyboard/hover identity and the density notice explains the omission.
+    if (x < 0 || x > w || y < 0 || y > h) continue;
     const label = svg("text", {
-      x: x + (x > w / 2 ? -13 : 13),
-      y: y < 24 ? y + 24 : y - 12,
-      "text-anchor": x > w / 2 ? "end" : "start",
-      fill: color(p.device_id),
-      "font-size": 12,
+      fill: color(p.device_id), "font-size": 13,
+      "data-device": p.device_id, "data-party-label": p.device_id,
     });
-    label.setAttribute("data-device", p.device_id);
     label.textContent = d.snapshot.party.id + (p.live ? "" : " · last known");
     liveLayer.append(label);
+    const width = label.getComputedTextLength(), height = 16;
+    const intersects = (a, b) => a.x < b.x + b.width + 3 && a.x + a.width + 3 > b.x && a.y < b.y + b.height + 2 && a.y + a.height + 2 > b.y;
+    let placed;
+    for (const dy of [-16, 18, -32, 34, -48, 50, -64, 66]) {
+      for (const dx of [13, -13 - width]) {
+        const box = { x: x + dx, y: y + dy - 12, width, height };
+        if (box.x < 2 || box.x + width > w - 2 || box.y < 2 || box.y + height > h - 2 || labelBoxes.some(other => intersects(box, other))) continue;
+        label.setAttribute("x", box.x);
+        label.setAttribute("y", box.y + 12);
+        labelBoxes.push(box);
+        placed = true;
+        break;
+      }
+      if (placed) break;
+    }
+    if (!placed) { label.remove(); hiddenLabels++; }
+
   }
+  $("label-density").hidden = !hiddenLabels;
+  $("label-density").textContent = hiddenLabels ? `${hiddenLabels} crowded party label${hiddenLabels === 1 ? "" : "s"} hidden · select a marker or zoom in` : "";
   $("scale-label").textContent = "WGS84 / Web Mercator · north up";
   if (locatedSOS?.fix) {
     const [x, y] = xy({ fix: locatedSOS.fix });
@@ -2232,7 +2258,7 @@ async function pollLive() {
     const b = await response.json();
     liveConnection = "● Command Connected";
     if (state && b.receipt_version < state.receipt_version) {
-      $("connection").textContent = liveConnection;
+      updateConnectionLabel();
       $("connection").classList.remove("unavailable");
       return;
     }
@@ -2256,7 +2282,7 @@ async function pollLive() {
   } catch (e) {
     failed = true;
     liveConnection = "● Command LIVE/SOS unavailable";
-    $("connection").textContent = liveConnection;
+    updateConnectionLabel();
     $("connection").classList.add("unavailable");
     if (!state) showError(e);
   } finally {
@@ -3846,3 +3872,125 @@ function appendPinnedContours(root,terrain,xyCoord,night) {
 }
 
 window.PinnedTerrainRenderer = {hillshade:appendPinnedHillshade,contours:appendPinnedContours};
+
+// Menus retain the existing action nodes and close after activation or Escape.
+document.addEventListener("click", (event) => {
+  const menu = event.target.closest(".menu");
+  if (menu && event.target.closest("button, a")) {
+    for (let current = menu; current; current = current.parentElement?.closest(".menu")) if (!current.classList.contains("header-menu-root") || innerWidth <= 1100) current.open = false;
+  } else if (!menu) document.querySelectorAll(".menu[open]").forEach((item) => { if (!item.classList.contains("header-menu-root") || innerWidth <= 1100) item.open = false; });
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  const menu = event.target.closest(".menu[open]");
+  if (menu) { event.preventDefault(); menu.open = false; menu.querySelector("summary")?.focus(); }
+});
+const captureHealth = $("capture-health");
+function updateCaptureSummary() {
+  const value = captureHealth.textContent || "";
+  const unverified = value.includes("Unverified");
+  $("capture-summary").textContent = unverified ? "Unverified" : "Evidence";
+  $("capture-heading").hidden = !unverified;
+}
+new MutationObserver(updateCaptureSummary).observe(captureHealth, {childList: true, characterData: true, subtree: true});
+updateCaptureSummary();
+
+function updateConnectionLabel() {
+  $("connection").title = liveConnection;
+  $("connection").textContent = innerWidth <= 600
+    ? (liveConnection.includes("unavailable") ? "● Unavailable" : liveConnection.includes("Connected") ? "● Connected" : "Connecting…")
+    : liveConnection;
+}
+window.addEventListener("resize", updateConnectionLabel);
+const headerMenuRoot = document.querySelector(".header-menu-root");
+let compactLayout;
+function updateCompactLayout() {
+  const compact = innerWidth <= 1100;
+  if (compact === compactLayout) return;
+  compactLayout = compact;
+  headerMenuRoot.open = !compact;
+  if (compact) {
+    const main = document.querySelector("main");
+    main.classList.add("parties-closed", "details-closed");
+    $("toggle-parties").setAttribute("aria-expanded", "false");
+    $("toggle-details").setAttribute("aria-expanded", "false");
+  }
+}
+window.addEventListener("resize", updateCompactLayout);
+updateCompactLayout();
+document.querySelector(".map-tools").addEventListener("toggle", event => {
+  if (!event.currentTarget.open || innerWidth > 1100) return;
+  const main = document.querySelector("main");
+  main.classList.add("parties-closed", "details-closed");
+  $("toggle-parties").setAttribute("aria-expanded", "false");
+  $("toggle-details").setAttribute("aria-expanded", "false");
+});
+// Keep less frequent playback actions available without expanding the timeline.
+const playbackMore = document.createElement("details");
+playbackMore.className = "menu playback-more";
+const playbackMoreSummary = document.createElement("summary");
+playbackMoreSummary.textContent = "More";
+const playbackMoreContent = document.createElement("div");
+playbackMoreContent.className = "menu-content";
+for (const id of ["playback-first", "playback-last", "playback-facts", "playback-start"]) playbackMoreContent.append($(id));
+playbackMore.append(playbackMoreSummary, playbackMoreContent);
+$("playback-timeline").append(playbackMore);
+// Restore focus for non-modal narrow drawers, including historical inspection.
+document.addEventListener("click", event => {
+  if (innerWidth > 1100) return;
+  const id = event.target.closest("button")?.id;
+  if (!["toggle-parties", "collapse-parties", "toggle-details", "close-details"].includes(id)) return;
+  queueMicrotask(() => {
+    const left = id.includes("parties"), main = document.querySelector("main");
+    const closed = main.classList.contains(left ? "parties-closed" : "details-closed");
+    if (closed) $(left ? "toggle-parties" : "toggle-details").focus();
+    else $(left ? "collapse-parties" : "close-details").focus();
+  });
+}, true);
+document.addEventListener("keydown", event => {
+  if (event.key !== "Escape" || innerWidth > 1100 || event.target.closest("dialog, .menu")) return;
+  const aside = event.target.closest(".party-overview, .party-detail");
+  if (!aside) return;
+  const left = aside.classList.contains("party-overview");
+  document.querySelector("main").classList.add(left ? "parties-closed" : "details-closed");
+  const toggle = $(left ? "toggle-parties" : "toggle-details");
+  toggle.setAttribute("aria-expanded", "false");
+  toggle.focus();
+  event.preventDefault();
+});
+document.addEventListener("keydown", event => {
+  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+  const menu = event.target.closest(".menu");
+  if (!menu || !menu.open) return;
+  const container = menu.querySelector(":scope > .menu-content, :scope > .menu-groups");
+  if (!container) return;
+  const items = [...container.querySelectorAll(":scope > button, :scope > a, :scope > details > summary")].filter(item => !item.disabled);
+  if (!items.length) return;
+  const current = items.indexOf(document.activeElement);
+  const next = event.key === "ArrowDown" ? (current + 1) % items.length : (current < 0 ? items.length - 1 : (current + items.length - 1) % items.length);
+  items[next].focus();
+  event.preventDefault();
+});
+// The recording controls belong to the live map cell so side panels never
+// consume the dock's width. Existing nodes and handlers are retained.
+document.querySelector(".canvas").append(document.querySelector(".recording-bar"));
+for (const group of document.querySelectorAll(".menu-groups > .menu")) {
+  group.addEventListener("toggle", () => {
+    if (group.open) for (const sibling of group.parentElement.children) if (sibling !== group) sibling.open = false;
+  });
+}
+// A menu item may open a dialog after its menu closes. Return focus to the
+// visible menu trigger when that dialog is dismissed.
+document.addEventListener("click", event => {
+  const button = event.target.closest(".menu button");
+  if (!button) return;
+  const menu = button.closest(".menu");
+  const root = button.closest(".header-menu-root");
+  const trigger = root && innerWidth <= 1100 ? root.querySelector(":scope > summary") : menu.querySelector(":scope > summary");
+  const previouslyOpen = new Set(document.querySelectorAll("dialog[open]"));
+  queueMicrotask(() => {
+    for (const dialog of document.querySelectorAll("dialog[open]")) {
+      if (!previouslyOpen.has(dialog)) dialog.addEventListener("close", () => trigger?.focus(), {once:true});
+    }
+  });
+}, true);
