@@ -73,6 +73,12 @@ func compressed(b []byte) []byte {
 	return out.Bytes()
 }
 func (s *Store) initPresentation() error {
+	// An older browser may still hold responses across a Command upgrade. Preserve
+	// those pins until its explicit close; heartbeat expiry is not a closed page.
+	var hadLivePins int
+	if e := s.db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='presentation_asset_live'`).Scan(&hadLivePins); e != nil {
+		return e
+	}
 	for _, q := range []string{
 		`CREATE TABLE IF NOT EXISTS presentation_runtime(id INTEGER PRIMARY KEY CHECK(id=1),last_alive TEXT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS presentation_participants(recording TEXT NOT NULL,device TEXT NOT NULL,party TEXT NOT NULL,PRIMARY KEY(recording,device))`,
@@ -88,6 +94,9 @@ func (s *Store) initPresentation() error {
 		`CREATE TABLE IF NOT EXISTS saved_recordings(id TEXT PRIMARY KEY,metadata TEXT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS saved_library(id TEXT PRIMARY KEY,metadata TEXT NOT NULL,deleted INTEGER NOT NULL DEFAULT 0)`,
 		`CREATE TABLE IF NOT EXISTS saved_gc_done(snapshot TEXT PRIMARY KEY)`,
+		`CREATE TABLE IF NOT EXISTS saved_gc_candidates(snapshot TEXT,hash TEXT,kind TEXT,PRIMARY KEY(snapshot,hash,kind))`,
+		`CREATE TABLE IF NOT EXISTS saved_gc_phase(snapshot TEXT PRIMARY KEY,stage INTEGER NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS presentation_asset_live(hash TEXT PRIMARY KEY)`,
 		`CREATE TABLE IF NOT EXISTS saved_library_revisions(id TEXT,revision INTEGER,metadata TEXT,deleted INTEGER,at TEXT,PRIMARY KEY(id,revision))`,
 		`CREATE TABLE IF NOT EXISTS saved_presentation(snapshot TEXT NOT NULL,ordinal INTEGER NOT NULL,data TEXT NOT NULL,PRIMARY KEY(snapshot,ordinal))`,
 		`DROP INDEX IF EXISTS saved_display_clock`,
@@ -108,6 +117,11 @@ func (s *Store) initPresentation() error {
 			return e
 		}
 	}
+	if hadLivePins == 0 {
+		if _, e := s.db.Exec(`INSERT OR IGNORE INTO presentation_asset_live SELECT hash FROM presentation_assets WHERE EXISTS(SELECT 1 FROM presentation_meta WHERE COALESCE(json_extract(lease,'$.closed'),0)=0)`); e != nil {
+			return e
+		}
+	}
 	for _, table := range []string{"saved_recordings", "saved_presentation", "saved_originals", "saved_assets", "presentation_blobs", "presentation_assets", "presentation_journal"} {
 		for _, op := range []string{"UPDATE", "DELETE"} {
 			if _, e := s.db.Exec(fmt.Sprintf("DROP TRIGGER IF EXISTS immutable_%s_%s", table, op)); e != nil {
@@ -124,7 +138,7 @@ func (s *Store) initPresentation() error {
 				condition = " WHEN NOT EXISTS(SELECT 1 FROM presentation_gc WHERE hash=OLD.hash)"
 			}
 			if table == "presentation_assets" && op == "DELETE" {
-				condition = " WHEN EXISTS(SELECT 1 FROM saved_assets WHERE hash=OLD.hash) OR EXISTS(SELECT 1 FROM presentation_asset_refs WHERE hash=OLD.hash AND recording=(SELECT json_extract(data,'$.recording.recording_id') FROM state WHERE id=1))"
+				condition = " WHEN EXISTS(SELECT 1 FROM presentation_asset_live WHERE hash=OLD.hash) OR EXISTS(SELECT 1 FROM saved_assets WHERE hash=OLD.hash) OR EXISTS(SELECT 1 FROM presentation_asset_refs WHERE hash=OLD.hash AND recording=(SELECT json_extract(data,'$.recording.recording_id') FROM state WHERE id=1))"
 			}
 			if _, e := s.db.Exec(fmt.Sprintf(`CREATE TRIGGER IF NOT EXISTS immutable_%s_%s BEFORE %s ON %s%s BEGIN SELECT RAISE(ABORT,'immutable recording evidence'); END`, table, op, op, table, condition)); e != nil {
 				return e
@@ -422,6 +436,9 @@ func (s *Store) presentationOperation(op string, r presentationRequest) (any, er
 			l.Seen = now
 			result = l
 		case "close":
+			if _, e = tx.Exec(`DELETE FROM presentation_asset_live`); e != nil {
+				return nil, e
+			}
 			l.Closed = true
 			l.Seen = now
 			if st.Recording != nil {
@@ -987,6 +1004,7 @@ func presentationParticipants(tx receiptSQL, st State) error {
 // with false precision. SQLite failure leaves the older uncertainty bound intact.
 func (s *Store) presentationRuntime() {
 	defer close(s.presentationDone)
+	gcCursor := ""
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -995,6 +1013,18 @@ func (s *Store) presentationRuntime() {
 			return
 		case <-ticker.C:
 			_, _ = s.db.Exec(`UPDATE presentation_runtime SET last_alive=? WHERE id=1`, time.Now().UTC().Format(time.RFC3339Nano))
+			// Retry only authorized tombstones, yielding to Save and durable receipt.
+			if s.saveMu.TryLock() {
+				var sid string
+				e := s.db.QueryRow(`SELECT id FROM saved_library WHERE deleted=1 AND id>? AND NOT EXISTS(SELECT 1 FROM saved_gc_done WHERE snapshot=id) ORDER BY id LIMIT 1`, gcCursor).Scan(&sid)
+				if e == nil {
+					gcCursor = sid
+					_ = s.reclaimSnapshot(sid)
+				} else {
+					gcCursor = ""
+				}
+				s.saveMu.Unlock()
+			}
 		}
 	}
 }
@@ -1012,8 +1042,20 @@ func (s *Store) pinServedAsset(b []byte) (string, error) {
 	hash := digest(b)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, e := s.db.Exec(`INSERT OR IGNORE INTO presentation_assets VALUES(?,?,?)`, hash, b, len(b))
-	return hash, e
+	tx, e := s.db.Begin()
+	if e != nil {
+		return "", e
+	}
+	defer tx.Rollback()
+	if _, e = tx.Exec(`INSERT OR IGNORE INTO presentation_assets VALUES(?,?,?)`, hash, b, len(b)); e != nil {
+		return "", e
+	}
+	// Reserve even before the renderer confirms the response, including outside a
+	// recording. Close releases this single-browser reservation transactionally.
+	if _, e = tx.Exec(`INSERT OR IGNORE INTO presentation_asset_live VALUES(?)`, hash); e != nil {
+		return "", e
+	}
+	return hash, tx.Commit()
 }
 func presentationAssetPath(r *http.Request) bool {
 	if r.Method != "GET" || !strings.HasPrefix(r.URL.Path, "/local/maps/") {

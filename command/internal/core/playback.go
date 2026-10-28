@@ -390,16 +390,18 @@ func (s *Store) initPlaybackIndex() error {
 		cursorHash = hash
 	}
 	// Resume interrupted resource reclamation before accepting traffic.
+	gcCursor := ""
 	for {
 		var sid string
-		err := s.db.QueryRow(`SELECT id FROM saved_library WHERE deleted=1 AND NOT EXISTS(SELECT 1 FROM saved_gc_done WHERE snapshot=id) ORDER BY id LIMIT 1`).Scan(&sid)
+		err := s.db.QueryRow(`SELECT id FROM saved_library WHERE deleted=1 AND id>? AND NOT EXISTS(SELECT 1 FROM saved_gc_done WHERE snapshot=id) ORDER BY id LIMIT 1`, gcCursor).Scan(&sid)
 		if errors.Is(err, sql.ErrNoRows) {
 			break
 		}
 		if err != nil {
 			return err
 		}
-		if err = s.reclaimSnapshot(sid); err != nil {
+		gcCursor = sid
+		if err = s.reclaimSnapshot(sid); err != nil && !errors.Is(err, errSnapshotAssetsInUse) {
 			return err
 		}
 	}

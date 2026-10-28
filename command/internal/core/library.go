@@ -124,9 +124,39 @@ func (s *Store) libraryHTTP(w http.ResponseWriter, r *http.Request) {
 	respond(w, 200, map[string]bool{"committed": true})
 }
 
-// Delete in yielding chunks so durable phone receipt can run between batches.
-// saveMu protects in-flight snapshot staging, while mu covers each short write.
+var errSnapshotAssetsInUse = errors.New("snapshot removed; asset cleanup waits for the live view or current recording to release its pins")
+
+// Candidates are captured durably before removing snapshot references. Cleanup
+// never sweeps unrelated response pins or blobs, and resumes safely after death.
+// saveMu protects Save staging; each short mu section yields to phone receipt.
 func (s *Store) reclaimSnapshot(sid string) error {
+	s.mu.Lock()
+	tx, e := s.db.Begin()
+	if e == nil {
+		var n int
+		e = tx.QueryRow(`SELECT COUNT(*) FROM saved_gc_phase WHERE snapshot=?`, sid).Scan(&n)
+		if e == nil && n == 0 {
+			_, e = tx.Exec(`INSERT OR IGNORE INTO saved_gc_candidates SELECT snapshot,hash,'asset' FROM saved_assets WHERE snapshot=?`, sid)
+			if e == nil {
+				_, e = tx.Exec(`INSERT OR IGNORE INTO saved_gc_candidates WITH RECURSIVE owned(hash) AS (
+      SELECT json_extract(data,'$.Data.hash') FROM saved_presentation WHERE snapshot=? AND json_extract(data,'$.Kind')='display'
+      UNION SELECT l.base FROM presentation_blob_links l JOIN owned r ON l.hash=r.hash WHERE l.base!=''
+     ) SELECT ?,hash,'blob' FROM owned WHERE hash IS NOT NULL`, sid, sid)
+			}
+			if e == nil {
+				_, e = tx.Exec(`INSERT INTO saved_gc_phase VALUES(?,0)`, sid)
+			}
+		}
+		if e == nil {
+			e = tx.Commit()
+		} else {
+			tx.Rollback()
+		}
+	}
+	s.mu.Unlock()
+	if e != nil {
+		return e
+	}
 	for _, table := range []string{"saved_visibility", "saved_visibility_ready", "saved_presentation", "saved_originals", "saved_assets"} {
 		for {
 			s.mu.Lock()
@@ -146,7 +176,11 @@ func (s *Store) reclaimSnapshot(sid string) error {
 	}
 	for {
 		s.mu.Lock()
-		result, e := s.db.Exec(`DELETE FROM presentation_assets WHERE hash IN (SELECT hash FROM presentation_assets WHERE NOT EXISTS(SELECT 1 FROM saved_assets WHERE hash=presentation_assets.hash) AND NOT EXISTS(SELECT 1 FROM presentation_asset_refs WHERE hash=presentation_assets.hash AND recording=(SELECT json_extract(data,'$.recording.recording_id') FROM state WHERE id=1)) LIMIT 64)`)
+		result, e := s.db.Exec(`DELETE FROM presentation_assets WHERE hash IN (
+   SELECT c.hash FROM saved_gc_candidates c WHERE snapshot=? AND kind='asset'
+   AND NOT EXISTS(SELECT 1 FROM saved_assets WHERE hash=c.hash)
+   AND NOT EXISTS(SELECT 1 FROM presentation_asset_live WHERE hash=c.hash)
+   AND NOT EXISTS(SELECT 1 FROM presentation_asset_refs WHERE hash=c.hash AND recording=(SELECT json_extract(data,'$.recording.recording_id') FROM state WHERE id=1)) LIMIT 64)`, sid)
 		s.mu.Unlock()
 		if e != nil {
 			return e
@@ -161,26 +195,53 @@ func (s *Store) reclaimSnapshot(sid string) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	tx, e := s.db.Begin()
+	tx, e = s.db.Begin()
 	if e != nil {
 		return e
 	}
 	defer tx.Rollback()
-	_, e = tx.Exec(`INSERT OR IGNORE INTO presentation_gc WITH RECURSIVE live(hash) AS (
- SELECT json_extract(data,'$.hash') FROM presentation_journal WHERE kind='display'
- UNION SELECT json_extract(data,'$.Data.hash') FROM saved_presentation WHERE json_extract(data,'$.Kind')='display'
- UNION SELECT l.base FROM presentation_blob_links l JOIN live r ON l.hash=r.hash WHERE l.base!=''
- ) SELECT hash FROM presentation_blobs WHERE hash NOT IN (SELECT hash FROM live WHERE hash IS NOT NULL)`)
-	if e != nil {
+	var stage int
+	if e = tx.QueryRow(`SELECT stage FROM saved_gc_phase WHERE snapshot=?`, sid).Scan(&stage); e != nil {
 		return e
 	}
-	for _, q := range []string{`DELETE FROM presentation_blobs WHERE hash IN (SELECT hash FROM presentation_gc)`, `DELETE FROM presentation_blob_links WHERE hash IN (SELECT hash FROM presentation_gc)`, `DELETE FROM presentation_gc`, `UPDATE presentation_usage SET bytes=(SELECT COALESCE(SUM(length(data)),0) FROM presentation_blobs) WHERE id=1`} {
-		if _, e = tx.Exec(q); e != nil {
+	if stage == 0 {
+		_, e = tx.Exec(`INSERT OR IGNORE INTO presentation_gc WITH RECURSIVE live(hash) AS (
+   SELECT json_extract(data,'$.hash') FROM presentation_journal WHERE kind='display'
+   UNION SELECT json_extract(data,'$.Data.hash') FROM saved_presentation WHERE json_extract(data,'$.Kind')='display'
+   UNION SELECT l.base FROM presentation_blob_links l JOIN live r ON l.hash=r.hash WHERE l.base!=''
+   ) SELECT hash FROM saved_gc_candidates WHERE snapshot=? AND kind='blob' AND hash NOT IN (SELECT hash FROM live WHERE hash IS NOT NULL)`, sid)
+		if e != nil {
+			return e
+		}
+		for _, q := range []string{`DELETE FROM presentation_blobs WHERE hash IN (SELECT hash FROM presentation_gc)`, `DELETE FROM presentation_blob_links WHERE hash IN (SELECT hash FROM presentation_gc)`, `DELETE FROM presentation_gc`, `UPDATE presentation_usage SET bytes=(SELECT COALESCE(SUM(length(data)),0) FROM presentation_blobs) WHERE id=1`} {
+			if _, e = tx.Exec(q); e != nil {
+				return e
+			}
+		}
+		if _, e = tx.Exec(`UPDATE saved_gc_phase SET stage=1 WHERE snapshot=?`, sid); e != nil {
 			return e
 		}
 	}
-	if _, e = tx.Exec(`INSERT OR IGNORE INTO saved_gc_done VALUES(?)`, sid); e != nil {
+	var pending int
+	// Other saved recordings take over ownership; live/unsaved use postpones final
+	// reclamation rather than erasing bytes still needed by an open browser.
+	e = tx.QueryRow(`SELECT COUNT(*) FROM saved_gc_candidates c JOIN presentation_assets a ON a.hash=c.hash WHERE c.snapshot=? AND c.kind='asset' AND NOT EXISTS(SELECT 1 FROM saved_assets WHERE hash=c.hash)`, sid).Scan(&pending)
+	if e != nil {
 		return e
 	}
-	return tx.Commit()
+	if pending == 0 {
+		if _, e = tx.Exec(`INSERT OR IGNORE INTO saved_gc_done VALUES(?)`, sid); e != nil {
+			return e
+		}
+		if _, e = tx.Exec(`DELETE FROM saved_gc_candidates WHERE snapshot=?`, sid); e != nil {
+			return e
+		}
+	}
+	if e = tx.Commit(); e != nil {
+		return e
+	}
+	if pending != 0 {
+		return errSnapshotAssetsInUse
+	}
+	return nil
 }

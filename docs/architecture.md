@@ -670,7 +670,12 @@ store. `saved_library_revisions` is append-only; sealed #27 receipts are not ren
 in place. Library retirement authorizes deletion of that snapshot's references and
 selected-original copies, never operational raw/SOS rows or another snapshot. Pin
 reclamation retains every remaining snapshot and the current unsaved recording's
-ownership. Blob mark/sweep retains all original journal roots, remaining saved roots
+ownership, plus served responses reserved by the exclusive live browser until its
+explicit close. Reservations persist across Command restart and cover the response
+before render confirmation, not just journal references. Durable per-snapshot GC
+candidates are captured before releasing references; unrelated orphan response pins
+and blobs are never swept by a Library Delete. Pending live-owned candidates are
+retried by the existing liveness worker after release. Blob mark/sweep retains all original journal roots, remaining saved roots
 and their bounded delta ancestors; only unreachable snapshot graphs can be released.
 Save and Delete share the existing Save mutex to protect unpublished staging. Row
 cleanup yields between batches, and incomplete retirement cleanup resumes at startup.

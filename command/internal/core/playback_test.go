@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http/httptest"
 	"runtime"
@@ -145,6 +146,19 @@ func TestLibraryReclamationPreservesSharedPinsAndOperationalData(t *testing.T) {
 		t.Fatal(e)
 	}
 	action(t, s, "discard")
+	// Neither an unrelated response pin nor an unrelated unstaged blob belongs to
+	// either saved snapshot, even if no recording currently references it.
+	unrelatedAsset, e := s.pinServedAsset([]byte("unrelated served response"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	unrelatedBlob, e := putPresentationBlob(s.db, []byte(`{"unrelated":true}`), "", "unrelated-test")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = s.presentationOperation("close", r); e != nil {
+		t.Fatal(e)
+	}
 	remove := func(id string) {
 		t.Helper()
 		req := httptest.NewRequest("POST", "http://localhost/local/presentation/library", strings.NewReader(marshal(map[string]any{"id": id, "action": "delete", "confirmed": true})))
@@ -169,6 +183,11 @@ func TestLibraryReclamationPreservesSharedPinsAndOperationalData(t *testing.T) {
 	_ = s.db.QueryRow(`SELECT COUNT(*) FROM presentation_assets WHERE hash=?`, hash).Scan(&count)
 	if count != 0 {
 		t.Fatal("unreferenced pinned asset retained")
+	}
+	for _, check := range []struct{ table, hash string }{{"presentation_assets", unrelatedAsset}, {"presentation_blobs", unrelatedBlob}} {
+		if e = s.db.QueryRow("SELECT COUNT(*) FROM "+check.table+" WHERE hash=?", check.hash).Scan(&count); e != nil || count != 1 {
+			t.Fatalf("unrelated %s reclaimed: count=%d error=%v", check.table, count, e)
+		}
 	}
 	_ = s.db.QueryRow(`SELECT COUNT(*) FROM raw`).Scan(&count)
 	if count != 1 {
@@ -273,5 +292,80 @@ func TestPlaybackInterruptionResumesAtFirstConfirmedDisplay(t *testing.T) {
 	}
 	if len(manifest.Groups) != 1 || !manifest.Groups[0].SkipUntil.Equal(start.Add(2*time.Second)) {
 		t.Fatalf("first resumed rendered state skipped: %+v", manifest.Groups)
+	}
+}
+
+// A response may be on the live browser's screen (or in flight to it) before
+// its next #27 confirmation. Deleting a different saved use cannot erase it.
+func TestLibraryReclamationDefersLivePinsAcrossRestart(t *testing.T) {
+	s, now, path := open(t)
+	ingest(t, s, message(t, 1, 0, 0, 0, 1))
+	r := claimPresentation(t, s)
+	action(t, s, "start")
+	r = confirmPresentation(t, s, r, 1, *now)
+	hash, e := s.pinServedAsset([]byte(`{"map":"live response"}`))
+	if e != nil {
+		t.Fatal(e)
+	}
+	r.Revision = 2
+	r.State.Assets = []string{hash}
+	r.State.MapID = "live-map"
+	if _, e = s.presentationOperation("confirm", r); e != nil {
+		t.Fatal(e)
+	}
+	r.Included, r.Name = []string{device}, "Snapshot sharing live response"
+	value, e := s.presentationOperation("save", r)
+	if e != nil {
+		t.Fatal(e)
+	}
+	sid := value.(map[string]any)["id"].(string)
+	action(t, s, "discard")
+	if _, e = s.db.Exec(`INSERT INTO saved_library VALUES(?, '{}', 1)`, sid); e != nil {
+		t.Fatal(e)
+	}
+	s.saveMu.Lock()
+	e = s.reclaimSnapshot(sid)
+	s.saveMu.Unlock()
+	if !errors.Is(e, errSnapshotAssetsInUse) {
+		t.Fatalf("live response must postpone reclamation: %v", e)
+	}
+	var count int
+	if e = s.db.QueryRow(`SELECT COUNT(*) FROM presentation_assets WHERE hash=?`, hash).Scan(&count); e != nil || count != 1 {
+		t.Fatalf("live pin lost: %v", e)
+	}
+	// Even accidental direct deletes are blocked while the live page owns it.
+	if _, e = s.db.Exec(`DELETE FROM presentation_assets WHERE hash=?`, hash); e == nil {
+		t.Fatal("live asset deletion was permitted")
+	}
+	s.Close()
+	s, e = Open(path)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer s.Close()
+	if e = s.db.QueryRow(`SELECT COUNT(*) FROM presentation_assets WHERE hash=?`, hash).Scan(&count); e != nil || count != 1 {
+		t.Fatalf("restart lost live response: %v", e)
+	}
+	r = claimPresentation(t, s)
+	if _, e = s.presentationOperation("close", r); e != nil {
+		t.Fatal(e)
+	}
+	// The existing liveness worker finishes authorized pending cleanup without
+	// another Delete request, including after Command process restart.
+	deadline := time.Now().Add(8 * time.Second)
+	for time.Now().Before(deadline) {
+		if e = s.db.QueryRow(`SELECT COUNT(*) FROM saved_gc_done WHERE snapshot=?`, sid).Scan(&count); e != nil {
+			t.Fatal(e)
+		}
+		if count == 1 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if count != 1 {
+		t.Fatal("pending reclamation never resumed")
+	}
+	if e = s.db.QueryRow(`SELECT COUNT(*) FROM presentation_assets WHERE hash=?`, hash).Scan(&count); e != nil || count != 0 {
+		t.Fatalf("released response retained: %v", e)
 	}
 }

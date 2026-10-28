@@ -1153,7 +1153,11 @@ captured interruptions. Edit changes only name, descriptive date/time/timezone a
 description; actual timestamps and sealed receipts remain immutable. Confirmed Delete
 removes the library entry, its selected-original copies, presentation references and
 unshared pins. Operational GNSS/SOS remain retained. Cleanup yields between row batches;
-interrupted cleanup resumes at startup. A committed removal with pending cleanup is
+interrupted cleanup resumes at startup. Only that snapshot's durable reclamation
+candidates are considered. Response pins still held by the current recording or live
+browser (including responses awaiting render confirmation) remain protected; the
+existing liveness worker retries after those owners release them. Browser heartbeat
+expiry alone does not release live map pins. A committed removal with pending cleanup is
 reported explicitly. Descriptive changes have an append-only revision history.
 
 **Open** reuses Command's map, Parties and Details panels. A single timeline inside
