@@ -510,10 +510,36 @@ async function wait(fn) {
     assert(boxes.timeline.right <= boxes.map.right);
     assert(boxes.timeline.x >= boxes.left.right);
     assert(boxes.timeline.right <= boxes.right.x);
+    async function assertPlaybackLayout() {
+      const problems = await page.evaluate(() => {
+        const map = document.querySelector('.canvas').getBoundingClientRect();
+        const timeline = document.querySelector('#playback-timeline').getBoundingClientRect();
+        const toolbar = document.querySelector('.canvas-toolbar');
+        const items = [...toolbar.querySelectorAll('button'), toolbar.firstElementChild];
+        const boxes = items.map(e => e.getBoundingClientRect());
+        const overlap = (a, b) => a.left < b.right - 1 && a.right > b.left + 1 && a.top < b.bottom - 1 && a.bottom > b.top + 1;
+        const errors = [];
+        boxes.forEach((r, i) => {
+          if (r.left < map.left - 1 || r.right > map.right + 1) errors.push('toolbar outside map');
+          boxes.slice(i + 1).forEach(b => { if (overlap(r, b)) errors.push('toolbar overlap'); });
+        });
+        for (const e of document.querySelectorAll('#playback-timeline > *')) {
+          const r = e.getBoundingClientRect();
+          if (r.width && (r.left < timeline.left - 1 || r.right > timeline.right + 1 || r.bottom > timeline.bottom + 1)) errors.push('timeline child outside');
+        }
+        const sos = document.querySelector('#playback-sos');
+        if (!sos.hidden && overlap(sos.getBoundingClientRect(), timeline)) errors.push('SOS overlaps timeline');
+        if (timeline.left < map.left - 1 || timeline.right > map.right + 1 || timeline.bottom > map.bottom + 1) errors.push('timeline outside map');
+        return errors;
+      });
+      assert.deepEqual(problems, []);
+    }
+    await assertPlaybackLayout();
     await page.screenshot({
       path: path.join(out, `playback-day-${width}.png`),
     });
     await page.locator("#appearance").click();
+    await assertPlaybackLayout();
     await page.screenshot({
       path: path.join(out, `playback-night-${width}.png`),
     });
@@ -533,9 +559,14 @@ async function wait(fn) {
         return t.left >= m.left && t.right <= m.right;
       });
       assert(bounds, "timeline must resize for either individual panel");
+      await assertPlaybackLayout();
       await page.screenshot({
         path: path.join(out, `playback-${control}-only-${width}.png`),
       });
+      await page.locator("#appearance").click();
+      await assertPlaybackLayout();
+      await page.screenshot({ path: path.join(out, `playback-night-${control}-only-${width}.png`) });
+      await page.locator("#appearance").click();
     }
   }
   await page.locator("#follow-original").uncheck();

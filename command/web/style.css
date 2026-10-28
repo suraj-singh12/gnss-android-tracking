@@ -2316,3 +2316,42 @@ body.playback #stopped-choice {
     grid-template-columns: 0 minmax(0, 1fr) 0;
   }
 }
+
+/* Playback controls adapt to the actual map cell as either sidebar changes. */
+body.playback .canvas { container-type: inline-size; }
+@container (max-width: 760px) {
+  body.playback .canvas-toolbar { align-items: flex-start; flex-direction: column; gap: 4px; }
+  body.playback .canvas-toolbar > div { flex-wrap: wrap; max-width: 100%; }
+  body.playback #playback-status { top: 112px; right: 12px; }
+  body.playback #playback-sos { bottom: 210px; }
+  body.playback #playback-timeline {
+    left: 8px; right: 8px; padding: 8px; gap: 6px;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-rows: auto auto auto;
+  }
+  body.playback .playback-time { grid-column: 1 / 3; grid-row: 1; min-width: 0; }
+  body.playback #playback-facts { grid-column: 3; grid-row: 1; }
+  body.playback #playback-seek { grid-column: 1 / -1; grid-row: 2; min-width: 0; }
+  body.playback #playback-elapsed { grid-column: 1; grid-row: 3; }
+  body.playback .playback-buttons { grid-column: 2; grid-row: 3; gap: 4px; }
+  body.playback #playback-timeline label { grid-column: 3; grid-row: 3; }
+  body.playback #playback-start { display: block; grid-column: 1 / -1; grid-row: 4; max-width: none; }
+}
+@container (max-width: 430px) {
+  body.playback #playback-sos { bottom: 250px; }
+  body.playback #playback-timeline { grid-template-columns: minmax(0, 1fr) auto; }
+  body.playback .playback-time { grid-column: 1; }
+  body.playback #playback-facts { grid-column: 2; }
+  body.playback .playback-buttons { grid-column: 1 / -1; grid-row: 4; justify-content: center; }
+  body.playback #playback-timeline label { grid-column: 2; grid-row: 3; }
+  body.playback #playback-start { grid-row: 5; }
+}
+@media (max-width: 900px) {
+  @container (min-width: 761px) {
+    body.playback #playback-timeline { grid-template-columns: minmax(145px, 1fr) auto auto auto; }
+    body.playback #playback-seek { grid-column: 2 / 4; min-width: 120px; }
+    body.playback #playback-facts { grid-column: 4; }
+    body.playback #playback-start { display: block; grid-column: 4; grid-row: 2; }
+    body.playback #playback-timeline label { grid-column: 3; }
+  }
+}
