@@ -109,6 +109,7 @@ async function examine(page, label) {
   await until(async()=> (await fetch(dashboard+"/local/state")).ok, "Command start");
   browser=await chromium.launch({headless:true,args:["--no-sandbox"]});
   const page=await browser.newPage({viewport:{width:1280,height:720},timezoneId:"Asia/Kolkata"});
+  page.setDefaultTimeout(8000);
   page.on("pageerror",e=>report.browser_errors.push(e.message));
   await page.goto(dashboard);
   await until(async()=> /connected/i.test(await page.locator("#connection").innerText()),"browser connection");
@@ -145,9 +146,7 @@ async function examine(page, label) {
     await page.locator('[data-close="sos-panel"]').click();
     await page.locator("#open-map").click();
     await page.screenshot({path:path.join(out,"map-dialog-"+theme+"-1280.png")});
-    await page.locator('[data-close="map-modal"]').click().catch(async()=>{
-      await page.keyboard.press("Escape");
-    });
+    await page.locator('[data-close="map-settings"]').click();
   }
   // Zoom approximation is isolated and explicitly NOT labeled real browser zoom.
   await page.locator("#appearance").click();
