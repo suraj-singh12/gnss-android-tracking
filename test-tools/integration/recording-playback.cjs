@@ -37,6 +37,7 @@ async function headerAction(id) {
 }
 async function mapAction(id) { await page.locator(`#${id}`).click(); }
 async function openDetails() {
+  if (await page.locator('#close-details').isVisible()) await page.locator('#close-details').click();
   if (await page.locator('#collapse-parties').isVisible() === false) await page.locator('#toggle-parties').click();
   await page.locator('.historical-party-name:not(:disabled)').first().click();
 }
@@ -110,7 +111,7 @@ async function wait(fn) {
       assert.equal(r.status, 200, await r.text());
     }
   await page.evaluate(() => poll());
-  for (const [width, height] of [[1920,1080],[1440,900],[1280,720],[960,720],[390,844]]) {
+  for (const [width, height] of [[1920,1080],[1440,900],[1280,720],[1100,800],[960,720],[760,900],[390,844]]) {
     await page.setViewportSize({width, height});
     await page.evaluate(() => draw());
     const labels = await page.evaluate(() => {
@@ -524,16 +525,15 @@ async function wait(fn) {
     [1440, 900],
     [1920, 1080],
     [960, 720],
+    [760, 900],
+    [1100, 800],
     [390, 844],
   ]) {
     await page.setViewportSize({ width, height });
     await openDetails();
     await seek(timeline.duration);
-    await page.evaluate(() =>
-      document
-        .querySelector("main")
-        .classList.remove("details-closed", "parties-closed"),
-    );
+    if (width > 1100) await page.evaluate(() => document.querySelector("main").classList.remove("details-closed", "parties-closed"));
+    await page.waitForTimeout(100);
     const boxes = await page.evaluate(() => {
       const b = (s) => {
         const r = document.querySelector(s).getBoundingClientRect();
@@ -560,6 +560,16 @@ async function wait(fn) {
         const boxes = items.map(e => e.getBoundingClientRect());
         const overlap = (a, b) => a.left < b.right - 1 && a.right > b.left + 1 && a.top < b.bottom - 1 && a.bottom > b.top + 1;
         const errors = [];
+        for (const id of ['zoom-in','zoom-out','fit','focus-party','inspect-history','open-layers']) {
+          const node=document.getElementById(id), r=node.getBoundingClientRect();
+          if (!r.width || getComputedStyle(node).visibility==='hidden') errors.push(id+' unavailable');
+        }
+        const layers=document.querySelector('#open-layers').getBoundingClientRect();
+        const tools=toolbar.getBoundingClientRect();
+        if (Math.abs(layers.right-tools.right)>2 || Math.abs(layers.top-tools.top)>2) errors.push('Layers not top-right');
+        const status=document.querySelector('#playback-status').getBoundingClientRect();
+        const evidence=document.querySelector('#playback-evidence');
+        if (!evidence.hidden && evidence.getBoundingClientRect().top < status.bottom) errors.push('evidence overlaps status');
         boxes.forEach((r, i) => {
           if (r.left < map.left - 1 || r.right > map.right + 1) errors.push('toolbar outside map');
           boxes.slice(i + 1).forEach(b => { if (overlap(r, b)) errors.push('toolbar overlap'); });

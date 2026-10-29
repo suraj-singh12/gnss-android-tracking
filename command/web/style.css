@@ -2367,7 +2367,7 @@ header { flex-wrap: nowrap; padding: 0 12px; gap: 8px; }
 .menu { position: relative; }
 .menu summary { cursor: pointer; list-style: none; min-height: 40px; display: flex; align-items: center; padding: 7px 10px; border: 1px solid var(--control-line); border-radius: 7px; background: var(--surface); white-space: nowrap; }
 .menu summary::-webkit-details-marker { display: none; }
-.menu summary::after { content: ' ▾'; margin-left: 5px; }
+.menu summary::after { content: none; }
 .menu-content { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; min-width: 190px; max-width: min(90vw, 300px); padding: 5px; background: var(--surface); border: 1px solid var(--line); border-radius: 7px; box-shadow: 0 8px 24px #0003; }
 .menu-content button, .menu-content a { display: block; width: 100%; text-align: left; white-space: normal; border: 0; padding: 10px; color: var(--ink); font-size: 14px; text-decoration: none; }
 .menu-content button:hover, .menu-content a:hover { background: var(--hover); }
@@ -2539,3 +2539,33 @@ body:not(.playback) #projection-status, body.playback #playback-status { top:var
 }
 main.parties-closed .canvas-toolbar { left:38px; }
 @media (max-width:1100px) { .party-detail, body.playback .party-detail { right:0; } }
+
+/* Operator visual corrections: original direct control order, right alignment. */
+.canvas-toolbar, body.playback .canvas-toolbar { justify-content:space-between; flex-direction:row; align-items:flex-start; }
+.canvas-toolbar > span { display:block; flex:1; padding-top:10px; min-width:0; }
+.canvas-toolbar > div, body.playback .canvas-toolbar > div { justify-content:flex-end; flex-wrap:wrap; padding-right:75px; margin-left:auto; }
+#open-layers { position:absolute; top:0; right:0; }
+@container (max-width:850px) {
+ .canvas-toolbar > span { display:none; }
+ .canvas-toolbar > div, body.playback .canvas-toolbar > div { width:100%; }
+}
+.playback-context { position:absolute; left:12px; right:12px; top:var(--command-tools-height,70px); z-index:6; color:var(--muted); font-size:13px; }
+body.playback #playback-status { position:static; max-width:none; margin:0; font-size:13px; }
+#playback-evidence { position:static; max-width:none; margin:3px 0 0; padding:0; border:0; border-radius:0; background:transparent; box-shadow:none; }
+#playback-evidence summary { font-weight:600; font-size:13px; }
+#playback-evidence p { max-height:22dvh; overflow:auto; background:var(--surface); padding:8px; }
+@media (max-width:600px) {
+ :root { --command-detail-width:min(280px,72vw); }
+ .party-overview, body.playback .party-overview { width:min(280px,72vw); }
+}
+@media (max-width:1100px) {
+ .party-overview, .party-detail, body.playback .party-overview, body.playback .party-detail {
+  top:var(--command-panel-top,var(--command-tools-bottom,180px));
+  max-height:min(52dvh,calc(var(--command-dock-top,80dvh) - var(--command-panel-top,180px) - 12px));
+ }
+}
+@media (max-width:600px) {
+ .party-overview, .party-detail, body.playback .party-overview, body.playback .party-detail {
+  max-height:min(42dvh,calc(var(--command-dock-top,80dvh) - var(--command-panel-top,180px) - 12px));
+ }
+}

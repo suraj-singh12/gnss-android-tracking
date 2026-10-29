@@ -5,7 +5,7 @@ const {chromium} = require(process.env.GNSS_PLAYWRIGHT_MODULE || "playwright");
 (async () => {
   const browser = await chromium.launch({executablePath: process.env.GNSS_CHROMIUM || undefined, headless: true, args:["--no-sandbox"]});
   try {
-    for (const [width,height] of [[390,844],[960,720],[1280,720],[1440,900],[1920,1080]]) {
+    for (const [width,height] of [[390,844],[760,900],[960,720],[1100,800],[1280,720],[1440,900],[1920,1080]]) {
       const page = await browser.newPage({viewport:{width,height}});
       const errors=[]; page.on("pageerror", e => errors.push(e.message));
       await page.goto(process.env.GNSS_COMMAND_URL || "http://127.0.0.1:8081");
@@ -35,7 +35,7 @@ const {chromium} = require(process.env.GNSS_PLAYWRIGHT_MODULE || "playwright");
         assert.equal(await records.evaluate(e=>e.open),false);
         assert.equal(await records.locator(":scope > summary").evaluate(e=>e===document.activeElement),true);
         if (width <= 1100) await page.keyboard.press("Escape");
-        assert(await page.locator("#fit").isVisible());
+        for (const id of ["zoom-in","zoom-out","fit","focus-party","inspect-history","open-layers"]) assert(await page.locator(`#${id}`).isVisible());
       }
       assert.deepEqual(errors,[]); await page.close();
     }

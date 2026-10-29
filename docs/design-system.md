@@ -268,3 +268,13 @@ available. Browser sound readiness does not establish speaker volume or audibili
 Live map labels use deterministic collision avoidance with selected and unacknowledged SOS parties prioritized. Markers remain selectable and keyboard accessible; a visible density notice explains omitted labels and suggests zoom or selection. Historical Follow Original retains the recorded presentation rather than reflowing immutable evidence.
 
 Operator amendments to #59: Parties opens by default and collapses/restores through edge arrows. Details opens through party/marker selection and closes through its X. Map controls are direct, with Layers at the canvas top right. SOS and Event History share the responsive Details width. SOS cards retain event-specific actions and a persistent structured evidence disclosure across polling.
+
+Visual correction to #59: direct +/−, Fit, Focus, Inspect and Layers retain the
+right-aligned original order, with Layers at the upper right and the direction /
+map-mode label shown when the map cell has room. Menu triggers omit redundant
+chevrons; ordinary evidence disclosures retain their native single indicator.
+Playback uncertainty appears as informational text immediately beneath the frozen
+view status, with reasons and intervals in its disclosure. Narrow right panels
+share a compact width and are bounded between the map controls/context and dock,
+with internal scrolling. Superseded screenshot provenance is in
+`docs/design/issue59/README.md`.
