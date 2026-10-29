@@ -242,33 +242,68 @@ class SosEngineTest {
     fun wrongAckTimeoutAndReopenKeepIdentityUntilMatchingAck() = runBlocking {
         repository.settings("A", "B", "http://192.168.1.2", 10)
         val sos = engine().activate(SosTrigger.SCREEN).row
+        var wrongAckAttempts = 0
         val sender =
-            Sender(repository, Transport { _, json -> ack(json, true) }, clock, ::evidence) {
+            Sender(
+                repository,
+                Transport { _, json ->
+                    wrongAckAttempts++
+                    assertEquals(sos.json, json)
+                    ack(json, true)
+                },
+                clock,
+                ::evidence,
+            ) {
                 repository.snapshot(clock.now, null, Health())
             }
         sender.step()
+        assertEquals(1, wrongAckAttempts)
         assertNull(db.dao().row(sos.sequence)!!.deliveredAt)
         assertTrue(events.any { it.event == DiagnosticEvent.SOS_TRANSPORT_ACK_REJECTED })
         db.close()
         open()
         assertEquals(sos.json, db.dao().row(sos.sequence)!!.json)
-        clock.now += 1000
+
+        // Sender persists the actual retry deadline, including positive jitter.
+        // Fixed 1s/2s fake-clock jumps can silently skip either transport attempt.
+        val timeoutDue = db.dao().row(sos.sequence)!!.nextAttemptMillis
+        assertTrue(timeoutDue > clock.now)
+        clock.now = timeoutDue
+        var timeoutAttempts = 0
         val lost =
             Sender(
                 repository,
-                Transport { _, _ -> throw java.net.SocketTimeoutException() },
+                Transport { _, json ->
+                    timeoutAttempts++
+                    assertEquals(sos.json, json)
+                    throw java.net.SocketTimeoutException()
+                },
                 clock,
             ) {
                 repository.snapshot(clock.now, null, Health())
             }
         lost.step()
+        assertEquals(1, timeoutAttempts)
         assertNull(db.dao().row(sos.sequence)!!.deliveredAt)
-        clock.now += 2000
+
+        val recoveryDue = db.dao().row(sos.sequence)!!.nextAttemptMillis
+        assertTrue(recoveryDue > clock.now)
+        clock.now = recoveryDue
+        var recoveredAttempts = 0
         val recovered =
-            Sender(repository, Transport { _, json -> ack(json) }, clock) {
+            Sender(
+                repository,
+                Transport { _, json ->
+                    recoveredAttempts++
+                    assertEquals(sos.json, json)
+                    ack(json)
+                },
+                clock,
+            ) {
                 repository.snapshot(clock.now, null, Health())
             }
         recovered.step()
+        assertEquals(1, recoveredAttempts)
         assertNotNull(db.dao().row(sos.sequence)!!.deliveredAt)
         assertEquals(sos.json, db.dao().row(sos.sequence)!!.json)
     }
