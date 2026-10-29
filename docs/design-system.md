@@ -278,3 +278,10 @@ view status, with reasons and intervals in its disclosure. Narrow right panels
 share a compact width and are bounded between the map controls/context and dock,
 with internal scrolling. Superseded screenshot provenance is in
 `docs/design/issue59/README.md`.
+
+Final #59 density correction: at narrow widths (up to 1100 px), only Parties and
+Selected Party Details use reduced padding, card gaps and restrained 12–15 px
+text, retaining 40 px party-selection and dismissal targets. Historical inspection
+facts use compact, wrapping rows; panel widths and dock-aware scroll bounds are
+unchanged. Saved Recordings shares `--command-detail-width` at every breakpoint,
+with wrapping names, sorting and management actions inside its existing drawer.

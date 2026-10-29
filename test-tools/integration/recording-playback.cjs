@@ -34,12 +34,30 @@ async function headerAction(id) {
   const group = target.locator("xpath=ancestor::details[contains(@class, 'menu')][1]");
   if (!(await group.evaluate(e => e.open))) await group.locator(":scope > summary").click();
   await target.click();
+  if (id === 'open-library') await page.waitForFunction(() => !document.querySelector('#library-status').textContent.includes('Loading'));
 }
 async function mapAction(id) { await page.locator(`#${id}`).click(); }
 async function openDetails() {
   if (await page.locator('#close-details').isVisible()) await page.locator('#close-details').click();
   if (await page.locator('#collapse-parties').isVisible() === false) await page.locator('#toggle-parties').click();
   await page.locator('.historical-party-name:not(:disabled)').first().click();
+}
+const panelMeasurements = [];
+async function inspectPanel(selector, mode, width, theme) {
+  await page.waitForTimeout(120);
+  const facts = await page.locator(selector).evaluate(panel => {
+    const r=panel.getBoundingClientRect(), dock=document.querySelector(document.body.classList.contains('playback') ? '#playback-timeline' : '.recording-bar').getBoundingClientRect();
+    return {width:r.width, right:r.right, bottom:r.bottom, dockTop:dock.top, scrollWidth:panel.scrollWidth, clientWidth:panel.clientWidth, font:parseFloat(getComputedStyle(panel.querySelector('small, .historical-values') || panel).fontSize), padding:parseFloat(getComputedStyle(panel).paddingTop)};
+  });
+  assert(facts.width > 0 && facts.scrollWidth <= facts.clientWidth+1, `${selector} overflow: ${JSON.stringify(facts)}`);
+  if (width <= 1100) {
+    assert(facts.bottom <= facts.dockTop-10, `${selector} covers dock`);
+    assert(facts.font >= 12 && facts.font <= 13, 'panel text stays readable');
+    assert.equal(facts.padding,8);
+  }
+  panelMeasurements.push({mode,width,theme,selector,...facts});
+  fs.writeFileSync(path.join(out,'panel-measurements.json'),JSON.stringify(panelMeasurements,null,2));
+  return facts;
 }
 async function wait(fn) {
   for (let i = 0; i < 300; i++) {
@@ -111,7 +129,7 @@ async function wait(fn) {
       assert.equal(r.status, 200, await r.text());
     }
   await page.evaluate(() => poll());
-  for (const [width, height] of [[1920,1080],[1440,900],[1280,720],[1100,800],[960,720],[760,900],[390,844]]) {
+  for (const [width, height] of [[1920,1080],[1440,900],[1280,720],[1100,800],[960,720],[760,900],[430,900],[390,844]]) {
     await page.setViewportSize({width, height});
     await page.evaluate(() => draw());
     const labels = await page.evaluate(() => {
@@ -129,6 +147,19 @@ async function wait(fn) {
       return !!document.querySelector(`[data-party-label="${CSS.escape(id)}"]`);
     });
     assert(selectedVisible, "selected visible party must receive label priority");
+    for (const theme of ['day','night']) {
+      if (await page.locator('#close-details').isVisible()) await page.locator('#close-details').click();
+      if (!(await page.locator('#collapse-parties').isVisible())) await page.locator('#toggle-parties').click();
+      await inspectPanel('.party-overview','live',width,theme);
+      await page.screenshot({path:path.join(out,`live-${theme}-parties-${width}.png`)});
+      const party=page.locator('.party-select').first();
+      await party.scrollIntoViewIfNeeded();
+      await wait(async () => (await party.boundingBox())?.height >= 40);
+      await party.click();
+      await inspectPanel('.party-detail','live',width,theme);
+      await page.screenshot({path:path.join(out,`live-${theme}-details-${width}.png`)});
+      await headerAction('appearance');
+    }
     await page.screenshot({path: path.join(out, `live-day-${width}.png`)});
     await headerAction("appearance");
     await page.screenshot({path: path.join(out, `live-night-${width}.png`)});
@@ -346,22 +377,48 @@ async function wait(fn) {
   await headerAction("open-library");
   await page.getByRole("button", { name: "Open", exact: true }).waitFor();
   for (const [width, height] of [
-    [1280, 720],
-    [1440, 900],
+    [390,844], [430,900], [760,900], [960,720], [1280,720], [1440,900], [1920,1080],
   ]) {
     await page.setViewportSize({ width, height });
-    await page.screenshot({ path: path.join(out, `library-day-${width}.png`) });
+    const libraryWidth=await page.locator('#saved-library').evaluate(e=>e.getBoundingClientRect().width);
     await page.locator('[data-close="saved-library"]').click();
-    await headerAction("appearance");
-    await headerAction("open-library");
-    await page.getByRole("button", { name: "Open", exact: true }).waitFor();
-    await page.screenshot({
-      path: path.join(out, `library-night-${width}.png`),
-    });
-    await page.locator('[data-close="saved-library"]').click();
-    await headerAction("appearance");
-    await headerAction("open-library");
-    await page.getByRole("button", { name: "Open", exact: true }).waitFor();
+    if (await page.locator('#close-details').isVisible()) await page.locator('#close-details').click();
+    if (!(await page.locator('#collapse-parties').isVisible())) await page.locator('#toggle-parties').click();
+    await page.locator('.party-select').first().click();
+    const detailWidth=(await page.locator('.party-detail').boundingBox()).width;
+    assert(Math.abs(libraryWidth-detailWidth)<1, `library ${libraryWidth} != Details ${detailWidth} at ${width}`);
+    await headerAction('open-library');
+    for (const theme of ['day','night']) {
+      const overflow=await page.locator('#saved-library').evaluate(root=>[root,...root.querySelectorAll('#library-rows, .library-row, #library-selected, .library-sortline')].filter(e=>e.scrollWidth>e.clientWidth+1).map(e=>e.id || e.className));
+      assert.deepEqual(overflow,[], `library overflow ${width} ${theme}`);
+      const r=await page.locator('#saved-library').boundingBox();
+      assert(Math.abs(r.x+r.width-width)<1, 'library aligned right');
+      assert(Math.abs(r.width-detailWidth)<1);
+      panelMeasurements.push({mode:'library',width,theme,selector:'#saved-library',widthMeasured:r.width,detailWidth});
+      fs.writeFileSync(path.join(out,'panel-measurements.json'),JSON.stringify(panelMeasurements,null,2));
+      await page.locator('#library-search').fill('no-such-recording');
+      assert.equal(await page.locator('.library-row').count(),0);
+      await page.locator('#library-search').fill('');
+      await page.locator('#library-sort').selectOption('name');
+      assert.equal(await page.locator('.library-row').count(),1);
+      await page.locator('.library-more summary').click();
+      const editAction=page.getByRole('button',{name:'Edit metadata',exact:true});
+      await editAction.scrollIntoViewIfNeeded();
+      await editAction.click();
+      assert(await page.locator('#library-edit').evaluate(e=>e.open));
+      await page.keyboard.press('Escape');
+      assert.equal(await page.locator('#library-edit').evaluate(e=>e.open),false);
+      assert(await page.locator('#saved-library').evaluate(e=>e.open));
+      await editAction.scrollIntoViewIfNeeded();
+      await page.screenshot({path:path.join(out,`library-${theme}-actions-${width}.png`)});
+      await page.locator('.library-more summary').click();
+      await page.screenshot({path:path.join(out,`library-${theme}-${width}.png`)});
+      await page.keyboard.press('Escape');
+      assert.equal(await page.locator('#saved-library').evaluate(e=>e.open),false);
+      await headerAction('appearance');
+      await headerAction('open-library');
+    }
+
   }
   await page.getByRole("button", { name: "Open", exact: true }).click();
   await page.waitForFunction(() => window.HistoricalPlayback?.active);
@@ -527,11 +584,13 @@ async function wait(fn) {
     [960, 720],
     [760, 900],
     [1100, 800],
+    [430, 900],
     [390, 844],
   ]) {
     await page.setViewportSize({ width, height });
-    await openDetails();
     await seek(timeline.duration);
+    // Follow Original first restores recorded state; inspect through the sidebar afterwards.
+    await openDetails();
     if (width > 1100) await page.evaluate(() => document.querySelector("main").classList.remove("details-closed", "parties-closed"));
     await page.waitForTimeout(100);
     const boxes = await page.evaluate(() => {
@@ -585,11 +644,13 @@ async function wait(fn) {
       });
       assert.deepEqual(problems, []);
     }
+    const inspectedDetails=await inspectPanel('.party-detail','playback',width,'day');
     await assertPlaybackLayout();
     await page.screenshot({
       path: path.join(out, `playback-day-${width}.png`),
     });
     await headerAction("appearance");
+    await inspectPanel('.party-detail','playback',width,'night');
     await assertPlaybackLayout();
     await page.screenshot({
       path: path.join(out, `playback-night-${width}.png`),
@@ -614,14 +675,28 @@ async function wait(fn) {
         return t.left >= m.left && t.right <= m.right;
       });
       assert(bounds, "timeline must resize for either individual panel");
+      await inspectPanel(control === 'toggle-details' ? '.party-detail' : '.party-overview','playback',width,'day');
       await assertPlaybackLayout();
       await page.screenshot({
         path: path.join(out, `playback-${control}-only-${width}.png`),
       });
       await headerAction("appearance");
+      await inspectPanel(control === 'toggle-details' ? '.party-detail' : '.party-overview','playback',width,'night');
       await assertPlaybackLayout();
       await page.screenshot({ path: path.join(out, `playback-night-${control}-only-${width}.png`) });
       await headerAction("appearance");
+    }
+    for (const theme of ['day','night']) {
+      await headerAction('open-library');
+      const measured=await page.locator('#saved-library').evaluate(e=>({width:e.getBoundingClientRect().width,overflow:e.scrollWidth>e.clientWidth+1}));
+      assert(Math.abs(measured.width-inspectedDetails.width)<1, 'playback library must match Details');
+      assert.equal(measured.overflow,false);
+      assert(await page.evaluate(()=>window.HistoricalPlayback.active), 'library does not exit playback');
+      panelMeasurements.push({mode:'playback-library',width,theme,selector:'#saved-library',widthMeasured:measured.width,detailWidth:inspectedDetails.width});
+      fs.writeFileSync(path.join(out,'panel-measurements.json'),JSON.stringify(panelMeasurements,null,2));
+      await page.screenshot({path:path.join(out,`playback-library-${theme}-${width}.png`)});
+      await page.locator('[data-close="saved-library"]').click();
+      await headerAction('appearance');
     }
     await page.evaluate(() => document.querySelector("main").classList.remove("details-closed", "parties-closed"));
   }
