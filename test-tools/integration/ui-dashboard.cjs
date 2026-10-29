@@ -315,7 +315,7 @@ async function wait(check) {
   )
     await page.locator("#toggle-parties").click();
   if (
-    (await page.locator("#toggle-details").getAttribute("aria-expanded")) ===
+    (await page.locator("#close-details").getAttribute("aria-expanded")) ===
     "true"
   )
     await page.locator("#close-details").click();
@@ -332,7 +332,7 @@ async function wait(check) {
     path: path.join(out, "command-1440-map-dominant.png"),
     fullPage: true,
   });
-  await page.locator("#toggle-details").click();
+  await page.getByRole("button", {name:"Charlie", exact:true}).click();
   const before = await page
     .locator("[data-live-device]")
     .first()
@@ -811,7 +811,7 @@ async function wait(check) {
   assert.equal(await page.locator("#layers").isVisible(), false);
   assert.equal(
     await page
-      .locator(".map-tools > summary")
+      .locator("#open-layers")
       .evaluate((e) => e === document.activeElement),
     true,
   );
@@ -872,11 +872,10 @@ async function wait(check) {
   await wait(async () => (await state()).policy.maximum_accuracy_m === 50);
   assert.equal((await state()).policy.enabled.maximum_speed_mps, false);
   await page.locator('[data-close="quality"]').click();
-  if (
-    (await page.locator("#toggle-details").getAttribute("aria-expanded")) ===
-    "false"
-  )
-    await page.locator("#toggle-details").click();
+  if (!(await page.locator('#selected-detail .override input').isVisible())) {
+    if (!(await page.locator('#collapse-parties').isVisible())) await page.locator('#toggle-parties').click();
+    await page.locator('.party-select[aria-pressed="true"]').click();
+  }
   await page.locator("#selected-detail .override input").fill("15");
   await page.locator("#selected-detail .override button").first().click();
   await wait(
@@ -1014,7 +1013,7 @@ async function wait(check) {
     "toast dismissal does not silence emergencies",
   );
   await page.locator("#open-sos").click();
-  assert.equal(await page.locator(".sos-alert").count(), 2);
+  assert.equal(await page.locator(".sos-alert:not(.acknowledged)").count(), 2);
   await page
     .locator(".sos-alert button:not(:disabled)")
     .filter({ hasText: "Locate event observation" })

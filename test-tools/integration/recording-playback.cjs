@@ -35,10 +35,10 @@ async function headerAction(id) {
   if (!(await group.evaluate(e => e.open))) await group.locator(":scope > summary").click();
   await target.click();
 }
-async function mapAction(id) {
-  const menu = page.locator(".map-tools");
-  if (!(await menu.evaluate(e => e.open))) await menu.locator(":scope > summary").click();
-  await page.locator(`#${id}`).click();
+async function mapAction(id) { await page.locator(`#${id}`).click(); }
+async function openDetails() {
+  if (await page.locator('#collapse-parties').isVisible() === false) await page.locator('#toggle-parties').click();
+  await page.locator('.historical-party-name:not(:disabled)').first().click();
 }
 async function wait(fn) {
   for (let i = 0; i < 300; i++) {
@@ -527,7 +527,7 @@ async function wait(fn) {
     [390, 844],
   ]) {
     await page.setViewportSize({ width, height });
-    await page.locator("#toggle-details").click();
+    await openDetails();
     await seek(timeline.duration);
     await page.evaluate(() =>
       document
@@ -585,8 +585,8 @@ async function wait(fn) {
       path: path.join(out, `playback-night-${width}.png`),
     });
     await headerAction("appearance");
-    await page.locator("#toggle-parties").click();
-    await page.locator("#toggle-details").click();
+    if (await page.locator("#collapse-parties").isVisible()) await page.locator("#collapse-parties").click();
+    if (await page.locator("#close-details").isVisible()) await page.locator("#close-details").click();
     await page.screenshot({
       path: path.join(out, `playback-collapsed-${width}.png`),
     });
@@ -595,7 +595,7 @@ async function wait(fn) {
     await headerAction("appearance");
     for (const control of ["toggle-details", "toggle-parties"]) {
       await page.evaluate(() => document.querySelector("main").classList.add("details-closed", "parties-closed"));
-      await page.locator("#" + control).click();
+      if (control === "toggle-details") await openDetails(); else await page.locator("#toggle-parties").click();
       const bounds = await page.evaluate(() => {
         const t = document
             .querySelector("#playback-timeline")

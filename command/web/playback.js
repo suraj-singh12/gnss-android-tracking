@@ -359,7 +359,7 @@
       "aria-expanded",
       String(!main.classList.contains("parties-closed")),
     );
-    $("toggle-details").setAttribute(
+    $("close-details").setAttribute(
       "aria-expanded",
       String(!main.classList.contains("details-closed")),
     );

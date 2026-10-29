@@ -2509,3 +2509,33 @@ body:not(.playback) #map-detail-status { top: 92px; }
 #label-density { position: absolute; left: 12px; bottom: 145px; z-index: 3; max-width: calc(100% - 24px); padding: 6px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); font-size: 13px; color: var(--ink); pointer-events: none; }
 body.playback #label-density { display: none; }
 @media (max-width: 600px) { #label-density { bottom: 180px; } }
+/* Event and emergency drawers share the selected-detail width. */
+:root { --command-detail-width: 250px; }
+.drawer { width: min(var(--command-detail-width), 100vw); max-width: min(var(--command-detail-width), 100vw); overflow-x: hidden; overflow-wrap: anywhere; }
+@media (max-width: 1100px) { :root { --command-detail-width: min(320px, calc(100vw - 24px)); } }
+#toggle-parties { position:absolute; left:0; top:12px; z-index:8; min-width:30px; }
+main:not(.parties-closed) #toggle-parties { display:none; }
+.canvas-toolbar > div, body.playback .canvas-toolbar > div { flex-wrap:wrap; padding-right:75px; }
+#open-layers { position:absolute; right:0; top:0; }
+.sos-evidence dl { margin:0; }
+.sos-evidence dt { color:var(--muted); margin-top:8px; }
+.sos-evidence dd { margin:0; overflow-wrap:anywhere; }
+.sos-evidence h3 { font-size:14px; margin:16px 0 8px; }
+.sos-details p { margin:8px 0; }
+.party-detail { --effective-detail-width:var(--command-detail-width); }
+@media (max-width:1100px) {
+ .party-detail, body.playback .party-detail { width:var(--command-detail-width); }
+}
+body:not(.playback) #projection-status, body.playback #playback-status { top:var(--command-tools-height, 70px); }
+@media (max-width:1100px) {
+ .party-overview, .party-detail, body.playback .party-overview, body.playback .party-detail { top:var(--command-tools-bottom, 180px); max-height:calc(100dvh - var(--command-tools-bottom, 180px) - 160px); }
+}
+#layers { z-index:30; }
+@media (min-width:1101px) {
+ main, body.playback main { grid-template-columns:220px minmax(0,1fr) var(--command-detail-width); }
+ main.parties-closed, body.playback main.parties-closed { grid-template-columns:0 minmax(0,1fr) var(--command-detail-width); }
+ main.details-closed, body.playback main.details-closed { grid-template-columns:220px minmax(0,1fr) 0; }
+ main.details-closed.parties-closed, body.playback main.details-closed.parties-closed { grid-template-columns:0 minmax(0,1fr) 0; }
+}
+main.parties-closed .canvas-toolbar { left:38px; }
+@media (max-width:1100px) { .party-detail, body.playback .party-detail { right:0; } }

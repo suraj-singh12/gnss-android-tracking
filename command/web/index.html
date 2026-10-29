@@ -417,27 +417,11 @@
           >
         </p>
       </aside>
-      <section class="canvas" aria-label="Geographic workspace">
+      <section class="canvas" aria-label="Geographic workspace"><button id="toggle-parties" aria-label="Restore Parties sidebar" aria-expanded="true">›</button>
         <div class="canvas-toolbar">
           <span>N ↑ <span id="map-mode-label">Blank canvas</span></span>
           <div>
-            <button
-              id="toggle-parties"
-              aria-label="Toggle Parties sidebar"
-              aria-expanded="true"
-            >
-              Parties
-            </button>
-            <button
-              id="toggle-details"
-              aria-label="Toggle selected party details"
-              aria-expanded="false"
-            >
-              Details
-            </button>
-            <details class="menu map-tools"><summary>Map tools</summary><div class="menu-content">
             <button id="zoom-in" aria-label="Zoom in">+</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="fit">Fit parties</button><button id="focus-party">Focus selected</button><button id="inspect-history">Inspect history</button><button id="open-layers" title="Show or hide locally prepared terrain layers" aria-label="Map Layers" aria-expanded="false">Layers</button>
-            </div></details>
           </div>
         </div>
         <div id="playback-status" role="status" hidden></div>

@@ -11,7 +11,7 @@ const {chromium} = require(process.env.GNSS_PLAYWRIGHT_MODULE || "playwright");
       await page.goto(process.env.GNSS_COMMAND_URL || "http://127.0.0.1:8081");
       for (const theme of ["day","night"]) {
         await page.evaluate(t => localStorage.setItem("gnss-appearance",t), theme); await page.reload();
-        await page.waitForSelector("#toggle-parties");
+        await page.waitForSelector("#collapse-parties");
         const geometry = await page.evaluate(() => {
           const rect = selector => { const r=document.querySelector(selector).getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height,right:r.right,bottom:r.bottom}; };
           return {header:rect("header"),rail:rect(".recording-bar"),map:rect(".canvas"),sos:rect("#open-sos"),audio:rect("#sos-audio"), connection:rect("#connection"), menu:rect(".header-menu-root > summary")};
@@ -20,11 +20,12 @@ const {chromium} = require(process.env.GNSS_PLAYWRIGHT_MODULE || "playwright");
         assert(geometry.sos.right <= width && geometry.audio.right <= width);
         if (width <= 600) assert(geometry.connection.right <= geometry.menu.x, JSON.stringify(geometry));
         assert(geometry.map.width >= width * .6, JSON.stringify(geometry));
-        const parties = page.locator("#toggle-parties");
-        const before = await parties.getAttribute("aria-expanded");
-        await parties.click();
-        assert.notEqual(await parties.getAttribute("aria-expanded"), before);
-        await parties.click();
+        assert(await page.locator('#collapse-parties').isVisible());
+        await page.locator('#collapse-parties').click();
+        assert(await page.locator('#toggle-parties').isVisible());
+        await page.locator('#toggle-parties').click();
+        assert(await page.locator('#collapse-parties').isVisible());
+        assert.equal(await page.locator('#toggle-details, .map-tools').count(),0);
         const root=page.locator(".header-menu-root");
         if (!(await root.evaluate(e=>e.open))) await root.locator(":scope > summary").click();
         const records=page.locator(".menu-groups > details").nth(1);
@@ -34,9 +35,7 @@ const {chromium} = require(process.env.GNSS_PLAYWRIGHT_MODULE || "playwright");
         assert.equal(await records.evaluate(e=>e.open),false);
         assert.equal(await records.locator(":scope > summary").evaluate(e=>e===document.activeElement),true);
         if (width <= 1100) await page.keyboard.press("Escape");
-        await page.locator(".map-tools > summary").click();
         assert(await page.locator("#fit").isVisible());
-        await page.keyboard.press("Escape");
       }
       assert.deepEqual(errors,[]); await page.close();
     }

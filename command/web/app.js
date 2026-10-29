@@ -210,13 +210,9 @@ function detailsOpen(open) {
     $("toggle-parties").setAttribute("aria-expanded", "false");
   }
   document.querySelector("main").classList.toggle("details-closed", !open);
-  $("toggle-details").setAttribute("aria-expanded", String(open));
+  $("close-details").setAttribute("aria-expanded", String(open));
 }
-$("toggle-details").onclick = () =>
-  detailsOpen(
-    document.querySelector("main").classList.contains("details-closed"),
-  );
-$("close-details").onclick = () => { detailsOpen(false); $("toggle-details").focus(); };
+$("close-details").onclick = () => { detailsOpen(false); $("tracks").focus(); };
 $("toggle-parties").onclick = $("collapse-parties").onclick = () => {
   const closed = document
     .querySelector("main")
@@ -254,7 +250,7 @@ function renderSOS() {
     $("sos-toast").hidden = false;
   }
   if (!pending) $("sos-toast").hidden = true;
-  const summary = `${pending} unacknowledged · ${alerts.length - pending} acknowledged. Receipt and operator acknowledgement are separate. Recording controls retain SOS.`;
+  const summary = `${pending} unacknowledged · ${alerts.length - pending} acknowledged.`;
   if ($("sos-summary").textContent !== summary)
     $("sos-summary").textContent = summary;
   // Reuse event-specific nodes so polling never removes keyboard focus or changes
@@ -264,7 +260,7 @@ function renderSOS() {
     ? document.activeElement
     : null;
   let index = 0;
-  for (const a of alerts.filter((a) => !a.operator_acknowledged_at)) {
+  for (const a of alerts) {
     const key = a.device_id + "/" + a.event_id;
     let card = Array.from(root.children).find((c) => c.dataset.event === key);
     if (!card) {
@@ -287,6 +283,7 @@ function renderSOS() {
       };
       const locate = el("button", "Locate event observation");
       locate.disabled = !a.fix;
+      locate.hidden = !a.fix;
       locate.onclick = () => {
         selectParty(a.device_id);
         locatedSOS = a;
@@ -298,7 +295,9 @@ function renderSOS() {
         $("hover").textContent =
           `SOS event observation · ${a.fix.latitude}, ${a.fix.longitude} · ${time(a.fix.observed_at)} · not necessarily a current position`;
       };
-      card.append(details, button, locate);
+      const more = el("details", undefined, "sos-more");
+      more.append(el("summary", "Show more"), el("div", undefined, "sos-evidence"));
+      card.append(details, button, locate, more);
       root.append(card);
     }
     card.classList.toggle("acknowledged", !!a.operator_acknowledged_at);
@@ -307,37 +306,27 @@ function renderSOS() {
     if (card.dataset.snapshot !== JSON.stringify(a)) {
       card.dataset.snapshot = JSON.stringify(a);
       details.replaceChildren(
-        el("h2", `SOS · ${a.party.id} · ${a.party.name}`),
-        el("div", `Device ${a.device_id} · Event ${a.event_id}`),
-        el(
-          "div",
-          `Activated ${time(a.triggered_at)} · Snapshot ${time(a.captured_at)} · Command received ${time(a.received_at)}`,
-        ),
-        el(
-          "div",
-          f
-            ? `Last credible reported coordinates: ${f.latitude}, ${f.longitude} · accuracy ${f.horizontal_accuracy_m == null ? "unknown" : "±" + f.horizontal_accuracy_m + " m"}`
-            : "Coordinates unavailable at activation",
-        ),
-        el(
-          "div",
-          `GNSS at capture: ${a.gnss_status.replaceAll("_", " ")} · ${a.location_freshness.replaceAll("_", " ")}`,
-        ),
-        el(
-          "div",
-          f
-            ? `Measured ${time(f.observed_at)} · age at capture ${(f.fix_age_ms / 1000).toFixed(1)} s. This is the event observation, not a current position.`
-            : "SOS sent without waiting for GNSS",
-        ),
-        el(
-          "strong",
-          a.operator_acknowledged_at
-            ? `Acknowledged by operator ${time(a.operator_acknowledged_at)}`
-            : "UNACKNOWLEDGED — operator action required",
-        ),
+        el("h2", `${a.party.id} · ${a.party.name}`),
+        el("strong", a.operator_acknowledged_at ? "Acknowledged" : "Unacknowledged — action required"),
+        el("p", `Activated ${time(a.triggered_at)}`),
+        el("p", f ? `Event location: ${f.latitude}, ${f.longitude} · accuracy ${f.horizontal_accuracy_m == null ? "unknown" : "±" + f.horizontal_accuracy_m + " m"}` : "Location unavailable at activation"),
+        el("p", `${a.location_freshness.replaceAll("_", " ")} · event observation, not current position`),
+      );
+      const evidence = card.querySelector(".sos-evidence");
+      const group = (title, rows) => {
+        const section = el("section"); section.append(el("h3", title));
+        const list = el("dl");
+        for (const [name, value] of rows) list.append(el("dt", name), el("dd", value));
+        section.append(list); return section;
+      };
+      evidence.replaceChildren(
+        group("Event timeline", [["Activation", time(a.triggered_at)], ["Capture", time(a.captured_at)], ["Command receipt", time(a.received_at)], ["Operator acknowledgement", a.operator_acknowledged_at ? time(a.operator_acknowledged_at) : "Pending"]]),
+        group("GNSS evidence", [["Original observation", f ? time(f.observed_at) : "Unavailable"], ["GNSS state", a.gnss_status.replaceAll("_", " ")], ["Freshness", a.location_freshness.replaceAll("_", " ")], ["Fix age at capture", f ? (f.fix_age_ms / 1000).toFixed(1) + " s" : "Unavailable"], ["Accuracy", f?.horizontal_accuracy_m == null ? "Unknown" : "±" + f.horizontal_accuracy_m + " m"]]),
+        group("Technical identification", [["Device ID", a.device_id], ["Event ID", a.event_id]]),
       );
     }
     card.querySelector("button").disabled = !!a.operator_acknowledged_at;
+    card.querySelector("button").hidden = !!a.operator_acknowledged_at;
     card
       .querySelector("button")
       .setAttribute(
@@ -352,7 +341,6 @@ function renderSOS() {
     if (
       !alerts.some(
         (a) =>
-          !a.operator_acknowledged_at &&
           card.dataset.event === a.device_id + "/" + a.event_id,
       )
     )
@@ -1173,7 +1161,7 @@ $("layers").onkeydown = (event) => {
   if (event.key === "Escape") {
     event.preventDefault();
     $("layers").close();
-    document.querySelector(".map-tools > summary").focus();
+    $("open-layers").focus();
   }
 };
 for (const kind of terrainLayers)
@@ -3770,7 +3758,7 @@ window.recordingAppliedState = () => {
 };
 window.recordingLiveState = () => state;
 
-window.restoreLiveDashboard = () => { const main=document.querySelector("main");$("toggle-parties").setAttribute("aria-expanded",String(!main.classList.contains("parties-closed")));$("toggle-details").setAttribute("aria-expanded",String(!main.classList.contains("details-closed"))); render(); draw(); };
+window.restoreLiveDashboard = () => { const main=document.querySelector("main");$("toggle-parties").setAttribute("aria-expanded",String(!main.classList.contains("parties-closed")));$("close-details").setAttribute("aria-expanded",String(!main.classList.contains("details-closed"))); render(); draw(); };
 
 function appendPinnedHillshade(root,terrain,xyCoord,night) {
         if (!terrain.image) {
@@ -3911,20 +3899,13 @@ function updateCompactLayout() {
   headerMenuRoot.open = !compact;
   if (compact) {
     const main = document.querySelector("main");
-    main.classList.add("parties-closed", "details-closed");
-    $("toggle-parties").setAttribute("aria-expanded", "false");
-    $("toggle-details").setAttribute("aria-expanded", "false");
+    main.classList.add("details-closed");
+    $("toggle-parties").setAttribute("aria-expanded", String(!main.classList.contains("parties-closed")));
+    $("close-details").setAttribute("aria-expanded", "false");
   }
 }
 window.addEventListener("resize", updateCompactLayout);
 updateCompactLayout();
-document.querySelector(".map-tools").addEventListener("toggle", event => {
-  if (!event.currentTarget.open || innerWidth > 1100) return;
-  const main = document.querySelector("main");
-  main.classList.add("parties-closed", "details-closed");
-  $("toggle-parties").setAttribute("aria-expanded", "false");
-  $("toggle-details").setAttribute("aria-expanded", "false");
-});
 // Keep less frequent playback actions available without expanding the timeline.
 const playbackMore = document.createElement("details");
 playbackMore.className = "menu playback-more";
@@ -3943,7 +3924,7 @@ document.addEventListener("click", event => {
   queueMicrotask(() => {
     const left = id.includes("parties"), main = document.querySelector("main");
     const closed = main.classList.contains(left ? "parties-closed" : "details-closed");
-    if (closed) $(left ? "toggle-parties" : "toggle-details").focus();
+    if (closed) $(left ? "toggle-parties" : "tracks").focus();
     else $(left ? "collapse-parties" : "close-details").focus();
   });
 }, true);
@@ -3953,7 +3934,7 @@ document.addEventListener("keydown", event => {
   if (!aside) return;
   const left = aside.classList.contains("party-overview");
   document.querySelector("main").classList.add(left ? "parties-closed" : "details-closed");
-  const toggle = $(left ? "toggle-parties" : "toggle-details");
+  const toggle = $(left ? "toggle-parties" : "tracks");
   toggle.setAttribute("aria-expanded", "false");
   toggle.focus();
   event.preventDefault();
@@ -3994,3 +3975,9 @@ document.addEventListener("click", event => {
     }
   });
 }, true);
+const mapToolbar = document.querySelector('.canvas-toolbar');
+new ResizeObserver(() => {
+  const rect = mapToolbar.getBoundingClientRect();
+  document.documentElement.style.setProperty('--command-tools-bottom', `${rect.bottom + 10}px`);
+  document.querySelector('.canvas').style.setProperty('--command-tools-height', `${rect.height + 24}px`);
+}).observe(mapToolbar);
