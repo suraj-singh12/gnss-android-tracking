@@ -28,3 +28,9 @@ Selected Party Details widths at each requested viewport. The browser suite reco
 `panel-measurements.json`, populated Day/Night live and historical panels, and
 library search/sort/actions/close checks. Only panel density and library fit change;
 map chrome, recording/playback docks and SOS/Events are preserved.
+
+[Final panel density / Saved Recordings review ZIP](evidence/issue59-panel-density-e0a30f7.zip)
+contains 98 real Day/Night captures at all seven requested viewports, an HTML
+index, measured library/Details widths and a SHA-256 manifest. Tested application
+source: `e0a30f7497d49584397619adcc6d9cf95e72f002`. These supersede earlier panel
+and library images; the upload commit changes only evidence/documentation.
