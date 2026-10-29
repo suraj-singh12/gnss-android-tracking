@@ -153,7 +153,6 @@ async function wait(fn) {
       await inspectPanel('.party-overview','live',width,theme);
       await page.screenshot({path:path.join(out,`live-${theme}-parties-${width}.png`)});
       const party=page.locator('.party-select').first();
-      await party.scrollIntoViewIfNeeded();
       await wait(async () => (await party.boundingBox())?.height >= 40);
       await party.click();
       await inspectPanel('.party-detail','live',width,theme);
