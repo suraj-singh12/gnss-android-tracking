@@ -768,7 +768,7 @@ async function wait(fn) {
   await page.locator("#exit-playback").click();
   await headerAction("appearance");
   await headerAction("open-library");
-  await page.screenshot({ path: path.join(out, "library-night-960.png") });
+  await page.screenshot({ path: path.join(out, "library-night-after-playback.png") });
   await page.locator('[data-close="saved-library"]').click();
   await page.reload();
   await headerAction("open-library");
