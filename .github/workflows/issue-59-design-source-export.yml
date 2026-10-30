@@ -1,0 +1,51 @@
+name: Export pinned PR54 source for Issue59 design
+on:
+  push:
+    branches:
+      - devX/issue-57-command-premerge-qa
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      SOURCE_REVISION: 773497ff7e89530e087a9417325152580935988f
+    steps:
+      - name: Checkout exact PR54 source
+        uses: actions/checkout@v4
+        with:
+          ref: 773497ff7e89530e087a9417325152580935988f
+          persist-credentials: false
+          path: exact-source
+      - name: Verify and archive source without Git history
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C exact-source rev-parse HEAD)" = "$SOURCE_REVISION"
+          test -z "$(git -C exact-source status --porcelain)"
+          mkdir -p "$RUNNER_TEMP/gnss-issue59-source"
+          printf '%s\n' "$SOURCE_REVISION" > "$RUNNER_TEMP/gnss-issue59-source/SOURCE_REVISION.txt"
+          printf '%s\n' "Pinned source of PR #54 for independent UI design; do not merge or edit production from this archive." > "$RUNNER_TEMP/gnss-issue59-source/README.txt"
+          python3 - <<'PY'
+          import pathlib,zipfile,os
+          src=pathlib.Path("exact-source")
+          out=pathlib.Path(os.environ["RUNNER_TEMP"])/"gnss-issue59-source"/"gnss-command-pr54-exact-source.zip"
+          count=0
+          with zipfile.ZipFile(out,"w",compression=zipfile.ZIP_DEFLATED,compresslevel=6) as z:
+              for p in sorted(src.rglob("*")):
+                  if p.is_file() and ".git" not in p.relative_to(src).parts:
+                      z.write(p,"gnss-android-tracking/"+str(p.relative_to(src)))
+                      count+=1
+          print(f"Archived {count} verified source files, {out.stat().st_size} bytes")
+          PY
+          (cd "$RUNNER_TEMP/gnss-issue59-source" && sha256sum gnss-command-pr54-exact-source.zip > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PR54-pinned-source-773497ff-Issue59-design
+          path: ${{ runner.temp }}/gnss-issue59-source/
+          if-no-files-found: error
+          retention-days: 30
