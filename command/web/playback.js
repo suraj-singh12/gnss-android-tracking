@@ -2,6 +2,30 @@
 (() => {
   const $ = (id) => document.getElementById(id),
     ns = "http://www.w3.org/2000/svg";
+  let travelRequest = 0,
+    recordingContext = true,
+    recordingIdentity;
+  window.OperationalModes = {
+    update: updateMode,
+    get showRecording() {
+      return recordingContext && recordingInProgress();
+    },
+  };
+  let travel,
+    suspended = false,
+    suspendedLayout,
+    suspendedInspection,
+    travelMap,
+    travelBasis;
+  const recordingInProgress = () => {
+    const r = window.recordingLiveState?.()?.recording;
+    return !!(r?.active || r?.status === "active" || r?.status === "paused");
+  };
+  const locked = () => !window.recordingLiveState?.() || recordingInProgress();
+  const lockReason = () =>
+    !window.recordingLiveState?.()
+      ? "Waiting for Command recording state before historical navigation."
+      : "Stop or discard the ongoing recording before historical navigation.";
   let active = false,
     session,
     frame,
@@ -43,6 +67,7 @@
     return `${hours ? hours + "h " : ""}${minutes ? minutes + "m " : ""}${secs}s`;
   }
   function locationAt(t) {
+    if (travel) return { wall: Date.parse(travel.start) + t * 1000 };
     let wall = Date.parse(session.metadata.started_at),
       elapsed = 0;
     for (const g of session.groups) {
@@ -249,7 +274,10 @@
   function permitted(id) {
     return (
       frame?.checkpoint?.parties?.[id]?.visible === true &&
-      filters.get(id) !== false
+      filters.get(id) !== false &&
+      (!travel ||
+        !$("travel-offline").checked ||
+        travel.contacts?.[id] === "healthy")
     );
   }
   function detail() {
@@ -265,7 +293,7 @@
       label("h2", identity(p, selected)),
       label(
         "p",
-        `Displayed at: ${new Date(frame.presentation_at).toLocaleString(undefined, { timeZoneName: "short" })}`,
+        `${travel ? "Capture playhead" : "Displayed at"}: ${new Date(frame.presentation_at).toLocaleString(undefined, { timeZoneName: "short" })}`,
       ),
     );
     const d = p.device || {},
@@ -326,11 +354,13 @@
     root.append(
       label(
         "p",
-        `Included parties ${session.metadata.included.length} of ${session.metadata.total_parties}`,
+        `${travel ? "Retained range parties" : "Included parties"} ${session.metadata.included.length} of ${session.metadata.total_parties}`,
       ),
       label(
         "small",
-        "Evidence gaps remain marked. View preferences do not modify the recording.",
+        travel
+          ? "Unknown gaps remain unknown. View filters do not modify retained originals."
+          : "Evidence gaps remain marked. View preferences do not modify the recording.",
       ),
     );
   }
@@ -345,7 +375,12 @@
           typeof value === "object" ? JSON.stringify(value) : String(value),
         ),
       );
-    inspection("Historical quality · READ ONLY", dl);
+    inspection(
+      travel
+        ? "Travel Back policy snapshot · READ ONLY"
+        : "Historical quality · READ ONLY",
+      dl,
+    );
   }
   function responsivePanels() {
     const main = document.querySelector("main");
@@ -384,7 +419,7 @@
       return;
     }
     const c = checkpoint.common || {},
-      basis = follow ? c : anchor || c,
+      basis = travel ? c : follow ? c : anchor || c,
       w = basis.width || 1280,
       h = basis.height || 720;
     root.setAttribute("viewBox", `0 0 ${w} ${h}`);
@@ -396,11 +431,13 @@
       `translate(${transform[0]} ${transform[1]}) scale(${transform[2]}) rotate(${angle} ${w / 2} ${h / 2})`,
     );
     const evidence = document.createElementNS(ns, "g");
-    if (!follow) {
+    if (!follow && !travel) {
       const [dx, dy, z] = viewportTransform(c, basis);
       evidence.setAttribute("transform", `translate(${dx} ${dy}) scale(${z})`);
     }
-    const map = geometry(follow ? c.map_svg : (inspectorMap ?? c.map_svg));
+    const map = geometry(
+      travel ? c.map_svg : follow ? c.map_svg : (inspectorMap ?? c.map_svg),
+    );
     for (const child of map.querySelectorAll("[data-layer]"))
       if (layers[child.dataset.layer] === false) child.remove();
     world.append(map);
@@ -455,7 +492,9 @@
         card.append(
           label(
             "small",
-            `Historic position · ${new Date(frame.presentation_at).toLocaleTimeString()}`,
+            travel && !p.device?.location?.fix
+              ? "No qualified observation at this playhead"
+              : `Historic position · ${new Date(frame.presentation_at).toLocaleTimeString()}`,
           ),
         );
       $("devices").append(card);
@@ -489,27 +528,66 @@
     $("playback-sos").textContent = alerts.length
       ? `● Recording SOS · ${alerts.length} historical notification${alerts.length > 1 ? "s" : ""}`
       : "";
-    $("map-mode-label").textContent = checkpoint.map_id
-      ? "Offline geographic map · recorded revision"
-      : "Blank canvas";
+    $("map-mode-label").textContent = travel
+      ? map.querySelector('[data-layer="offline-map"]')
+        ? "Offline geographic map · view snapshot"
+        : "Blank canvas"
+      : checkpoint.map_id
+        ? "Offline geographic map · recorded revision"
+        : "Blank canvas";
     updateEvidence(checkpoint);
     detail();
   }
   // Time can advance within a single checkpoint while crossing an evidence
   // boundary; update the status even when no new frame fetch is necessary.
   function updateEvidence(checkpoint) {
+    if (travel) {
+      $("playback-status").textContent = `Qualified distance ${Object.entries(
+        checkpoint.parties || {},
+      )
+        .reduce(
+          (n, [id, p]) => n + (permitted(id) ? p.device?.total_m || 0 : 0),
+          0,
+        )
+        .toFixed(
+          1,
+        )} m · Original GNSS capture time · READ ONLY reconstruction · gaps are not interpolated`;
+      return;
+    }
     const trailing = session.metadata.trailing_unverified_interval;
     const wall = locationAt(position).wall;
-    const intervals = [trailing, ...(session.facts || []).filter(f => f.Kind === "unverified").map(f => f.Data)].filter(Boolean);
-    const limitations = intervals.filter(f => Date.parse(f.from) <= wall && Date.parse(f.until) >= wall);
+    const intervals = [
+      trailing,
+      ...(session.facts || [])
+        .filter((f) => f.Kind === "unverified")
+        .map((f) => f.Data),
+    ].filter(Boolean);
+    const limitations = intervals.filter(
+      (f) => Date.parse(f.from) <= wall && Date.parse(f.until) >= wall,
+    );
     $("playback-evidence").hidden = !limitations.length;
     if (limitations.length) {
-      const format = value => value ? new Date(value).toLocaleString(undefined, {timeZoneName: "short"}) : "unknown";
-      $("playback-evidence-detail").textContent = limitations.map(item => `${item.reason || "Reason unavailable"} · ${format(item.from)} – ${format(item.until)}`).join("; ") + ". Presentation status does not determine GNSS validity.";
+      const format = (value) =>
+        value
+          ? new Date(value).toLocaleString(undefined, { timeZoneName: "short" })
+          : "unknown";
+      $("playback-evidence-detail").textContent =
+        limitations
+          .map(
+            (item) =>
+              `${item.reason || "Reason unavailable"} · ${format(item.from)} – ${format(item.until)}`,
+          )
+          .join("; ") +
+        ". Presentation status does not determine GNSS validity.";
     }
     $("playback-status").textContent =
-      (follow ? "Frozen display · original recorded viewport" : "INSPECTION VIEW — MODIFIED DURING PLAYBACK") +
-      " · read-only evidence" + (checkpoint.asset_warnings?.length ? " · " + checkpoint.asset_warnings.join(" ") : "");
+      (follow
+        ? "Frozen display · original recorded viewport"
+        : "INSPECTION VIEW — MODIFIED DURING PLAYBACK") +
+      " · read-only evidence" +
+      (checkpoint.asset_warnings?.length
+        ? " · " + checkpoint.asset_warnings.join(" ")
+        : "");
   }
   let inspectorMap, anchor;
   let controller;
@@ -517,6 +595,17 @@
     if (!session) return;
     position = Math.max(0, Math.min(session.duration, t));
     const target = locationAt(position);
+    if (travel) {
+      frame = travelFrame(target.wall);
+      repaint();
+      $("playback-seek").value = position;
+      $("playback-elapsed").textContent =
+        `${clock(position)} / ${clock(session.duration)}`;
+      $("presentation-time").textContent = new Date(
+        target.wall,
+      ).toLocaleString();
+      return;
+    }
     $("playback-seek").value = position;
     $("playback-elapsed").textContent =
       `${clock(position)} / ${clock(session.duration)}`;
@@ -606,17 +695,36 @@
     }
   }
   async function open(metadata) {
+    travelRequest++;
+    if (locked()) throw Error(lockReason());
     const data = await api(
       `/local/presentation/playback?id=${encodeURIComponent(metadata.id)}`,
     );
+    if (locked()) throw Error(lockReason());
+    travel = undefined;
+    $("travel-settings").hidden = true;
+    $("follow-label").hidden = false;
+    delete document.body.dataset.historyMode;
+    $("historical-mode").textContent = "● VIEWING RECORDING";
+    $("historical-authority").textContent = "Read-only evidence";
+    $("timeline-authority").textContent = "Presentation time";
+    $("playback-timeline").setAttribute(
+      "aria-label",
+      "Recording presentation timeline",
+    );
+    $("playback-seek").setAttribute("aria-label", "Presentation timeline");
     session = data;
     session.metadata = { ...data.metadata, name: metadata.name };
     if (!active) {
       savedLayout = document.querySelector("main").className;
       savedAppearance = document.documentElement.dataset.appearance;
     }
+    suspended = false;
+    $("historical-return").hidden = true;
     active = true;
+    updateMode();
     $("snapshot-receipt").hidden = true;
+    document.body.classList.remove("historical-suspended");
     document.body.classList.add("playback");
     $("playback-rail").hidden =
       $("playback-timeline").hidden =
@@ -636,11 +744,18 @@
     await seek(0);
   }
   function exit() {
+    travelRequest++;
     playing = false;
     active = false;
+    updateMode();
+    travel = undefined;
+    travelBasis = undefined;
+    suspended = false;
+    $("historical-return").hidden = true;
+    $("travel-settings").hidden = true;
     revision++;
     controller?.abort();
-    document.body.classList.remove("playback");
+    document.body.classList.remove("playback", "historical-suspended");
     for (const id of [
       "playback-rail",
       "playback-timeline",
@@ -701,20 +816,25 @@
     repaint();
   };
   $("playback-facts").onclick = () =>
-    inspection(
-      "Recording facts · READ ONLY",
-      JSON.stringify(
-        {
-          actual_start: session.metadata.started_at,
-          cutoff: session.metadata.cutoff_at,
-          interruptions: session.groups,
-          underlying_facts: session.facts,
-          limitations: session.metadata.limitations,
-        },
-        null,
-        2,
-      ),
-    );
+    travel
+      ? inspection(
+          "Travel Back facts · READ ONLY",
+          $("travel-diagnostics").textContent,
+        )
+      : inspection(
+          "Recording facts · READ ONLY",
+          JSON.stringify(
+            {
+              actual_start: session.metadata.started_at,
+              cutoff: session.metadata.cutoff_at,
+              interruptions: session.groups,
+              underlying_facts: session.facts,
+              limitations: session.metadata.limitations,
+            },
+            null,
+            2,
+          ),
+        );
   function addRecordedLayer(kind) {
     const c = frame.checkpoint.common,
       source = geometry(c.map_svg),
@@ -817,7 +937,9 @@
           n.getBBox(),
         );
     boxes = boxes.filter((b) => b.width || b.height);
-    const basis = anchor || frame.checkpoint.common,
+    const basis = travel
+        ? frame.checkpoint.common
+        : anchor || frame.checkpoint.common,
       [dx, dy, ratio] = viewportTransform(frame.checkpoint.common, basis);
     boxes = boxes.map((b) => ({
       x: b.x * ratio + dx,
@@ -850,8 +972,13 @@
       event.stopImmediatePropagation();
       event.preventDefault();
       const id = button.id;
-      for (let menu = button.closest(".menu"); menu; menu = menu.parentElement?.closest(".menu")) {
-        if (!menu.classList.contains("header-menu-root") || innerWidth <= 1100) menu.open = false;
+      for (
+        let menu = button.closest(".menu");
+        menu;
+        menu = menu.parentElement?.closest(".menu")
+      ) {
+        if (!menu.classList.contains("header-menu-root") || innerWidth <= 1100)
+          menu.open = false;
       }
       if (
         [
@@ -873,7 +1000,21 @@
       else if (id === "inspect-history")
         inspection(
           "Historical party · READ ONLY",
-          JSON.stringify(frame?.checkpoint?.parties?.[selected] || {}, null, 2),
+          JSON.stringify(
+            travel
+              ? {
+                  capture_range: { start: travel.start, end: travel.end },
+                  original_observations: travel.originals.filter(
+                    (o) => o.message.device_id === selected,
+                  ),
+                  quality_decisions: travel.decisions.filter(
+                    (d) => d.device_id === selected,
+                  ),
+                }
+              : frame?.checkpoint?.parties?.[selected] || {},
+            null,
+            2,
+          ),
         );
       else if (id === "open-control")
         inspection(
@@ -1047,7 +1188,316 @@
     requestAnimationFrame(tick);
   }
   requestAnimationFrame(tick);
+  function travelFrame(wall) {
+    const parties = {},
+      points = travel.points.filter(
+        (p) => Date.parse(p.fix.observed_at) <= wall,
+      );
+    const project = (f) => GeoMap.project(f.longitude, f.latitude);
+    const all = travel.points.map((p) => project(p.fix));
+    const bounds = all.reduce(
+      (b, p) => [
+        Math.min(b[0], p[0]),
+        Math.max(b[1], p[0]),
+        Math.min(b[2], p[1]),
+        Math.max(b[3], p[1]),
+      ],
+      [Infinity, -Infinity, Infinity, -Infinity],
+    );
+    const xs = [bounds[0], bounds[1]],
+      ys = [bounds[2], bounds[3]];
+    let cx = all.length ? (Math.min(...xs) + Math.max(...xs)) / 2 : 0;
+    let cy = all.length ? (Math.min(...ys) + Math.max(...ys)) / 2 : 0;
+    let scale = all.length
+      ? Math.min(
+          1000 / Math.max(100, Math.max(...xs) - Math.min(...xs)),
+          550 / Math.max(100, Math.max(...ys) - Math.min(...ys)),
+        )
+      : 1;
+    const width = travelMap?.width || 1200,
+      height = travelMap?.height || 700;
+    if (travelMap?.viewport && travelMap.map_svg)
+      ({ cx, cy, scale } = travelMap.viewport);
+    else if (travelBasis) ({ cx, cy, scale } = travelBasis);
+    else travelBasis = { cx, cy, scale };
+    const xy = (f) => {
+      const p = project(f);
+      return [
+        (p[0] - cx) * scale + width / 2,
+        height / 2 - (p[1] - cy) * scale,
+      ];
+    };
+    for (const o of travel.originals) {
+      const m = o.message;
+      if (!parties[m.device_id])
+        parties[m.device_id] = {
+          visible: true,
+          identity: m.party,
+          device: {
+            ...travel.styles?.[m.device_id],
+            snapshot: { party: m.party },
+          },
+          svg: "",
+        };
+    }
+    const segments = new Map();
+    for (const p of points) {
+      const party = parties[p.device_id];
+      if (!party) continue;
+      const key = p.device_id + "/" + p.segment_id,
+        list = segments.get(key) || [];
+      list.push(xy(p.fix));
+      segments.set(key, list);
+      party.device.location = { fix: p.fix };
+      party.device.total_m = p.cumulative_m;
+    }
+    for (const [key, list] of segments) {
+      const id = key.split("/")[0],
+        party = parties[id];
+      const color = /^#[0-9a-f]{6}$/i.test(party.device.track_color || "")
+        ? party.device.track_color
+        : "#245fa5";
+      const dash = /^[0-9 .]*$/.test(party.device.track_dash || "")
+        ? party.device.track_dash || ""
+        : "";
+      party.svg += `<polyline fill="none" stroke="${color}" stroke-dasharray="${dash}" stroke-width="2" points="${list.map((p) => p.join(",")).join(" ")}"/>`;
+      const p = list.at(-1);
+      party.svg += `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="${color}"/>`;
+    }
+    if ($("travel-raw").checked)
+      for (const o of travel.originals) {
+        const m = o.message,
+          party = parties[m.device_id];
+        if (!party || Date.parse(m.fix.observed_at) > wall) continue;
+        const p = xy(m.fix);
+        party.svg += `<circle cx="${p[0]}" cy="${p[1]}" r="3" fill="none" stroke="#999"/>`;
+      }
+    return {
+      presentation_at: new Date(wall).toISOString(),
+      checkpoint: {
+        common: {
+          width,
+          height,
+          map_svg: travelMap?.map_svg || "",
+          policy: travel.policy,
+          viewport: { cx, cy, scale },
+        },
+        parties,
+      },
+    };
+  }
+  async function refreshTravel() {
+    const request = ++travelRequest;
+    if (locked()) throw Error(lockReason());
+    const start = new Date($("travel-start").value).toISOString(),
+      end = new Date($("travel-end").value).toISOString();
+    const next = await api(
+      `/local/travel-back?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+    );
+    if (locked()) throw Error(lockReason());
+    if (request !== travelRequest) return;
+    revision++;
+    controller?.abort();
+    busy = false;
+    const oldWall = travel ? locationAt(position).wall : Date.parse(start);
+    if (!active) {
+      travelMap = window.recordingAppliedState?.()?.common;
+      travelBasis = undefined;
+    }
+    travel = next;
+    travel.styles = next.styles;
+    travel.contacts = next.contacts;
+    travel.receivedCount = next.retained_observation_count;
+    session = {
+      duration: (Date.parse(end) - Date.parse(start)) / 1000,
+      groups: [],
+      metadata: {
+        started_at: start,
+        cutoff_at: end,
+        included: [...new Set(next.originals.map((o) => o.message.device_id))],
+        total_parties: new Set(next.originals.map((o) => o.message.device_id))
+          .size,
+      },
+    };
+    if (!active) {
+      savedLayout = document.querySelector("main").className;
+      savedAppearance = document.documentElement.dataset.appearance;
+    }
+    suspended = false;
+    $("historical-return").hidden = true;
+    active = true;
+    updateMode();
+    follow = false;
+    playing = false;
+    document.body.classList.remove("historical-suspended");
+    document.body.classList.add("playback");
+    for (const id of [
+      "playback-rail",
+      "playback-timeline",
+      "playback-status",
+      "travel-settings",
+    ])
+      $(id).hidden = false;
+    $("follow-label").hidden = true;
+    document.body.dataset.historyMode = "travel";
+    $("historical-mode").textContent = "● TRAVEL BACK";
+    $("historical-authority").textContent = "Read-only reconstruction";
+    $("timeline-authority").textContent = "Original GNSS capture time";
+    $("playback-timeline").setAttribute(
+      "aria-label",
+      "Travel Back capture timeline",
+    );
+    $("playback-seek").setAttribute(
+      "aria-label",
+      "Original GNSS capture timeline",
+    );
+    $("playback-name").textContent = "Retained history";
+    $("playback-start").textContent = "Capture range";
+    $("travel-diagnostics").textContent = JSON.stringify(
+      {
+        policy: next.policy,
+        background_projection_pending: next.projection_pending,
+        background_projection_error: next.projection_error,
+        decisions: next.decisions.reduce((counts, d) => {
+          counts[d.reason] = (counts[d.reason] || 0) + 1;
+          return counts;
+        }, {}),
+      },
+      null,
+      2,
+    );
+    $("travel-pending").textContent =
+      "Snapshot established · Refresh View to include later stored data";
+    $("playback-seek").max = session.duration;
+    await seek((oldWall - Date.parse(start)) / 1000);
+  }
+  $("open-travel").onclick = async () => {
+    const local = (t) =>
+      new Date(t - new Date(t).getTimezoneOffset() * 60000)
+        .toISOString()
+        .slice(0, 19);
+    if (!travel) {
+      $("travel-end").value = local(Date.now());
+      $("travel-start").value = local(Date.now() - 3600000);
+    }
+    try {
+      await refreshTravel();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+  $("travel-offline").onchange = () => seek(position);
+  $("travel-raw").onchange = () => seek(position);
+  $("travel-refresh").onclick = () =>
+    refreshTravel().catch((e) => alert(e.message));
+  function updateMode() {
+    if (travel) {
+      const count = Object.values(
+        window.recordingLiveState?.()?.devices || {},
+      ).reduce((n, d) => n + (d.durably_received_observations || 0), 0);
+      if (count > travel.receivedCount)
+        $("travel-pending").textContent =
+          "New stored observations available · Refresh View";
+    }
+    const lock = locked();
+    const identity = window.recordingLiveState?.()?.recording?.recording_id;
+    if (identity && identity !== recordingIdentity) {
+      recordingIdentity = identity;
+      recordingContext = true;
+    }
+    $("operational-mode").textContent = active
+      ? travel
+        ? "TRAVEL BACK"
+        : "VIEWING RECORDING"
+      : recordingInProgress() && recordingContext
+        ? "RECORDING LIVE"
+        : "LIVE";
+    const current = $("operational-mode").textContent;
+    for (const [id, mode] of [
+      ["mode-live", "LIVE"],
+      ["mode-recording", "RECORDING LIVE"],
+      ["mode-library", "VIEWING RECORDING"],
+      ["mode-travel", "TRAVEL BACK"],
+    ])
+      $(id).setAttribute("aria-pressed", String(mode === current));
+    for (const id of [
+      "open-travel",
+      "open-library",
+      "mode-library",
+      "mode-travel",
+      "historical-return",
+    ]) {
+      $(id).disabled = !!lock;
+      $(id).title = lock ? lockReason() : "";
+    }
+  }
+  setInterval(updateMode, 500);
+  $("mode-live").onclick = () => {
+    recordingContext = false;
+    updateMode();
+    if (active) exit();
+    else window.restoreLiveDashboard();
+  };
+  $("mode-recording").onclick = () => {
+    recordingContext = true;
+    updateMode();
+    if (active) exit();
+    else window.restoreLiveDashboard();
+    if (!locked()) $("start").click();
+  };
+  $("mode-library").onclick = () => {
+    if (!locked()) $("open-library").click();
+  };
+  $("mode-travel").onclick = () => {
+    if (!locked()) $("open-travel").click();
+  };
+  $("historical-return").onclick = () => {
+    if (!suspended || locked()) return;
+    suspended = false;
+    document.body.classList.remove("historical-suspended");
+    active = true;
+    updateMode();
+    document.body.classList.remove("historical-suspended");
+    document.body.classList.add("playback");
+    document.querySelector("main").className = suspendedLayout;
+    if (suspendedInspection) $("historical-inspection").showModal();
+    for (const id of ["playback-rail", "playback-timeline", "playback-status"])
+      $(id).hidden = false;
+    $("travel-settings").hidden = !travel;
+    $("historical-return").hidden = true;
+    repaint();
+  };
   window.HistoricalPlayback = {
+    suspend() {
+      if (!active) return;
+      suspendedLayout = document.querySelector("main").className;
+      suspendedInspection = $("historical-inspection").open;
+      $("historical-inspection").close();
+      playing = false;
+      revision++;
+      controller?.abort();
+      busy = false;
+      suspended = true;
+      document.body.classList.add("historical-suspended");
+      active = false;
+      updateMode();
+      document.body.classList.remove("playback");
+      for (const id of [
+        "playback-rail",
+        "playback-timeline",
+        "playback-status",
+        "playback-evidence",
+        "playback-sos",
+        "playback-notice",
+        "travel-settings",
+      ])
+        $(id).hidden = true;
+      $("historical-return").hidden = false;
+      $("historical-return").textContent = travel
+        ? "Go Back to Travel Back"
+        : "Go Back to Recording";
+      window.restoreLiveDashboard();
+    },
     get active() {
       return active;
     },
@@ -1062,4 +1512,5 @@
       return position;
     },
   };
+  updateMode();
 })();

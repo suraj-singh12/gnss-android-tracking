@@ -281,19 +281,27 @@ function renderSOS() {
           showError(e);
         }
       };
-      const locate = el("button", "Locate event observation");
-      locate.disabled = !a.fix;
-      locate.hidden = !a.fix;
-      locate.onclick = () => {
+      const locate = el("button", "Locate");
+      locate.disabled = false;
+      locate.onclick = async () => {
+        window.HistoricalPlayback?.suspend();
         selectParty(a.device_id);
-        locatedSOS = a;
-        const [cx, cy] = GeoMap.project(a.fix.longitude, a.fix.latitude);
-        viewport = { cx, cy, scale: 2 };
         $("sos-panel").close();
         detailsOpen(true);
-        render();
-        $("hover").textContent =
-          `SOS event observation · ${a.fix.latitude}, ${a.fix.longitude} · ${time(a.fix.observed_at)} · not necessarily a current position`;
+        locatedSOS=undefined;
+        $("hover").textContent="SOS location · checking retained credible observations; freshness unknown";
+        try {
+          const response=await fetch(`/local/sos-location?device_id=${encodeURIComponent(a.device_id)}`);
+          if(!response.ok) throw Error("Credible SOS location unavailable");
+          const {fix}=await response.json();
+          if(fix) {
+            locatedSOS={...a,fix};
+            const [cx,cy]=GeoMap.project(fix.longitude,fix.latitude);
+            viewport={cx,cy,scale:2};
+          }
+          render();
+          $("hover").textContent=fix ? `SOS last available credible location · ${fix.latitude}, ${fix.longitude} · ${time(fix.observed_at)} · age ${Math.round((Date.now()-Date.parse(fix.observed_at))/1000)} s · not necessarily a current position` : "SOS · no credible retained location available · freshness unknown";
+        } catch(e) {render();$("hover").textContent=e.message+" · location/freshness unknown";}
       };
       const more = el("details", undefined, "sos-more");
       more.append(el("summary", "Show more"), el("div", undefined, "sos-evidence"));
@@ -360,6 +368,7 @@ function render() {
 }
 function renderDashboard() {
   renderSOS();
+  window.OperationalModes?.update?.();
   if (window.HistoricalPlayback?.active) return;
   if ($("event-history").open) renderEvents();
   $("projection-status").textContent = state.projection_error
@@ -1779,7 +1788,7 @@ function drawMap() {
     raw
       ? (state.raw_points ?? [])
       : [...(state.points ?? []), ...(state.provisional_points ?? [])]
-  ).filter((p) => !hidden.has(p.device_id));
+  ).filter((p) => !hidden.has(p.device_id) && (raw || window.OperationalModes?.showRecording !== false));
   const live = Object.values(state.devices)
     .filter((d) => d.location && !hidden.has(d.device_id))
     .map((d) => ({
@@ -2174,11 +2183,11 @@ function drawMap() {
       "stroke-width": 2,
       tabindex: 0,
       role: "button",
-      "aria-label": `SOS event observation for ${locatedSOS.party.id}, ${time(locatedSOS.triggered_at)}; not a current position`,
+      "aria-label": `SOS last available credible location for ${locatedSOS.party.id}, observed ${time(locatedSOS.fix.observed_at)}; not necessarily a current position`,
     });
     marker.onfocus = marker.onclick = () => {
       $("hover").textContent =
-        `SOS event observation · ${locatedSOS.fix.latitude}, ${locatedSOS.fix.longitude} · ${time(locatedSOS.fix.observed_at)} · not a current position`;
+        `SOS last available credible location · ${locatedSOS.fix.latitude}, ${locatedSOS.fix.longitude} · ${time(locatedSOS.fix.observed_at)} · not necessarily a current position`;
     };
     const label = svg("text", {
       x: x + 13,
@@ -3913,7 +3922,7 @@ const playbackMoreSummary = document.createElement("summary");
 playbackMoreSummary.textContent = "More";
 const playbackMoreContent = document.createElement("div");
 playbackMoreContent.className = "menu-content";
-for (const id of ["playback-first", "playback-last", "playback-facts", "playback-start"]) playbackMoreContent.append($(id));
+for (const id of ["playback-facts", "playback-start"]) playbackMoreContent.append($(id));
 playbackMore.append(playbackMoreSummary, playbackMoreContent);
 $("playback-timeline").append(playbackMore);
 // Restore focus for non-modal narrow drawers, including historical inspection.

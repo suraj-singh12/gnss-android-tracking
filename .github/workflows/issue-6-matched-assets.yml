@@ -248,6 +248,7 @@ jobs:
           node test-tools/integration/ui-dashboard.cjs
           node test-tools/integration/recording-foundation.cjs
           node test-tools/integration/recording-playback.cjs
+          node test-tools/integration/travel-back.cjs
           node test-tools/integration/playback-clips.cjs
           node test-tools/integration/control-ui.cjs
           node test-tools/integration/history-dashboard.cjs

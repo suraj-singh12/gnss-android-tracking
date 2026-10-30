@@ -172,6 +172,24 @@ func (s *Store) LocalHandler(assets http.Handler) http.Handler {
 			respond(w, 200, dashboardView(st, s.Now()))
 			return
 		}
+		if r.URL.Path == "/local/sos-location" && r.Method == "GET" {
+			fix, err := s.lastCredibleLocation(r.Context(), r.URL.Query().Get("device_id"))
+			if err != nil {
+				failure(w, 503, "sos_location_unavailable", err)
+				return
+			}
+			respond(w, 200, map[string]any{"fix": fix, "authority": "retained_original_capture_quality"})
+			return
+		}
+		if r.URL.Path == "/local/travel-back" && r.Method == "GET" {
+			view, err := s.travelView(r.Context(), r.URL.Query().Get("start"), r.URL.Query().Get("end"))
+			if err != nil {
+				failure(w, 400, "travel_unavailable", err)
+				return
+			}
+			respond(w, 200, view)
+			return
+		}
 		if r.URL.Path == "/local/history" && r.Method == "GET" {
 			page, err := s.historyPage(r.Context(), r.URL.Query().Get("device_id"), r.URL.Query().Get("cursor"))
 			if r.URL.Query().Get("layer") == "raw" {

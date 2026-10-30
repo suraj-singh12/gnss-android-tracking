@@ -38,7 +38,7 @@
         <details class="header-menu-root menu" open><summary>Menu</summary>
           <div class="menu-groups">
             <details class="menu"><summary>Workspace</summary><div class="menu-content"><button id="open-map">Map &amp; layers</button><button id="open-control">Phone controls</button></div></details>
-            <details class="menu"><summary>Records</summary><div class="menu-content"><button id="open-library">Saved recordings</button><button id="open-history" aria-label="Events history">Events</button></div></details>
+            <details class="menu"><summary>Records</summary><div class="menu-content"><button id="open-travel">Travel Back</button><button id="open-library">Saved recordings</button><button id="open-history" aria-label="Events history">Events</button></div></details>
             <details class="menu"><summary>Tools</summary><div class="menu-content"><button id="open-quality">Quality settings</button><a href="/local/field-report">Export diagnostics</a><button id="open-about">About</button></div></details>
             <details class="menu"><summary>View</summary><div class="menu-content"><button id="appearance" aria-label="Switch to Night appearance">Night</button></div></details>
           </div>
@@ -150,18 +150,18 @@
       <h2>Per-phone command history</h2>
       <div id="control-history"></div>
     </dialog>
-    <div id="error" role="alert" hidden></div>
-    <section id="playback-rail" hidden aria-label="Historical playback">
+    <nav id="mode-navigation" aria-label="Operational mode"><button id="mode-live">LIVE</button><button id="mode-recording">RECORDING LIVE</button><button id="mode-library">VIEWING RECORDING</button><button id="mode-travel">TRAVEL BACK</button><section id="playback-rail" hidden aria-label="Historical playback">
       <div>
-        <strong>● VIEWING RECORDING</strong> <span id="playback-name"></span>
+        <strong id="historical-mode">● VIEWING RECORDING</strong> <span id="playback-name"></span>
       </div>
       <label id="follow-label"
         >Follow Original
         <input id="follow-original" type="checkbox" role="switch" checked /><span id="follow-state">ON</span></label>
-      <span>Read-only evidence</span
+      <span id="historical-authority">Read-only evidence</span
       ><button id="exit-playback">Exit playback</button>
     </section>
-    <section class="recording-bar" aria-label="Recording controls">
+    </nav><output id="operational-mode" aria-live="polite">LIVE</output><div id="error" role="alert" hidden></div>
+    <button id="historical-return" hidden>Go Back</button><section class="recording-bar" aria-label="Recording controls">
       <span id="recording" role="status">Connecting…</span>
       <details class="capture-disclosure"><summary id="capture-summary">Presentation status</summary><div class="capture-detail"><strong id="capture-heading" hidden>Presentation unverified at this time</strong><span id="capture-health" role="status">Awaiting browser ownership</span></div></details>
       <div class="controls">
@@ -428,10 +428,10 @@
         <details id="playback-evidence" hidden><summary>Presentation unverified at this time</summary><p id="playback-evidence-detail"></p></details></div>
         <div id="playback-notice" role="status" hidden></div>
         <div id="playback-sos" hidden></div>
-        <section id="playback-timeline" hidden aria-label="Recording timeline">
+        <details id="travel-settings" hidden><summary>Capture range & diagnostics</summary><label>Start <input id="travel-start" step="1" type="datetime-local"></label><label>End <input id="travel-end" step="1" type="datetime-local"></label><button id="travel-refresh">Refresh View</button><span id="travel-pending" role="status"></span><p>Retained original GNSS only · unknown gaps remain unknown. Quality uses the current policy without editing it.</p><label><input id="travel-offline" type="checkbox">Exclude offline at snapshot (contact, not GNSS quality)</label><label><input id="travel-raw" type="checkbox">Use All Observations (diagnostic dots, no qualified distance)</label><pre id="travel-diagnostics"></pre></details><section id="playback-timeline" hidden aria-label="Recording timeline">
           <div class="playback-time">
             <strong id="presentation-time"></strong
-            ><small>Presentation time</small>
+            ><small id="timeline-authority">Presentation time</small>
           </div>
           <input
             id="playback-seek"
