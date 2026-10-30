@@ -712,3 +712,24 @@ never reconstructed movement. No source observation, policy or distance engine i
 introduced. Missing assets, trailing/unverified evidence and rendering-opportunity
 limitations remain visible. Exact native/physical and sustained multi-day acceptance
 must not be inferred from deterministic browser/SQLite tests.
+
+### Operational historical navigation (#34)
+
+`travelView` reads retained `raw` envelopes and the current policy in one existing
+SQLite read transaction. It calls the same `Derive`/quality/distance authority as
+the recording-window projection, with an ephemeral range boundary instead of an
+operator recording window. It creates no database, persisted projection, recording
+or phone command. Its response is held by the shared historical player until
+explicit Refresh View. LIVE polling only checks durable receipt counts for a pending
+indicator. Read limits fail explicitly, never return silent partial geometry.
+
+Saved presentation playback keeps its existing source and visibility authority.
+Travel Back uses original capture timestamps; it cannot be saved as presentation
+evidence. SOS interruption suspends the player's current source and preferences,
+not the independent live receiver or evidence recorder.
+
+SOS Locate's read-only original lookup applies the existing `Quality` and clock
+rules to original fixes, including outside recording windows. A rejected latest
+report cannot replace the last credible original. The query uses the existing read
+connection with a three-second context; unavailable/no credible location is shown
+as unknown. The response never acknowledges an alert or changes LIVE history.

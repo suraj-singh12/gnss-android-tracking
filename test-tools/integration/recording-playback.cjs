@@ -28,6 +28,9 @@ async function port() {
   return p;
 }
 async function headerAction(id) {
+  // A new/reopened real SOS notification can cover the mobile header menu.
+  // Dismiss only the toast; the outstanding emergency remains unacknowledged.
+  if(await page.locator("#sos-toast-dismiss").isVisible()) await page.locator("#sos-toast-dismiss").click();
   const target = page.locator(`#${id}`);
   const root = page.locator(".header-menu-root");
   if (!(await root.evaluate(e => e.open))) await root.locator(":scope > summary").click();
@@ -44,6 +47,15 @@ async function openDetails() {
 }
 const panelMeasurements = [];
 async function inspectPanel(selector, mode, width, theme) {
+  if (await page.locator('#follow-label').isVisible()) {
+    const overlaps=await page.evaluate(()=>{
+      const name=document.querySelector('#playback-name'),follow=document.querySelector('#follow-label');
+      if(getComputedStyle(name).display==='none') return false;
+      const a=name.getBoundingClientRect(),b=follow.getBoundingClientRect();
+      return a.width>0 && a.left<b.right && a.right>b.left && a.top<b.bottom && a.bottom>b.top;
+    });
+    assert(!overlaps,'recording name must not overlap Follow Original');
+  }
   await page.waitForTimeout(120);
   const facts = await page.locator(selector).evaluate(panel => {
     const r=panel.getBoundingClientRect(), dock=document.querySelector(document.body.classList.contains('playback') ? '#playback-timeline' : '.recording-bar').getBoundingClientRect();
@@ -129,6 +141,7 @@ async function wait(fn) {
       assert.equal(r.status, 200, await r.text());
     }
   await page.evaluate(() => poll());
+  await mapAction("fit"); // Fit the newly received fleet; LIVE preserves operator viewport.
   for (const [width, height] of [[1920,1080],[1440,900],[1280,720],[1100,800],[960,720],[760,900],[430,900],[390,844]]) {
     await page.setViewportSize({width, height});
     await page.evaluate(() => draw());
@@ -350,6 +363,25 @@ async function wait(fn) {
     entries = await (await fetch(local + "/local/presentation/library")).json();
     return entries.length === 1;
   });
+  assert(
+    await page.locator("#open-library").isDisabled(),
+    "Save Snapshot must not unlock history",
+  );
+  assert(await page.locator("#open-travel").isDisabled());
+  const ongoing=await page.evaluate(()=>window.recordingLiveState().recording.recording_id);
+  await page.locator('#mode-live').click();
+  assert.equal(await page.evaluate(()=>window.OperationalModes.showRecording),false);
+  assert.equal(await page.evaluate(()=>window.recordingLiveState().recording.active),true);
+  await page.locator('#mode-recording').click();
+  assert.equal(await page.evaluate(()=>window.recordingLiveState().recording.recording_id),ongoing);
+  await page.locator("#pause").click();
+  assert(
+    await page.locator("#open-travel").isDisabled(),
+    "paused recording locks history",
+  );
+  await page.locator("#stop").click();
+  await page.locator('[data-close="save-snapshot"]').first().click();
+  await wait(async () => !(await page.locator("#open-travel").isDisabled()));
   const recording = entries[0];
   assert.equal(recording.total_parties, 21);
   assert.equal(recording.included.length, 20);
@@ -421,6 +453,26 @@ async function wait(fn) {
   }
   await page.getByRole("button", { name: "Open", exact: true }).click();
   await page.waitForFunction(() => window.HistoricalPlayback?.active);
+  const returnPosition=await page.evaluate(()=>window.HistoricalPlayback.position);
+  await page.locator('#follow-original').uncheck();
+  await page.locator('#playback-speed').selectOption('5');
+  const emergency=structuredClone(sos);emergency.message_id=emergency.sos.event_id=randomUUID();emergency.sequence=800;
+  emergency.captured_at=emergency.fix.observed_at=emergency.sos.triggered_at=new Date().toISOString();
+  const realSOS=await fetch(phone+'/api/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(emergency)});
+  assert.equal(realSOS.status,200,await realSOS.text());
+  await page.evaluate(()=>poll());
+  await page.locator('#open-sos').click();
+  await page.locator('.sos-alert').last().getByRole('button',{name:'Locate'}).click();
+  assert.equal(await page.evaluate(()=>window.HistoricalPlayback.active),false);
+  await page.locator('#historical-return').click();
+  assert.equal(await page.evaluate(()=>window.HistoricalPlayback.position),returnPosition);
+  assert.equal(await page.locator('#playback-speed').inputValue(),'5');
+  assert.equal(await page.locator('#follow-original').isChecked(),false);
+  assert.equal(await page.locator('#playback-play').getAttribute('aria-label'),'Play');
+  await page.locator('#follow-original').check();
+  await page.locator('#playback-speed').selectOption('1');
+  await page.locator('#sos-toast-dismiss').click();
+
   assert.equal(await page.locator("#follow-original").isChecked(), true);
   const timeline = await (
     await fetch(local + `/local/presentation/playback?id=${recording.id}`)
@@ -822,6 +874,60 @@ async function wait(fn) {
   await headerAction("appearance");
   await headerAction("open-library");
   await page.screenshot({ path: path.join(out, "library-day-empty.png") });
+  await page.locator('[data-close="saved-library"]').click();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await headerAction("open-travel");
+  await wait(() => page.evaluate(() => window.HistoricalPlayback.active));
+  assert.equal(await page.locator("#follow-label").isVisible(), false);
+  const travelPosition = await page.evaluate(
+    () => window.HistoricalPlayback.position,
+  );
+  await page.locator("#playback-last").click();
+  await page.locator("#travel-settings > summary").click();
+  assert(
+    (await page.locator("#travel-diagnostics").textContent()).includes(
+      "maximum_accuracy_m",
+    ),
+  );
+  for (const [width, height] of [
+    [390, 844],
+    [960, 720],
+    [1440, 900],
+  ]) {
+    await page.setViewportSize({ width, height });
+    for (const theme of ["day", "night"]) {
+      await page.evaluate(
+        (theme) => (document.documentElement.dataset.appearance = theme),
+        theme,
+      );
+      await page.screenshot({
+        path: path.join(out, `travel-${theme}-${width}.png`),
+      });
+    }
+  }
+  const beforeHistory = await page.locator("#tracks").innerHTML();
+  const delayed = structuredClone(base);
+  delayed.device_id = ids[0];
+  delayed.message_id = randomUUID();
+  delayed.sequence = 900;
+  delayed.captured_at = delayed.fix.observed_at = new Date(
+    Date.now() - 30000,
+  ).toISOString();
+  const delivered = await fetch(phone + "/api/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(delayed),
+  });
+  assert.equal(delivered.status, 200);
+  await page.evaluate(() => poll());
+  assert.equal(
+    await page.locator("#tracks").innerHTML(),
+    beforeHistory,
+    "arrival must not redraw Travel Back",
+  );
+  await page.locator("#travel-refresh").click();
+  assert.equal(await page.locator("#follow-label").isVisible(), false);
+  await page.locator("#exit-playback").click();
   assert.deepEqual(errors, []);
   report.passed = true;
   report.parties = 21;

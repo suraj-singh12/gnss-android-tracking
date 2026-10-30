@@ -1,6 +1,8 @@
 "use strict";
 // Open the same menus an operator uses before activating an existing action.
 exports.menuAction = async (page, id) => {
+  // Operator dismissal clears the notification only, never SOS acknowledgement.
+  if(await page.locator("#sos-toast-dismiss").isVisible()) await page.locator("#sos-toast-dismiss").click();
   const target = page.locator(`#${id}`);
   const group = target.locator("xpath=ancestor::details[contains(concat(' ',normalize-space(@class),' '),' menu ')][1]");
   if (!(await group.count())) { await target.click(); return; }

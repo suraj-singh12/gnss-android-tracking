@@ -908,3 +908,82 @@ labelled. Local browser evidence is Linux Chromium; physical Android, native mac
 Windows operation, sustained dense multi-day capture and actual field SOS/audio remain
 operator acceptance work. Public-provider network/transfer failures must be reported
 separately from deterministic #37 failures.
+
+
+## Issue #34 operational modes and Travel Back
+
+Implementation continues on `devX/issue-34-travel-back`, from verified integration
+parent `6f435942394b805d5e81129bafa3607a41ae0290` and approved design reference
+`cfb0dfdd26bda4259bb60497470bb71bba48aaa4`. Working AGENTS.md matched canonical
+guidance `3b60b6d6228ca208df75765e2008c9b9abba8a69`; integration was re-fetched
+and remained unchanged before delivery.
+
+The production UI reuses the saved player, sealed presentation source, GNSS
+derivation and Command tokens. One mode/context strip selects LIVE, RECORDING
+LIVE, VIEWING RECORDING or TRAVEL BACK. Recording-active/paused and Save Snapshot
+locks, read-only historical inspection, original visibility gates and Follow
+Original remain distinct from capture-time reconstruction. SOS uses retained
+capture-quality originals and never promotes a rejected latest report or
+acknowledges an emergency during Locate/Go Back.
+
+[Review screenshots and measured browser evidence](design/issue34/final-review/README.md)
+cover Day/Night at mobile, tablet and desktop widths. These are genuine application
+renderings driven by deterministic protocol fixtures, not native/field GNSS
+acceptance. Manual screenshot review checked the approved compact hierarchy,
+shared transport, contextual range disclosure, palette, responsive panels and
+separate time authorities.
+
+Verified browser entry points: `ui-dashboard.cjs` (including axe),
+`sos-dashboard.cjs`, `recording-foundation.cjs`, `playback-clips.cjs`,
+`recording-playback.cjs` and `travel-back.cjs`. Saved playback exercises 21 parties
+with a 20-party sealed subset, immutable maps/terrain, original visibility,
+rewind, process restart and four-second interruption behavior. New assertions
+cover recording locks and real SOS return with speed/playhead/Follow Original.
+Travel Back covers a 20-phone snapshot, a late 21st phone and missing original
+arrivals appearing only after manual Refresh View. Go fixtures additionally
+cover 1/5/21 parties, recording OFF/paused history, rejected quality, source
+sequence gaps and stale/clock-anomalous SOS location selection.
+
+Android `testDebugUnitTest lintDebug assembleDebug` passed in the managed Linux
+environment: 278 reported cases, zero failures/errors, 36 bridge-dependent skips
+(the separate real bridge run is required and is reported independently).
+Native macOS/Windows runtime, physical Android background/audio and real LAN/field
+acceptance remain unperformed. Cross-builds/debug APKs are development acceptance
+assets, not release/signature or field-stability approval.
+
+Initial environment setup required local Go/SDK/JDK and the configured proxy CA.
+An overloaded parallel verification attempt exhausted memory and invalidated its
+browser/Gradle runs; those were rerun sequentially. The initial Command race run
+also hit a latency assertion and the default ten-minute suite timeout. A clean
+retry passed in 564.382 seconds; final source validation is recorded alongside
+the delivered evidence. Failed setup/overload attempts are not counted as passes.
+
+The historical interactive range has an explicit 32 MiB original-envelope budget
+and 30-second read deadline; choose a narrower capture range if exceeded.
+Exclude Offline uses the contact snapshot at acquisition, not guessed historical
+connectivity. Unknown backlog, rejected observations and missing evidence are not
+claimed complete or converted into fresh LIVE positions. ZIP/import remains #38.
+
+Final automated verification for the implementation worktree:
+
+| Check | Result |
+| --- | --- |
+| Command `go test -race ./... -timeout 30m` | PASS, 429.170 s |
+| Command authority/SOS priority race cases | PASS, including a held historical read connection |
+| Command `go vet ./...` | PASS |
+| test-tools `go test -race ./...` and `go vet ./...` | PASS |
+| Android unit/lint/debug APK | PASS; 242 executed unit cases, 36 bridge-dependent skips, no failures/errors |
+| Real Room/Sender → Command bridge | PASS; 36 cases, zero skips/failures/errors, 21m 47s |
+
+The bridge run replaces the ordinary unit run's bridge skips with actual execution;
+it is not counted as a skipped integration pass. The final Go retry used the
+workspace temporary volume after the small `/tmp` volume fell below the existing
+3 GB map-source reservation. Installer archives and superseded builds were removed;
+no storage or transfer guard was weakened.
+
+Travel Back's policy, receipt counter, contact filter and party styles come from
+one read transaction. Later receipt cannot hide a pending change through a stale
+browser counter. Startup waits for the recording state, active intention remains
+locked during unverified presentation, and Go Back is also locked if a recording
+is started/paused while temporarily away in LIVE. Selected-range metadata may be
+listed before a phone's first fix; no future position is rendered.
