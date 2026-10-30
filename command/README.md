@@ -1143,3 +1143,60 @@ UTC boundaries, source mode and recorded interruption facts separately from desc
 date. A finally stopped recording's party picker uses its frozen participation list,
 so later phone arrivals cannot silently alter the selection. Missing applied-map pins
 are shown in Save and retained in receipt diagnostics.
+
+### Saved recordings and historical playback (#37)
+
+Open **Saved recordings** in the Command header to search and sort durable #27
+snapshots by Actual Start, Saved At, name, descriptive date or source. Rows distinguish
+full participation from the operator-selected saved subset, snapshot lifecycle and
+captured interruptions. Edit changes only name, descriptive date/time/timezone and
+description; actual timestamps and sealed receipts remain immutable. Confirmed Delete
+removes the library entry, its selected-original copies, presentation references and
+unshared pins. Operational GNSS/SOS remain retained. Cleanup yields between row batches;
+interrupted cleanup resumes at startup. Only that snapshot's durable reclamation
+candidates are considered. Response pins still held by the current recording or live
+browser (including responses awaiting render confirmation) remain protected; the
+existing liveness worker retries after those owners release them. Browser heartbeat
+expiry alone does not release live map pins. A committed removal with pending cleanup is
+reported explicitly. Descriptive changes have an append-only revision history.
+
+**Open** reuses Command's map, Parties and Details panels. A single timeline inside
+the central map offers Play/Pause, beginning/end, seek, 1×/5×/20×, presentation clock
+and inspectable recording facts. It resizes with the actual map grid and cannot extend
+across either side panel. **Exit playback** restores the current live dashboard.
+
+**Follow Original**, initially ON, reproduces the recorded map geometry, layers,
+viewport and party selection. OFF allows temporary pan/zoom/rotation, permitted party
+selection, focus/fit and layer inspection. Original visibility always overrides
+inspector choices. Hidden parties cannot expose routes/details through the playback
+response; excluded identities are metadata only. Explicit seek resets temporary view
+preferences. Re-enabling Follow Original immediately restores the current recorded
+presentation. Altered inspection has a visible label.
+
+The player uses frozen browser presentation timestamps, never GNSS observation time.
+Delayed history becomes visible at its original redraw. Original SVG geometry and
+content-addressed map/terrain responses survive ordinary map-library deletion; historical
+terrain inspection uses those pinned samples through the shared terrain renderer.
+Missing/unsupported evidence is labelled, with no latest-map fallback. Original fix
+and presentation timestamps remain distinct. Historical quality/panels are read-only;
+neutral **Recording SOS** notifications never acknowledge or operate an emergency.
+Live receipt, SOS, synchronization and recording lifecycle continue separately.
+When this exclusive browser displays historical evidence instead of LIVE, #27 cannot
+claim it rendered the live map: the next live confirmation retains the resulting
+unverified display interval, rather than capturing historical UI as live evidence.
+
+Each connected overlapping Pause/browser-closed/Command-down group occupies exactly
+four seconds on the playback clock, then skips to the next actual recorded state.
+The longest underlying real interruption supplies the label/duration; ties prefer
+Command, browser, Pause. Facts preserve all causes, boundaries and uncertainty.
+Disjoint intervals retain separate notices even without a rendered state between them.
+
+Read APIs: `GET /local/presentation/library`; same-origin JSON POST `edit`/confirmed
+`delete`; `GET /local/presentation/playback?id=UUID` for the frozen timeline;
+`&at=UNIX_MILLISECONDS` for one indexed, visibility-gated checkpoint. Frames use #27's
+bounded, hash-verified delta reader. Derived visibility boundaries are indexed at Save
+or once when upgrading existing snapshots; historical reads never build indexes or
+write evidence. Existing sealed diagnostic and pinned-asset reads remain available.
+Rendering-opportunity evidence is not proof of OS scanout or human attention; gaps
+and uncertain process-death boundaries remain explicit. Sustained multi-day recordings,
+physical Android and native macOS/Windows acceptance remain separate from software CI.

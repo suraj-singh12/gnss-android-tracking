@@ -1,5 +1,6 @@
 /* Real SQLite/server + instrumented Chromium; no pixel-diff baselines. */
 "use strict";
+const { menuAction } = require("./menu-actions.cjs");
 const assert = require("node:assert/strict"),
   fs = require("node:fs"),
   os = require("node:os"),
@@ -243,9 +244,9 @@ async function captureCount() {
       await route.abort();
     } else await route.continue();
   });
-  await page.locator("#zoom-in").click();
+  await menuAction(page, "zoom-in");
   await wait(async () => lostRevision !== undefined);
-  await page.locator("#zoom-out").click();
+  await menuAction(page, "zoom-out");
   await wait(async () => (await captureCount()) > lostRevision);
   await page.unroute("**/local/presentation/confirm");
   report.lost_ack_retry_preserved_frozen_state = true;
@@ -257,7 +258,7 @@ async function captureCount() {
     db,
   ]);
   const beforeFailure = await captureCount();
-  await page.locator("#zoom-in").click();
+  await menuAction(page, "zoom-in");
   await wait(async () =>
     (await page.locator("#capture-health").textContent()).includes(
       "injected display commit failure",
@@ -401,7 +402,7 @@ async function captureCount() {
   }
   await page.locator("#pause").click();
   await wait(async () => (await state()).recording.status === "paused");
-  await page.locator("#appearance").click();
+  await menuAction(page, "appearance");
   await page.screenshot({
     path: path.join(out, "issue27-night-paused.png"),
     fullPage: true,

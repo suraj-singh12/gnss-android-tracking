@@ -178,7 +178,7 @@ async function sosSound(test = false) {
         audio.state === "running",
       );
       if (audio.state !== "running") {
-        $("sos-audio").textContent = "Enable SOS sound · currently blocked";
+        $("sos-audio").textContent = "SOS alarm: blocked";
         $("sos-audio-status").textContent =
           "Audio suspended / blocked. Enable sound; visual SOS stays active.";
       }
@@ -188,11 +188,11 @@ async function sosSound(test = false) {
     const pending = state?.sos_alerts?.some((a) => !a.operator_acknowledged_at);
     alarm.update(pending, true);
     if (test && !pending) beep();
-    $("sos-audio").textContent = "SOS sound enabled · Test";
+    $("sos-audio").textContent = "SOS alarm: ready";
     $("sos-audio-status").textContent =
       "Sound enabled · one shared beep every second until every SOS is acknowledged. Check speaker volume.";
   } catch (e) {
-    $("sos-audio").textContent = "Enable SOS sound · currently blocked";
+    $("sos-audio").textContent = (window.AudioContext || window.webkitAudioContext) ? "SOS alarm: blocked" : "SOS alarm: error";
     $("sos-audio-status").textContent =
       "Audible alert blocked / unavailable. Enable audio and check speaker volume; visible SOS remains active.";
     alarm.update(alarm.pending, false);
@@ -205,26 +205,20 @@ $("sos-toast-dismiss").onclick = () => {
   $("sos-toast").hidden = true;
 };
 function detailsOpen(open) {
-  document.querySelector("main").classList.toggle("details-closed", !open);
-  $("toggle-details").setAttribute("aria-expanded", String(open));
-}
-$("toggle-details").onclick = () =>
-  detailsOpen(
-    document.querySelector("main").classList.contains("details-closed"),
-  );
-$("close-details").onclick = () => detailsOpen(false);
-window.addEventListener("resize", () => {
-  if (innerWidth <= 850) detailsOpen(false);
-  if (innerWidth <= 550) {
+  if (open && innerWidth <= 1100) {
     document.querySelector("main").classList.add("parties-closed");
     $("toggle-parties").setAttribute("aria-expanded", "false");
   }
-});
+  document.querySelector("main").classList.toggle("details-closed", !open);
+  $("close-details").setAttribute("aria-expanded", String(open));
+}
+$("close-details").onclick = () => { detailsOpen(false); $("tracks").focus(); };
 $("toggle-parties").onclick = $("collapse-parties").onclick = () => {
   const closed = document
     .querySelector("main")
     .classList.toggle("parties-closed");
   $("toggle-parties").setAttribute("aria-expanded", String(!closed));
+  if (!closed && innerWidth <= 1100) detailsOpen(false);
 };
 function renderSOS() {
   const alerts = [...(state.sos_alerts || [])].sort(
@@ -256,7 +250,7 @@ function renderSOS() {
     $("sos-toast").hidden = false;
   }
   if (!pending) $("sos-toast").hidden = true;
-  const summary = `${pending} unacknowledged · ${alerts.length - pending} acknowledged. Receipt and operator acknowledgement are separate. Recording controls retain SOS.`;
+  const summary = `${pending} unacknowledged · ${alerts.length - pending} acknowledged.`;
   if ($("sos-summary").textContent !== summary)
     $("sos-summary").textContent = summary;
   // Reuse event-specific nodes so polling never removes keyboard focus or changes
@@ -266,7 +260,7 @@ function renderSOS() {
     ? document.activeElement
     : null;
   let index = 0;
-  for (const a of alerts.filter((a) => !a.operator_acknowledged_at)) {
+  for (const a of alerts) {
     const key = a.device_id + "/" + a.event_id;
     let card = Array.from(root.children).find((c) => c.dataset.event === key);
     if (!card) {
@@ -289,6 +283,7 @@ function renderSOS() {
       };
       const locate = el("button", "Locate event observation");
       locate.disabled = !a.fix;
+      locate.hidden = !a.fix;
       locate.onclick = () => {
         selectParty(a.device_id);
         locatedSOS = a;
@@ -300,7 +295,9 @@ function renderSOS() {
         $("hover").textContent =
           `SOS event observation · ${a.fix.latitude}, ${a.fix.longitude} · ${time(a.fix.observed_at)} · not necessarily a current position`;
       };
-      card.append(details, button, locate);
+      const more = el("details", undefined, "sos-more");
+      more.append(el("summary", "Show more"), el("div", undefined, "sos-evidence"));
+      card.append(details, button, locate, more);
       root.append(card);
     }
     card.classList.toggle("acknowledged", !!a.operator_acknowledged_at);
@@ -309,37 +306,27 @@ function renderSOS() {
     if (card.dataset.snapshot !== JSON.stringify(a)) {
       card.dataset.snapshot = JSON.stringify(a);
       details.replaceChildren(
-        el("h2", `SOS · ${a.party.id} · ${a.party.name}`),
-        el("div", `Device ${a.device_id} · Event ${a.event_id}`),
-        el(
-          "div",
-          `Activated ${time(a.triggered_at)} · Snapshot ${time(a.captured_at)} · Command received ${time(a.received_at)}`,
-        ),
-        el(
-          "div",
-          f
-            ? `Last credible reported coordinates: ${f.latitude}, ${f.longitude} · accuracy ${f.horizontal_accuracy_m == null ? "unknown" : "±" + f.horizontal_accuracy_m + " m"}`
-            : "Coordinates unavailable at activation",
-        ),
-        el(
-          "div",
-          `GNSS at capture: ${a.gnss_status.replaceAll("_", " ")} · ${a.location_freshness.replaceAll("_", " ")}`,
-        ),
-        el(
-          "div",
-          f
-            ? `Measured ${time(f.observed_at)} · age at capture ${(f.fix_age_ms / 1000).toFixed(1)} s. This is the event observation, not a current position.`
-            : "SOS sent without waiting for GNSS",
-        ),
-        el(
-          "strong",
-          a.operator_acknowledged_at
-            ? `Acknowledged by operator ${time(a.operator_acknowledged_at)}`
-            : "UNACKNOWLEDGED — operator action required",
-        ),
+        el("h2", `${a.party.id} · ${a.party.name}`),
+        el("strong", a.operator_acknowledged_at ? "Acknowledged" : "Unacknowledged — action required"),
+        el("p", `Activated ${time(a.triggered_at)}`),
+        el("p", f ? `Event location: ${f.latitude}, ${f.longitude} · accuracy ${f.horizontal_accuracy_m == null ? "unknown" : "±" + f.horizontal_accuracy_m + " m"}` : "Location unavailable at activation"),
+        el("p", `${a.location_freshness.replaceAll("_", " ")} · event observation, not current position`),
+      );
+      const evidence = card.querySelector(".sos-evidence");
+      const group = (title, rows) => {
+        const section = el("section"); section.append(el("h3", title));
+        const list = el("dl");
+        for (const [name, value] of rows) list.append(el("dt", name), el("dd", value));
+        section.append(list); return section;
+      };
+      evidence.replaceChildren(
+        group("Event timeline", [["Activation", time(a.triggered_at)], ["Capture", time(a.captured_at)], ["Command receipt", time(a.received_at)], ["Operator acknowledgement", a.operator_acknowledged_at ? time(a.operator_acknowledged_at) : "Pending"]]),
+        group("GNSS evidence", [["Original observation", f ? time(f.observed_at) : "Unavailable"], ["GNSS state", a.gnss_status.replaceAll("_", " ")], ["Freshness", a.location_freshness.replaceAll("_", " ")], ["Fix age at capture", f ? (f.fix_age_ms / 1000).toFixed(1) + " s" : "Unavailable"], ["Accuracy", f?.horizontal_accuracy_m == null ? "Unknown" : "±" + f.horizontal_accuracy_m + " m"]]),
+        group("Technical identification", [["Device ID", a.device_id], ["Event ID", a.event_id]]),
       );
     }
     card.querySelector("button").disabled = !!a.operator_acknowledged_at;
+    card.querySelector("button").hidden = !!a.operator_acknowledged_at;
     card
       .querySelector("button")
       .setAttribute(
@@ -354,7 +341,6 @@ function renderSOS() {
     if (
       !alerts.some(
         (a) =>
-          !a.operator_acknowledged_at &&
           card.dataset.event === a.device_id + "/" + a.event_id,
       )
     )
@@ -374,13 +360,14 @@ function render() {
 }
 function renderDashboard() {
   renderSOS();
+  if (window.HistoricalPlayback?.active) return;
   if ($("event-history").open) renderEvents();
   $("projection-status").textContent = state.projection_error
     ? "Projection failed: " + state.projection_error
     : state.projection_pending
       ? "Projection catching up — displayed history is not fully synchronized"
       : "";
-  $("connection").textContent = liveConnection;
+  updateConnectionLabel();
   $("connection").classList.toggle(
     "unavailable",
     liveConnection.includes("unavailable"),
@@ -1774,6 +1761,7 @@ function terrainReadout(lon, lat) {
   return ` · Estimated ground elevation ${value === null ? "unavailable / out of coverage" : "~" + Math.round(value) + " m"} · ${terrain.vertical_datum} · ${terrain.arc_seconds} arc sec · not GNSS altitude`;
 }
 function draw() {
+  if (window.HistoricalPlayback?.active) { window.HistoricalPlayback.repaint(); return; }
   if (!state) return;
   const started = performance.now();
   try {
@@ -1915,63 +1903,7 @@ function drawMap() {
     for (const terrain of (
       globalThis.radiusGrids || [globalThis.legacyTerrainForDraw]
     ).filter(Boolean)) {
-      if (layerOn("hillshade") && terrain.shades) {
-        if (!terrain.image) {
-          const c = document.createElement("canvas");
-          c.width = terrain.columns;
-          c.height = terrain.rows;
-          const context = c.getContext("2d"),
-            image = context.createImageData(c.width, c.height);
-          const [west, south, east, north] = terrain.bounds,
-            pyNorth = GeoMap.project(west, north)[1],
-            pySouth = GeoMap.project(west, south)[1];
-          // Resample north-up rows to the existing Mercator projection, not a new CRS.
-          for (let y = 0; y < c.height; y++) {
-            const py = pyNorth - (y / (c.height - 1)) * (pyNorth - pySouth);
-            const lat = GeoMap.unproject(0, py)[1];
-            const row = Math.max(
-              0,
-              Math.min(
-                c.height - 1,
-                Math.round(((north - lat) / (north - south)) * (c.height - 1)),
-              ),
-            );
-            for (let x = 0; x < c.width; x++) {
-              const a = (y * c.width + x) * 4,
-                b = (row * c.width + x) * 4;
-              const shade = terrain.shades[b];
-              image.data[a] =
-                image.data[a + 1] =
-                image.data[a + 2] =
-                  night ? Math.round(25 + shade * 0.32) : shade;
-              image.data[a + 3] = terrain.shades[b + 3];
-            }
-          }
-          context.putImageData(image, 0, 0);
-          terrain.image = c.toDataURL("image/png");
-        }
-        const [west, south, east, north] = terrain.bounds,
-          tl = xyCoord(GeoMap.project(west, north)),
-          br = xyCoord(GeoMap.project(east, south)),
-          cellWidth = (br[0] - tl[0]) / (terrain.columns - 1),
-          cellHeight = (br[1] - tl[1]) / (terrain.rows - 1);
-        root.append(
-          svg("image", {
-            "data-layer": "hillshade",
-            "clip-path": radiusClip(root, terrain, xyCoord),
-            href: terrain.image,
-            // Raster pixels cover cells; their centres must coincide with DEM nodes.
-            // Horn's unsupported outer border is transparent, not invented coverage.
-            x: tl[0] - cellWidth / 2,
-            y: tl[1] - cellHeight / 2,
-            width: cellWidth * terrain.columns,
-            height: cellHeight * terrain.rows,
-            preserveAspectRatio: "none",
-            opacity: night ? 0.8 : 0.5,
-            "pointer-events": "none",
-          }),
-        );
-      }
+      if (layerOn("hillshade") && terrain.shades) appendPinnedHillshade(root, terrain, xyCoord, night);
     }
     $("map-mode-label").textContent = mapVisible
       ? "Offline geographic map"
@@ -2054,44 +1986,7 @@ function drawMap() {
     for (const terrain of (
       globalThis.radiusGrids || [globalThis.legacyTerrainForDraw]
     ).filter(Boolean)) {
-      if (layerOn("contours") && terrain.contour) {
-        const lines = svg("g", {
-          "data-layer": "contours",
-          "clip-path": radiusClip(root, terrain, xyCoord),
-          "pointer-events": "none",
-        });
-        for (const [i, segment] of terrain.contour.segments.entries()) {
-          const coords = segment.points.map((p) =>
-            xyCoord(GeoMap.project(...p)),
-          );
-          lines.append(
-            svg("polyline", {
-              points: coords.map((p) => p.join(",")).join(" "),
-              fill: "none",
-              stroke: night ? "#c4ab82" : "#79603d",
-              "stroke-width": 1,
-              opacity: 0.75,
-            }),
-          );
-          if (
-            i % 100 === 0 &&
-            Math.hypot(
-              coords[1][0] - coords[0][0],
-              coords[1][1] - coords[0][1],
-            ) > 35
-          ) {
-            const label = svg("text", {
-              x: coords[0][0],
-              y: coords[0][1] - 3,
-              fill: night ? "#ecd1a8" : "#614723",
-              "font-size": 10,
-            });
-            label.textContent = segment.level + " m";
-            lines.append(label);
-          }
-        }
-        root.append(lines);
-      }
+      if (layerOn("contours") && terrain.contour) appendPinnedContours(root, terrain, xyCoord, night);
     }
     if (mapVisible && offlineMap.plan) drawRadiusCoverage(root, xyCoord);
     const overlay = svg("g", { "data-layer": "tracks" });
@@ -2187,7 +2082,16 @@ function drawMap() {
   }
   const liveLayer = svg("g", { "data-layer": "live" });
   root.append(liveLayer);
-  for (const p of live) {
+  // Place high-priority labels first; markers and accessible identities are never
+  // removed. A stable device-id tie break keeps redraws deterministic.
+  const pendingSOS = new Set((state.sos_alerts || []).filter(a => !a.operator_acknowledged_at).map(a => a.device_id));
+  const ranked = [...live].sort((a, b) => {
+    const rank = p => (p.device_id === selectedParty ? 2 : 0) + (pendingSOS.has(p.device_id) ? 4 : 0);
+    return rank(b) - rank(a) || a.device_id.localeCompare(b.device_id);
+  });
+  const labelBoxes = [];
+  let hiddenLabels = 0;
+  for (const p of ranked) {
     const [x, y] = xy(p),
       d = state.devices[p.device_id];
     const bearing = GeoMap.liveHeading(p.fix, p.live);
@@ -2217,7 +2121,7 @@ function drawMap() {
       inspect(p);
       render();
     };
-    marker.onfocus = () => inspect(p);
+    marker.onfocus = marker.onmouseenter = () => inspect(p);
     marker.onkeydown = (e) => {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
@@ -2225,17 +2129,36 @@ function drawMap() {
       }
     };
     liveLayer.append(marker);
+    // Labels remain close to their own markers, so they cannot be mistaken
+    // for a route or another party. If no candidate fits, the marker retains
+    // its keyboard/hover identity and the density notice explains the omission.
+    if (x < 0 || x > w || y < 0 || y > h) continue;
     const label = svg("text", {
-      x: x + (x > w / 2 ? -13 : 13),
-      y: y < 24 ? y + 24 : y - 12,
-      "text-anchor": x > w / 2 ? "end" : "start",
-      fill: color(p.device_id),
-      "font-size": 12,
+      fill: color(p.device_id), "font-size": 13,
+      "data-device": p.device_id, "data-party-label": p.device_id,
     });
-    label.setAttribute("data-device", p.device_id);
     label.textContent = d.snapshot.party.id + (p.live ? "" : " · last known");
     liveLayer.append(label);
+    const width = label.getComputedTextLength(), height = 16;
+    const intersects = (a, b) => a.x < b.x + b.width + 3 && a.x + a.width + 3 > b.x && a.y < b.y + b.height + 2 && a.y + a.height + 2 > b.y;
+    let placed;
+    for (const dy of [-16, 18, -32, 34, -48, 50, -64, 66]) {
+      for (const dx of [13, -13 - width]) {
+        const box = { x: x + dx, y: y + dy - 12, width, height };
+        if (box.x < 2 || box.x + width > w - 2 || box.y < 2 || box.y + height > h - 2 || labelBoxes.some(other => intersects(box, other))) continue;
+        label.setAttribute("x", box.x);
+        label.setAttribute("y", box.y + 12);
+        labelBoxes.push(box);
+        placed = true;
+        break;
+      }
+      if (placed) break;
+    }
+    if (!placed) { label.remove(); hiddenLabels++; }
+
   }
+  $("label-density").hidden = !hiddenLabels;
+  $("label-density").textContent = hiddenLabels ? `${hiddenLabels} crowded party label${hiddenLabels === 1 ? "" : "s"} hidden · select a marker or zoom in` : "";
   $("scale-label").textContent = "WGS84 / Web Mercator · north up";
   if (locatedSOS?.fix) {
     const [x, y] = xy({ fix: locatedSOS.fix });
@@ -2323,7 +2246,7 @@ async function pollLive() {
     const b = await response.json();
     liveConnection = "● Command Connected";
     if (state && b.receipt_version < state.receipt_version) {
-      $("connection").textContent = liveConnection;
+      updateConnectionLabel();
       $("connection").classList.remove("unavailable");
       return;
     }
@@ -2347,7 +2270,7 @@ async function pollLive() {
   } catch (e) {
     failed = true;
     liveConnection = "● Command LIVE/SOS unavailable";
-    $("connection").textContent = liveConnection;
+    updateConnectionLabel();
     $("connection").classList.add("unavailable");
     if (!state) showError(e);
   } finally {
@@ -3797,7 +3720,7 @@ window.recordingAppliedState = () => {
       map_svg: [...$("tracks").children]
         .filter(
           (e) =>
-            e.tagName.toLowerCase() === "defs" ||
+            ["defs","clippath","mask","lineargradient","radialgradient","pattern"].includes(e.tagName.toLowerCase()) ||
             ["offline-map", "hillshade", "contours", "coverage"].includes(
               e.dataset.layer,
             ),
@@ -3834,3 +3757,238 @@ window.recordingAppliedState = () => {
   };
 };
 window.recordingLiveState = () => state;
+
+window.restoreLiveDashboard = () => { const main=document.querySelector("main");$("toggle-parties").setAttribute("aria-expanded",String(!main.classList.contains("parties-closed")));$("close-details").setAttribute("aria-expanded",String(!main.classList.contains("details-closed"))); render(); draw(); };
+
+function appendPinnedHillshade(root,terrain,xyCoord,night) {
+        if (!terrain.image) {
+          const c = document.createElement("canvas");
+          c.width = terrain.columns;
+          c.height = terrain.rows;
+          const context = c.getContext("2d"),
+            image = context.createImageData(c.width, c.height);
+          const [west, south, east, north] = terrain.bounds,
+            pyNorth = GeoMap.project(west, north)[1],
+            pySouth = GeoMap.project(west, south)[1];
+          // Resample north-up rows to the existing Mercator projection, not a new CRS.
+          for (let y = 0; y < c.height; y++) {
+            const py = pyNorth - (y / (c.height - 1)) * (pyNorth - pySouth);
+            const lat = GeoMap.unproject(0, py)[1];
+            const row = Math.max(
+              0,
+              Math.min(
+                c.height - 1,
+                Math.round(((north - lat) / (north - south)) * (c.height - 1)),
+              ),
+            );
+            for (let x = 0; x < c.width; x++) {
+              const a = (y * c.width + x) * 4,
+                b = (row * c.width + x) * 4;
+              const shade = terrain.shades[b];
+              image.data[a] =
+                image.data[a + 1] =
+                image.data[a + 2] =
+                  night ? Math.round(25 + shade * 0.32) : shade;
+              image.data[a + 3] = terrain.shades[b + 3];
+            }
+          }
+          context.putImageData(image, 0, 0);
+          terrain.image = c.toDataURL("image/png");
+        }
+        const [west, south, east, north] = terrain.bounds,
+          tl = xyCoord(GeoMap.project(west, north)),
+          br = xyCoord(GeoMap.project(east, south)),
+          cellWidth = (br[0] - tl[0]) / (terrain.columns - 1),
+          cellHeight = (br[1] - tl[1]) / (terrain.rows - 1);
+        root.append(
+          svg("image", {
+            "data-layer": "hillshade",
+            "clip-path": radiusClip(root, terrain, xyCoord),
+            href: terrain.image,
+            // Raster pixels cover cells; their centres must coincide with DEM nodes.
+            // Horn's unsupported outer border is transparent, not invented coverage.
+            x: tl[0] - cellWidth / 2,
+            y: tl[1] - cellHeight / 2,
+            width: cellWidth * terrain.columns,
+            height: cellHeight * terrain.rows,
+            preserveAspectRatio: "none",
+            opacity: night ? 0.8 : 0.5,
+            "pointer-events": "none",
+          }),
+        );
+
+}
+
+function appendPinnedContours(root,terrain,xyCoord,night) {
+        const lines = svg("g", {
+          "data-layer": "contours",
+          "clip-path": radiusClip(root, terrain, xyCoord),
+          "pointer-events": "none",
+        });
+        for (const [i, segment] of terrain.contour.segments.entries()) {
+          const coords = segment.points.map((p) =>
+            xyCoord(GeoMap.project(...p)),
+          );
+          lines.append(
+            svg("polyline", {
+              points: coords.map((p) => p.join(",")).join(" "),
+              fill: "none",
+              stroke: night ? "#c4ab82" : "#79603d",
+              "stroke-width": 1,
+              opacity: 0.75,
+            }),
+          );
+          if (
+            i % 100 === 0 &&
+            Math.hypot(
+              coords[1][0] - coords[0][0],
+              coords[1][1] - coords[0][1],
+            ) > 35
+          ) {
+            const label = svg("text", {
+              x: coords[0][0],
+              y: coords[0][1] - 3,
+              fill: night ? "#ecd1a8" : "#614723",
+              "font-size": 10,
+            });
+            label.textContent = segment.level + " m";
+            lines.append(label);
+          }
+        }
+        root.append(lines);
+
+}
+
+window.PinnedTerrainRenderer = {hillshade:appendPinnedHillshade,contours:appendPinnedContours};
+
+// Menus retain the existing action nodes and close after activation or Escape.
+document.addEventListener("click", (event) => {
+  const menu = event.target.closest(".menu");
+  if (menu && event.target.closest("button, a")) {
+    for (let current = menu; current; current = current.parentElement?.closest(".menu")) if (!current.classList.contains("header-menu-root") || innerWidth <= 1100) current.open = false;
+  } else if (!menu) document.querySelectorAll(".menu[open]").forEach((item) => { if (!item.classList.contains("header-menu-root") || innerWidth <= 1100) item.open = false; });
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  const menu = event.target.closest(".menu[open]");
+  if (menu) { event.preventDefault(); menu.open = false; menu.querySelector("summary")?.focus(); }
+});
+const captureHealth = $("capture-health");
+function updateCaptureSummary() {
+  const value = captureHealth.textContent || "";
+  const unverified = value.includes("Unverified");
+  $("capture-summary").textContent = unverified ? "Unverified" : "Evidence";
+  $("capture-heading").hidden = !unverified;
+}
+new MutationObserver(updateCaptureSummary).observe(captureHealth, {childList: true, characterData: true, subtree: true});
+updateCaptureSummary();
+
+function updateConnectionLabel() {
+  $("connection").title = liveConnection;
+  $("connection").textContent = innerWidth <= 600
+    ? (liveConnection.includes("unavailable") ? "● Unavailable" : liveConnection.includes("Connected") ? "● Connected" : "Connecting…")
+    : liveConnection;
+}
+window.addEventListener("resize", updateConnectionLabel);
+const headerMenuRoot = document.querySelector(".header-menu-root");
+let compactLayout;
+function updateCompactLayout() {
+  const compact = innerWidth <= 1100;
+  if (compact === compactLayout) return;
+  compactLayout = compact;
+  headerMenuRoot.open = !compact;
+  if (compact) {
+    const main = document.querySelector("main");
+    main.classList.add("details-closed");
+    $("toggle-parties").setAttribute("aria-expanded", String(!main.classList.contains("parties-closed")));
+    $("close-details").setAttribute("aria-expanded", "false");
+  }
+}
+window.addEventListener("resize", updateCompactLayout);
+updateCompactLayout();
+// Keep less frequent playback actions available without expanding the timeline.
+const playbackMore = document.createElement("details");
+playbackMore.className = "menu playback-more";
+const playbackMoreSummary = document.createElement("summary");
+playbackMoreSummary.textContent = "More";
+const playbackMoreContent = document.createElement("div");
+playbackMoreContent.className = "menu-content";
+for (const id of ["playback-first", "playback-last", "playback-facts", "playback-start"]) playbackMoreContent.append($(id));
+playbackMore.append(playbackMoreSummary, playbackMoreContent);
+$("playback-timeline").append(playbackMore);
+// Restore focus for non-modal narrow drawers, including historical inspection.
+document.addEventListener("click", event => {
+  if (innerWidth > 1100) return;
+  const id = event.target.closest("button")?.id;
+  if (!["toggle-parties", "collapse-parties", "toggle-details", "close-details"].includes(id)) return;
+  queueMicrotask(() => {
+    const left = id.includes("parties"), main = document.querySelector("main");
+    const closed = main.classList.contains(left ? "parties-closed" : "details-closed");
+    if (closed) $(left ? "toggle-parties" : "tracks").focus();
+    else $(left ? "collapse-parties" : "close-details").focus();
+  });
+}, true);
+document.addEventListener("keydown", event => {
+  if (event.key !== "Escape" || innerWidth > 1100 || event.target.closest("dialog, .menu")) return;
+  const aside = event.target.closest(".party-overview, .party-detail");
+  if (!aside) return;
+  const left = aside.classList.contains("party-overview");
+  document.querySelector("main").classList.add(left ? "parties-closed" : "details-closed");
+  const toggle = $(left ? "toggle-parties" : "tracks");
+  toggle.setAttribute("aria-expanded", "false");
+  toggle.focus();
+  event.preventDefault();
+});
+document.addEventListener("keydown", event => {
+  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+  const menu = event.target.closest(".menu");
+  if (!menu || !menu.open) return;
+  const container = menu.querySelector(":scope > .menu-content, :scope > .menu-groups");
+  if (!container) return;
+  const items = [...container.querySelectorAll(":scope > button, :scope > a, :scope > details > summary")].filter(item => !item.disabled);
+  if (!items.length) return;
+  const current = items.indexOf(document.activeElement);
+  const next = event.key === "ArrowDown" ? (current + 1) % items.length : (current < 0 ? items.length - 1 : (current + items.length - 1) % items.length);
+  items[next].focus();
+  event.preventDefault();
+});
+// The recording controls belong to the live map cell so side panels never
+// consume the dock's width. Existing nodes and handlers are retained.
+document.querySelector(".canvas").append(document.querySelector(".recording-bar"));
+for (const group of document.querySelectorAll(".menu-groups > .menu")) {
+  group.addEventListener("toggle", () => {
+    if (group.open) for (const sibling of group.parentElement.children) if (sibling !== group) sibling.open = false;
+  });
+}
+// A menu item may open a dialog after its menu closes. Return focus to the
+// visible menu trigger when that dialog is dismissed.
+document.addEventListener("click", event => {
+  const button = event.target.closest(".menu button");
+  if (!button) return;
+  const menu = button.closest(".menu");
+  const root = button.closest(".header-menu-root");
+  const trigger = root && innerWidth <= 1100 ? root.querySelector(":scope > summary") : menu.querySelector(":scope > summary");
+  const previouslyOpen = new Set(document.querySelectorAll("dialog[open]"));
+  queueMicrotask(() => {
+    for (const dialog of document.querySelectorAll("dialog[open]")) {
+      if (!previouslyOpen.has(dialog)) dialog.addEventListener("close", () => trigger?.focus(), {once:true});
+    }
+  });
+}, true);
+const mapToolbar = document.querySelector('.canvas-toolbar');
+function updateMapChromeBounds() {
+  const rect = mapToolbar.getBoundingClientRect();
+  const root = document.documentElement.style;
+  root.setProperty('--command-tools-bottom', `${rect.bottom + 10}px`);
+  document.querySelector('.canvas').style.setProperty('--command-tools-height', `${rect.height + 24}px`);
+  const context = document.querySelector('.playback-context');
+  const playback = document.body.classList.contains('playback');
+  const contextBottom = playback ? context.getBoundingClientRect().bottom : rect.bottom;
+  root.setProperty('--command-panel-top', `${Math.max(rect.bottom, contextBottom) + 12}px`);
+  const dock = playback ? $('playback-timeline') : document.querySelector('.recording-bar');
+  root.setProperty('--command-dock-top', `${dock.getBoundingClientRect().top}px`);
+}
+const chromeBounds = new ResizeObserver(updateMapChromeBounds);
+for (const element of [mapToolbar, $('playback-timeline'), document.querySelector('.recording-bar'), document.querySelector('.playback-context')]) chromeBounds.observe(element);
+window.addEventListener('resize', updateMapChromeBounds);
+updateMapChromeBounds();

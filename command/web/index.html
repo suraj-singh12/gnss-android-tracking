@@ -10,6 +10,8 @@
     <script src="/sos-alarm.js" defer></script>
     <script src="/app.js" defer></script>
     <script src="/recording.js" defer></script>
+    <script src="/playback.js" defer></script>
+    <script src="/library.js" defer></script>
     <script src="/control.js" defer></script>
   </head>
   <body>
@@ -17,7 +19,7 @@
       <div class="brand">
         <span class="brand-mark">G</span>
         <div>
-          GNSS Command Centre
+          <span class="brand-name">GNSS Command Centre</span>
           <div class="command-summary">
             <span
               id="connection"
@@ -33,23 +35,16 @@
         </div>
       </div>
       <div class="header-tools">
-        <button id="sos-audio">Enable / test SOS sound</button>
-        <button id="open-quality">Quality settings</button
-        ><button id="open-map">Map & layers</button
-        ><a href="/local/field-report">Export diagnostics</a>
-        <button id="open-history" aria-label="Events history">Events</button>
-        <button id="appearance" aria-label="Switch to Night appearance">
-          Night
-        </button>
-        <button id="open-control">Phone controls</button>
-        <button id="open-about">About</button>
-        <button
-          id="open-sos"
-          class="emergency"
-          aria-label="Open SOS emergencies"
-        >
-          SOS <span id="sos-count">0</span>
-        </button>
+        <details class="header-menu-root menu" open><summary>Menu</summary>
+          <div class="menu-groups">
+            <details class="menu"><summary>Workspace</summary><div class="menu-content"><button id="open-map">Map &amp; layers</button><button id="open-control">Phone controls</button></div></details>
+            <details class="menu"><summary>Records</summary><div class="menu-content"><button id="open-library">Saved recordings</button><button id="open-history" aria-label="Events history">Events</button></div></details>
+            <details class="menu"><summary>Tools</summary><div class="menu-content"><button id="open-quality">Quality settings</button><a href="/local/field-report">Export diagnostics</a><button id="open-about">About</button></div></details>
+            <details class="menu"><summary>View</summary><div class="menu-content"><button id="appearance" aria-label="Switch to Night appearance">Night</button></div></details>
+          </div>
+        </details>
+        <button id="sos-audio">SOS alarm: enable</button>
+        <button id="open-sos" class="emergency" aria-label="Open SOS emergencies">SOS <span id="sos-count">0</span></button>
       </div>
     </header>
     <dialog id="phone-control" aria-labelledby="phone-control-title">
@@ -156,11 +151,19 @@
       <div id="control-history"></div>
     </dialog>
     <div id="error" role="alert" hidden></div>
+    <section id="playback-rail" hidden aria-label="Historical playback">
+      <div>
+        <strong>● VIEWING RECORDING</strong> <span id="playback-name"></span>
+      </div>
+      <label id="follow-label"
+        >Follow Original
+        <input id="follow-original" type="checkbox" role="switch" checked /><span id="follow-state">ON</span></label>
+      <span>Read-only evidence</span
+      ><button id="exit-playback">Exit playback</button>
+    </section>
     <section class="recording-bar" aria-label="Recording controls">
       <span id="recording" role="status">Connecting…</span>
-      <span id="capture-health" role="status"
-        >Unverified presentation evidence</span
-      >
+      <details class="capture-disclosure"><summary id="capture-summary">Presentation status</summary><div class="capture-detail"><strong id="capture-heading" hidden>Presentation unverified at this time</strong><span id="capture-health" role="status">Awaiting browser ownership</span></div></details>
       <div class="controls">
         <button id="start" class="primary">Start Recording</button>
         <button id="pause" class="primary" hidden>Pause</button>
@@ -337,6 +340,65 @@
         ×
       </button>
     </div>
+    <dialog id="saved-library" aria-labelledby="library-title">
+      <div class="dialog-heading">
+        <h1 id="library-title">Saved Recordings</h1>
+        <button data-close="saved-library" aria-label="Close Saved recordings">
+          ×
+        </button>
+      </div>
+      <p class="muted library-subtitle">Frozen snapshots from this Command</p>
+      <label class="library-search-label"
+        ><span class="sr-only">Search recordings</span
+        ><input
+          id="library-search"
+          type="search"
+          placeholder="⌕  Search recordings"
+      /></label>
+      <div class="library-sortline">
+        <strong>Saved recordings</strong
+        ><label
+          ><span class="sr-only">Sort saved recordings</span
+          ><select id="library-sort">
+            <option value="saved_at">Saved at · Newest</option>
+            <option value="started_at">Actual start · Newest</option>
+            <option value="name">Name · A–Z</option>
+            <option value="display_date">Descriptive date</option>
+            <option value="source_mode">Source · A–Z</option>
+          </select></label
+        >
+      </div>
+      <p id="library-status" role="status"></p>
+      <div id="library-rows"></div>
+      <section
+        id="library-selected"
+        aria-label="Selected recording facts"
+      ></section>
+    </dialog>
+    <dialog id="library-edit" aria-labelledby="library-edit-title">
+      <div class="dialog-heading">
+        <h1 id="library-edit-title">Edit recording metadata</h1>
+        <button data-close="library-edit" aria-label="Close metadata editor">
+          ×
+        </button>
+      </div>
+      <form id="library-edit-form">
+        <label>Name<input id="library-name" required maxlength="256" /></label
+        ><label
+          >Descriptive date / time / timezone<input
+            id="library-date"
+            maxlength="256" /></label
+        ><label
+          >Description<textarea
+            id="library-description"
+            maxlength="8192"
+          ></textarea>
+        </label>
+        <p>Actual Start, Save and immutable evidence remain unchanged.</p>
+        <p id="library-edit-status" role="status"></p>
+        <button type="submit">Save metadata</button>
+      </form>
+    </dialog>
     <main class="details-closed">
       <aside class="party-overview">
         <div class="aside-title">
@@ -355,40 +417,70 @@
           >
         </p>
       </aside>
-      <section class="canvas" aria-label="Geographic workspace">
+      <section class="canvas" aria-label="Geographic workspace"><button id="toggle-parties" aria-label="Restore Parties sidebar" aria-expanded="true">›</button>
         <div class="canvas-toolbar">
           <span>N ↑ <span id="map-mode-label">Blank canvas</span></span>
           <div>
-            <button
-              id="toggle-parties"
-              aria-label="Toggle Parties sidebar"
-              aria-expanded="true"
-            >
-              Parties
-            </button>
-            <button
-              id="toggle-details"
-              aria-label="Toggle selected party details"
-              aria-expanded="false"
-            >
-              Details
-            </button>
-            <button id="zoom-in" aria-label="Zoom in">+</button
-            ><button id="zoom-out" aria-label="Zoom out">−</button
-            ><button id="fit">Fit parties</button
-            ><button id="focus-party">Focus selected</button
-            ><button id="inspect-history">Inspect history</button>
-            <button
-              id="open-layers"
-              title="Show or hide locally prepared terrain layers"
-              aria-label="Map Layers"
-              aria-expanded="false"
-            >
-              ▱ Layers
-            </button>
+            <button id="zoom-in" aria-label="Zoom in">+</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="fit">Fit parties</button><button id="focus-party">Focus selected</button><button id="inspect-history">Inspect history</button><button id="open-layers" title="Show or hide locally prepared terrain layers" aria-label="Map Layers" aria-expanded="false">Layers</button>
           </div>
         </div>
+        <div class="playback-context"><div id="playback-status" role="status" hidden></div>
+        <details id="playback-evidence" hidden><summary>Presentation unverified at this time</summary><p id="playback-evidence-detail"></p></details></div>
+        <div id="playback-notice" role="status" hidden></div>
+        <div id="playback-sos" hidden></div>
+        <section id="playback-timeline" hidden aria-label="Recording timeline">
+          <div class="playback-time">
+            <strong id="presentation-time"></strong
+            ><small>Presentation time</small>
+          </div>
+          <input
+            id="playback-seek"
+            type="range"
+            min="0"
+            max="1"
+            step="0.001"
+            value="0"
+            aria-label="Presentation timeline"
+          />
+          <strong id="playback-elapsed"></strong>
+          <div class="playback-buttons">
+            <button id="playback-first" aria-label="Beginning">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                aria-hidden="true"
+              >
+                <path fill="currentColor" d="M2 2h2v16H2zm14 0v16L5 10z" />
+              </svg></button
+            ><button id="playback-play" aria-label="Play" class="primary">
+              ▷</button
+            ><button id="playback-last" aria-label="End">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                aria-hidden="true"
+              >
+                <path fill="currentColor" d="M16 2h2v16h-2zM4 2l11 8-11 8z" />
+              </svg>
+            </button>
+          </div>
+          <label
+            >Speed
+            <select id="playback-speed">
+              <option value="1">1×</option>
+              <option value="5">5×</option>
+              <option value="20">20×</option>
+            </select></label
+          >
+          <small id="playback-start"></small
+          ><button id="playback-facts" aria-label="Inspect recording facts">
+            ⋮
+          </button>
+        </section>
         <div id="projection-status" role="status"></div>
+        <div id="label-density" role="status" hidden></div>
         <div id="map-detail-status" role="status"></div>
 
         <dialog
@@ -448,6 +540,18 @@
         </div>
       </aside>
     </main>
+    <dialog id="historical-inspection" aria-labelledby="historical-title">
+      <div class="dialog-heading">
+        <h1 id="historical-title">Historical · READ ONLY</h1>
+        <button
+          data-close="historical-inspection"
+          aria-label="Close historical inspection"
+        >
+          ×
+        </button>
+      </div>
+      <div id="historical-content"></div>
+    </dialog>
     <dialog id="layers" aria-labelledby="layers-title">
       <div class="dialog-heading">
         <h1 id="layers-title">Layers</h1>
@@ -818,9 +922,6 @@
         </details>
       </details>
     </dialog>
-    <footer>
-      Offline geographic coordinates · Phone Tracking continues independently of
-      Command Recording
-    </footer>
+    <footer title="Offline geographic coordinates · Phone Tracking continues independently of Command Recording"><span class="footer-full">Offline geographic coordinates · Phone Tracking continues independently of Command Recording</span><span class="footer-short">Offline map · Phone tracking independent</span></footer>
   </body>
 </html>

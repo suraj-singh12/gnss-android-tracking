@@ -265,3 +265,20 @@ Exclusive browser fencing protects recording publication. GNSS/ACK/SOS retain th
 existing authorities. OS compositor scanout is outside the claim. Asset read revisions and concurrent
 Save receipt have targeted tests; sustained large-Save latency and long-running fleet
 acceptance remain unverified; see architecture.
+
+## Issue #37 · Saved library and historical playback
+
+| Existing capability | Historical presentation | Preserved authority |
+| --- | --- | --- |
+| Header / Event History conventions | Saved recordings opens an accessible Command dialog; search/sort, descriptive edit and confirmed Delete | Existing SQLite and immutable #27 receipts |
+| Recording strip / live lifecycle | Compact VIEWING RECORDING rail with one centred Follow Original switch and Exit | Live recording state remains separate; historical DOM is never recaptured as live |
+| Parties / geographic map / Details | Same grid, time-gated party rows, read-only details/quality and neutral Recording SOS | Frozen browser checkpoint; no GNSS or distance reconstruction |
+| Map toolbar / layers | Historical focus/fit and temporary pan/zoom/rotation; pinned terrain inspection | Existing map and terrain helpers; no mutable-library fallback |
+| Panel collapse / responsive map | Timeline is bounded by the map cell at all panel combinations | Existing grid and panel controls |
+| Live SOS / receipt / synchronization | Existing live header and notifications continue; historical chips have no actions | Existing operational transport/SOS owners |
+
+Approved Day/Night images supplied with #37 are the visual contract. Runtime screenshots
+in `docs/design/issue37/` and the integrated workflow demonstrate actual Command/SQLite
+fixtures, including populated library, 21-party/20-subset playback, hidden restriction,
+interruption and responsive panel states. They are not pixel-diff baselines or physical
+field acceptance. #34 navigation/Travel Back and #38 packaging remain out of scope.

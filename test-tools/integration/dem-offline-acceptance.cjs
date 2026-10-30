@@ -1,6 +1,7 @@
 /* Production acquisition/UI/storage acceptance. Public providers by default;
  * controlled runs explicitly identify the verified real SRTM replay sample. */
 "use strict";
+const { menuAction } = require("./menu-actions.cjs");
 const {
   waitForAcquisition,
   transferBudget,
@@ -107,7 +108,7 @@ async function wait(f) {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(local);
-  await page.locator("#open-map").click();
+  await menuAction(page, "open-map");
   await page.locator("#tab-map-preparation").click();
   await page.locator(".map-precise").evaluate((e) => (e.open = true));
   await page.getByRole("button", { name: "Custom", exact: true }).click();
@@ -165,7 +166,7 @@ async function wait(f) {
       (await json(local, `maps/${id}/manifest`)).transfer,
       before.transfer,
     );
-    await page.locator("#open-map").click();
+    await menuAction(page, "open-map");
     await page.locator("#tab-map-preparation").click();
     report.pending_approval_save_use_preserves_map = true;
     const approvalRoute = `**/local/maps/${id}/approve-transfer`;
@@ -262,7 +263,7 @@ async function wait(f) {
       "real provider sample at exact requested coordinate; not a surveyed ground truth",
     );
   await page.locator('[data-close="map-settings"]').click();
-  await page.locator("#open-layers").click();
+  await menuAction(page, "open-layers");
   for (const k of ["hillshade", "contours", "elevation"]) {
     assert.equal(await page.locator("#layer-" + k).isChecked(), false);
     await page.locator("#layer-" + k).check();

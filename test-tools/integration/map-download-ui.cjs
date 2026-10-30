@@ -1,5 +1,6 @@
 /* Deterministic UI evidence: provider/DEM responses here are labelled fixtures. */
 "use strict";
+const { menuAction } = require("./menu-actions.cjs");
 const assert = require("node:assert/strict"),
   fs = require("node:fs"),
   os = require("node:os"),
@@ -87,7 +88,7 @@ async function port() {
     route.fulfill({ json: fixture }),
   );
   await page.goto(local);
-  await page.locator("#open-map").click();
+  await menuAction(page, "open-map");
   assert.equal(
     await page.locator("#current-map-title").textContent(),
     "Current Map",
@@ -176,8 +177,8 @@ async function port() {
   for (const theme of ["day", "night"]) {
     if (theme === "night") {
       await page.locator('[data-close="map-settings"]').click();
-      await page.locator("#appearance").click();
-      await page.locator("#open-map").click();
+      await menuAction(page, "appearance");
+      await menuAction(page, "open-map");
     }
     for (const size of [
       { width: 1280, height: 720 },

@@ -253,3 +253,35 @@ App-owned dialogs and OS-owned notifications use native layouts. Tracking notifi
 Sync and confirmed Stop enter existing Activity workflows; alert ACK retains its
 original receiver/journal. Android owns system surfaces and background restrictions.
 Command web and its existing visual system remain unchanged.
+
+## Issue #59 Command map-first layout
+
+Command groups existing header actions into Workspace, Records, Tools and View;
+the SOS counter, browser alarm readiness and connection remain directly visible.
+Map actions remain direct canvas controls, with Layers at the top right. Parties
+collapses and restores through edge arrows; selection opens Details. Narrow layouts
+use bounded overlay panels and a compact header. Recording status is a compact
+disclosure. Playback remains read-only, uses the existing map cell and exposes
+unverified presentation intervals with the recorded reason and bounds when
+available. Browser sound readiness does not establish speaker volume or audibility.
+
+Live map labels use deterministic collision avoidance with selected and unacknowledged SOS parties prioritized. Markers remain selectable and keyboard accessible; a visible density notice explains omitted labels and suggests zoom or selection. Historical Follow Original retains the recorded presentation rather than reflowing immutable evidence.
+
+Operator amendments to #59: Parties opens by default and collapses/restores through edge arrows. Details opens through party/marker selection and closes through its X. Map controls are direct, with Layers at the canvas top right. SOS and Event History share the responsive Details width. SOS cards retain event-specific actions and a persistent structured evidence disclosure across polling.
+
+Visual correction to #59: direct +/−, Fit, Focus, Inspect and Layers retain the
+right-aligned original order, with Layers at the upper right and the direction /
+map-mode label shown when the map cell has room. Menu triggers omit redundant
+chevrons; ordinary evidence disclosures retain their native single indicator.
+Playback uncertainty appears as informational text immediately beneath the frozen
+view status, with reasons and intervals in its disclosure. Narrow right panels
+share a compact width and are bounded between the map controls/context and dock,
+with internal scrolling. Superseded screenshot provenance is in
+`docs/design/issue59/README.md`.
+
+Final #59 density correction: at narrow widths (up to 1100 px), only Parties and
+Selected Party Details use reduced padding, card gaps and restrained 12–15 px
+text, retaining 40 px party-selection and dismissal targets. Historical inspection
+facts use compact, wrapping rows; panel widths and dock-aware scroll bounds are
+unchanged. Saved Recordings shares `--command-detail-width` at every breakpoint,
+with wrapping names, sorting and management actions inside its existing drawer.

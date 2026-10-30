@@ -1,6 +1,7 @@
 // Optional browser acceptance for the real embedded Command dashboard. No product
 // dependencies: Node + an externally supplied Playwright installation are test-only.
 "use strict";
+const { menuAction } = require("./menu-actions.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -94,8 +95,48 @@ async function stop() {
   assert.match(await page.locator("#sos-audio-status").innerText(), /blocked/i);
   assert.match(
     await page.locator(".sos-alert").innerText(),
-    /Coordinates unavailable/,
+    /Location unavailable/,
   );
+  await page.locator('[data-close="sos-panel"]').click();
+  const evidence = process.env.GNSS_SCREENSHOT_DIR || work;
+  fs.mkdirSync(evidence, {recursive:true});
+  for (const [width,height] of [[390,844],[960,720],[1280,720],[1440,900],[1920,1080]]) {
+    await page.setViewportSize({width,height});
+    assert.equal(await page.locator('#toggle-details, .map-tools').count(),0);
+    if (!(await page.locator('#collapse-parties').isVisible())) await page.locator('#toggle-parties').click();
+    await page.locator('.party-select').first().click();
+    const pane = await page.locator('.party-detail').boundingBox();
+    await page.locator('#open-sos').click();
+    const drawer = await page.locator('#sos-panel').boundingBox();
+    assert(Math.abs(pane.width-drawer.width)<2, JSON.stringify({pane,drawer}));
+    if (await page.locator('.sos-more').first().evaluate(e=>e.open)) await page.locator('.sos-more summary').first().click();
+    await page.screenshot({path:path.join(evidence,`sos-day-${width}.png`)});
+    await page.locator('.sos-more summary').first().click();
+    await page.screenshot({path:path.join(evidence,`sos-expanded-${width}.png`)});
+    await page.locator('[data-close="sos-panel"]').click();
+    await menuAction(page,'appearance');
+    await page.locator('#open-sos').click();
+    await page.screenshot({path:path.join(evidence,`sos-night-${width}.png`)});
+    await page.locator('[data-close="sos-panel"]').click();
+    await menuAction(page,'appearance');
+    await menuAction(page,'open-history');
+    const events = await page.locator('#event-history').boundingBox();
+    assert(Math.abs(events.width-pane.width)<2);
+    await page.locator('[data-close="event-history"]').click();
+    await page.locator('#close-details').click();
+    await page.locator('#open-layers').click(); assert(await page.locator('#layers').isVisible());
+    await page.locator('#open-layers').click(); assert(!(await page.locator('#layers').isVisible()));
+    await page.locator('#open-layers').click(); await page.keyboard.press('Escape');
+    assert(await page.locator('#open-layers').evaluate(e=>e===document.activeElement));
+    await page.locator('#open-layers').click(); await page.locator('[data-close="layers"]').click();
+  }
+  await page.locator('#open-sos').click();
+  await page.locator('.sos-more').evaluate(e=>e.open=false);
+  const more = page.locator('.sos-more');
+  await more.locator('summary').click();
+  await page.waitForTimeout(2200);
+  assert(await more.evaluate(e => e.open));
+  assert.match(await more.innerText(), /Technical identification/);
   const button = page.locator(".sos-alert button").first();
   await button.focus();
   await page.waitForTimeout(2200);
@@ -108,7 +149,7 @@ async function stop() {
     () => document.querySelector("#sos-count").textContent === "0",
   );
   await page.locator('[data-close="sos-panel"]').click();
-  await page.locator("#open-history").click();
+  await menuAction(page, "open-history");
   await page.locator("#event-filter").selectOption("sos");
   await page.waitForSelector(".history-event");
   assert.match(
@@ -130,7 +171,7 @@ async function stop() {
   await page.reload();
   await page.locator("#open-sos").click();
   await page.waitForSelector(".sos-alert:not(.acknowledged)");
-  assert.equal(await page.locator(".sos-alert").count(), 1);
+  assert.equal(await page.locator(".sos-alert:not(.acknowledged)").count(), 1);
   assert.equal(
     await page.locator(".sos-alert button:not(:disabled)").count(),
     1,
@@ -164,9 +205,9 @@ async function stop() {
   await page.reload();
   await page.locator("#open-sos").click();
   await page.waitForSelector(".sos-alert:not(.acknowledged)");
-  assert.equal(await page.locator(".sos-alert").count(), 1);
+  assert.equal(await page.locator(".sos-alert:not(.acknowledged)").count(), 1);
   await page.locator('[data-close="sos-panel"]').click();
-  await page.locator("#open-history").click();
+  await menuAction(page, "open-history");
   await page.locator("#event-filter").selectOption("sos");
   await page.waitForFunction(
     () => document.querySelectorAll(".history-event").length === 2,

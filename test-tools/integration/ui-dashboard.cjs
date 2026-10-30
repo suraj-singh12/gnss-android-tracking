@@ -1,5 +1,6 @@
 /* Real Command API + Chromium. Fixture data is synthetic; no mocked state API. */
 "use strict";
+const { menuAction } = require("./menu-actions.cjs");
 const assert = require("node:assert/strict"),
   fs = require("node:fs"),
   os = require("node:os"),
@@ -254,7 +255,7 @@ async function wait(check) {
     [430, 900],
   ]) {
     await page.setViewportSize({ width: size[0], height: size[1] });
-    await page.locator("#fit").click();
+    await menuAction(page, "fit");
     assert.equal(
       await page.evaluate(
         () => document.documentElement.scrollWidth > innerWidth,
@@ -314,7 +315,7 @@ async function wait(check) {
   )
     await page.locator("#toggle-parties").click();
   if (
-    (await page.locator("#toggle-details").getAttribute("aria-expanded")) ===
+    (await page.locator("#close-details").getAttribute("aria-expanded")) ===
     "true"
   )
     await page.locator("#close-details").click();
@@ -331,21 +332,21 @@ async function wait(check) {
     path: path.join(out, "command-1440-map-dominant.png"),
     fullPage: true,
   });
-  await page.locator("#toggle-details").click();
+  await page.getByRole("button", {name:"Charlie", exact:true}).click();
   const before = await page
     .locator("[data-live-device]")
     .first()
     .getAttribute("cx");
-  await page.locator("#zoom-in").click();
+  await menuAction(page, "zoom-in");
   await page.locator("#tracks").focus();
   await page.keyboard.press("ArrowRight");
   assert.notEqual(
     await page.locator("[data-live-device]").first().getAttribute("cx"),
     before,
   );
-  await page.locator("#fit").click();
-  await page.locator("#focus-party").click();
-  await page.locator("#open-map").click();
+  await menuAction(page, "fit");
+  await menuAction(page, "focus-party");
+  await menuAction(page, "open-map");
   await page.locator("#tab-maps-library").click();
   await page.getByText("Display & geographic details", { exact: true }).click();
   await page.locator("#tab-maps-library").click();
@@ -395,7 +396,7 @@ async function wait(check) {
     .evaluate((e) => (e.closest("details").open = true));
   await page.locator("#map-opacity").fill("0.25");
   await page.locator('[data-close="map-settings"]').click();
-  await page.locator("#fit").click();
+  await menuAction(page, "fit");
   await page.screenshot({
     path: path.join(out, "command-offline-map.png"),
     fullPage: true,
@@ -429,8 +430,8 @@ async function wait(check) {
     await page.locator("[data-live-device]").first().getAttribute("cx"),
     beforeMapPan,
   );
-  await page.locator("#fit").click();
-  await page.locator("#open-map").click();
+  await menuAction(page, "fit");
+  await menuAction(page, "open-map");
   // Provider-boundary fixtures only: production map storage and renderer remain real.
   // A live public-provider download is separate acceptance evidence.
   const downloaded = structuredClone(map);
@@ -583,7 +584,7 @@ async function wait(check) {
     /OpenStreetMap/,
   );
   // Synthetic georeferenced HGT: genuine local decoder/storage/rendering, NOT provider evidence.
-  await page.locator("#open-layers").click();
+  await menuAction(page, "open-layers");
   for (const k of ["hillshade", "contours", "elevation"])
     assert.equal(await page.locator("#layer-" + k).isDisabled(), true);
   await page.screenshot({
@@ -591,7 +592,7 @@ async function wait(check) {
     fullPage: true,
   });
   await page.locator('[data-close="layers"]').click();
-  await page.locator("#open-map").click();
+  await menuAction(page, "open-map");
   await page.locator("#tab-maps-library").click();
   await page
     .getByText("Acquire or import terrain for this saved map", { exact: true })
@@ -644,7 +645,7 @@ async function wait(check) {
       .textContent.includes("Prepared and saved"),
   );
   await page.locator('[data-close="map-settings"]').click();
-  await page.locator("#open-layers").click();
+  await menuAction(page, "open-layers");
   const unchanged = await page.evaluate(() =>
     JSON.stringify([viewport, selectedParty]),
   );
@@ -711,7 +712,7 @@ async function wait(check) {
     await page.locator("#hover").textContent(),
     /Estimated ground elevation ~\d+ m.*EGM96.*not GNSS altitude/,
   );
-  await page.locator("#appearance").click();
+  await menuAction(page, "appearance");
   assert.equal(
     await page.locator("html").getAttribute("data-appearance"),
     "night",
@@ -727,7 +728,7 @@ async function wait(check) {
     });
   }
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.locator("#open-about").click();
+  await menuAction(page, "open-about");
   assert.match(await page.locator("#about").innerText(), /Lt Suraj Singh/);
   assert.equal(
     await page.locator("#about a").getAttribute("href"),
@@ -800,7 +801,7 @@ async function wait(check) {
     await page.locator("html").getAttribute("data-appearance"),
     "night",
   );
-  await page.locator("#open-layers").click();
+  await menuAction(page, "open-layers");
   for (const k of ["hillshade", "contours", "elevation"]) {
     assert.equal(await page.locator("#layer-" + k).isChecked(), true);
     await page.locator("#layer-" + k).uncheck();
@@ -840,7 +841,7 @@ async function wait(check) {
     path: path.join(out, "command-offline-map-restored.png"),
     fullPage: true,
   });
-  await page.locator("#open-history").click();
+  await menuAction(page, "open-history");
   await page.locator("#event-filter").selectOption("operations");
   await page.waitForSelector(".history-event");
   assert.ok((await page.locator(".history-event").count()) > 0);
@@ -849,7 +850,7 @@ async function wait(check) {
     fullPage: true,
   });
   await page.locator('[data-close="event-history"]').click();
-  await page.locator("#open-map").click();
+  await menuAction(page, "open-map");
   await page.locator("#map-file").setInputFiles({
     name: "bad.json",
     mimeType: "application/json",
@@ -864,18 +865,17 @@ async function wait(check) {
     fullPage: true,
   });
   await page.locator('[data-close="map-settings"]').click();
-  await page.locator("#open-quality").click();
+  await menuAction(page, "open-quality");
   await page.locator('[name="maximum_accuracy_m"]').fill("50");
   await page.locator('[name="enabled_maximum_speed_mps"]').uncheck();
   await page.getByRole("button", { name: "Apply quality settings" }).click();
   await wait(async () => (await state()).policy.maximum_accuracy_m === 50);
   assert.equal((await state()).policy.enabled.maximum_speed_mps, false);
   await page.locator('[data-close="quality"]').click();
-  if (
-    (await page.locator("#toggle-details").getAttribute("aria-expanded")) ===
-    "false"
-  )
-    await page.locator("#toggle-details").click();
+  if (!(await page.locator('#selected-detail .override input').isVisible())) {
+    if (!(await page.locator('#collapse-parties').isVisible())) await page.locator('#toggle-parties').click();
+    await page.locator('.party-select[aria-pressed="true"]').click();
+  }
   await page.locator("#selected-detail .override input").fill("15");
   await page.locator("#selected-detail .override button").first().click();
   await wait(
@@ -1013,7 +1013,7 @@ async function wait(check) {
     "toast dismissal does not silence emergencies",
   );
   await page.locator("#open-sos").click();
-  assert.equal(await page.locator(".sos-alert").count(), 2);
+  assert.equal(await page.locator(".sos-alert:not(.acknowledged)").count(), 2);
   await page
     .locator(".sos-alert button:not(:disabled)")
     .filter({ hasText: "Locate event observation" })
@@ -1051,7 +1051,7 @@ async function wait(check) {
     () => document.querySelector("#sos-count").textContent === "0",
   );
   await page.locator('[data-close="sos-panel"]').click();
-  await page.locator("#open-history").click();
+  await menuAction(page, "open-history");
   await page.locator("#event-filter").selectOption("sos");
   await page.waitForFunction(
     () => document.querySelectorAll(".history-event").length === 3,
@@ -1118,18 +1118,9 @@ async function wait(check) {
     "layers",
   ]) {
     if (dialog) {
-      await page
-        .locator(
-          {
-            quality: "#open-quality",
-            "map-settings": "#open-map",
-            "event-history": "#open-history",
-            "sos-panel": "#open-sos",
-            about: "#open-about",
-            layers: "#open-layers",
-          }[dialog],
-        )
-        .click();
+      const action = {quality:"open-quality", "map-settings":"open-map", "event-history":"open-history", "sos-panel":"open-sos", about:"open-about", layers:"open-layers"}[dialog];
+      if (action === "open-sos") await page.locator("#open-sos").click();
+      else await menuAction(page, action);
       await page.screenshot({
         path: path.join(out, `command-${dialog}-dialog.png`),
         fullPage: true,

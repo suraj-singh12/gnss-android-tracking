@@ -76,7 +76,7 @@
   // candidate. This establishes a browser rendering opportunity, not OS scanout.
   const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
   async function pump() {
-    if (pumping || !lease || stopped) return;
+    if (pumping || !lease || stopped || window.HistoricalPlayback?.active) return;
     if ($("tracks").clientWidth <= 0 || $("tracks").clientHeight <= 0) {
       health("Unverified presentation evidence · map has no renderable area");
       return;
@@ -93,7 +93,7 @@
         const presented = new Date().toISOString();
         await frame();
         await new Promise((resolve) => setTimeout(resolve, 0));
-        if (lease?.epoch !== ownerEpoch) return;
+        if (lease?.epoch !== ownerEpoch || window.HistoricalPlayback?.active) return;
         if (before !== generation) {
           dirty = true;
           if (capturing)
@@ -119,6 +119,7 @@
               opportunity_at: lastPresented.opportunity_at,
             });
             presenceReported = true;
+            if (!rec) health("Ready · GNSS independent");
           }
           dirty = false;
           return;
@@ -137,9 +138,9 @@
         dirty = false;
       }
       if (pending) {
-        if (lease?.epoch !== ownerEpoch) return;
+        if (lease?.epoch !== ownerEpoch || window.HistoricalPlayback?.active) return;
         const ack = await request("confirm", pending);
-        if (lease?.epoch !== ownerEpoch) return;
+        if (lease?.epoch !== ownerEpoch || window.HistoricalPlayback?.active) return;
         lastConfirmed = Date.now();
         presenceReported = true;
         if (window.recordingLiveState?.()?.recording?.active)

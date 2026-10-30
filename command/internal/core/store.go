@@ -413,6 +413,9 @@ func Open(path string) (*Store, error) {
 	if err = s.initPresentation(); err != nil {
 		return fail(err)
 	}
+	if err = s.initPlaybackIndex(); err != nil {
+		return fail(err)
+	}
 	s.presentationDone = make(chan struct{})
 	go s.presentationRuntime()
 	s.cleanProjectionChunks("", "")
