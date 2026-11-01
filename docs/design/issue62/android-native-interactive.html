@@ -1,0 +1,88 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>GNSS Tracker — Android Design Proposal</title><style>
+:root{--bg:#f4f7f8;--paper:#fff;--ink:#182c36;--muted:#5d727d;--border:#d9e4e7;--teal:#08786f;--tealbg:#e6f4f0;--amber:#986018;--amberbg:#fff2df;--burgundy:#71333f;--burgundybg:#f6e9ec}
+*{box-sizing:border-box}body{margin:0;background:#e8eff1;color:var(--ink);font:14px/1.4 -apple-system,BlinkMacSystemFont,"Roboto","Arial",sans-serif;min-height:100dvh}.device{position:relative;max-width:430px;min-height:100dvh;margin:auto;background:var(--bg);display:flex;flex-direction:column;overflow:hidden}
+.statusbar{height:26px;display:flex;justify-content:space-between;align-items:center;padding:3px 19px 0;font-weight:650;font-size:12px;color:#263943}
+.screen{flex:1;min-height:0;overflow:auto;padding:16px 18px 16px}
+.appbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px}
+.brand{font-size:17px;letter-spacing:-.3px;font-weight:730}.preview{font-size:9px;color:var(--muted);font-weight:700;letter-spacing:.6px}
+.theme{border:0;background:transparent;color:var(--muted);font-size:17px}
+.heading{font-size:28px;letter-spacing:-.8px;font-weight:750;line-height:1.1;margin:0 0 8px}
+.lead{color:var(--muted);margin:0 0 18px;font-size:13px}
+.lifecycle{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;margin:14px 0 12px;border:1px solid #c5e0d9;background:var(--tealbg);border-radius:12px}
+.lifecycle strong{font-size:14px;color:#086b5f}.lifecycle small{display:block;color:#4f776d;margin-top:3px}
+.pill{border-radius:100px;padding:5px 10px;font-size:12px;font-weight:700;color:var(--teal);background:#d0ede6}
+button{font:inherit;cursor:pointer}.stop{width:100%;border:0;background:var(--burgundy);color:#fff;padding:15px;border-radius:12px;min-height:50px;font-weight:750;font-size:14px}.stop:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid #2f93ee;outline-offset:2px}
+.warning{display:flex;gap:9px;align-items:flex-start;background:var(--amberbg);border:1px solid #ebdcc1;padding:11px 12px;margin:12px 0;border-radius:11px;color:#80551b}
+.warning b{display:block;font-size:12px}.warning small{display:block;line-height:1.4;font-size:11.5px;margin-top:2px}
+.card{background:var(--paper);border:1px solid var(--border);border-radius:14px;padding:15px 15px;margin:12px 0;box-shadow:0 2px 4px #152e3306}
+.ctitle{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}.ctitle strong{font-size:15px}
+.meter{font-size:27px;font-weight:750;letter-spacing:-.7px}.meter small{font-size:13px;font-weight:600;color:var(--muted)}.muted{color:var(--muted);font-size:12px}
+.metrics{display:grid;grid-template-columns:1fr 1fr;gap:12px}.metric{padding-right:9px}.metric+.metric{border-left:1px solid var(--border);padding-left:13px}.metric b{display:block;font-size:21px;letter-spacing:-.4px}.metric small{font-size:11px;color:var(--muted)}
+.row{display:flex;align-items:center;justify-content:space-between;gap:9px}.secondary{background:#f7fbfc;border:1px solid #cbdce1;color:#245568;border-radius:9px;padding:9px 11px;font-weight:650;font-size:12px}
+.card .divider{height:1px;background:var(--border);margin:12px 0}
+.bottom{flex-shrink:0;background:var(--paper);border-top:1px solid var(--border);z-index:5;padding:10px 16px 9px;box-shadow:0 -8px 20px #0c22250a}
+.sosbar{padding:9px 9px 12px;background:var(--burgundybg);border-radius:12px;margin-bottom:9px}
+.sosmeta{font-weight:730;font-size:12px;color:#9e3444;margin:0 0 6px 4px;display:flex;justify-content:space-between}
+.sos{background:var(--burgundy);border:0;border-radius:10px;color:#fff;min-height:48px;width:100%;font-size:14px;font-weight:730}
+.nav{height:54px;display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.nav button{border:0;background:transparent;color:var(--muted);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:3px;font-size:11px}
+.nav .active{background:#e4f3ee;color:#17654c;font-weight:740}
+.nav .ico{font-size:18px;line-height:1}
+.home-indicator{height:5px;width:104px;border-radius:10px;background:#22333b;opacity:.7;margin:0 auto 2px}
+.linkrow{width:100%;display:flex;align-items:center;justify-content:space-between;border:0;border-bottom:1px solid var(--border);background:transparent;text-align:left;padding:15px 0;color:var(--ink);min-height:64px}
+.linkrow b{display:block;font-size:14px}.linkrow small{font-size:12px;color:var(--muted)}.label{font-weight:700;font-size:13px;display:block;margin-bottom:5px}.field{display:block;width:100%;padding:12px;border:1px solid #afc4ca;border-radius:9px;background:white;margin-bottom:14px;color:var(--ink);min-height:45px}
+.healthrow{display:flex;gap:12px;align-items:center;padding:12px 1px;border-bottom:1px solid var(--border)}
+.healthrow:last-child{border-bottom:0}.healthrow .icon{font-size:20px;width:24px;text-align:center;color:#59747e}.healthrow b{font-size:13px}.healthrow small{display:block;color:var(--muted);font-size:11.5px}
+.healthrow .healthstate{margin-left:auto;font-size:11px;padding:5px 8px;border-radius:100px;background:#eff3f3;font-weight:700;white-space:nowrap;color:#526a72}
+.healthrow .healthstate.good{background:var(--tealbg);color:var(--teal)}.healthrow .healthstate.warn{background:var(--amberbg);color:var(--amber)}
+.tbutton{border:0;background:transparent;color:var(--teal);font-weight:720;cursor:pointer}
+#tracking,#settings,#diagnostics,#config{display:none}#tracking.active,#settings.active,#diagnostics.active,#config.active{display:block}
+@media(min-width:600px){.device{margin:20px auto;min-height:842px;max-height:842px;box-shadow:0 10px 50px #1234;border:1px solid #d1dfe3;border-radius:28px}.screen{max-height:630px}.bottom{margin-top:auto}}
+</style></head><body><div class="device">
+<div class="statusbar"><span>8:21</span><span>◕ ▰ ◼</span></div>
+<main class="screen">
+ <header class="appbar"><div><span class="brand">GNSS Tracker</span><div class="preview">APP-SPECIFIC DESIGN PROPOSAL · DEMO VALUES</div></div><button class="theme" onclick="alert('Appearance remains in Settings; this is a design preview.')">☾</button></header>
+ <section id="tracking" class="active">
+  <h1 class="heading">Tracking</h1><p class="lead">Your device is collecting GNSS observations.</p>
+  <div class="lifecycle"><div><strong>● Tracking active</strong><small>Background collection on this device</small></div><span class="pill">ACTIVE</span></div>
+  <button class="stop" onclick="alert('Design preview only. Real Stop confirmation is preserved.')">Stop tracking</button>
+  <div class="warning"><span>⚠</span><span><b>Command unavailable</b><small>Observations are retained on this phone for retry. Tracking continues.</small></span></div>
+  <article class="card"><div class="ctitle"><strong>GNSS position</strong><span class="pill">FRESH</span></div><div class="row"><div><div class="meter">3.0 <small>m</small></div><div class="muted">Reported accuracy</div></div><div style="text-align:right"><div style="font-weight:740;font-size:17px">1 s</div><div class="muted">Fix age</div></div></div></article>
+  <article class="card"><div class="ctitle"><strong>Delivery to Command</strong><span class="muted">Offline / retrying</span></div><div class="metrics"><div class="metric"><b>1</b><small>Observation pending</small></div><div class="metric"><b>0</b><small>Durably ACKed</small></div></div><div class="divider"></div><div class="row"><div class="muted">Last contact: unavailable</div><button class="secondary" onclick="alert('This proposal retains Sync Now; no network action in preview.')">Sync now</button></div></article>
+ </section>
+ <section id="settings">
+  <h1 class="heading">Settings</h1><p class="lead">Your identity, Command connection and device readiness.</p>
+  <article class="card"><div class="ctitle"><strong>Connection & identity</strong><span class="pill" style="background:var(--amberbg);color:var(--amber)">Unenrolled</span></div><div class="row"><div><b>Field team</b><div class="muted">Party · Command 192.168.1.10:8080</div></div><button class="secondary" onclick="show('config')">Edit</button></div></article>
+  <article class="card"><div class="ctitle"><strong>Device configuration</strong></div>
+   <button class="linkrow" onclick="alert('Tracking-policy screen retained in approved UI')"><span><b>Tracking policy</b><small>Reporting interval · adaptive persistence</small></span><span>›</span></button>
+   <button class="linkrow" onclick="alert('Readiness/permissions interactions preserved')"><span><b>Readiness & permissions</b><small>Location, battery and background behavior</small></span><span>›</span></button>
+   <button class="linkrow" onclick="alert('Emergency settings remain available')"><span><b>Emergency & physical controls</b><small>SOS · volume button test</small></span><span>›</span></button>
+   <button class="linkrow" onclick="alert('Appearance remains an independent choice')"><span><b>Appearance</b><small>Day / Night</small></span><span>›</span></button>
+  </article>
+ </section>
+ <section id="config">
+  <div class="row" style="margin-bottom:20px"><button class="tbutton" onclick="show('settings')">‹ Settings</button><span class="muted">Local changes only</span></div>
+  <h1 class="heading">Party & Command</h1><p class="lead">Changes apply locally after you save.</p>
+  <article class="card"><label class="label">Party ID</label><input class="field" value="Party"><label class="label">Party name</label><input class="field" value="Field team"><label class="label">Command address</label><input class="field" value="http://192.168.1.10:8080"><label class="label">Reporting interval (seconds)</label><input class="field" type="number" value="10" min="5"><div class="row"><button class="stop" style="width:65%" onclick="alert('Preview only — real persistence unchanged.')">Save settings</button><button class="tbutton" onclick="show('settings')">Cancel</button></div></article>
+ </section>
+ <section id="diagnostics">
+  <h1 class="heading">Diagnostics</h1><p class="lead">Device health, delivery and deeper evidence.</p>
+  <div class="warning"><span>⚠</span><span><b>SOS delivery pending</b><small>One SOS awaits durable Command receipt.</small></span></div>
+  <article class="card" style="padding-top:4px;padding-bottom:4px">
+    <div class="healthrow"><span class="icon">◎</span><div><b>GNSS</b><small>3.0 m · 1 s old</small></div><span class="healthstate good">Fresh fix</span></div>
+    <div class="healthrow"><span class="icon">▤</span><div><b>Storage</b><small>1 queued</small></div><span class="healthstate">Ready</span></div>
+    <div class="healthrow"><span class="icon">➤</span><div><b>Command</b><small>Last ACK unavailable</small></div><span class="healthstate">No contact</span></div>
+    <div class="healthrow"><span class="icon">↻</span><div><b>Sync</b><small>1 pending</small></div><span class="healthstate warn">Pending</span></div>
+    <div class="healthrow"><span class="icon">⚠</span><div><b>SOS</b><small>Operator ACK belongs to Command</small></div><span class="healthstate warn">1 pending</span></div>
+    <div class="healthrow"><span class="icon">▣</span><div><b>Device space</b><small>4.6 GB free</small></div><span class="healthstate">Available</span></div>
+    <div class="healthrow"><span class="icon">♙</span><div><b>Remote control</b><small>Enrollment required</small></div><span class="healthstate">Unenrolled</span></div>
+  </article>
+  <article class="card" style="padding-top:0;padding-bottom:0"><button class="linkrow" onclick="alert('Preview only')">Command instructions <span>›</span></button><button class="linkrow" onclick="alert('Preview only')">Phone alerts <span>›</span></button><button class="linkrow" onclick="alert('Preview only')">Saved data & sync <span>›</span></button><button class="linkrow" onclick="alert('Preview only')" style="border-bottom:0">Advanced diagnostic tools <span>›</span></button></article>
+ </section>
+</main>
+<footer class="bottom"><div class="sosbar"><div class="sosmeta"><span>SOS pending</span><span>1 awaiting Command receipt</span></div><button class="sos" id="sos" onclick="alert('Preview only. Real SOS requires continuous 1.2-second hold.')">SOS — hold to activate</button></div>
+<nav class="nav"><button data-target="tracking" class="active" onclick="show('tracking')"><span class="ico">⌖</span>Tracking</button><button data-target="settings" onclick="show('settings')"><span class="ico">⚙</span>Settings</button><button data-target="diagnostics" onclick="show('diagnostics')"><span class="ico">≡</span>Diagnostics</button></nav><div class="home-indicator"></div></footer>
+</div><script>
+function show(id){document.querySelectorAll('#tracking,#settings,#diagnostics,#config').forEach(x=>x.classList.toggle('active',x.id===id));document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x.dataset.target===(id==='config'?'settings':id)));document.querySelector('.screen').scrollTop=0;}
+const target=new URLSearchParams(location.search).get('screen');if(['tracking','settings','diagnostics','config'].includes(target))show(target);
+</script></body></html>
