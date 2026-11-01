@@ -908,3 +908,44 @@ labelled. Local browser evidence is Linux Chromium; physical Android, native mac
 Windows operation, sustained dense multi-day capture and actual field SOS/audio remain
 operator acceptance work. Public-provider network/transfer failures must be reported
 separately from deterministic #37 failures.
+
+
+## Issue #62 · First-pass visual audit and proposed design review (2026-11-01)
+
+**Status: design-only / operator approval pending; no application UI code change.** This section reports a focused visual first pass, **not** a verified full application interaction or field usability study. Source of observations: screenshots already checked into the repository at the exact cited branches/revisions; those screenshots are representative recorded browser/native test states, not live production operation.
+
+**Baseline provenance:** Command #59 map-first source merged into `integration/combined-upgrades` at `6f435942394b805d5e81129bafa3607a41ae0290`; extended Travel Back/SOS/mode captures in **open** PR #61 head `dfe51ffeb89ac43b6d1594963050c55b63a4d6fa` and `docs/design/issue34/final-review/`. Android #39 native evidence under `docs/evidence/issue-39/`. PR #61 is not assumed merged or field-accepted.
+
+### Current strengths — KEEP
+
+- Command's map-first viewport, collapse-capable Parties, selected-party context, direct map controls and bottom recording/playback transport; preserve map prominence.
+- Four explicit operational modes and truthful distinction between live, recording and historical read-only.
+- Persistent high-visibility SOS counter, real operator acknowledgement custody and independent browser sound readiness.
+- Android's separate Tracking/Settings/Diagnostics destinations, real tracking lifecycle and protected SOS dock.
+- Existing semantic tokens, Day/Night behavior and offline/quality truth, subject to testing.
+
+### Current weaknesses — IMPROVE / REDESIGN, prioritized
+
+| Priority | Current captured state | Visual issue and operator/user impact | Proposed direction | Evidence / limit |
+| --- | --- | --- | --- | --- |
+| P0 | Command Travel Back: capture range expanded | A large inline box pushes raw policy JSON and configuration over map work, overtaking the canvas and weakening task hierarchy | **TB-01**: compact range summary + “Change range” opens a bounded task-specific editor; diagnostics nested and structured elsewhere; preserve explicit Refresh View and truthful snapshot | `docs/design/issue34/final-review/travel-day-1440.png` at PR #61 HEAD |
+| P0 | Travel Back narrow (390 px) with Parties expanded | Capture editor, map tools, Parties and playback compete vertically; visible overlap/occlusion in captured narrow state | Intentional responsive sheet for range editing; keep Parties independently collapsible and playback always reachable; no long inline map accordion | `docs/design/issue34/final-review/travel-day-390.png` |
+| P1 | Live selected-party inspector | Dense mixed observation/contact/override text and adjacent actions are difficult to scan; technical content sits close to primary facts | Primary distance and GNSS/source state first, grouped contact/actions second, secondary evidence disclosure | `docs/design/issue34/final-review/live-day-1440.png` |
+| P1 | Command Parties with 21 identities | Repeated multi-line cards show few parties per viewport; comparison and locating an identity require extensive scrolling | Keep keyboard/selection/visibility and SOS; explore compact scannable rows and contextual secondary detail without sacrificing readability | `docs/design/issue34/final-review/live-day-1440.png`, `live-day-390.png` |
+| P1 | Narrow Command operation buttons | Mode tabs and map tools crowd/wrap across available width; hierarchy is less clear than desktop | Adaptive control grouping without hiding emergency access, location inspection, or selected-party context | `docs/design/issue34/final-review/live-day-390.png` |
+| P1 | Command SOS drawer | Real operational content is present but has little visual grouping; urgent action can compete with text | Distinguish emergency summary/action from evidence, while retaining all event-specific custody information | `docs/design/issue34/final-review/sos-day-1440.png` |
+| P2 | Android Tracking (Issue #39 visual state) | GNSS, Command and History are primarily prose blocks; status prioritization and quick scanning can improve | Tighten cards, emphasize current state and actionable warnings; keep tracking lifecycle and SOS dock | `docs/evidence/issue-39/v4-tracking-day.png`; real-device feel not yet observed |
+| P2 | Android Settings and Diagnostics | Native form and diagnostic list are understandable, but could better distinguish core tasks, status summaries and advanced destinations | Reuse the V4 hierarchy; improve grouping, wording and action priority rather than replacing OS patterns | `docs/evidence/issue-39/settings.png`, `diagnostics.png`; screenshot-level only |
+
+### GNSS design candidate TB-01 — exact proposed behavior, not approved
+
+- Travel Back opens with a compact one-line range summary (date, start/end, duration, read-only context), “Change range” and “Refresh View.” The map remains unobstructed. The snapshot indicator is based on actual backend state, **not** an invented static success claim.
+- “Change range” opens a bounded right-side editor at desktop widths or an appropriately sized mobile sheet. Start/end are fully usable; Cancel/Apply are distinct. Options include Exclude Offline (captured contact, not GNSS quality) and Use All Observations (diagnostic dots, not qualified distance).
+- Advanced capture information and raw policy evidence are in a separately discoverable, structured disclosure, **not** a free-form JSON dump in the map.
+- Party panel, map controls, playback rail, SOS counter, read-only semantics, uncertainty/gap labels and explicit Refresh View retain their existing authority and reachability.
+- A first-pass **interactive HTML design prototype** and rendered desktop/mobile proposal screenshots were prepared in the chat for user review; they are proposal artifacts, not screenshots of implemented GNSS or proof of native/browser integration.
+- Confirm layout, information ordering, responsive sheets, keyboard focus, long values, backend-specific error/loading/expired state and actual mode transitions at implementation time. Some source screenshots are synthetic test fixtures; this audit cannot assert full production UX or physical-device behavior.
+
+### Design-review gate and future QA
+
+Do not treat this audit or candidate as approved implementation. Obtain explicit operator selection first. After implementation, verify actual running UI only for affected significant states, compare against the **approved GNSS-specific proposal**, test critical interactions/accessibility and report divergences honestly. Do not impose repeated screenshot review of untouched components.
