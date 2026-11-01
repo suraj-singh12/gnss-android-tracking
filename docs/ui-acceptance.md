@@ -949,3 +949,7 @@ separately from deterministic #37 failures.
 ### Design-review gate and future QA
 
 Do not treat this audit or candidate as approved implementation. Obtain explicit operator selection first. After implementation, verify actual running UI only for affected significant states, compare against the **approved GNSS-specific proposal**, test critical interactions/accessibility and report divergences honestly. Do not impose repeated screenshot review of untouched components.
+
+### Candidate A-01 — native Android prototype for operator review
+
+A separate self-contained interactive Android design proposal presents Tracking, Settings, Party & Command editing, and Diagnostics at 390 × 844. It retains the semantic Android V4 color system, three destinations, single active-tracking action, real configuration fields, Command-delivery distinction and permanent SOS hold dock. It experiments with more scannable GNSS/delivery facts and secondary settings/diagnostics structure. Proposed screens use **simulated data**; navigation and alerts are prototype interactions, not a functioning GNSS, SOS or persistence implementation. The operator must approve placement/appearance before native code changes. Preserve 360/480 dp large-font/landscape behavior and all hidden original settings or tools during any subsequent implementation.
