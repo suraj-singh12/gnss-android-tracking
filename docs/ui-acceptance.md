@@ -953,3 +953,5 @@ Do not treat this audit or candidate as approved implementation. Obtain explicit
 ### Candidate A-01 — native Android prototype for operator review
 
 A separate self-contained interactive Android design proposal presents Tracking, Settings, Party & Command editing, and Diagnostics at 390 × 844. It retains the semantic Android V4 color system, three destinations, single active-tracking action, real configuration fields, Command-delivery distinction and permanent SOS hold dock. It experiments with more scannable GNSS/delivery facts and secondary settings/diagnostics structure. Proposed screens use **simulated data**; navigation and alerts are prototype interactions, not a functioning GNSS, SOS or persistence implementation. The operator must approve placement/appearance before native code changes. Preserve 360/480 dp large-font/landscape behavior and all hidden original settings or tools during any subsequent implementation.
+
+Issue #62's committed, openable, GNSS-specific proposal artifacts are indexed in [`docs/design/issue62/README.md`](design/issue62/README.md). They remain unapproved and do not represent implemented runtime UI.
