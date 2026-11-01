@@ -282,3 +282,19 @@ in `docs/design/issue37/` and the integrated workflow demonstrate actual Command
 fixtures, including populated library, 21-party/20-subset playback, hidden restriction,
 interruption and responsive panel states. They are not pixel-diff baselines or physical
 field acceptance. #34 navigation/Travel Back and #38 packaging remain out of scope.
+
+
+## Issue #62 · Design-governance preservation obligations (proposal stage)
+
+This is an **audit and design-only** addition: no runtime GNSS, recording, SOS or map behavior is changed. The rows map future proposed visual placement against behavior that must remain intact. An approved redesign must update the actual owning rows and regression references.
+
+| Surface / interaction | Preserve unconditionally | Permitted UI exploration (not yet approved) | Verification when implemented |
+| --- | --- | --- | --- |
+| Command live canvas and map controls | Always-available map canvas/controls, map-layer order, original coordinates, marker click/focus, source freshness and qualified history | Reduce control competition, improve grouping and density | Desktop/narrow pan/zoom/inspect, selection, SOS, Day/Night |
+| Command Travel Back in pending #61 | Read-only SQLite capture snapshot, explicit later-data pending and Refresh View, quality and gap semantics, fixed received originals, playback and mode isolation | Move capture editing and diagnostics into correctly bounded secondary surfaces; retain quick summary | Start/end, refresh, exclusion/contact capture, raw dots and no false distance; narrow layout |
+| Command Parties, Details and SOS | Selection/visibility, labels, 20+1 party support, selected contextual actions, event-specific ACK and browser alarm readiness | More scannable rows, prioritized facts, bounded inspector, durable SOS action hierarchy | 390–1920 widths, long data, keyboard, sound/readiness and SOS safety |
+| Command saved recording/playback | Recording start/pause/save/discard/stop, frozen presentation evidence, library actions, unverified gaps, read-only replay | Clear separation of control and evidence/disclosure | Recording and playback suites, read-only boundaries |
+| Android Tracking and persistent SOS | One true tracking action, GNSS/contact/queue/ACK separation, Sync Now, state, protected hold dock, native navigation | Stronger visual hierarchy and simpler status summaries | 360/480 dp, 1.5x text, state changes, SOS and permission preflight |
+| Android Settings and Diagnostics | All setup/policy/enrollment, Party and Command controls, local save/cancel, status facts, retry and sanitized ZIP | Reorganize/compose informational groups and advanced destinations with no hidden capability loss | Navigation, persisted draft, warnings/errors, native accessibility |
+
+The UI governance gate requires a current issue-specific proposal and explicit user design approval *before* using any of these placement possibilities as implementation instructions. Future design proposals are not authorization to implement.

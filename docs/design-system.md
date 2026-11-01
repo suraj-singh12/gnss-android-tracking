@@ -285,3 +285,71 @@ text, retaining 40 px party-selection and dismissal targets. Historical inspecti
 facts use compact, wrapping rows; panel widths and dock-aware scroll bounds are
 unchanged. Saved Recordings shares `--command-detail-width` at every breakpoint,
 with wrapping names, sorting and management actions inside its existing drawer.
+
+
+## Living UI/UX governance and first-pass ownership map (Issue #62; 2026-11-01)
+
+This existing document is the **canonical design-intent and component-reuse reference**, not a frozen style sample. `AGENTS.md` owns the mandatory stop gate. The current GitHub Issue and approved design artifact specify a change; `ui-preservation-matrix.md` protects functionality; `ui-acceptance.md` owns evidence and verification. Resolve contradictions against current source/PR state and operator-approved intent. Do not introduce a separate competing UX rulebook.
+
+### Product experience and screen ownership
+
+| Surface | User's immediate task | Navigation/interaction model | Existing source to inspect | Preserve/reuse |
+| --- | --- | --- | --- | --- |
+| Android Tracking | Start/stop actual phone tracking; see GNSS, Command delivery and SOS status | Native Tracking destination + protected SOS dock | `android/app/src/main/java/org/gnss/tracking/{MainActivity,NativeUi,OperationalUi}.kt` | One tracking action, truthful GNSS/contact separation, local Sync, always-reachable 1.2 s SOS |
+| Android Settings | Configure Party/Command, readiness, policies and enrollment | Native settings destinations; local draft, Save/Cancel | `android/app/src/main/java/org/gnss/tracking/{NativeUi,OperationalUi}.kt` | Real setup validation, independent Day/Night and approved controls |
+| Android Diagnostics | Understand device/transport/storage/alerts; reach technical tools | Health facts first, detailed destinations second | `android/app/src/main/java/org/gnss/tracking/{GnssDiagnostics,NativeUi,OperationalUi}.kt` | Journals/evidence, retry, physical-button test and sanitized export without invented facts |
+| Command live map | Locate/manage parties, see historical/qualified evidence, respond to SOS | Viewport-bound map-first workspace, collapsible Parties and selection-based Details | `command/web/index.html`, `style.css`, `app.js`, `map.js`, `sos-alarm.js` | Canvas priority, marker accessibility, live freshness truth, SOS action/readiness, existing controls |
+| Command recording & saved playback | Capture/save immutable evidence; inspect recorded presentation | Compact recording rail, Library, read-only replay with timeline | `command/web/{recording.js,library.js,playback.js}` and HTML/CSS | Distinct record/live states, durable backend authority, frozen evidence |
+| Command Travel Back (pending PR #61) | Choose capture-time range, reconstruct retained originals, inspect read-only historical state | Mode selector, range action and playback controls | `command/web/{index.html,style.css,playback.js,app.js}` on `devX/issue-34-travel-back` | Explicit snapshot/Refresh View, unknown gaps, independent current live receiver, read-only results |
+| Command map/maps & layers | Navigate, acquire and reuse offline vector/DEM maps | Direct map controls; bounded map-management dialogs | `command/web/{map.js,terrain.js,index.html,style.css}` | Offline assets, source/cost consent, honest coverage and current selection |
+| Command SOS / events / controls | Prioritize urgent events and operator commands | Persistent SOS count, operator-controlled sound, event drawers, context-specific controls | `command/web/{sos-alarm.js,control.js,index.html,style.css}` | Per-event ACK, emergency prominence, consent and evidence history |
+
+The Command source in the table names existing files under `command/web/`. Verify actual functions and ownership with the checked-out source. #61 is not integrated into `integration/combined-upgrades` at the time of this audit; maintain that distinction.
+
+### Component and behavior vocabulary
+
+- Reuse existing semantic tokens for surfaces, actions and alerts, including independent Day/Night systems and distinct Android native versus Command browser implementation.
+- Primary: map context (Command), tracking state and SOS (Android), relevant read-only/live status. Secondary: filters, party details, capture configuration and recording metadata. Tertiary: raw policy JSON, internal diagnostics, evidence export and advanced developer controls.
+- Command: shared menu/popover, bounded dialog/sheet, selected-party inspector, list card, playback/recording rail, mode controls, map tools, safety drawer, status badge and read-only information rows. Inventory the existing class/API before adding a variation.
+- Android: native state card, party/Command setup form, diagnostics fact rows, bounded detail destinations, one tracking action, bottom navigation, anchored SOS dock. Do not reinvent the OS-owned notification/permission surfaces.
+- Correct interaction states are part of the component: default, expanded/open, selected, keyboard-focused, disabled, loading, error, empty, dense data, day/night and narrow width or large text.
+- Keep technical facts **available and truthful** without routinely overwhelming primary task space. Distinguish critical operational warnings from low-priority diagnostics. No permanent expanding raw JSON in the geographic canvas.
+- Prefer selection-driven inspectors, bounded context panels or dedicated dialogs for secondary data; a popover is only for brief related interactions. Avoid overlays that cover SOS, map actions, or the playback rail without clear dismissal/context restoration.
+- A feature's UI impact check must include existing behavior/function preservation and whether its new surface competes with primary screen content.
+
+### Research and decisions, not uncritical imitation
+
+Start with [Apple design principles](https://developer.apple.com/design/human-interface-guidelines/design-principles/), [disclosure controls](https://developer.apple.com/design/human-interface-guidelines/disclosure-controls/), [popovers](https://developer.apple.com/design/human-interface-guidelines/popovers/), [layout](https://developer.apple.com/design/human-interface-guidelines/layout/) and [sidebars](https://developer.apple.com/design/human-interface-guidelines/sidebars/). Apply hierarchy, responsiveness, minimal visual noise, context preservation, and deliberate interactions; **do not** copy platform-specific glass effects or macOS control geometry into Android and Command. For time-sensitive map views consider [ArcGIS time-extent controls](https://developers.arcgis.com/net/wpf/sample-code/filter-by-time-extent/) and [QGIS temporal controller](https://docs.qgis.org/latest/en/docs/user_manual/map_views/map_view.html) as task patterns, not pixel sources. Cite exact relevant references in each new design proposal.
+
+### Required proposal and approval record
+
+Before application UI edits, prepare an issue-scoped proposal with:
+1. Current revision/branch and accepted evidence; map of affected screens and entry/exit interactions.
+2. `Keep / Improve / Replace` by element with user-task rationale; links to reusable source components.
+3. Accurate **GNSS-screen-specific** visual proposals (not example photos), with interactive states when they matter, and actual responsive/native variants where relevant.
+4. Scope/preservation constraints including SOS, map, tracking and recording integrity; relevant empty/error/loading/long-data and keyboard/touch cases.
+5. Operator-selected design variant and **explicit approval** recorded in the GitHub Issue or PR. Until then all proposed UI remains unapproved and application code is untouched.
+
+After operator approval, update this document's corresponding ownership/decision entries and the preservation matrix. Verify proportionately; significant design changes need one representative real render and interaction assessment, not repetitive screenshots on every commit.
+
+### Initial decisions awaiting operator approval
+
+- **Candidate TB-01** (PR #61 only): show a compact capture-time summary in Travel Back and use an intentional dedicated range editor with advanced diagnostics secondary, instead of expanding an unformatted evidence/JSON block inside the map. Preserve explicit refresh, full bounds, acquisition semantics and read-only custody. *Proposed, not implemented or approved.*
+- **Candidate C-02**: restructure selected-party details into primary observation/distance, then grouped contact/actions and expandable evidence. Preserve all controls and accuracy/age/authority metadata. *Needs review.*
+- **Candidate A-01**: improve Android Tracking density and the relationship among GNSS, communication, sync and persistent SOS; keep the three native destinations and hold-to-activate emergency dock. A GNSS-specific interactive mockup additionally explores Settings and Diagnostics presentation, with forms/screens still subject to preservation and native usability review. *Proposed, not implemented or approved.*
+
+Issue #62's committed, openable, GNSS-specific proposal artifacts are indexed in [`docs/design/issue62/README.md`](design/issue62/README.md). They remain unapproved and do not represent implemented runtime UI.
+
+### Second-pass preflight: information economy, containment and design confidence (2026-11-01)
+
+The GNSS first-pass HTML simulations are **superseded**, because they included layout overflow, repeated labels and controls, mismatched visual grammar and over-exposed details. They were never approved. Use **current-source design analysis**, not closed-issue screenshots, for further work. The latest design baseline for the second pass is Command PR #61 `dfe51ffeb89ac43b6d1594963050c55b63a4d6fa` (open, not integrated) and Android at that same revision. The design-governance source is PR #63; re-fetch branch heads on each subsequent task. The GNSS v2 previews delivered in the review conversation remain **unapproved**, simulated and are not proof of actual application runtime.
+
+**Calm, functional hierarchy**: The primary map (Command) and active tracking + SOS (Android) dominate. One visible operational mode selection is sufficient. The current capture window gets one compact, scannable summary, with editing on demand. Keep original-quality and data-custody distinctions; eliminate repeated explanation without eliminating truthful information. SOS retains interruptive visibility and operator action priority; safety duplication is explicit, not accidental.
+
+**Shared spacing/typography/color**: Reuse the current 4/8-based spacing tokens, existing restrained green/amber/emergency semantic colors, native Android visual grammar and Command web tokens. Typography is role-based (screen title, section, body, metadata, data); do not force four exact sizes or 60/30/10 color ratios. All variants share control sizing, states and clear labels. Decisions are **platform-appropriate**, guided by Apple HIG's hierarchy, layout, disclosure and popover guidance and Android's adaptive navigation conventions.
+
+**Single-ownership presentation**: Assign status, count, date, mode and actions to one user-facing location wherever possible. Keep essential persistent alarm/SOS distinct from event evidence; this is intentional duplication because the objectives differ. Separate routine mode/record actions from technical diagnostics. Never place raw logs, policy JSON or dense forms over the map by default.
+
+**Containment proof**: For each proposed relevant state, verify at least a compact phone-sized Command viewport, a standard Command desktop viewport, and native Android 360/390/480 dp classes where applicable; use short and long realistic values, zoom/font scaling, empty, busy, error and action-open states. Confirm no horizontal page overflow and no clipped/overlapping controls, and preserved reachable SOS/navigation. If source cannot be launched, mark the review as source-informed **not live-render verified**, and do not imply otherwise.
+
+**Evidence hierarchy**: 1. current checked-out source and real runtime captures with revision, 2. newly rendered simulated proposal screenshots **from the exact proposed HTML**, 3. historical screenshots only as explicitly labelled context, never as current verification. A proposal can be interactive yet remain unready or unapproved. Audit unresolved inconsistencies before showing operator.
