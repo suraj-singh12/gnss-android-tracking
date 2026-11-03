@@ -1,0 +1,1172 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GNSS Command · Interactive Design V5.14</title>
+<style>
+:root{--bg:#eef2f0;--panel:#fff;--soft:#f5f8f6;--ink:#24343a;--muted:#6d7d80;--line:#dce5e1;--green:#216f56;--greenwash:#e6f1eb;--amber:#9b681d;--amberwash:#faf1df;--red:#963f4b;--redwash:#f9eaec;--blue:#44788d;--shadow:0 20px 60px #142b3038}
+body.night{--bg:#101c23;--panel:#1b2a31;--soft:#15232a;--ink:#e5eeee;--muted:#a7babe;--line:#34474d;--green:#8cdbb7;--greenwash:#253e34;--amber:#efd09c;--amberwash:#393020;--red:#efb0ba;--redwash:#3f2b31;--blue:#97c6da;--shadow:0 20px 60px #0009}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;font:13px/1.42 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;color:var(--ink);background:var(--bg);overflow:hidden}button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer}button:disabled{cursor:not-allowed;opacity:.38;filter:grayscale(.4)}[hidden]{display:none!important}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #78a7fb;outline-offset:2px}svg{display:block}
+button{border:0}.icon{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}.small-icon{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.btn{min-height:35px;display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--line);border-radius:9px;background:var(--panel);padding:7px 11px;font-weight:650;white-space:nowrap}.btn:hover:not(:disabled){background:var(--soft)}.btn.solid{color:white;background:#216f56;border-color:#216f56}.btn.solid:hover:not(:disabled){background:#165b46}.btn.danger{color:var(--red);background:var(--redwash);border-color:#dcb8bf}.btn.flat{background:transparent;border-color:transparent}.btn.square{width:36px;padding:0}.btn.active{border-color:var(--green);background:var(--greenwash);color:var(--green)}
+.app{height:100dvh;display:flex;flex-direction:column;overflow:hidden}.header{height:58px;flex-shrink:0;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;border-bottom:1px solid var(--line);background:var(--panel);padding:0 15px;gap:8px}.identity{display:flex;align-items:center;gap:10px;min-width:0}.logo{width:33px;height:33px;display:grid;place-items:center;border-radius:10px;background:#1d6a51;color:white;font-weight:750;font-size:15px}.identity-name{font-size:15px;font-weight:760;letter-spacing:-.35px;white-space:nowrap}.identity-caption{color:var(--muted);font-size:10px;white-space:nowrap}.mode-chooser{min-width:175px;min-height:46px;border:1px solid var(--line);background:var(--soft);border-radius:11px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;padding:5px 14px;font-size:12px;font-weight:780;letter-spacing:.35px}.mode-chooser:hover{border-color:var(--green)}.mode-chooser .arrow{width:12px;height:10px;stroke:var(--muted);stroke-width:2.4;fill:none}.header-right{justify-self:end;display:flex;align-items:center;gap:6px;min-width:0}.status-inline{font-size:11px;color:var(--muted);white-space:nowrap}.status-inline::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:#39936e;margin-right:7px}.header-right .minor{display:inline-flex}
+.layout{flex:1;display:grid;grid-template-columns:var(--left,242px) minmax(0,1fr) var(--right,270px);min-height:0;position:relative;overflow:hidden}.layout.left-closed{--left:0px}.layout.right-closed{--right:0px}.layout .side.left{grid-column:1;grid-row:1}.layout .center{grid-column:2;grid-row:1}.layout .side.right{grid-column:3;grid-row:1}
+.side{background:var(--panel);display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden}.side.left{border-right:1px solid var(--line)}.side.right{border-left:1px solid var(--line)}.layout.left-closed .side.left,.layout.right-closed .side.right{display:none}.side-heading{height:54px;border-bottom:1px solid var(--line);flex-shrink:0;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:6px}.side-heading strong{font-size:13px}.side-heading small{display:block;font-size:10px;color:var(--muted);margin-top:2px}.side-body{overflow-y:auto;padding:10px;flex:1;min-height:0}.party{display:block;width:100%;padding:11px 10px;background:transparent;text-align:left;border:1px solid transparent;border-radius:10px;margin-bottom:4px}.party:hover{background:var(--soft)}.party.chosen{background:var(--greenwash);border-color:#b6d0c2}.party-name{font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:5px}.party small{display:block;color:var(--muted);font-size:10.5px;margin-top:4px;line-height:1.35}.pip{width:7px;height:7px;display:inline-block;border-radius:50%;background:#339875;margin-right:5px}.pip.warn{background:#d39b3a}.pip.red{background:#bb5261}.pip.off{background:#97a5a7}
+.center{display:flex;flex-direction:column;min-width:0;min-height:0}.context{background:var(--panel);height:auto;min-height:48px;border-bottom:1px solid var(--line);flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 12px}.context-title{font-weight:730;font-size:12px}.context-detail{color:var(--muted);font-size:10.5px;margin-top:2px}.context-right{display:flex;align-items:center;gap:7px;flex-shrink:0}.pill{font-size:10.5px;font-weight:700;color:var(--green);background:var(--greenwash);border-radius:20px;padding:5px 8px;white-space:nowrap}.pill.warn{color:var(--amber);background:var(--amberwash)}.pill.danger{color:var(--red);background:var(--redwash)}
+.map{flex:1;min-height:0;position:relative;background:var(--bg);overflow:hidden;touch-action:pan-y}.map-visual{position:absolute;inset:0;width:100%;height:100%;transform-origin:center;transition:transform .15s ease}.map-visual svg{width:100%;height:100%;display:block}.map-visual .roads{stroke:#abb5ad;stroke-width:.65;fill:none;opacity:.8}.map-visual .minor-roads{stroke:#c7cec8;stroke-width:.35;fill:none}.map-visual .contours{stroke:#a0b4a5;stroke-width:.35;fill:none;opacity:.45}.night .map-visual .roads{stroke:#627a74;opacity:.5}.night .map-visual .minor-roads{stroke:#4c655e;opacity:.55}.night .map-visual .contours{stroke:#5d7e73;opacity:.45}.map-water{fill:#b3d9dc;opacity:.45}.night .map-water{fill:#456e79;opacity:.32}.marker{position:absolute;border:0;background:transparent;display:flex;align-items:center;gap:6px;font-size:11px;text-shadow:0 1px var(--panel);max-width:120px;padding:3px;z-index:3}.marker span{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.marker .dot{width:13px;height:13px;border-radius:50%;background:var(--partycolor);border:3px solid var(--panel);outline:2px solid var(--partycolor);flex-shrink:0}.marker.selected .dot{width:17px;height:17px}.map-tag{position:absolute;top:14px;left:14px;background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:9px 11px;max-width:calc(100% - 140px);box-shadow:0 2px 8px #0000000a;z-index:4}.map-tag strong{display:block;font-size:11px}.map-tag small{display:block;margin-top:3px;color:var(--muted);font-size:10px}.map-actions{position:absolute;right:12px;top:12px;display:flex;gap:5px;z-index:5}.map-actions .btn{box-shadow:0 1px 5px #0000000e}.map-corner{position:absolute;bottom:13px;left:12px;z-index:4;display:flex;align-items:center;gap:6px;flex-wrap:wrap;max-width:calc(100% - 24px)}.map-corner .chip{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 8px;color:var(--muted);font-size:10.5px}.map-corner button{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-size:10.5px}
+.rail{flex-shrink:0;background:var(--panel);border-top:1px solid var(--line);min-height:61px;padding:9px 12px;display:flex;align-items:center;gap:9px}.rail button{flex-shrink:0}.rail-text{display:flex;flex-direction:column;gap:2px;min-width:0;margin-right:auto}.rail-text b{font-size:12px}.rail-text small{font-size:10.5px;color:var(--muted);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.rail .buttons{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.rail-play{display:flex;gap:5px;align-items:center}.rail-play .btn{min-height:38px}.timeline-wrap{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}.timeline-head{display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--muted);font-size:10.5px;white-space:nowrap;overflow:hidden}.timeline-head strong{color:var(--ink)}.timeline-head span{overflow:hidden;text-overflow:ellipsis}.timeline-bottom{display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--muted)}.timeline-bottom input{flex:1;min-width:30px;accent-color:#216f56}.rail .choice{height:38px;border:1px solid var(--line);background:var(--panel);border-radius:9px;padding:0 8px}
+.detail-name{font-size:16px;font-weight:760;letter-spacing:-.25px}.big-number{font-size:29px;font-weight:760;letter-spacing:-.6px;margin:12px 0 0}.caption{font-size:10.5px;color:var(--muted)}.fact{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:11.5px}.fact span:last-child{font-weight:650;text-align:right;min-width:0;overflow-wrap:anywhere}.section-label{color:var(--muted);font-size:10px;font-weight:750;text-transform:uppercase;letter-spacing:.7px;margin:17px 0 8px}.note{padding:11px;border-radius:10px;background:var(--soft);border:1px solid var(--line);font-size:11px;color:var(--muted);line-height:1.5}.full{width:100%}
+.scrim{display:none}.modal-backdrop{position:fixed;inset:0;background:#101b2199;display:none;justify-content:center;align-items:center;padding:16px;z-index:100}.modal-backdrop.open{display:flex}.modal{width:min(544px,100%);height:min(620px,calc(100dvh - 32px));min-height:0;border-radius:17px;background:var(--panel);display:flex;flex-direction:column;overflow:hidden;box-shadow:var(--shadow);border:1px solid var(--line)}.modal-header{padding:17px 19px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-shrink:0}.modal-title{font-weight:770;letter-spacing:-.2px;font-size:18px}.modal-sub{font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.35}.modal-body{padding:17px 19px;flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain}.modal-footer{border-top:1px solid var(--line);padding:12px 19px;display:flex;gap:7px;justify-content:flex-end;align-items:center;flex-wrap:wrap;flex-shrink:0}.mode-grid{display:grid;gap:8px}.mode-option{display:flex;justify-content:space-between;align-items:center;gap:12px;text-align:left;width:100%;padding:13px 14px;border:1px solid var(--line);background:var(--panel);border-radius:11px}.mode-option:hover:not(:disabled){border-color:var(--green)}.mode-option.selected{background:var(--greenwash);border-color:#9ccbb3}.mode-option strong{display:block;font-size:13px}.mode-option small{display:block;color:var(--muted);font-size:11px;margin-top:4px;line-height:1.3}.mode-tick{font-size:16px;color:var(--green)}.formrow{margin-bottom:13px}.formrow label{display:block;font-weight:700;font-size:11px;margin-bottom:6px}.formrow input,.formrow select,.formrow textarea{width:100%;background:var(--panel);border:1px solid #afc0ba;border-radius:9px;padding:10px;min-height:38px;min-width:0}.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.toggle-line{display:flex;gap:9px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}.toggle-line input{margin-top:3px;accent-color:#216f56}.toggle-line strong{display:block;font-size:12px}.toggle-line small{display:block;font-size:10.5px;color:var(--muted);margin-top:3px;line-height:1.35}.tabs{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:14px}.tab{background:var(--soft);border:1px solid var(--line);padding:8px 10px;border-radius:9px;font-size:11px;font-weight:700}.tab.selected{background:var(--greenwash);border-color:#9ccbb3;color:var(--green)}.item{border:1px solid var(--line);border-radius:11px;padding:12px;margin-bottom:9px}.item strong{display:block}.item small{display:block;color:var(--muted);margin:3px 0 11px;font-size:10.5px}.item-actions{display:flex;gap:6px;flex-wrap:wrap}.item-actions .btn{min-height:31px;font-size:11px}.item.selected{border-color:var(--green);background:var(--greenwash)}.menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.menu-grid button{border:1px solid var(--line);border-radius:11px;padding:13px;background:var(--soft);text-align:left}.menu-grid button b{display:block;font-size:12px}.menu-grid button small{display:block;font-size:10.5px;color:var(--muted);margin-top:4px}
+.toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#263f44;color:white;padding:10px 15px;border-radius:12px;font-size:11.5px;box-shadow:var(--shadow);z-index:130;max-width:min(500px,calc(100vw - 26px));display:none}.toast.show{display:block}
+@media(max-width:1250px){.header-right .minor,.header-right .status-inline{display:none}}
+@media(max-width:1190px){.layout{--right:0px}.side.right{display:none}.layout.right-open{--right:0px}.layout.right-open .side.right{display:flex;position:absolute;right:0;top:0;bottom:0;width:min(280px,86vw);z-index:32;box-shadow:var(--shadow)}.layout.right-open .scrim{display:block;position:absolute;inset:0;background:#1d31354d;z-index:31}.context .aux{display:none}}
+@media(max-width:800px){.layout{--left:0px}.side.left{display:none}.layout.left-open .side.left{display:flex;position:absolute;top:0;bottom:0;left:0;width:min(290px,86vw);z-index:32;box-shadow:var(--shadow)}.layout.left-open .scrim{display:block;position:absolute;inset:0;background:#1d31354d;z-index:31}.header{padding:0 9px}.identity-caption{display:none}.header-right .minor,.status-inline{display:none}.header{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)}.mode-chooser{min-width:125px;padding:3px 6px}.header .btn.flat{padding:5px}.context{flex-wrap:wrap}.rail{flex-wrap:wrap}.rail-text{width:100%;flex-basis:100%}.rail .timeline-wrap{flex:1;min-width:130px}.map-tag{max-width:calc(100% - 102px)}}
+@media(max-width:520px){.identity-name{font-size:12px}.logo{height:28px;width:28px;font-size:13px}.mode-chooser{min-width:112px;max-width:130px;font-size:10.5px}.header-right{gap:2px}.header-right .btn{min-height:31px;padding:4px 6px;font-size:11px}.header-right .label-text{display:none}.context{padding:8px 10px}.context-right .pill{display:none}.map-actions{right:8px;top:8px;gap:3px}.map-actions .btn{min-height:32px;padding:5px}.map-actions .btn .map-word{display:none}.map-tag{left:9px;top:8px;max-width:calc(100% - 100px);padding:7px}.map-tag small{display:none}.rail{padding:8px;gap:7px}.rail-play .btn{min-height:34px}.rail .choice{height:34px}.rail .buttons .btn{padding:6px 8px}
+.rail[data-kind="travel"],.rail[data-kind="view"]{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"transport speed" "timeline timeline" "actions actions"}
+.rail[data-kind="travel"] .rail-play,.rail[data-kind="view"] .rail-play{grid-area:transport}
+.rail[data-kind="travel"] .timeline-wrap,.rail[data-kind="view"] .timeline-wrap{grid-area:timeline;width:100%;min-width:0}
+.rail[data-kind="travel"] .choice,.rail[data-kind="view"] .choice{grid-area:speed}
+.rail[data-kind="travel"] .buttons,.rail[data-kind="view"] .buttons{grid-area:actions;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;width:100%}
+.rail[data-kind="record"]{display:flex;flex-wrap:wrap}
+.rail[data-kind="record"] .buttons{width:100%;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+.rail[data-kind="record"] .buttons .btn{width:100%}.modal{height:min(590px,calc(100dvh - 24px));border-radius:15px}.modal-header,.modal-body,.modal-footer{padding:12px}.formgrid,.menu-grid{grid-template-columns:1fr}}
+
+/* V5 responsive and interaction-system refinements */
+/* Keep the mode selector centered; tool labels never crowd it. */
+.header-right .status-inline{display:none}
+.header-right [data-action="workspace-menu"].minor,.header-right [data-action="view-menu"].minor{display:none}
+.header-right [aria-label="Open all tools"]{display:none}
+@media(max-width:1250px){.header-right [aria-label="Open all tools"]{display:inline-flex}}
+
+.header,.context,.rail,.side,.modal,.mode-option,.item,.menu-grid{min-width:0}
+.identity,.header-right,.context>div:first-child,.context-right,.side-heading>div{min-width:0}
+.identity-name,.identity-caption,.context-title,.context-detail,.mode-option small,.item strong,.item small,.menu-grid small,.note{overflow-wrap:anywhere}
+.mode-chooser{flex-shrink:0}.btn{max-width:100%}.btn:disabled{opacity:.36;filter:saturate(.3)}
+.modal{height:min(660px,calc(100dvh - 32px));width:min(560px,100%)}
+.modal-body{overscroll-behavior:contain}.modal-header>div{min-width:0}
+.panel-search{width:100%;height:34px;border-radius:9px;border:1px solid var(--line);background:var(--panel);padding:8px 10px;font:inherit;margin-bottom:8px}
+.panel-filters{display:flex;gap:4px;margin-bottom:10px;flex-wrap:wrap}
+.panel-filters button{font-size:10px;min-height:28px;padding:5px 8px}
+.box-label{font-size:10px;color:var(--muted);font-weight:750;text-transform:uppercase;letter-spacing:.65px;margin:12px 0 7px}
+.compact-list{max-height:174px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;padding:6px 10px}
+.control-status{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:11px;overflow-wrap:anywhere}
+.control-status:last-child{border:0}.control-status>div{min-width:0}.control-status b{display:block;font-size:11.5px}
+.control-status small{display:block;color:var(--muted);margin-top:2px}
+.soft-tag{font-size:10px;font-weight:730;border-radius:12px;background:var(--greenwash);color:var(--green);padding:5px 8px;white-space:nowrap}
+.soft-tag.warn{background:var(--amberwash);color:var(--amber)}.soft-tag.danger{background:var(--redwash);color:var(--red)}
+.footer-helper{font-size:10.5px;color:var(--muted);margin-top:10px}
+@media(max-width:800px){.modal{height:min(650px,calc(100dvh - 24px))}.modal-body{padding:13px}.header{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)}.context>div:first-child{flex:1 1 150px}.context-right{max-width:100%;flex-wrap:wrap}}
+@media(max-width:390px){.mode-chooser{min-width:105px;max-width:116px}.logo{display:none}.header-right .btn.flat{min-width:28px}.modal-footer .btn{flex:1 1 auto}.rail[data-kind="record"] .buttons{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.demo-observation{position:absolute;width:5px;height:5px;background:#287b65;border:1px solid #fff;border-radius:50%;z-index:2;pointer-events:none}
+/* Command V5.1 — task-focused, compact, equal-width controls and inspectable real-state concepts */
+.modal{width:min(720px,100%);height:min(690px,calc(100dvh - 32px))}
+.modal-body{padding:18px 22px}.modal-footer{padding:14px 22px}
+.map-tabs,.phone-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;flex-wrap:nowrap;padding:5px;background:var(--soft);border:1px solid var(--line);border-radius:12px}
+.map-tabs .btn,.phone-tabs .btn{width:100%;border-color:transparent;background:transparent;min-height:42px;border-radius:9px;white-space:normal;line-height:1.2;font-size:12px}
+.map-tabs .btn.active,.phone-tabs .btn.active{background:var(--panel);border:1px solid var(--line);box-shadow:0 1px 4px #0000000c;color:var(--green)}
+.phone-tabs{grid-template-columns:repeat(3,minmax(0,1fr))}.phone-form{padding:6px 0 0}.phone-form .formrow{margin-bottom:19px}.phone-form .formrow label{font-size:12px;letter-spacing:.1px}
+.phone-form .formrow input,.phone-form .formrow select{min-height:45px;padding:11px 13px;border:1px solid var(--line);background:var(--soft);border-radius:10px}
+.phone-form .formrow:focus-within select,.phone-form .formrow:focus-within input{border-color:var(--green)}
+.map-form{padding:7px 1px 4px}.field-title{font-size:12px;font-weight:750;margin:6px 0 9px;letter-spacing:.05px}
+.location-entry{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px}.location-entry input{height:44px;min-width:0;border-radius:10px;border:1px solid var(--line);padding:11px 13px;background:var(--panel)}
+.location-preview{height:172px;position:relative;margin:15px 0 20px;border:1px solid var(--line);border-radius:13px;overflow:hidden;background:linear-gradient(110deg,#eef4ec,#e5eeed)}
+body.night .location-preview{background:linear-gradient(110deg,#172a2a,#233333)}.location-preview svg{width:100%;height:100%}.preview-label{position:absolute;left:12px;bottom:10px;padding:8px 10px;background:var(--panel);border:1px solid var(--line);border-radius:9px;max-width:calc(100% - 24px)}.preview-label strong{display:block;font-size:12px}.preview-label small{display:block;font-size:10px;color:var(--muted);line-height:1.35}
+.empty-preview{display:flex;align-items:center;justify-content:center;flex-direction:column;height:100%;gap:4px;text-align:center;color:var(--muted);padding:18px}.empty-preview span{font-size:28px;color:var(--green)}.empty-preview b{font-size:12px;color:var(--ink)}.empty-preview small{font-size:11px}
+.radius-options{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-bottom:15px}.radius-options .btn{width:100%;min-width:0;padding:9px 6px;font-weight:680}.radius-custom{display:grid;grid-template-columns:1fr minmax(80px,1fr) minmax(92px,1fr);align-items:center;gap:8px;margin:-3px 0 16px}.radius-custom label{font-weight:730}.radius-custom input,.radius-custom select{width:100%;min-width:0;height:39px;padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:var(--panel)}
+.switchline{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:13px 0;padding:12px 0;border-top:1px solid var(--line)}.switchline>span{min-width:0}.switchline b{font-size:12.5px;display:block}.switchline small{font-size:11px;color:var(--muted);display:block;margin-top:4px;line-height:1.4}.switchline input{appearance:none;position:relative;width:43px;height:25px;flex-shrink:0;border:0;border-radius:999px;background:#c8d5d0;cursor:pointer}.switchline input:checked{background:#216f56}.switchline input:after{content:"";position:absolute;top:3px;left:3px;background:white;border-radius:50%;height:19px;width:19px;box-shadow:0 1px 3px #0002;transition:transform .14s}.switchline input:checked:after{transform:translateX(18px)}
+.upload-zone{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;min-height:184px;border:2px dashed #b5cec3;border-radius:14px;background:var(--soft);cursor:pointer;padding:16px;text-align:center;margin-bottom:15px;overflow-wrap:anywhere}.upload-zone:hover{border-color:var(--green)}.upload-zone .upload-icon{font-size:27px;color:var(--green)}.upload-zone b{font-size:13px;max-width:100%;word-break:break-word}.upload-zone small{color:var(--muted);font-size:11px}.upload-zone input{max-width:100%;font-size:11px;padding:9px;background:var(--panel);border:1px solid var(--line);border-radius:9px}
+.import-note{display:flex;flex-direction:column;gap:5px;border:1px solid var(--line);border-radius:11px;padding:14px;background:var(--soft)}.import-note b{font-size:12px}.import-note span{font-size:11px;color:var(--muted);line-height:1.5}
+.map-list-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:6px 0 16px}.map-list-heading>b{font-size:13px}.map-list-heading b{font-size:13px}.map-list-heading small{display:block;font-size:11px;margin-top:4px;color:var(--muted)}.map-stack{display:flex;flex-direction:column;gap:10px}.map-row{border:1px solid var(--line);border-radius:13px;padding:13px 14px;background:var(--panel)}.map-row.selected{border-color:#a5cbb8;background:var(--greenwash)}.map-row-main{display:block;width:100%;background:transparent;text-align:left;padding:0 0 10px}.map-row-main strong{font-size:13px;display:block}.map-row-main small{font-size:11px;color:var(--muted);margin-top:4px;display:block}.map-row-actions{display:flex;justify-content:flex-end;align-items:center;gap:7px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:10px}.map-row-actions .soft-tag{margin-right:auto}.map-row-actions .btn{min-height:31px;font-size:11px}
+.inline-error{padding:12px;border:1px solid #dbb6bd;background:var(--redwash);color:var(--red);border-radius:11px;margin-top:12px;font-size:11.5px}.inline-error b,.inline-error span{display:block;line-height:1.5}.inline-status{padding:12px;background:var(--soft);border:1px solid var(--line);border-radius:11px;margin-top:12px}.inline-status>b,.inline-status>span{display:block}.inline-status>span{font-size:11px;color:var(--muted);margin-top:4px}.inline-buttons{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.confirm-map{border:1px solid var(--line);border-radius:11px;padding:15px;background:var(--soft)}.confirm-map strong,.confirm-map small{display:block}.confirm-map small{color:var(--muted);font-size:11px;margin-top:7px;line-height:1.5}
+.end-input{display:flex;align-items:center;gap:10px}.end-input input{max-width:200px}.end-input span{color:var(--muted);font-size:12px}.range-control{accent-color:var(--green);width:100%!important;border:0!important;padding:0!important;min-height:30px!important}.formrow label strong{float:right;color:var(--green)}
+.sync-panel{padding:12px;margin-top:15px;border:1px solid var(--line);background:var(--soft);border-radius:12px}.sync-head{display:flex;justify-content:space-between;align-items:center;gap:9px}.sync-head>b{font-size:12px}.sync-count{font-size:24px;font-weight:780;letter-spacing:-.5px;margin-top:10px;line-height:1.2}.sync-count>span{font-size:11px;font-weight:650;letter-spacing:0;color:var(--muted)}.sync-track{width:100%;height:8px;border-radius:10px;background:#d3e0da;margin:11px 0;overflow:hidden}.sync-track i{height:100%;background:#216f56;display:block;border-radius:9px;transition:width .45s}.sync-meta{display:flex;justify-content:space-between;gap:8px;font-size:11px;align-items:center}.sync-meta span{font-size:10px;color:var(--muted);text-align:right}.sync-help{font-size:10px;line-height:1.4;color:var(--muted);margin:9px 0 0}.compact-facts .fact{padding:9px 0}.evidence-fold{margin-top:12px;border:1px solid var(--line);border-radius:10px;overflow:hidden}.evidence-fold summary{padding:10px;font-size:11.5px;font-weight:700;cursor:pointer;background:var(--panel)}.evidence-fold[open]{padding-bottom:9px}.evidence-fold[open] .fact,.evidence-fold[open] .btn{margin-left:10px;margin-right:10px;width:calc(100% - 20px)}
+.map-actions{flex-wrap:wrap;justify-content:flex-end;max-width:calc(100% - 16px)}.map-actions .btn{min-height:34px;padding:7px 8px;font-size:11px}.map-actions .btn.square{width:34px;padding:0}
+@media(max-width:700px){.modal{height:min(660px,calc(100dvh - 22px));width:min(700px,100%)}.modal-body{padding:13px}.modal-footer{padding:10px 13px}.map-tabs .btn{font-size:10px;min-height:42px;padding:7px 4px}.location-preview{height:138px}.map-tag{top:93px;max-width:calc(100% - 24px)}.map-actions{left:7px;right:7px;top:8px;max-width:calc(100% - 14px)}.map-actions .btn{font-size:10px;padding:7px 7px;min-height:33px}.map-actions .btn.square{min-height:33px}.sync-meta{flex-wrap:wrap}.radius-options .btn{font-size:11px}}
+@media(max-width:390px){.map-tabs{gap:2px;padding:4px}.map-tabs .btn{font-size:9.4px;min-width:0}.location-entry .btn{padding:7px 10px}.modal-header{padding:13px}.location-preview{height:118px}.radius-custom{grid-template-columns:1fr 1fr}.radius-custom label{grid-column:1/-1}.map-row-actions .soft-tag{display:none}}
+
+/* Compact destructive-confirmation variant within the same Cancel family. */
+.btn.ui-cancel.danger-confirm{background:#9a394b;color:#fff;border-color:#9a394b}
+.btn.ui-cancel.danger-confirm:hover:not(:disabled){background:#802e3d}
+/* V5.2 — one semantic button factory, shared spacing, compact dialogs, native file input */
+:root{--ui-space-1:4px;--ui-space-2:8px;--ui-space-3:12px;--ui-space-4:16px;--ui-space-5:20px;--ui-control-height:38px;--ui-radius:10px;--ui-focus:#78a7fb;--ui-cancel-bg:#fff1f2;--ui-cancel-border:#ddadb5;--ui-cancel-text:#9a394b}
+body.night{--ui-cancel-bg:#402a33;--ui-cancel-border:#80535d;--ui-cancel-text:#f1bbc4}
+.btn{min-height:var(--ui-control-height);border-radius:var(--ui-radius);padding:8px 13px;gap:var(--ui-space-2);font-weight:670;transition:background .12s ease,border-color .12s ease,box-shadow .12s ease}
+.btn.ui-action{border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+.btn.ui-action:hover:not(:disabled){background:var(--soft)}
+.btn.ui-ok{border:1px solid #216f56;background:#216f56;color:white}
+.btn.ui-ok:hover:not(:disabled){background:#165b46}
+.btn.ui-cancel{border:1px solid var(--ui-cancel-border);background:var(--ui-cancel-bg);color:var(--ui-cancel-text)}
+.btn.ui-cancel:hover:not(:disabled){filter:brightness(.96)}
+.btn.active{border-color:var(--green);background:var(--greenwash);color:var(--green)}
+.btn:focus-visible{outline:3px solid var(--ui-focus);outline-offset:2px}
+/* Details should only be discoverable when the Parties panel is present. */
+.layout.left-closed .map-actions [data-action="toggle-right"]{display:none}
+/* Task dialogs retain consistent dimensions; simple dialogues size to content. */
+.modal{width:min(720px,100%);height:auto;max-height:calc(100dvh - 32px);min-height:0}
+.modal.modal-task{height:min(660px,calc(100dvh - 32px))}
+.modal.modal-compact{width:min(720px,100%);height:auto}
+.modal.modal-confirm{width:min(390px,calc(100vw - 32px));height:auto}
+.modal.modal-confirm .modal-header{padding:14px 18px}
+.modal.modal-confirm .modal-body{padding:13px 18px 20px}
+.modal.modal-confirm .modal-footer{padding:12px 18px}
+.delete-question{font-size:14px;line-height:1.45;margin:0}
+.modal-body{flex:0 1 auto;overflow-y:auto}
+.modal-task .modal-body{flex:1 1 auto}
+.modal-footer{padding:var(--ui-space-3) var(--ui-space-5);gap:var(--ui-space-2);justify-content:flex-end}
+.modal-header{padding:var(--ui-space-4) var(--ui-space-5)}
+.modal-compact .modal-body{padding:var(--ui-space-4) var(--ui-space-5)}
+.modal-footer .btn{min-width:76px}
+/* Native file selection, visually treated as one consistent interactive row. */
+.map-file-picker{position:relative;display:flex;align-items:center;gap:var(--ui-space-3);border:1px solid #aebdb7;background:var(--panel);border-radius:var(--ui-radius);padding:var(--ui-space-4);min-height:88px;margin-top:var(--ui-space-2);cursor:pointer;overflow:hidden}
+.map-file-picker:hover,.map-file-picker:focus-within{border-color:var(--green);box-shadow:0 0 0 2px var(--greenwash)}
+.map-file-picker .file-icon{flex:none;width:40px;height:40px;border-radius:10px;background:var(--greenwash);color:var(--green);display:grid;place-items:center;font-size:21px;font-weight:750}
+.map-file-picker .file-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.map-file-picker .file-info strong{font-size:13px;overflow-wrap:anywhere}
+.map-file-picker .file-info small{font-size:11px;color:var(--muted)}
+.map-file-picker .file-browse{flex:none;display:inline-flex;align-items:center;justify-content:center;min-height:var(--ui-control-height);border:1px solid var(--line);border-radius:9px;padding:8px 12px;font-weight:680;background:var(--panel)}
+.map-file-picker input[type=file]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:2}
+/* A real value field, not a disabled-looking slab. */
+.dot-interval-row{display:flex;align-items:center;justify-content:space-between;gap:var(--ui-space-4);padding:var(--ui-space-4) 0;border-top:1px solid var(--line)}
+.dot-interval-row label{font-size:12px;font-weight:730;flex:1;min-width:0}
+.dot-value{display:flex;align-items:center;gap:var(--ui-space-2);flex-shrink:0}
+.dot-value input{width:4.3rem;min-height:34px;padding:5px 6px;background:var(--panel);border:1px solid #afc0ba;border-radius:8px;text-align:center;font-weight:740;font-variant-numeric:tabular-nums}
+.dot-value input::-webkit-outer-spin-button,.dot-value input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.dot-value input[type=number]{appearance:textfield;-moz-appearance:textfield}
+.dot-value span{font-size:11px;color:var(--muted)}
+.display-opacity{margin-top:var(--ui-space-4)}
+/* Map details: concise facts, no vague explanatory card, actions in right-aligned footer. */
+.map-detail-summary{display:flex;align-items:center;gap:var(--ui-space-3);padding:var(--ui-space-3);background:var(--soft);border-radius:var(--ui-radius);margin-bottom:var(--ui-space-4)}
+.map-detail-symbol{width:44px;height:44px;display:grid;place-items:center;flex:none;border-radius:10px;background:var(--greenwash);color:var(--green);font-size:25px}
+.map-detail-summary strong{display:block;font-size:14px}
+.map-detail-summary small{display:block;color:var(--muted);font-size:11px;margin-top:4px}
+.map-detail-facts{padding:0 var(--ui-space-1)}
+.map-detail-facts .fact{padding:var(--ui-space-3) 0;font-size:12px}
+.map-detail-facts .fact:last-child{border-bottom:0}
+/* Editable fields stay white/surface and outlined; muted backgrounds are for read-only explanation. */
+.phone-form .formrow input,.phone-form .formrow select{background:var(--panel);border-color:#afc0ba}
+.phone-form .formrow input:disabled,.phone-form .formrow select:disabled{opacity:.5;background:var(--soft)}
+@media(max-width:700px){.modal{max-height:calc(100dvh - 22px)}.modal.modal-task{height:min(660px,calc(100dvh - 22px))}.modal-footer{padding:var(--ui-space-3)}.modal-header,.modal-compact .modal-body{padding:var(--ui-space-4)}.map-file-picker{padding:var(--ui-space-3)}.map-file-picker .file-icon{width:32px;height:32px}.modal-footer .btn{min-width:0}}
+@media(max-width:390px){.map-file-picker .file-browse{padding:7px 8px}.map-file-picker .file-info small{font-size:10px}.modal-confirm .modal-footer .btn{flex:1 1 0}}
+/* V5.3 flat inspector and semantic binary switches */
+.side.right .side-body{padding:14px 16px 20px;scrollbar-gutter:stable}
+.inspector-person{min-width:0}
+.inspector-person-header{display:flex;align-items:center;justify-content:space-between;gap:9px;padding-bottom:12px}
+.inspector-person-header .detail-name{font-size:18px;line-height:1.25}
+.inspector-fix{font-size:10px;font-weight:760;white-space:nowrap;letter-spacing:.2px;border-radius:99px;padding:4px 7px;background:var(--amberwash);color:var(--amber)}
+.inspector-fix.positive{background:var(--greenwash);color:var(--green)}
+.inspector-critical{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:14px 0 16px}
+.inspector-kicker{display:block;color:var(--muted);font-size:10.5px;font-weight:610;line-height:1.3;margin-bottom:7px}
+.inspector-contact{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:19px}
+.inspector-contact .inspector-kicker{margin:0;font-size:11px}
+.inspector-contact strong{font-size:14px;font-weight:750;letter-spacing:-.12px;text-align:right}
+.inspector-contact .positive{color:var(--green)}.inspector-contact .caution{color:var(--amber)}
+.inspector-metric-pair{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.inspector-metric-pair>div{min-width:0;padding-right:10px}
+.inspector-metric-pair>div+div{border-left:1px solid var(--line);padding-left:15px;padding-right:0}
+.inspector-metric-pair strong{display:block;font-variant-numeric:tabular-nums;line-height:1.16;font-size:23px;letter-spacing:-.6px;font-weight:760;white-space:nowrap}
+.inspector-facts .fact{padding:11px 0;font-size:11.5px}.inspector-facts .fact:last-child{border-bottom:none}
+.inspector-sync{margin-top:3px;padding:17px 0 13px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:none;border-radius:0}
+.inspector-sync .sync-head>b{font-size:12.5px}.inspector-sync .sync-count{font-size:22px;margin-top:10px}.inspector-sync .sync-count>strong{font:inherit}
+.inspector-sync .sync-track{height:6px;margin:9px 0 11px}.inspector-sync .sync-meta{font-size:11px}.inspector-sync .sync-meta span{font-size:10px}.inspector-sync .sync-help{font-size:10px;margin:8px 0 0}
+.inspector-evidence{border:0;border-bottom:1px solid var(--line);padding:0;margin:0}
+.inspector-evidence>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:67px;padding:11px 0;cursor:pointer;list-style:none;border:0;background:transparent}
+.inspector-evidence>summary::-webkit-details-marker{display:none}.inspector-evidence>summary:hover .evidence-copy strong{color:var(--green)}
+.inspector-evidence .evidence-copy{display:flex;flex-direction:column;min-width:0;gap:3px}
+.inspector-evidence .evidence-copy strong{font-size:11.5px;line-height:1.3}.inspector-evidence .evidence-copy small{font-size:10px;line-height:1.3;color:var(--muted)}
+.inspector-evidence .evidence-disclosure{display:flex;align-items:center;gap:5px;color:var(--green);font-size:10.5px;font-weight:750;flex-shrink:0}
+.inspector-evidence .evidence-disclosure svg{transition:transform .16s ease}.inspector-evidence[open] .evidence-disclosure svg{transform:rotate(180deg)}
+.inspector-evidence .evidence-close-text{display:none}.inspector-evidence[open] .evidence-open-text{display:none}.inspector-evidence[open] .evidence-close-text{display:inline}
+.inspector-evidence .evidence-content{padding:0 0 16px}.inspector-evidence .evidence-content .fact{padding:8px 0;font-size:11px}.inspector-evidence .evidence-content>.btn{margin-top:12px}
+.inspector-actions{padding:17px 0 4px}.inspector-actions>.btn{min-height:39px}.inspector-actions>.caption{margin-top:8px;font-size:10px;line-height:1.4}
+.inspector-disclaimer{font-size:9.5px;color:var(--muted);margin:14px 0 0;line-height:1.45}.inspector-empty{padding:28px 2px;text-align:center}.inspector-empty b{display:block;font-size:13px}.inspector-empty p{font-size:11px;color:var(--muted)}
+/* One switch across all binary settings, including participation selections. Radios remain radio controls. */
+.toggle-line:has(input[role="switch"]){flex-direction:row-reverse;align-items:center;justify-content:space-between;gap:14px}
+.toggle-line:has(input[role="switch"])>span{min-width:0;flex:1}
+.toggle-line input[role="switch"],.switchline input[role="switch"]{-webkit-appearance:none;appearance:none;position:relative;width:43px;height:25px;min-width:43px;flex-shrink:0;border:1px solid #bccac4;border-radius:99px;background:#cbd7d2;margin:0;cursor:pointer;outline-offset:3px;transition:background .15s}
+.toggle-line input[role="switch"]::after,.switchline input[role="switch"]::after{content:"";position:absolute;top:2px;left:2px;width:19px;height:19px;border-radius:99px;background:white;box-shadow:0 1px 4px #0002;transition:transform .15s}
+.toggle-line input[role="switch"]:checked,.switchline input[role="switch"]:checked{background:#216f56;border-color:#216f56}
+.toggle-line input[role="switch"]:checked::after,.switchline input[role="switch"]:checked::after{transform:translateX(18px)}
+.toggle-line input[role="switch"]:focus-visible,.switchline input[role="switch"]:focus-visible{outline:3px solid #78a7fb}
+.toggle-line input[role="switch"]:disabled,.switchline input[role="switch"]:disabled{opacity:.45;cursor:not-allowed}
+.layer-switch{margin:0;padding:15px 2px;border-top:0;border-bottom:1px solid var(--line)}.layer-switch:last-child{border-bottom:0}.layer-switch b{font-size:12.5px}
+@media(max-width:700px){.side.right .side-body{padding:12px 14px 20px}.inspector-metric-pair strong{font-size:21px}}
+
+/* Command V5.4: anchored nonmodal choices, precise controls and useful destinations */
+.mode-picker-wrap{position:relative;min-width:0;z-index:85;justify-self:center}
+.mode-picker-wrap .mode-chooser{width:184px;min-width:0;max-width:100%}
+.mode-picker-wrap .mode-chooser[aria-expanded="true"]{background:var(--greenwash);border-color:var(--green);color:var(--green)}
+.mode-picker-wrap .mode-chooser[aria-expanded="true"] .arrow{transform:rotate(180deg)}
+.mode-dropdown{position:absolute;left:50%;transform:translateX(-50%);top:calc(100% + 8px);width:min(296px,calc(100vw - 22px));max-height:min(400px,calc(100dvh - 92px));overflow-y:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px;box-shadow:var(--shadow);z-index:99}
+.mode-dropdown[hidden],.utility-dropdown[hidden]{display:none!important}
+.mode-menu-item{display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;width:100%;padding:11px 12px;border:0;border-radius:10px;background:transparent;white-space:normal}
+.mode-menu-item:hover:not(:disabled),.mode-menu-item:focus-visible{background:var(--soft)}
+.mode-menu-item[aria-checked="true"]{background:var(--greenwash);color:var(--green)}
+.mode-menu-item strong{display:block;font-size:12.5px;font-weight:750}
+.mode-menu-item small{display:block;font-size:10.5px;line-height:1.3;margin-top:2px;color:var(--muted)}
+.mode-menu-item .menu-check{font-size:16px;font-weight:850;flex-shrink:0}
+.mode-menu-item:disabled{opacity:.43;cursor:not-allowed}
+.header-right .theme-toggle{border:0;background:transparent;min-width:36px;width:36px;padding:0;font-size:20px;line-height:1;display:inline-flex;justify-content:center;align-items:center}
+.header-right .theme-toggle:hover{background:var(--soft)}
+.utility-anchor{position:relative;z-index:86;flex-shrink:0}
+.header-right .utility-trigger{display:none}
+.utility-dropdown{position:absolute;right:0;top:calc(100% + 10px);width:230px;max-width:calc(100vw - 16px);max-height:min(70dvh,440px);overflow-y:auto;background:var(--panel);border:1px solid var(--line);padding:6px;border-radius:14px;box-shadow:var(--shadow);z-index:99}
+.utility-dropdown button{width:100%;display:flex;align-items:center;justify-content:space-between;text-align:left;padding:10px 12px;background:transparent;border-radius:9px;font-weight:650;font-size:12px;min-height:39px}
+.utility-dropdown button:hover{background:var(--soft)}
+.utility-dropdown .menu-group-title{display:block;font-size:10px;font-weight:720;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);padding:8px 12px 4px}
+.utility-dropdown .menu-divider{height:1px;background:var(--line);margin:5px 7px}
+/* Real work areas: segmented navigation, not a popup of destination buttons. */
+.workspace-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;padding:4px;background:var(--soft);border:1px solid var(--line);border-radius:11px;margin-bottom:16px}
+.workspace-tabs.tools-tabs{grid-template-columns:repeat(3,minmax(0,1fr))}
+.workspace-tabs button{min-width:0;min-height:36px;font-size:11.5px;font-weight:680;padding:7px 8px;background:transparent;border-radius:8px;border:1px solid transparent}
+.workspace-tabs button[aria-selected="true"]{background:var(--panel);border-color:var(--line);color:var(--green);box-shadow:0 1px 3px #142b3010}
+.records-toolbar{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px}
+.records-toolbar .formrow{flex:1 1 200px;margin:0}.records-toolbar label{display:block;font-size:11px;font-weight:690;margin-bottom:5px}
+.records-toolbar select{height:38px;border:1px solid var(--line);border-radius:9px;background:var(--panel);padding:6px 8px}
+.records-list{display:flex;flex-direction:column;gap:0;border-top:1px solid var(--line)}
+.records-list .record-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 2px;border-bottom:1px solid var(--line);min-width:0}
+.record-row .record-main{min-width:0;flex:1}.record-row .record-main strong{font-size:12.5px;display:block}.record-row .record-main small{color:var(--muted);display:block;margin-top:4px;font-size:10.5px;line-height:1.35;overflow-wrap:anywhere}
+.record-row .record-actions{display:flex;gap:5px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.record-row .record-actions .btn{min-height:31px;font-size:10.5px;padding:5px 8px}
+.record-row.chosen{background:var(--greenwash);border-radius:7px;padding-left:10px;padding-right:9px}
+.tool-panel-heading{font-size:13px;font-weight:760;margin:3px 0 6px}
+.tool-panel-intro{font-size:11px;color:var(--muted);margin:0 0 14px;line-height:1.45}
+.tool-fact{display:flex;gap:12px;justify-content:space-between;align-items:baseline;padding:11px 2px;border-bottom:1px solid var(--line);font-size:11.5px}
+.tool-fact strong{text-align:right;max-width:58%;font-weight:730}
+.tool-inline{display:flex;align-items:center;gap:12px;justify-content:space-between;padding:12px 2px;border-top:1px solid var(--line)}
+.tool-inline span{font-size:12px;font-weight:680}.tool-inline small{display:block;font-size:10.5px;color:var(--muted);margin-top:2px}
+.tool-inline .btn{min-width:98px}.tools-note{font-size:10.5px;color:var(--muted);line-height:1.5;margin-top:13px}
+.receiver-line{display:inline-flex;align-items:center;gap:5px;color:var(--muted);font-size:10.5px;font-weight:550;margin-left:7px;white-space:nowrap}
+.receiver-line::before{content:'';height:6px;width:6px;background:#29936a;border-radius:50%}
+@media(max-width:1250px){.header-right .utility-trigger{display:inline-flex}}
+@media(max-width:800px){.mode-picker-wrap .mode-chooser{width:134px}.header-right .theme-toggle{width:30px;min-width:30px}}
+@media(max-width:520px){.mode-picker-wrap .mode-chooser{width:112px;min-width:0}.header-right .theme-toggle{width:29px;min-width:29px;font-size:18px}.record-row{align-items:flex-start!important;flex-direction:column}.record-row .record-actions{width:100%;justify-content:flex-start}.workspace-tabs button{font-size:10.5px;padding:7px 5px}.identity-name{font-size:11.5px}.header-right{gap:1px}}
+@media(max-width:365px){.mode-picker-wrap .mode-chooser{width:105px}.header-right .theme-toggle{width:25px;min-width:25px;font-size:17px}.header-right .btn.danger{min-width:31px}}
+
+/* V5.5 — native control semantics, bounded quality editor, stateful switches */
+select:not([multiple]){appearance:none;-webkit-appearance:none;background-color:var(--panel);color:var(--ink);border:1px solid #afc0ba;border-radius:9px;padding-right:34px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7c80' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-size:15px 15px;background-repeat:no-repeat;background-position:right 11px center}
+select:disabled{background-color:var(--soft);opacity:.5}
+.filter-row{display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid var(--line);padding:3px 0 14px;margin:0 0 10px}
+.filter-row>label{font-size:12px;font-weight:700;flex:1;min-width:0}
+.filter-row .form-select-compact{width:min(215px,58%);max-width:100%;min-width:145px;min-height:39px;padding:8px 33px 8px 12px;font-weight:600}
+.tabs .btn.active{background:var(--greenwash);border-color:var(--green);color:var(--green)}
+.record-choice-group{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:6px 0 13px}
+.record-choice{position:relative;display:flex;min-width:0;min-height:122px;text-align:center;border:1px solid var(--line);border-radius:12px;background:var(--panel);cursor:pointer;align-items:center;justify-content:center;padding:15px 12px}
+.record-choice:hover{border-color:#83b99e;background:var(--soft)}
+.record-choice:has(input:checked){background:var(--greenwash);border:2px solid var(--green);box-shadow:0 0 0 1px rgba(33,111,86,.05)}
+.record-choice:has(input:focus-visible){outline:3px solid #78a7fb;outline-offset:2px}
+.record-choice input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.record-choice strong{font-size:14px;font-weight:740;display:block;margin:0 auto 5px;line-height:1.35;color:var(--ink)}
+.record-choice small{font-size:11px;line-height:1.45;display:block;color:var(--muted)}
+.record-choice:has(input:checked) strong{color:var(--green)}
+.dialog-hint,.dialog-explanation{background:none;border:0;padding:0;margin:6px 0 3px;color:var(--ink);font-size:12px;line-height:1.55;max-width:62ch}
+.dialog-hint{color:var(--muted);font-size:11px;margin:4px 0 0}
+.record-participants-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 0 9px;border-bottom:1px solid var(--line)}
+.record-participants-heading>div>strong{font-size:12px;font-weight:740;display:block}
+.record-participants-heading>div>small{font-size:10.5px;color:var(--muted);margin-top:3px;display:block}
+.select-all-label{display:flex;align-items:center;gap:12px;cursor:pointer;font-size:11.5px;font-weight:700}
+.select-all-label input[role="switch"],.quality-toggle[role="switch"]{-webkit-appearance:none;appearance:none;position:relative;width:43px;height:25px;min-width:43px;border-radius:99px;background:#cbd7d2;border:1px solid #bccac4;cursor:pointer;outline-offset:3px;margin:0}
+.select-all-label input[role="switch"]:checked,.quality-toggle[role="switch"]:checked{background:#216f56;border-color:#216f56}
+.select-all-label input[role="switch"]::after,.quality-toggle[role="switch"]::after{content:"";position:absolute;left:2px;top:2px;width:19px;height:19px;background:white;border-radius:50%;box-shadow:0 1px 4px #0002;transition:transform .13s}
+.select-all-label input[role="switch"]:checked::after,.quality-toggle[role="switch"]:checked::after{transform:translateX(18px)}
+.select-all-label input[role="switch"]:focus-visible,.quality-toggle[role="switch"]:focus-visible{outline:3px solid #78a7fb}
+.rec-participants{padding-top:2px}.rec-party-line{padding:12px 0}
+.quality-head h3{font-size:16px;font-weight:760;letter-spacing:-.15px;margin:0 0 5px}
+.quality-head p{font-size:11.5px;line-height:1.5;margin:0 0 14px;color:var(--muted)}
+.quality-label-head{display:grid;grid-template-columns:minmax(0,1fr) 62px 85px;gap:12px;padding:7px 1px;border-bottom:1px solid var(--line);text-transform:uppercase;font-size:10px;font-weight:750;color:var(--muted);letter-spacing:.5px}
+.quality-label-head span:nth-child(2),.quality-label-head span:nth-child(3){text-align:center}
+.quality-rule{display:grid;grid-template-columns:minmax(0,1fr) 62px 85px;align-items:center;gap:12px;min-height:71px;padding:10px 1px;border-bottom:1px solid var(--line)}
+.quality-copy{min-width:0}.quality-copy label{display:block;font-size:12px;font-weight:710;line-height:1.4;cursor:text}.quality-copy .quality-unit{color:var(--muted);font-size:11px;font-weight:550}
+.quality-copy small{font-size:10.5px;color:var(--muted);line-height:1.35;margin-top:3px;display:block}
+.quality-toggle{justify-self:center}
+.quality-input{width:85px;max-width:100%;height:38px;min-width:0;text-align:center;border:1px solid #afc0ba;border-radius:8px;background:var(--panel);color:var(--ink);font:650 12px/1.3 inherit;font-variant-numeric:tabular-nums;padding:7px 4px}
+.quality-input:disabled{background:var(--soft);color:var(--muted);opacity:.65}
+.quality-error{padding:9px 11px;border-radius:9px;color:var(--red);border:1px solid var(--red);font-size:11px;line-height:1.4;margin:10px 0}
+.tools-tabs{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+.about-app{display:flex;gap:13px;align-items:center;margin:7px 0 20px}
+.about-logo{width:46px;height:46px;border-radius:13px;background:#216f56;color:white;font-size:24px;font-weight:790;display:grid;place-items:center;flex-shrink:0}
+.about-app h3{font-size:17px;margin:0 0 3px}.about-app p{font-size:11px;color:var(--muted);margin:0}
+.about-source{font-size:12px;margin:15px 0}.about-source a{color:var(--green);text-decoration:underline}
+@media(max-width:500px){.record-choice-group{grid-template-columns:1fr}.record-choice{min-height:76px}.quality-label-head,.quality-rule{grid-template-columns:minmax(0,1fr) 52px 68px;gap:6px}.quality-input{width:68px;padding:7px 2px}.quality-copy label{font-size:11px}.quality-copy small{font-size:9.5px}.quality-toggle{transform:scale(.88)}.tools-tabs button{font-size:10px;padding:5px 2px}.filter-row .form-select-compact{width:min(185px,56%);min-width:130px}}
+
+/* V5.7 — single semantic contract for rules, controls and task summaries */
+:root{--ui-select-chevron:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7c80' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")}
+/* Keep the dropdown affordance visible after any form-specific background shorthand. */
+select:not([multiple]),.phone-form .formrow select,.formrow select,.formgrid select,.radius-custom select{
+  -webkit-appearance:none;appearance:none;
+  background-color:var(--panel);background-image:var(--ui-select-chevron);background-repeat:no-repeat;
+  background-position:right 12px center;background-size:16px 16px;padding-right:39px;
+  border:1px solid #afc0ba;border-radius:9px;color:var(--ink);cursor:pointer;
+}
+select:not([multiple]):hover:not(:disabled){border-color:var(--green)}
+select:not([multiple]):disabled{background-color:var(--soft);cursor:not-allowed}
+/* Only rows sharing a continuous set of factual peers need dividers. */
+.modal-body .fact{border-bottom:0}
+.modal-body .fact+.fact{border-top:1px solid var(--line)}
+.modal-body .tool-fact:not(:has(+ .tool-fact)){border-bottom:0}
+.modal-body .filter-row{border-bottom:0}
+.modal-body .records-list{border-top:0}
+/* Instruction confirmation is a summary, not alternating boxes and horizontal rules. */
+.review-summary{display:grid;gap:1px;margin:2px 0 0}
+.review-row{display:flex;justify-content:space-between;align-items:baseline;gap:18px;padding:10px 0;min-width:0}
+.review-row>span{font-size:12px;color:var(--muted);flex:0 0 35%}
+.review-row>strong{font-size:12px;font-weight:730;flex:1;min-width:0;text-align:right;overflow-wrap:anywhere}
+.review-help{margin:14px 0 4px;padding:0;color:var(--muted);font-size:11.5px;line-height:1.5;max-width:72ch}
+/* Reset is a normal secondary action aligned with its owning section. */
+.quality-title-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0;margin:0 0 9px}
+.quality-title-row h3{margin:0;flex:1;min-width:0}
+.quality-title-row .btn{font-size:11px;min-height:35px;padding:7px 11px;white-space:normal;text-align:center;flex:0 1 auto}
+.quality-reset-hint{background:var(--greenwash);border-left:3px solid var(--green);padding:9px 11px;color:var(--ink);font-size:11px;line-height:1.45;margin:11px 0;border-radius:0 7px 7px 0}
+@media(max-width:430px){.quality-title-row{align-items:flex-start}.quality-title-row .btn{max-width:51%;font-size:10px;padding:6px 8px;line-height:1.25}.review-row{gap:10px}.review-row>span{flex-basis:32%}}
+
+/* V5.7 approved-feedback refinement: compact results + consistent actions + unsaved edit guard */
+.btn.ui-cancel.destructive{background:#a33b4b;color:#fff;border-color:#a33b4b;font-weight:740}
+.btn.ui-cancel.destructive:hover:not(:disabled){background:#882c3b;color:#fff;border-color:#882c3b}
+.btn.ui-cancel.destructive:focus-visible{outline:3px solid #eb97a5;outline-offset:2px}
+body.night .btn.ui-cancel.destructive{background:#b74d5f;color:#fff;border-color:#b74d5f}
+.file-browse{min-width:92px;text-align:center;white-space:nowrap}
+.contact-link{color:var(--green);text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
+#controlResults{margin-top:14px;border-top:1px solid var(--line)}
+.control-result-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:15px 2px;border-bottom:1px solid var(--line)}
+.control-result-main{min-width:0}
+.control-result-heading{display:flex;align-items:center;flex-wrap:wrap;gap:9px 12px}
+.control-result-heading strong{font-size:13px;font-weight:760;color:var(--ink)}
+.control-result-main small{display:block;font-size:11px;color:var(--muted);margin-top:4px}
+.control-result-main p{margin:6px 0 0;color:var(--muted);font-size:11.5px;line-height:1.4}
+.control-result-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:7px}
+.control-result-actions .btn{min-height:34px;font-size:11px;padding:6px 11px;white-space:nowrap}
+.result-state{font-size:10px;line-height:1.3;font-weight:730;padding:4px 8px;border-radius:999px;background:var(--soft);color:var(--muted)}
+.result-state.complete{background:var(--greenwash);color:var(--green)}
+.result-state.pending{background:var(--amberwash);color:var(--amber)}
+.result-detail .fact{padding:11px 0}
+.result-detail .dialog-explanation{margin-top:12px}
+.quality-leave-backdrop[hidden]{display:none!important}
+.quality-leave-backdrop{position:fixed;inset:0;z-index:150;display:flex;align-items:center;justify-content:center;padding:14px;background:#101b21aa}
+.quality-leave-dialog{width:min(420px,100%);max-height:calc(100dvh - 30px);overflow-y:auto;border-radius:17px;border:1px solid var(--line);background:var(--panel);box-shadow:var(--shadow);padding:20px}
+.quality-leave-header h2{font-size:19px;letter-spacing:-.35px;margin:0;font-weight:760;line-height:1.25}
+.quality-leave-dialog>p{font-size:12.5px;color:var(--muted);line-height:1.55;margin:12px 0 20px}
+.quality-leave-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.quality-leave-actions .btn{min-height:38px}
+@media(max-width:560px){.control-result-row{grid-template-columns:minmax(0,1fr)}.control-result-actions{justify-content:flex-start}.quality-leave-dialog{padding:17px}.quality-leave-actions .btn{flex:1 1 auto}}
+
+/* V5.8 — shared workspace-dialog, segmented filters, and semantic confirmations */
+.modal.modal-workspace{
+  width:min(720px,100%);
+  height:min(660px,calc(100dvh - 32px));
+  max-height:calc(100dvh - 32px);
+}
+.modal-workspace .modal-header,.modal-workspace .modal-footer{flex:0 0 auto}
+.modal-workspace .modal-body{flex:1 1 auto;min-height:0;overflow-y:auto;scrollbar-gutter:stable}
+.modal-workspace .modal-footer{min-height:62px}
+.modal.modal-confirm{width:min(440px,calc(100vw - 32px));height:auto;max-height:calc(100dvh - 32px)}
+.modal-confirm .modal-body{flex:0 1 auto;min-height:0}
+.delete-confirm-message{margin:0;font-size:13px;line-height:1.55;color:var(--ink);overflow-wrap:anywhere}
+.delete-confirm-message strong{font-weight:760}
+/* One coherent subview pattern inside Records: heading, segmented filter, continuous list. */
+.records-section-heading{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:3px 0 12px}
+.records-section-heading h3{font-size:13px;font-weight:760;margin:0;color:var(--ink)}
+.records-section-heading p{font-size:11px;color:var(--muted);margin:4px 0 0}
+.event-filter-bar{display:flex;justify-content:space-between;align-items:center;gap:14px;margin:0 0 13px}
+.event-filter-label{font-size:11px;font-weight:720;color:var(--muted)}
+.event-segments{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:min(340px,100%);padding:3px;gap:3px;border-radius:10px;background:var(--soft);border:1px solid var(--line)}
+.event-segment{min-width:0;min-height:34px;padding:7px 10px;white-space:nowrap;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--muted);font-weight:700;font-size:11.5px;cursor:pointer}
+.event-segment:hover:not([aria-pressed="true"]){background:var(--panel)}
+.event-segment[aria-pressed="true"]{background:var(--panel);border-color:var(--line);color:var(--green);box-shadow:0 1px 3px #142b3013}
+.event-segment:focus-visible{outline:3px solid #78a7fb;outline-offset:2px}
+.event-records-list{border-top:0}
+.event-record-row{min-height:63px;align-items:center}
+.event-kind{color:var(--muted);font-size:10.5px;font-weight:670;white-space:nowrap}
+.empty-records{font-size:12px;color:var(--muted);padding:25px 4px}
+/* Map actions: neutral inspection first; destructive action always last and visually separate. */
+.map-row-actions .btn[data-action="delete-map"]{margin-left:3px}
+@media(max-width:700px){
+ .modal.modal-workspace{height:min(650px,calc(100dvh - 22px));max-height:calc(100dvh - 22px)}
+ .modal-workspace .modal-body{scrollbar-gutter:auto}
+ .event-filter-bar{gap:8px}
+ .event-segments{width:min(310px,78%)}
+ .event-segment{font-size:11px;padding:7px 6px}
+}
+@media(max-width:390px){
+ .modal.modal-workspace{height:min(630px,calc(100dvh - 22px))}
+ .event-filter-bar{align-items:stretch;flex-direction:column;gap:6px}
+ .event-segments{width:100%}
+}
+
+/* Compact event rows remain one hierarchy, not a detached category below. */
+@media(max-width:520px){.event-record-row{flex-direction:row!important;align-items:center!important}.event-record-row .record-main{min-width:0}.event-kind{font-size:10px}}
+
+/* V5.9 — modal tasks persist until explicitly dismissed; refined developer-contact row. */
+.about-contact-row{display:flex;align-items:center;gap:12px;padding:14px 0;margin-top:14px;border-top:1px solid var(--line);color:var(--ink);text-decoration:none;min-width:0}
+.about-contact-row:hover .about-contact-copy strong{color:var(--green)}
+.about-contact-row:focus-visible{outline:3px solid #79a6fa;outline-offset:3px;border-radius:7px}
+.about-contact-symbol{width:36px;height:36px;border-radius:10px;background:var(--greenwash);color:var(--green);display:grid;place-items:center;font-size:18px;flex:none}
+.about-contact-copy{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0}
+.about-contact-copy strong{font-size:12px;font-weight:730}
+.about-contact-copy small{font-size:12px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}
+.about-contact-out{color:var(--muted);font-size:17px;margin-left:auto;flex:none}
+@media(max-width:400px){.about-contact-row{gap:9px}.about-contact-copy small{font-size:11px}}
+
+/* Mode-entry recording picker: the entire row is a choice, not a management dashboard. */
+.record-picker-row{width:100%;display:flex;align-items:center;justify-content:space-between;gap:14px;border:0;border-bottom:1px solid var(--line);border-radius:0;background:var(--panel);color:var(--ink);padding:15px 12px;text-align:left;cursor:pointer}
+.record-picker-row:hover{background:var(--soft)}
+.record-picker-row.chosen{background:var(--greenwash);border-radius:9px;border:1px solid var(--green);margin:3px 0}
+.record-picker-row:focus-visible{outline:3px solid #78a7fb;outline-offset:1px;border-radius:8px}
+.record-picker-copy{min-width:0;display:flex;flex-direction:column;gap:4px}
+.record-picker-copy strong{font-size:12px;font-weight:730;line-height:1.25}
+.record-picker-copy small{font-size:10.5px;color:var(--muted);line-height:1.4;overflow-wrap:anywhere}
+.record-picker-indicator{width:22px;height:22px;border:1.5px solid var(--line);border-radius:50%;display:grid;place-items:center;font-size:13px;color:#fff;flex:none}
+.record-picker-row.chosen .record-picker-indicator{background:var(--green);border-color:var(--green)}
+
+/* V5.10 — one-step Stop → Save and retained unsaved-draft state */
+.record-success{display:flex;align-items:center;gap:13px;padding:6px 0 8px;min-width:0}
+.record-success-icon{height:39px;width:39px;flex:none;display:grid;place-items:center;border-radius:50%;background:var(--greenwash);color:var(--green);font-size:20px;font-weight:750}
+.record-success div{min-width:0}.record-success strong{display:block;font-size:14px;overflow-wrap:anywhere}.record-success small{display:block;color:var(--muted);margin-top:4px;font-size:11px}
+.rail[data-kind="record"] .rail-text small{white-space:normal;line-height:1.3}
+.rail[data-kind="record"] .btn.danger:not(.destructive){color:var(--red);border-color:#dcb8bf;background:var(--redwash)}
+
+/* V5.11 · A quiet view-setting switch and an in-dialog, cross-browser range picker. */
+.follow-original-control{display:inline-flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 3px;min-height:37px;cursor:pointer;white-space:nowrap;color:var(--ink)}
+.follow-original-control .follow-copy{font-size:11px;line-height:1.2;font-weight:650;letter-spacing:0}
+.follow-original-control input[role="switch"]{-webkit-appearance:none;appearance:none;width:36px;height:21px;min-width:36px;position:relative;margin:0;border:1px solid #acbfb7;border-radius:20px;background:#cbd8d2;transition:background .15s;cursor:pointer}
+.follow-original-control input[role="switch"]:checked{background:#216f56;border-color:#216f56}
+.follow-original-control input[role="switch"]:after{content:"";position:absolute;width:15px;height:15px;border-radius:50%;left:2px;top:2px;background:#fff;box-shadow:0 1px 3px #0002;transition:transform .15s}
+.follow-original-control input[role="switch"]:checked:after{transform:translateX(15px)}
+.follow-original-control input[role="switch"]:focus-visible{outline:3px solid #78a7fb;outline-offset:3px}
+.follow-original-control:hover .follow-copy{color:var(--green)}
+body.night .follow-original-control input[role="switch"]:not(:checked){background:#50656a;border-color:#61777b}
+.modal.modal-range{width:min(740px,100%);height:auto;max-height:calc(100dvh - 30px)}
+.modal-range .modal-body{overflow-y:auto;min-height:0;overscroll-behavior:contain}
+.capture-grid{align-items:start;gap:16px;margin:1px 0 5px}
+.capture-field{min-width:0}
+.capture-field>.capture-label{font-size:12px;font-weight:750;color:var(--ink);display:block;margin-bottom:8px}
+.capture-fields{display:grid;grid-template-columns:minmax(0,1fr) 88px;gap:8px;align-items:center}
+.capture-date-button{width:100%;min-width:0;min-height:42px;display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;padding:9px 10px;border-radius:10px;border:1px solid #afc0ba;background:var(--panel);font-size:12.5px;font-weight:650}
+.capture-date-button:hover,.capture-date-button[aria-expanded="true"]{border-color:var(--green);background:var(--greenwash)}
+.capture-date-button .date-button-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.capture-date-button svg{width:15px;height:15px;flex-shrink:0;color:var(--muted)}
+.capture-time-input{width:100%;min-width:0;min-height:42px;border:1px solid #afc0ba;background:var(--panel);border-radius:10px;padding:9px 7px;text-align:center;font-weight:650;font-size:12.5px;letter-spacing:.2px;font-variant-numeric:tabular-nums}
+.capture-time-input:focus{border-color:var(--green)}
+.capture-time-hint{margin:6px 0 0;font-size:10px;color:var(--muted);line-height:1.2}
+.range-calendar{background:var(--panel);border:1px solid var(--line);box-shadow:0 8px 22px #173f3220;border-radius:12px;padding:10px;margin-top:9px;max-width:360px}
+.range-calendar[hidden]{display:none!important}
+.calendar-toolbar{display:flex;align-items:center;justify-content:space-between;gap:5px;margin-bottom:9px}
+.calendar-month{font-size:12px;font-weight:760;min-width:0}
+.calendar-nav{display:flex;gap:4px}
+.calendar-arrow{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);display:grid;place-items:center;font-size:19px;line-height:1}
+.calendar-arrow:hover{background:var(--soft)}
+.calendar-weekdays,.calendar-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;text-align:center}
+.calendar-weekdays{margin-bottom:5px}
+.calendar-weekdays span{font-size:10px;color:var(--muted);font-weight:650;padding:4px 0}
+.calendar-day{aspect-ratio:1;min-width:0;min-height:30px;border-radius:7px;background:transparent;border:1px solid transparent;color:var(--ink);font-size:11.5px;line-height:1;display:grid;place-items:center;cursor:pointer;font-variant-numeric:tabular-nums}
+.calendar-day:hover{background:var(--soft);border-color:var(--line)}
+.calendar-day.other-month{color:var(--muted);opacity:.52}
+.calendar-day.selected{background:#216f56;color:white;border-color:#216f56;font-weight:800}
+.calendar-day.today:not(.selected){border-color:var(--green);color:var(--green)}
+.calendar-bottom{display:flex;align-items:center;justify-content:space-between;margin-top:9px;padding-top:8px;border-top:1px solid var(--line)}
+.calendar-bottom .btn{min-height:29px;padding:5px 8px;font-size:10.5px}
+.calendar-bottom .calendar-guidance{font-size:10px;color:var(--muted)}
+.range-error{margin:12px 0 0;color:var(--red);font-size:11.5px;font-weight:680;line-height:1.4}
+.range-error[hidden]{display:none!important}
+.range-disclosure{margin:17px 0 4px}
+@media(max-width:700px){.modal.modal-range{width:min(690px,100%);max-height:calc(100dvh - 22px)}.capture-grid{grid-template-columns:minmax(0,1fr);gap:12px}.range-calendar{max-width:100%}.capture-fields{grid-template-columns:minmax(0,1fr) 91px}.follow-original-control{gap:8px}.follow-original-control .follow-copy{font-size:10.5px}}
+@media(max-width:360px){.capture-fields{grid-template-columns:minmax(0,1fr) 80px;gap:5px}.capture-date-button{font-size:11px;padding:8px}.capture-time-input{padding:8px 4px;font-size:11.5px}.calendar-day{min-height:28px}}
+
+
+/* V5.13: calendar floats inside the Capture Range dialog's content bounds.
+   Never grows or escapes the parent dialog; only its own content may scroll. */
+.range-calendar.capture-popover{position:fixed;z-index:150;margin:0;box-sizing:border-box;max-width:none;
+  width:320px;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;
+  border-radius:14px;padding:12px;background:var(--panel);border:1px solid var(--line);
+  box-shadow:0 18px 50px rgba(18,40,46,.23),0 3px 12px rgba(18,40,46,.11);}
+.range-calendar.capture-popover[hidden]{display:none!important}
+.range-calendar.capture-popover:focus-within{border-color:var(--green)}
+.range-calendar.capture-popover .calendar-days{gap:3px}
+.range-calendar.capture-popover .calendar-day{aspect-ratio:auto;min-height:31px;height:31px}
+.range-calendar.capture-popover .calendar-bottom{padding-top:8px}
+@media(max-width:360px){.range-calendar.capture-popover{padding:9px}.range-calendar.capture-popover .calendar-day{height:29px;min-height:29px}}
+
+
+/* V5.14: one settings-row switch component for SOS audio in Tools and SOS emergencies. */
+.audio-setting-row.switchline{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0;padding:13px 2px 15px;border-top:none;border-bottom:1px solid var(--line);cursor:pointer}
+.audio-setting-row .audio-setting-copy{flex:1;min-width:0}
+.audio-setting-row .audio-setting-copy b{font-size:12.5px;font-weight:720;display:block;line-height:1.35}
+.audio-setting-row .audio-setting-copy small{font-size:10.5px;color:var(--muted);display:block;margin-top:4px;line-height:1.4}
+.audio-setting-row input[role="switch"]{width:43px;height:25px;min-width:43px;flex:0 0 43px;margin:0}
+.audio-setting-row--sos{margin:0 0 14px!important;padding:6px 1px 13px!important}
+.audio-setting-row--tools{margin:1px 0 7px!important}
+.sos-support-note{font-size:10.5px;line-height:1.45;color:var(--muted);margin:13px 1px 2px}
+@media(max-width:390px){.audio-setting-row .audio-setting-copy b{font-size:12px}.audio-setting-row .audio-setting-copy small{font-size:10px}}
+</style></head><body>
+<svg style="position:absolute;width:0;height:0" aria-hidden="true"><symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol><symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol><symbol id="i-close" viewBox="0 0 24 24"><path d="M5 5l14 14M19 5 5 19"/></symbol><symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></symbol><symbol id="i-minus" viewBox="0 0 24 24"><path d="M4 12h16"/></symbol><symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5"/></symbol><symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5 5-2Z"/></symbol><symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></symbol><symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 21h20L12 3ZM12 9v5M12 18h.01"/></symbol><symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 12 7-12 7V5Z"/></symbol><symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol><symbol id="i-arrow" viewBox="0 0 24 24"><path d="m8 5 8 7-8 7"/></symbol><symbol id="i-back" viewBox="0 0 24 24"><path d="m16 5-8 7 8 7"/></symbol></svg>
+<div class="app"><header class="header"><div class="identity"><div class="logo">G</div><div><div class="identity-name">GNSS Command</div><div class="identity-caption">Offline operations · Command V5.14 · interactive design</div></div></div><div class="mode-picker-wrap" id="modePickerWrap"><button id="modeButton" class="mode-chooser" data-action="mode-picker" aria-haspopup="menu" aria-controls="modeDropdown" aria-expanded="false"><span id="modeLabel">LIVE</span><svg class="arrow" viewBox="0 0 20 12" aria-hidden="true"><path d="m4 3 6 6 6-6"/></svg></button><div id="modeDropdown" class="mode-dropdown" role="menu" aria-label="Select operational mode" hidden></div></div><div class="header-right"><button class="btn flat minor" data-action="maps">Maps</button><button class="btn flat minor" data-action="records-menu">Records</button><button class="btn flat minor" data-action="tools-menu">Tools</button><button class="btn theme-toggle" id="themeButton" data-action="theme" aria-label="Switch to Night appearance" title="Switch to Night appearance"><span id="themeGlyph" aria-hidden="true">☾</span></button><div class="utility-anchor" id="utilityAnchor"><button class="btn flat square utility-trigger" id="utilityButton" data-action="utility-menu" aria-label="Open navigation and tools" aria-haspopup="menu" aria-controls="utilityDropdown" aria-expanded="false"><svg class="icon"><use href="#i-menu"/></svg></button><div class="utility-dropdown" id="utilityDropdown" role="menu" aria-label="Navigation and tools" hidden></div></div><button class="btn danger" data-action="sos" aria-label="SOS events"><svg class="small-icon"><use href="#i-alert"/></svg><span class="label-text">SOS</span><span class="sos-count">1</span></button></div></header>
+<div class="layout" id="layout"><aside class="side left" id="left"><div class="side-heading"><div><strong>Parties</strong><small>21 parties · searchable</small></div><button class="btn square" data-action="toggle-left" aria-label="Close Parties"><svg class="icon"><use href="#i-close"/></svg></button></div><div class="side-body" id="partyList"></div></aside><main class="center"><div class="context"><div><div class="context-title" id="contextTitle"></div><div class="context-detail" id="contextDetail"></div></div><div class="context-right" id="contextActions"></div></div><div class="map" id="map"><div class="map-visual" id="mapVisual"><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path class="map-water" d="M0 65 Q22 51 37 63 T75 67 Q90 80 100 65 V100 H0Z"/><path class="contours" d="M5 18 Q25 -4 42 18 T95 21 M-10 32 Q25 13 46 39 T105 25 M-10 42 Q29 29 50 50 T103 37 M-10 57 Q21 37 56 61 T109 50 M0 80 Q26 64 48 76 T100 70 M0 92 Q23 78 50 86 T110 83"/><path class="roads" d="M3 56 Q16 49 27 51 L40 35 Q58 42 65 24 L94 9 M10 90 23 60 Q42 55 52 66 T91 51 M26 7 34 33 56 47 83 71 100 75"/><path class="minor-roads" d="M0 21 31 36 49 19 77 32 100 40 M8 74 34 80 55 70 100 84 M46 0 50 27 58 45 60 100 M73 0 75 24 90 46 96 95 M5 35 14 44 27 51 43 63 55 79"/><path id="routePath" d="M22 53 C28 47 39 48 42 58 S59 50 72 44" fill="none" stroke="#367d68" stroke-width=".9" stroke-linecap="round" stroke-dasharray="1.5 1"/></svg><button class="marker" data-action="choose-party" data-party="p18" style="top:44%;left:20%;--partycolor:#41758c"><i class="dot"></i><span>Party 18</span></button><button class="marker" data-action="choose-party" data-party="p11" style="top:54%;left:41%;--partycolor:#b07c35"><i class="dot"></i><span>Party 11</span></button><button class="marker" data-action="choose-party" data-party="p07" style="top:38%;left:69%;--partycolor:#8b6fa2"><i class="dot"></i><span>Party 07</span></button><button class="marker" data-action="choose-party" data-party="p03" style="top:64%;left:77%;--partycolor:#2e806f"><i class="dot"></i><span>Party 03</span></button></div><div class="map-tag"><strong id="mapName">Offline map · Mathura</strong><small id="mapSubtitle">Saved vector layers · illustrated map</small></div><div class="map-actions" role="toolbar" aria-label="Map controls">
+<button class="btn square" data-action="zoom-in" aria-label="Zoom in" title="Zoom in"><svg class="icon"><use href="#i-plus"/></svg></button>
+<button class="btn square" data-action="zoom-out" aria-label="Zoom out" title="Zoom out"><svg class="icon"><use href="#i-minus"/></svg></button>
+<button class="btn" data-action="fit" title="Fit all parties into view">Fit parties</button>
+<button class="btn" data-action="focus-selected" title="Focus on selected party">Focus selected</button>
+<button class="btn" data-action="layers" title="Show map layers">Layers <svg class="small-icon"><use href="#i-layers"/></svg></button>
+<button class="btn" data-action="toggle-left" title="Show Parties">Parties</button>
+<button class="btn" data-action="toggle-right" title="Show selected party details">Details</button></div><div class="map-corner" id="mapCorner"></div></div><section class="rail" id="rail" hidden></section></main><aside class="side right" id="right"><div class="side-heading"><div><strong>Selected party</strong><small>Contextual evidence</small></div><button class="btn square" data-action="toggle-right" aria-label="Close Details"><svg class="icon"><use href="#i-close"/></svg></button></div><div class="side-body" id="detailBody"></div></aside><div class="scrim" data-action="close-panels"></div></div></div>
+<div class="modal-backdrop" id="backdrop"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><header class="modal-header"><div><div class="modal-title" id="modalTitle"></div><div class="modal-sub" id="modalSub"></div></div><button class="btn square" data-action="close-modal" aria-label="Close dialog"><svg class="icon"><use href="#i-close"/></svg></button></header><div class="modal-body" id="modalBody"></div><footer class="modal-footer" id="modalFooter"></footer></section></div><div class="quality-leave-backdrop" id="qualityLeaveGuard" hidden>
+  <section class="quality-leave-dialog" role="alertdialog" aria-modal="true" aria-labelledby="qualityLeaveTitle" aria-describedby="qualityLeaveDescription">
+   <div class="quality-leave-header"><h2 id="qualityLeaveTitle">Apply your quality rules?</h2></div>
+   <p id="qualityLeaveDescription">You have unapplied changes. Apply Quality Rules to save them before leaving, or Cancel to return to editing.</p>
+   <div class="quality-leave-actions">
+    <button class="btn ui-action" data-action="quality-guard-cancel">Cancel</button>
+    <button class="btn ui-ok solid" id="qualityApplyAndLeave" data-action="quality-guard-apply">Apply Quality Rules</button>
+   </div>
+  </section>
+</div>
+<div class="toast" id="toast" role="status"></div>
+<script>
+const $=id=>document.getElementById(id),esc=s=>String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+// A single semantic action-button component. Appearance is determined by intent, not location.
+// Action: neutral adaptive surface. OK: positive green. Cancel/destructive: restrained red.
+const B=(text,action,variant='',attrs='')=>{
+ const names=variant.split(/\s+/).filter(Boolean);
+ const kind=names.includes('solid')?'ui-ok':names.includes('danger')||names.includes('destructive')||/^(Delete|Discard)\b/i.test(text)?'ui-cancel':'ui-action';
+ return `<button type="button" class="btn ${kind} ${variant}" data-action="${action}" ${attrs}>${text}</button>`;
+};
+const modes={live:'LIVE',record:'RECORD',view:'VIEW RECORDING',travel:'TRAVEL BACK'};
+const parties=[{id:'p18',name:'Party 18',contact:'Connected',fix:'Aged',time:'12:15',accuracy:'3 m',distance:'0.0 m',sos:true},{id:'p11',name:'Party 11',contact:'Connected',fix:'Fresh',time:'12:20',accuracy:'4 m',distance:'842 m'},{id:'p07',name:'Party 07',contact:'Disconnected',fix:'Stale',time:'11:58',accuracy:'8 m',distance:'1.24 km'},{id:'p03',name:'Party 03',contact:'Connected',fix:'Fresh',time:'12:19',accuracy:'5 m',distance:'412 m'}];
+for(let i=1;i<=21;i++){const id='p'+String(i).padStart(2,'0');if(!parties.some(x=>x.id===id))parties.push({id,name:'Party '+String(i).padStart(2,'0'),contact:i%4===0?'Disconnected':'Connected',fix:i%4===0?'Stale':'Fresh',time:'12:'+String(10+i%11).padStart(2,'0'),accuracy:(3+i%5)+' m',distance:(i*122)+' m'})}
+const saved=[{id:'R-024',name:'North patrol morning',meta:'30 Oct 2026 · 8 of 21 parties · 31 min'},{id:'R-023',name:'Perimeter inspection',meta:'29 Oct 2026 · 12 of 21 parties · 43 min'},{id:'R-022',name:'Validation route',meta:'Saved locally · read-only · 18 min'}];
+const maps=[{id:1,name:'Mathura · 2 km',meta:'Active · vector complete · terrain partial'},{id:2,name:'Refinery East · 5 km',meta:'Partial · offline usable'},{id:3,name:'Training package',meta:'Imported .gmap.zip'}];
+const s={mode:'live',selected:'p18',left:true,right:true,zoom:1,record:'idle',stoppedDraft:null,recordFrom:'now',recordPaused:false,viewSeen:false,travelSeen:false,selectedSaved:null,follow:true,play:false,seek:0,speed:1,range:null,pending:true,includeOffline:false,allObservations:false,theme:'day',showTrack:true,showTerrain:false,showLabels:true,audio:false,sosAck:false,evidenceOpenByParty:{},modal:null,tab:'get',selectedMap:1,rangeDraft:null,returnMode:null,partyQuery:'',partyFilter:'all',eventFilter:'all',phoneTab:'send',phoneScope:'selected',phoneOp:'sync',phoneDraft:null,controlJournal:[{id:'C-201',phone:'Party 11',op:'Sync All Now',status:'Applied',note:'Durable phone result received'},{id:'C-200',phone:'Party 07',op:'Reporting interval',status:'Sent · unknown',note:'No authenticated result yet'}],mapStep:'idle',mapFileSelected:false,previewRange:null,alertTab:'pending',mapLocation:'',mapRadius:'5',mapCustomRadius:2,mapRadiusUnit:'km',mapTerrain:false,mapPreviewReady:false,mapPreviewLabel:'',mapError:'',mapDisplayDot:30,mapDisplayOpacity:50,mapImportName:'',mapImportSize:0,pendingMode:null};
+// On compact widths side panels start closed; on mid-sized desktop the right panel starts closed.
+if (innerWidth<=800){s.left=false;s.right=false} else if(innerWidth<=1190){s.right=false}
+let interval,toastTimer,lastFocus;
+const progressByParty={p18:{received:734,total:1280,reportedPending:546,recent:true,battery:67,age:35},p11:{received:1280,total:1280,reportedPending:0,recent:true,battery:92,age:2},p07:{received:514,total:900,reportedPending:386,recent:false,battery:34,age:1320},p03:{received:962,total:1100,reportedPending:138,recent:true,battery:81,age:4}};
+function demoProgressFor(p){if(!progressByParty[p.id]){let n=Number(p.id.slice(1));progressByParty[p.id]={received:600+n*12,total:840+n*12,reportedPending:240,recent:p.contact==='Connected',battery:Math.max(12,94-n*3),age:p.contact==='Connected'?Math.max(1,n%16):600+n*12}}return progressByParty[p.id]}
+function progressStatus(p){const d=demoProgressFor(p);return d.recent?(d.reportedPending===0?'Phone reports zero pending':'Receiving history'):'Last phone report · currently unknown'}
+function fmtAge(seconds){return seconds<60?seconds+' s':seconds<3600?Math.floor(seconds/60)+' min':Math.floor(seconds/3600)+' h '+Math.floor((seconds%3600)/60)+' min'}
+
+function info(txt){const t=$('toast');t.textContent=txt+' · simulated';t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2600)}
+function modal(title,sub,body,footer){
+ captureDismissCalendar();
+ closeModeMenu();closeUtilityMenu();
+ if(!s.modal)lastFocus=document.activeElement;s.modal=title;
+ const panel=document.querySelector('#backdrop .modal');
+ panel.classList.remove('modal-task','modal-confirm','modal-compact','modal-workspace','modal-range');
+ panel.classList.add(title==='Capture range'?'modal-range':title==='Records'||title==='Tools'||title==='Choose recording'?'modal-workspace':title==='Maps & Layers'||title==='Phone controls'?'modal-task':title==='Delete map'||title==='Delete recording'||title==='Discard unsaved recording'?'modal-confirm':'modal-compact');
+ $('modalTitle').textContent=title;$('modalSub').textContent=sub||'';
+ $('modalBody').innerHTML=body;$('modalFooter').innerHTML=footer||B('Close','close-modal');
+ $('backdrop').classList.add('open');document.querySelector('.app').inert=true;setTimeout(()=>$('backdrop').querySelector('button')?.focus(),0)
+}
+let qualityPendingNavigation=null;
+function qualityDraftDirty(){
+ if(s.modal!=='Tools'||s.toolsTab!=='quality'||!$('qualityError'))return false;
+ return qualityRules.some(rule=>{
+  const toggle=document.querySelector(`.quality-toggle[data-rule="${rule.id}"]`);
+  const value=$('qual-'+rule.id);
+  return !!toggle&&!!value&&(toggle.checked!==rule.enabled||value.value!==String(rule.value));
+ });
+}
+function qualityLeavePrompt(navigate){
+ qualityPendingNavigation=navigate;
+ const popup=$('qualityLeaveGuard');
+ popup.hidden=false;
+ popup.classList.add('open');
+ requestAnimationFrame(()=>$('qualityApplyAndLeave')?.focus());
+}
+function dismissQualityGuard(){
+ const popup=$('qualityLeaveGuard');popup.classList.remove('open');popup.hidden=true;
+ qualityPendingNavigation=null;
+ $('qualityError')?.focus?.();
+}
+function continueAfterQualityApply(){
+ const navigate=qualityPendingNavigation;
+ if(!applyQuality()){dismissQualityGuard();return;}
+ $('qualityLeaveGuard').classList.remove('open');$('qualityLeaveGuard').hidden=true;
+ qualityPendingNavigation=null;
+ if(typeof navigate==='function')navigate();
+}
+function preserveStoppedDraft(){
+ if(s.record!=='stopped'||s.modal!=='Save recording'||!s.stoppedDraft)return;
+ const name=$('recName'),description=$('recDesc');
+ if(name)s.stoppedDraft.name=name.value;
+ if(description)s.stoppedDraft.description=description.value;
+ const boxes=Array.from(document.querySelectorAll('.rec-party'));
+ if(boxes.length)s.stoppedDraft.included=boxes.filter(x=>x.checked).map(x=>x.dataset.party);
+}
+function closeModal(force=false){
+ captureDismissCalendar();
+ preserveStoppedDraft();
+ if(!force&&qualityDraftDirty()){
+  qualityLeavePrompt(()=>closeModal(true));return;
+ }
+ const cancelingEntry=!!s.pendingMode;
+ s.modal=null;s.pendingMode=null;$('backdrop').classList.remove('open');
+ document.querySelector('.app').inert=false;
+ if(cancelingEntry)$('modeButton').focus();
+ else if(lastFocus?.isConnected)lastFocus.focus();
+}
+function switchMode(m){
+ closeModeMenu();closeUtilityMenu();
+ if(!modes[m]||m===s.mode)return;
+ if((s.record==='active'||s.record==='paused')&&(m==='view'||m==='travel')){
+  info('Finish the active recording before opening history');return;
+ }
+ // Historical modes have a required entry step. Don't switch the underlying
+ // workspace until a recording or capture range has actually been chosen.
+ if(m==='view'&&(!s.viewSeen||!saved.some(r=>r.id===s.selectedSaved))){
+  s.pendingMode='view';openLibrary();return;
+ }
+ if(m==='travel'&&(!s.travelSeen||!s.range)){
+  s.pendingMode='travel';openRange();return;
+ }
+ s.play=false;stopTick();closeModal();s.mode=m;render();
+}
+function openMode(){
+  const menu=$('modeDropdown'),button=$('modeButton');const opening=menu.hidden;
+  closeUtilityMenu();if(!opening){closeModeMenu();return}
+  menu.innerHTML=Object.entries(modes).map(([id,label])=>{
+    const blocked=(s.record==='active'||s.record==='paused')&&(id==='view'||id==='travel');
+    return `<button class="mode-menu-item" type="button" role="menuitemradio" aria-checked="${s.mode===id}" data-action="choose-mode" data-mode="${id}" ${blocked?'disabled title="Finish recording before opening history"':''}><span><strong>${({live:'Live',record:'Record',view:'View Recording',travel:'Travel Back'})[id]}</strong><small>${{live:'Current locations and SOS',record:'Record the operator presentation',view:'Frozen saved evidence',travel:'Original GNSS capture history'}[id]}${blocked?' · unavailable while recording':''}</small></span><span class="menu-check" aria-hidden="true">${s.mode===id?'✓':''}</span></button>`;
+  }).join('');
+  menu.hidden=false;button.setAttribute('aria-expanded','true');
+}
+function closeModeMenu(){const menu=$('modeDropdown');if(!menu)return;menu.hidden=true;$('modeButton').setAttribute('aria-expanded','false')}
+function render(){const sosButton=document.querySelector('.header-right [data-action=sos]');const pendingLabel=sosButton?.querySelector('.sos-count');if(pendingLabel)pendingLabel.textContent=s.sosAck?'':'1';if(sosButton)sosButton.classList.toggle('danger',!s.sosAck);document.body.classList.toggle('night',s.theme==='night');$('modeLabel').textContent=modes[s.mode];$('themeGlyph').textContent=s.theme==='night'?'☀':'☾';$('themeButton').setAttribute('aria-label',s.theme==='night'?'Switch to Day appearance':'Switch to Night appearance');$('themeButton').title=s.theme==='night'?'Switch to Day appearance':'Switch to Night appearance';const layout=$('layout');layout.classList.toggle('left-closed',!s.left);layout.classList.toggle('right-closed',!s.right);layout.classList.toggle('left-open',s.left);layout.classList.toggle('right-open',s.right);renderPanels();renderContext();renderRail();renderMap()}
+function renderPanels(){
+ const l=$('partyList'), query=s.partyQuery.trim().toLowerCase();
+ let filtered=parties.filter(p=>p.name.toLowerCase().includes(query)||p.id.includes(query));
+ if(s.partyFilter==='online')filtered=filtered.filter(p=>p.contact==='Connected');
+ if(s.partyFilter==='attention')filtered=filtered.filter(p=>p.sos&&!s.sosAck||p.contact!=='Connected'||p.fix==='Stale');
+ l.innerHTML=`<input class="panel-search" id="partySearch" placeholder="Find party or ID" value="${esc(s.partyQuery)}" aria-label="Search parties"><div class="panel-filters">${[['all','All'],['online','Online'],['attention','Attention']].map(([id,label])=>B(label,'party-filter',s.partyFilter===id?'active':'',`data-id="${id}"`)).join('')}</div><div class="caption" style="margin-bottom:9px">${filtered.length} of ${parties.length} · simulation fleet</div>`+filtered.map(p=>`<button class="party ${s.selected===p.id?'chosen':''}" data-action="choose-party" data-party="${p.id}"><div class="party-name"><span>${p.sos&&!s.sosAck?'<i class="pip red"></i>':`<i class="pip ${p.contact==='Connected'?'':'off'}"></i>`}${esc(p.name)}</span>${p.sos&&!s.sosAck?'<span class="pill danger">SOS</span>':''}</div><small>${p.contact} · GNSS ${p.fix} · ${p.distance}</small></button>`).join('');
+ const p=parties.find(x=>x.id===s.selected);
+ if(!p){$('detailBody').innerHTML='<div class="inspector-empty"><b>No party selected</b><p>Select a party to see its operational details.</p></div>';return}
+ const d=demoProgressFor(p),pct=Math.max(0,Math.min(100,Math.round(d.received/d.total*100))),canSend=s.mode==='live'||s.mode==='record';
+ const connected=p.contact==='Connected',stale=!d.recent;
+ $('detailBody').innerHTML=`<section class="inspector-person">
+   <div class="inspector-person-header"><div class="detail-name">${esc(p.name)}</div><span class="inspector-fix ${p.fix==='Fresh'?'positive':'caution'}">GNSS ${esc(p.fix)}</span></div>
+   <div class="inspector-critical">
+      <div class="inspector-contact"><span class="inspector-kicker">Command contact</span><strong class="${connected?'positive':'caution'}">${esc(p.contact)}</strong></div>
+      <div class="inspector-metric-pair"><div><span class="inspector-kicker">Observation age</span><strong data-live="age">${fmtAge(d.age)}${stale?'*':''}</strong></div><div><span class="inspector-kicker">Battery</span><strong data-live="battery">${d.battery}%${stale?'*':''}</strong></div></div>
+   </div>
+   <div class="inspector-facts">
+      <div class="fact"><span>Accuracy</span><span>${esc(p.accuracy)}</span></div>
+      <div class="fact"><span>Last fix</span><span>${esc(p.time)}</span></div>
+      <div class="fact"><span>Qualified distance</span><span>${esc(p.distance)}</span></div>
+   </div>
+ </section>
+ <section class="inspector-sync" aria-label="Observation synchronization" aria-live="off">
+   <div class="sync-head"><b>Observation sync</b><span class="soft-tag ${d.recent?(d.reportedPending===0?'':'warn'):'warn'}" data-live="sync-badge">${d.recent?(d.reportedPending===0?'Reported zero pending':'Receiving'):'Last report'}</span></div>
+   <div class="sync-count"><strong data-live="received">${d.received.toLocaleString()}</strong> <span>of <span data-live="total">${d.total.toLocaleString()}</span> received</span></div>
+   <div class="sync-track" role="progressbar" aria-valuemin="0" aria-valuemax="${d.total}" aria-valuenow="${d.received}" aria-label="Durably received observations"><i style="width:${pct}%"></i></div>
+   <div class="sync-meta"><b data-live="pending">${d.reportedPending.toLocaleString()} pending</b><span>${d.recent?'Last phone queue report':'Offline · last reported, not live'}</span></div>
+
+ </section>
+ <details class="inspector-evidence" id="evidenceFold" data-party="${p.id}" ${s.evidenceOpenByParty?.[p.id]?'open':''}>
+   <summary><span class="evidence-copy"><strong>Observation evidence &amp; quality</strong><small>Original fixes, qualification and missing gaps</small></span><span class="evidence-disclosure"><span class="evidence-open-text">Expand</span><span class="evidence-close-text">Collapse</span><svg class="small-icon" aria-hidden="true"><use href="#i-chevron"/></svg></span></summary>
+   <div class="evidence-content"><div class="fact"><span>Original GNSS</span><span>Retained</span></div><div class="fact"><span>Quality</span><span>Command-derived</span></div><div class="fact"><span>Unknown gaps</span><span>Not interpolated</span></div>${B('Quality policy','quality','full')}</div>
+ </details>
+ ${canSend?`<section class="inspector-actions">${B('Phone controls','phone-controls','full solid')}</section>`:''}
+ <p class="inspector-disclaimer">${stale?'* Last-reported values are not live. ':''}Illustrative prototype data, not a live receiver.</p>`;
+}
+function updateInspectorTelemetry(){
+ const p=parties.find(x=>x.id===s.selected),root=$('detailBody');if(!p||!root||!s.right)return;
+ const d=demoProgressFor(p),read=(name)=>root.querySelector(`[data-live="${name}"]`);
+ if(read('received'))read('received').textContent=d.received.toLocaleString();
+ if(read('pending'))read('pending').textContent=d.reportedPending.toLocaleString()+' pending';
+ if(read('total'))read('total').textContent=d.total.toLocaleString();
+ const badge=read('sync-badge');if(badge&&d.recent)badge.textContent=d.reportedPending===0?'Reported zero pending':'Receiving';
+ const bar=root.querySelector('.sync-track');if(bar){bar.setAttribute('aria-valuenow',d.received);bar.querySelector('i').style.width=Math.min(100,Math.max(0,d.received/d.total*100))+'%';}
+}
+function renderContext(){let label,detail,actions='';if(s.mode==='live'){label='Live operations';detail='Receiver accepting GNSS (preview) · contact and freshness stay separate';actions=''}if(s.mode==='record'){label='Operator recording';detail=s.record==='idle'?'Ready to begin presentation-evidence capture':s.record==='stopped'?'Capture stopped · unsaved recording retained locally in this preview':s.record==='paused'?'Recording paused · GNSS and SOS continue':'Recording the authorized browser presentation';actions=`<span class="pill ${s.record==='paused'||s.record==='stopped'?'warn':''}">${s.record==='idle'?'Not started':s.record==='stopped'?'Unsaved':s.record==='paused'?'Paused':'Recording'}</span>${B('Recording facts','record-facts')}`}if(s.mode==='view'){label=s.selectedSaved?saved.find(x=>x.id===s.selectedSaved)?.name:'No saved recording selected';detail='Frozen presentation-time evidence · read-only';actions=`${s.selectedSaved?`<label class="follow-original-control" title="Follow the original saved presentation"><span class="follow-copy">Follow Original</span><input type="checkbox" id="followOriginalSwitch" role="switch" aria-label="Follow Original" ${s.follow?'checked':''}></label>`:''}`}if(s.mode==='travel'){label=s.range?`${s.range.from.slice(0,10)} · ${s.range.from.slice(11)}–${s.range.to.slice(11)}`:'Capture range not selected';detail='Original GNSS capture time · operator-controlled refresh';actions=`${s.pending?'<span class="pill warn">New history</span>':''}`}$('contextTitle').textContent=label;$('contextDetail').textContent=detail;$('contextActions').innerHTML=actions}
+function elMapOrigin(v){$('mapVisual').style.transformOrigin=v}
+function renderMap(){
+const baseSvg=document.querySelector('#mapVisual > svg');if(baseSvg)baseSvg.style.opacity=String(s.mapDisplayOpacity/100);
+document.querySelectorAll('.demo-observation').forEach(e=>e.remove());
+if(s.allObservations){const n=Math.min(16,Math.max(2,Math.round(480/s.mapDisplayDot)));for(let i=0;i<n;i++){const mark=document.createElement('i');mark.className='demo-observation';mark.title='Illustrative raw observation dot';mark.style.left=(17+i*3.5)+'%';mark.style.top=(38+Math.sin(i*.8)*14+i*.34)+'%';$('mapVisual').append(mark)}}
+document.querySelectorAll('.map-actions [data-action=toggle-left]').forEach(x=>x.hidden=s.left);document.querySelectorAll('.map-actions [data-action=toggle-right]').forEach(x=>x.hidden=s.right);$('mapVisual').style.transform=`scale(${s.zoom})`;$('routePath').style.display=s.showTrack?'':'none';document.querySelectorAll('.marker').forEach(x=>{x.classList.toggle('selected',x.dataset.party===s.selected);const span=x.querySelector('span');span.style.display=s.showLabels?'':'none'});$('mapName').textContent=s.mode==='view'?'Recorded offline map':s.mode==='travel'?'Retained GNSS history':'Offline map · '+(maps.find(x=>x.id===s.selectedMap)?.name||'Blank canvas');$('mapSubtitle').textContent=s.mode==='view'?'Pinned layers · no live overlay':s.mode==='travel'?'Snapshot · capture-time provenance':(maps.find(x=>x.id===s.selectedMap)?.meta||'Blank canvas');$('mapCorner').innerHTML=`<span class="chip">${s.zoom.toFixed(1)}× map</span>${s.mode==='view'?'<span class="chip">Historical SOS is read-only</span>':''}${s.mode==='travel'?'<span class="chip">Unknown gaps preserved</span>':''}${s.returnMode?B('‹ Back','sos-back','active'):''}`}
+function renderRail(){const r=$('rail');r.dataset.kind=s.mode;if(s.mode==='live'){r.hidden=true;return}r.hidden=false;if(s.mode==='record'){
+  const idle=s.record==='idle',paused=s.record==='paused',stopped=s.record==='stopped';
+  if(stopped){
+   r.innerHTML=`<div class="rail-text"><b>Recording stopped · Unsaved</b><small>Capture has ended. Save the retained draft or discard it deliberately.</small></div><div class="buttons">${B('Save recording','record-save','solid')}${B('Discard','record-discard','danger')}</div>`;
+  }else{
+   r.innerHTML=`<div class="rail-text"><b>${idle?'Ready to record':paused?'Recording paused':'Recording live'}</b><small>${idle?'Start captures what Command renders from that moment':'Save creates an immutable snapshot without ending the session'}</small></div><div class="buttons">${B('Start','record-start','solid',idle?'':'disabled')}${B(paused?'Resume':'Pause','record-pause','',idle?'disabled':'')}${B('Save','record-save','',idle?'disabled':'')}${B('Stop','record-stop','danger',idle?'disabled':'')}</div>`;
+  }
+  return;
+ }const ready=s.mode==='travel'?!!s.range:!!s.selectedSaved;const footer=s.mode==='view'?`${B('Library','library')}${B('Facts','play-facts')}`:`${B('Range','range')}${B('Refresh','refresh','',ready?'':'disabled')}`;r.innerHTML=`<div class="rail-play">${B(s.play?'Ⅱ':'▶','play','solid',ready?'':'disabled')}${B('‹','seek-back','',ready?'':'disabled')}${B('›','seek-forward','',ready?'':'disabled')}</div><div class="timeline-wrap"><div class="timeline-head"><strong>${s.mode==='view'?'Presentation time':'Capture time'}</strong><span>${s.mode==='view'?'Frozen saved evidence':s.range?`${s.range.from.replace('T',' ')} → ${s.range.to.replace('T',' ')}`:'Select a capture range'}</span></div><div class="timeline-bottom"><span>00:00</span><input id="scrubber" type="range" min="0" max="100" value="${s.seek}" ${ready?'':'disabled'} aria-label="Historical timeline"><span>${Math.round(s.seek)}%</span></div></div><select class="choice" id="speed" aria-label="Playback speed" ${ready?'':'disabled'}><option ${s.speed===1?'selected':''}>1×</option><option ${s.speed===5?'selected':''}>5×</option><option ${s.speed===20?'selected':''}>20×</option></select><div class="buttons">${footer}</div>`}
+let capturePicker=null;
+const captureMonthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const captureDateIcon=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/></svg>`;
+function formatCaptureDate(iso){const [y,m,d]=iso.split('-').map(Number);return `${d} ${captureMonthNames[m-1].slice(0,3)} ${y}`}
+function openRange(){
+ const from=s.range?.from||'2026-10-30T11:21',to=s.range?.to||'2026-10-30T12:21';
+ capturePicker={from:from.slice(0,10),to:to.slice(0,10),fromMonth:from.slice(0,7),toMonth:to.slice(0,7),open:null};
+ const field=(kind,label,raw)=>`<div class="capture-field"><label class="capture-label" for="${kind}Time">${label}</label><div class="capture-fields"><button class="capture-date-button" id="${kind}DateButton" type="button" data-action="capture-calendar-toggle" data-which="${kind}" aria-haspopup="true" aria-controls="captureCalendarPopover" aria-expanded="false"><span class="date-button-label" id="${kind}DateText">${formatCaptureDate(raw.slice(0,10))}</span>${captureDateIcon}</button><input class="capture-time-input" id="${kind}Time" value="${raw.slice(11,16)}" type="text" inputmode="numeric" maxlength="5" autocomplete="off" aria-label="${label} time in 24-hour HH:MM format" spellcheck="false"></div><div class="capture-time-hint">24-hour time</div></div>`;
+ modal('Capture range','Choose the original GNSS capture-time window.',`<div class="formgrid capture-grid">${field('from','From',from)}${field('to','To',to)}</div><p class="range-error" id="rangeError" role="alert" hidden></p><div class="section-label range-disclosure">Observation filters</div><label class="toggle-line"><input id="exclude" type="checkbox" role="switch" ${s.includeOffline?'checked':''}><span><strong>Exclude parties offline at snapshot</strong><small>Uses contact at snapshot acquisition, not GNSS quality.</small></span></label><label class="toggle-line"><input id="all" type="checkbox" role="switch" ${s.allObservations?'checked':''}><span><strong>Show all observations</strong><small>Diagnostic dots only; does not alter qualified distance.</small></span></label><p class="range-guidance">New arrivals become visible only after Refresh View. Original GNSS remains unchanged.</p>`,B('Cancel','close-modal')+B('Apply range','apply-range','solid'));
+}
+function captureSetError(message){const error=$('rangeError');if(error){error.hidden=!message;error.textContent=message||''}}
+function capturePopover(){
+ let popup=$('captureCalendarPopover');
+ if(!popup){
+  popup=document.createElement('div');
+  popup.id='captureCalendarPopover';
+  popup.className='range-calendar capture-popover';
+  popup.setAttribute('role','group');
+  popup.setAttribute('aria-label','Choose a capture date');
+  popup.hidden=true;
+  $('backdrop').appendChild(popup);
+ }
+ return popup;
+}
+function captureDismissCalendar(){
+ const popup=$('captureCalendarPopover');
+ if(popup){popup.hidden=true;popup.removeAttribute('data-which')}
+ if(capturePicker)capturePicker.open=null;
+ for(const kind of ['from','to'])$(kind+'DateButton')?.setAttribute('aria-expanded','false');
+}
+function capturePositionCalendar(which){
+ if(!capturePicker||capturePicker.open!==which)return;
+ const popup=capturePopover(),btn=$(which+'DateButton');
+ const dialog=document.querySelector('#backdrop .modal');
+ const body=$('modalBody');
+ if(!btn||!dialog||!body||popup.hidden)return;
+ // The calendar belongs to this task dialog, not the browser viewport.
+ // Header/footer remain unobscured; content underneath never reflows.
+ const gap=8,pad=10;
+ const bounds=dialog.getBoundingClientRect();
+ const content=body.getBoundingClientRect();
+ const anchor=btn.getBoundingClientRect();
+ const topBound=Math.max(bounds.top+pad,content.top+gap);
+ const bottomBound=Math.min(bounds.bottom-pad,content.bottom-gap);
+ const leftBound=bounds.left+pad,rightBound=bounds.right-pad;
+ const availableHeight=Math.max(1,bottomBound-topBound);
+ const availableWidth=Math.max(1,rightBound-leftBound);
+ const width=Math.min(328,availableWidth);
+ popup.style.width=width+'px';
+ popup.style.maxHeight=availableHeight+'px';
+ // A resized calendar (month with 6 weeks) also stays within these bounds.
+ const h=Math.min(availableHeight,popup.getBoundingClientRect().height);
+ let left=Math.min(Math.max(anchor.left,leftBound),rightBound-width);
+ const below=bottomBound-(anchor.bottom+gap);
+ const above=(anchor.top-gap)-topBound;
+ let top;
+ if(below>=h){top=anchor.bottom+gap}
+ else if(above>=h){top=anchor.top-gap-h}
+ else if(below>=above){top=Math.max(topBound,Math.min(anchor.bottom+gap,bottomBound-h))}
+ else{top=Math.max(topBound,Math.min(anchor.top-gap-h,bottomBound-h))}
+ popup.style.left=Math.round(left)+'px';
+ popup.style.top=Math.round(Math.max(topBound,Math.min(top,bottomBound-h)))+'px';
+}
+function captureOpenCalendar(which){
+ if(!capturePicker||!['from','to'].includes(which))return;
+ const next=capturePicker.open===which?null:which;
+ captureDismissCalendar();
+ if(!next)return;
+ capturePicker.open=next;
+ const popup=capturePopover();
+ popup.dataset.which=next;
+ popup.setAttribute('aria-label',`${next==='from'?'From':'To'} capture date`);
+ popup.hidden=false;
+ $(next+'DateButton')?.setAttribute('aria-expanded','true');
+ captureRenderCalendar(next);
+ capturePositionCalendar(next);
+}
+function captureShiftCalendar(which,delta){
+ if(!capturePicker)return;
+ const [y,m]=capturePicker[which+'Month'].split('-').map(Number);
+ const d=new Date(Date.UTC(y,m-1+delta,1));
+ capturePicker[which+'Month']=d.toISOString().slice(0,7);
+ captureRenderCalendar(which);
+ capturePositionCalendar(which);
+}
+function captureRenderCalendar(which){
+ if(!capturePicker||!$('captureCalendarPopover'))return;
+ const [y,m]=capturePicker[which+'Month'].split('-').map(Number);
+ const offset=(new Date(Date.UTC(y,m-1,1)).getUTCDay()+6)%7;
+ const daysInMonth=new Date(Date.UTC(y,m,0)).getUTCDate();
+ const days=[];const numCells=Math.ceil((offset+daysInMonth)/7)*7;
+ const today=new Date().toISOString().slice(0,10);
+ for(let i=0;i<numCells;i++){
+  const d=new Date(Date.UTC(y,m-1,i-offset+1)),iso=d.toISOString().slice(0,10);
+  const isSelected=iso===capturePicker[which];
+  days.push(`<button type="button" class="calendar-day${iso.slice(0,7)!==capturePicker[which+'Month']?' other-month':''}${isSelected?' selected':''}${iso===today?' today':''}" data-action="capture-calendar-day" data-which="${which}" data-date="${iso}" aria-pressed="${isSelected}" aria-label="${formatCaptureDate(iso)}">${d.getUTCDate()}</button>`);
+ }
+ $('captureCalendarPopover').innerHTML=`<div class="calendar-toolbar"><span class="calendar-month" id="${which}MonthTitle">${captureMonthNames[m-1]} ${y}</span><div class="calendar-nav"><button type="button" class="calendar-arrow" data-action="capture-calendar-prev" data-which="${which}" aria-label="Previous month">‹</button><button type="button" class="calendar-arrow" data-action="capture-calendar-next" data-which="${which}" aria-label="Next month">›</button></div></div><div class="calendar-weekdays" aria-hidden="true">${['M','T','W','T','F','S','S'].map(x=>`<span>${x}</span>`).join('')}</div><div class="calendar-days" aria-label="${captureMonthNames[m-1]} ${y}">${days.join('')}</div><div class="calendar-bottom"><span class="calendar-guidance">${which==='from'?'Start':'End'} date</span><button type="button" class="btn" data-action="capture-calendar-today" data-which="${which}">Today</button></div>`;
+}
+function captureSelectDate(which,iso){
+ if(!capturePicker||!/^\d{4}-\d{2}-\d{2}$/.test(iso))return;
+ capturePicker[which]=iso;capturePicker[which+'Month']=iso.slice(0,7);
+ $(which+'DateText').textContent=formatCaptureDate(iso);
+ captureSetError('');captureOpenCalendar(which);
+ $(which+'DateButton')?.focus();
+}
+function applyRange(){
+ if(!capturePicker)return;
+ const timePattern=/^(?:[01]\d|2[0-3]):[0-5]\d$/;
+ const fromTime=$('fromTime')?.value.trim()||'',toTime=$('toTime')?.value.trim()||'';
+ if(!timePattern.test(fromTime)||!timePattern.test(toTime)){captureSetError('Use a valid 24-hour time in HH:MM format (for example, 11:21).');return}
+ const from=capturePicker.from+'T'+fromTime,to=capturePicker.to+'T'+toTime;
+ if(from>=to){captureSetError('The end must be later than the start.');return}
+ s.range={from,to};s.includeOffline=$('exclude').checked;s.allObservations=$('all').checked;s.seek=0;s.pending=false;
+ if(s.pendingMode==='travel'){s.mode='travel';s.travelSeen=true;s.play=false;stopTick()}
+ capturePicker=null;closeModal();render();info('Capture window applied');
+}
+function openLibrary(){openRecords('saved')}
+function renderLibrary(){
+ const node=$('libraryItems');if(!node)return;const q=$('libraryQuery')?.value.toLowerCase()||'';
+ const choosing=s.pendingMode==='view';
+ const matching=(s.sort==='old'?[...saved].reverse():saved).filter(x=>x.name.toLowerCase().includes(q)||x.meta.toLowerCase().includes(q));
+ node.innerHTML=matching.map(x=>choosing?
+  `<button type="button" class="record-picker-row ${s.selectedSaved===x.id?'chosen':''}" data-action="select-recording" data-id="${x.id}" aria-pressed="${s.selectedSaved===x.id}" aria-label="Select recording: ${esc(x.name)}"><span class="record-picker-copy"><strong>${esc(x.name)}</strong><small>${esc(x.meta)}</small></span><span class="record-picker-indicator" aria-hidden="true">${s.selectedSaved===x.id?'✓':''}</span></button>`:
+  `<div class="record-row ${s.selectedSaved===x.id?'chosen':''}"><div class="record-main"><strong>${esc(x.name)}</strong><small>${esc(x.meta)}</small></div><div class="record-actions">${B(s.selectedSaved===x.id?'Selected':'Select','select-recording',s.selectedSaved===x.id?'active':'',`data-id="${x.id}"`)}${B('Edit','edit-recording','',`data-id="${x.id}"`)}${B('Delete','delete-recording','danger',`data-id="${x.id}"`)}</div></div>`).join('')||'<p class="empty-records">No saved recordings match this search.</p>';
+ const f=$('modalFooter');if(f)f.innerHTML=B(s.pendingMode==='view'?'Cancel':'Close','close-modal')+B('Open selected','open-recording','solid',s.selectedSaved&&saved.some(r=>r.id===s.selectedSaved)&&s.record!=='active'&&s.record!=='paused'?'':'disabled');
+}
+function selectRecording(id){s.selectedSaved=id;renderLibrary();if(s.pendingMode==='view')document.querySelector(`.record-picker-row[data-id="${id}"]`)?.focus()}
+function showRecForm(){
+ const final=s.record==='stopped';
+ const draft=final?s.stoppedDraft:null;
+ const included=new Set(draft?.included??parties.map(p=>p.id));
+ const names=parties.map(p=>`<label class="toggle-line rec-party-line"><span><strong>${esc(p.name)}</strong></span><input type="checkbox" role="switch" class="rec-party" data-party="${p.id}" aria-label="Include ${esc(p.name)}" ${included.has(p.id)?'checked':''}></label>`).join('');
+ const chosen=included.size;
+ modal(final?'Save recording':'Save immutable snapshot',
+ final?'Capture stopped · Not yet saved':'Name the recording and choose participating parties. Capture continues.',
+ `<div class="formrow"><label for="recName">Name</label><input id="recName" value="${esc(draft?.name??'Patrol 30 October')}"></div>
+ <div class="formrow"><label for="recDesc">Description</label><textarea id="recDesc" rows="2" placeholder="Optional description">${esc(draft?.description??'')}</textarea></div>
+ <div class="record-participants-heading"><div><strong>Include parties</strong><small id="recCount">${chosen} of ${parties.length} selected</small></div><label class="select-all-label"><span>All</span><input type="checkbox" role="switch" id="recAll" ${chosen===parties.length?'checked':''} aria-label="Include all parties"></label></div>
+ <div class="rec-participants">${names}</div>`,
+ final?B('Discard','record-discard','danger')+B('Save recording','confirm-save','solid'):B('Cancel','close-modal')+B('Confirm Save','confirm-save','solid'));
+ refreshRecordCount();
+}
+function recordStop(){
+ if(s.record!=='active'&&s.record!=='paused')return;
+ // The Stop action ends capture immediately. No confirmation before stopping.
+ s.record='stopped';
+ s.stoppedDraft={name:'Patrol 30 October',description:'',included:parties.map(p=>p.id)};
+ render();
+ showRecForm();
+}
+function confirmDiscardStopped(){
+ if(s.record!=='stopped')return;
+ preserveStoppedDraft();
+ modal('Discard unsaved recording','',
+ `<p class="delete-question">Discard the stopped recording? This unsaved capture will be lost.</p>`,
+ B('Cancel','discard-back-to-save')+B('Discard recording','confirm-discard','destructive'));
+}
+function showRecordingSaved(id,name){
+ modal('Recording saved','Immutable saved evidence is ready.',
+ `<div class="record-success"><span class="record-success-icon" aria-hidden="true">✓</span><div><strong>${esc(name)}</strong><small>Saved successfully · capture has ended</small></div></div>`,
+ B('Done','close-modal')+B('View recording','view-newly-saved','solid',`data-id="${id}"`));
+}
+
+function recordStart(){
+ modal('Start recording','Choose the initial presentation. Recording begins when you press Start.',
+ `<div class="record-choice-group" role="radiogroup" aria-label="Recording start presentation">
+  <label class="record-choice"><input type="radio" name="startAt" value="now" ${s.recordFrom!=='beginning'?'checked':''}><span><strong>From now</strong><small>Begin with the current live view</small></span></label>
+  <label class="record-choice"><input type="radio" name="startAt" value="beginning" ${s.recordFrom==='beginning'?'checked':''}><span><strong>From beginning</strong><small>Present earlier GNSS history from the start</small></span></label>
+ </div><p class="dialog-hint">The evidentiary recording starts at Start in either option.</p>`,
+ B('Cancel','close-modal')+B('Start recording','confirm-start','solid'));
+}
+
+function sosAudioSwitchRow(context){
+ const isOn=s.audio;
+ const status=isOn?'On · actual audibility depends on the browser and speakers':'Off · visual SOS alerts remain available';
+ return `<label class="switchline audio-setting-row audio-setting-row--${context}"><span class="audio-setting-copy"><b>Audible SOS cue</b><small data-audio-state aria-live="polite">${status}</small></span><input type="checkbox" role="switch" aria-label="Audible SOS cue" data-sos-audio-switch ${isOn?'checked':''}></label>`;
+}
+function openSos(){
+ const isPending=!s.sosAck;
+ const tabs=`<div class="tabs">${B('Pending emergencies','sos-pending',s.alertTab==='pending'?'active':'')}${B('All SOS history','sos-history',s.alertTab==='history'?'active':'')}</div>`;
+ const pending=`<div class="item" style="background:${isPending?'var(--redwash)':'var(--soft)'}"><strong>${isPending?'Unacknowledged':'Acknowledged'} SOS · Party 18</strong><small>Original activation 12:08 · first Command receipt 12:09 · event #S-018</small><div class="fact"><span>Event location</span><span>Unknown · not inferred</span></div><div class="fact"><span>Command durability</span><span>Received</span></div><div class="fact"><span>Human ACK</span><span>${isPending?'Pending':'Recorded 12:10'}</span></div></div>`;
+ const hist=`<div class="item"><strong>Party 18 · current event</strong><small>${isPending?'Awaiting human ACK':'Acknowledged'} · received 12:09</small></div><div class="item"><strong>Party 11 · earlier event</strong><small>Acknowledged · received 10:21 · original preserved</small></div>`;
+ modal('SOS emergencies',isPending?'1 event awaits operator acknowledgement':'No pending operator acknowledgement',tabs+sosAudioSwitchRow('sos')+(s.alertTab==='history'?hist:pending)+`<p class="sos-support-note">Command receipt and human acknowledgement are separate. Audio cannot guarantee someone heard the alert.</p>`,B('Close','close-modal')+B('Locate','sos-locate')+B('Acknowledge','sos-ack','danger',isPending?'':'disabled'));
+}
+function openRecords(which='saved'){
+  s.recordsTab=which;
+  const entryPicker=s.pendingMode==='view';
+  if(entryPicker)which='saved';
+  const tabs=entryPicker?'':`<div class="workspace-tabs" role="tablist" aria-label="Record types">${[['saved','Saved recordings'],['events','Event history']].map(([id,label])=>`<button role="tab" aria-selected="${which===id}" data-action="records-tab" data-id="${id}">${label}</button>`).join('')}</div>`;
+  if(which==='saved'){
+    const body=tabs+`<div class="records-toolbar"><div class="formrow"><label for="libraryQuery">Find a recording</label><input id="libraryQuery" type="search" placeholder="Search by name or date" autocomplete="off"></div><div><label for="recordsSort" class="caption">Sort by</label><select id="recordsSort" aria-label="Recording sort order"><option value="new" ${s.sort==='old'?'':'selected'}>Newest first</option><option value="old" ${s.sort==='old'?'selected':''}>Oldest first</option></select></div></div><div id="libraryItems" class="records-list" aria-live="polite"></div>`;
+    modal(entryPicker?'Choose recording':'Records',entryPicker?'Select a saved recording to enter View Recording.':'Saved recordings and operational event history.',body,B(entryPicker?'Cancel':'Close','close-modal')+B('Open selected','open-recording','solid',s.selectedSaved&&saved.some(r=>r.id===s.selectedSaved)&&s.record!=='active'&&s.record!=='paused'?'':'disabled'));
+    renderLibrary();
+  }else{
+    const body=tabs+`<div class="records-section-heading"><div><h3>Operational events</h3><p>SOS and connectivity events</p></div></div><div class="event-filter-bar"><span class="event-filter-label" id="eventFilterLabel">Show</span><div class="event-segments" role="group" aria-labelledby="eventFilterLabel">${[['all','All'],['sos','SOS'],['contact','Connectivity']].map(([id,label])=>`<button type="button" class="event-segment" data-action="event-filter" data-id="${id}" aria-pressed="${s.eventFilter===id}">${label}</button>`).join('')}</div></div><div id="eventsList" class="records-list event-records-list" aria-live="polite"></div>`;
+    modal('Records','Saved recordings and operational event history.',body,B('Close','close-modal')+B('Export evidence','export-diag'));
+    renderEvents(s.eventFilter);
+  }
+}
+const qualityRules=[
+ {id:'forward',label:'Forward movement floor',unit:'m',hint:'Minimum accepted forward movement',value:2,enabled:true,min:0,max:10000,step:1},
+ {id:'backward',label:'Backward movement floor',unit:'m',hint:'Minimum accepted reverse movement',value:2,enabled:true,min:0,max:10000,step:1},
+ {id:'accuracy',label:'Maximum accuracy',unit:'m',hint:'Reject imprecise fixes above this accuracy radius',value:25,enabled:true,min:1,max:10000,step:1},
+ {id:'age',label:'Maximum fix age',unit:'s',hint:'Reject observations too old at capture',value:30,enabled:true,min:1,max:86400,step:1},
+ {id:'clock',label:'Clock tolerance',unit:'s',hint:'Allow bounded device clock difference',value:5,enabled:true,min:0,max:86400,step:1},
+ {id:'speed',label:'Maximum speed',unit:'m/s',hint:'Reject implausible movement speeds',value:12,enabled:true,min:.1,max:300,step:.1},
+ {id:'gap',label:'Maximum gap',unit:'s',hint:'Break sections across long observation gaps',value:120,enabled:true,min:1,max:86400,step:1},
+ {id:'uncertainty',label:'Uncertainty multiplier',unit:'×',hint:'Scale position uncertainty when qualifying movement',value:1,enabled:true,min:0,max:50,step:.1}
+];
+const qualityRuleDefaults=qualityRules.map(({id,value,enabled})=>({id,value,enabled}));
+function qualityEditor(){
+ return `<div class="quality-head"><div class="quality-title-row"><h3>Quality rules</h3>${B('Restore default rules','quality-reset','', 'aria-label="Restore Default Quality Rules" title="Restore Default Quality Rules"')}</div><p>Adjust the rules that qualify movement and distance. Original observations and recording boundaries remain unchanged.</p></div>
+ <div class="quality-label-head"><span>Rule</span><span>Enabled</span><span>Value</span></div>
+ <div class="quality-list">${qualityRules.map(q=>`<div class="quality-rule" data-rule="${q.id}">
+   <div class="quality-copy"><label for="qual-${q.id}">${q.label}<span class="quality-unit"> · ${q.unit}</span></label><small>${q.hint}</small></div>
+   <input type="checkbox" role="switch" class="quality-toggle" aria-label="Enable ${q.label}" data-rule="${q.id}" ${q.enabled?'checked':''}>
+   <input type="number" class="quality-input" id="qual-${q.id}" value="${q.value}" min="${q.min}" max="${q.max}" step="${q.step}" inputmode="decimal" ${q.enabled?'':'disabled'} aria-label="${q.label} in ${q.unit}">
+  </div>`).join('')}</div>
+ <p id="qualityError" class="quality-error" role="alert" hidden></p>
+ <p id="qualityResetHint" class="quality-reset-hint" role="status" hidden></p>
+ `;
+}
+function restoreQualityDraft(){
+  for(const def of qualityRuleDefaults){
+   const original=qualityRules.find(q=>q.id===def.id);
+   const toggle=document.querySelector(`.quality-toggle[data-rule="${def.id}"]`);
+   const input=$(`qual-${def.id}`);
+   if(toggle)toggle.checked=def.enabled;
+   if(input){input.value=String(def.value);input.disabled=!def.enabled}
+  }
+  const error=$('qualityError');if(error){error.hidden=true;error.textContent=''}
+  const hint=$('qualityResetHint');if(hint){hint.hidden=false;hint.textContent='Defaults restored in the editor. Choose Apply quality rules to save them.'}
+}
+function applyQuality(){
+ const next=[];
+ for(const rule of qualityRules){
+  const box=document.querySelector(`.quality-toggle[data-rule="${rule.id}"]`);
+  const field=$(`qual-${rule.id}`);
+  const value=Number(field.value);
+  if(box?.checked&&(!field.value.trim()||!Number.isFinite(value)||value<rule.min||value>rule.max)){
+    const error=$('qualityError');if(error){error.hidden=false;error.textContent=`Set a valid value for ${rule.label.toLowerCase()} (${rule.min}–${rule.max} ${rule.unit}).`}
+    field.focus();return false;
+  }
+  next.push({enabled:!!box?.checked,value:field.value.trim()?value:rule.value});
+ }
+ qualityRules.forEach((q,i)=>Object.assign(q,next[i]));
+ closeModal(true);info('Quality rules applied (preview only)');return true;
+}
+function openTools(which='quality'){
+  if(s.toolsTab==='quality'&&which!=='quality'&&qualityDraftDirty()){qualityLeavePrompt(()=>openTools(which));return}
+  s.toolsTab=which;
+  const tabs=`<div class="workspace-tabs tools-tabs" role="tablist" aria-label="Tools sections">${[['quality','Quality'],['diagnostics','Diagnostics'],['sound','SOS sound'],['about','About']].map(([id,label])=>`<button role="tab" aria-selected="${which===id}" data-action="tools-tab" data-id="${id}">${label}</button>`).join('')}</div>`;
+  let body=tabs,footer=B('Close','close-modal');
+  if(which==='quality'){
+    body+=qualityEditor();
+    footer+=B('Apply quality rules','apply-quality','solid');
+  }else if(which==='diagnostics'){
+    body+=`<h3 class="tool-panel-heading">Command diagnostics</h3><p class="tool-panel-intro">Operational health and retained facts, separate from recorded presentation evidence.</p><div class="tool-fact"><span>GNSS receiver</span><strong>Accepting data · simulated</strong></div><div class="tool-fact"><span>Transport receipt</span><strong>Durable SQLite receipt before ACK</strong></div><div class="tool-fact"><span>Projection</span><strong>Independent of receipt</strong></div><div class="tool-fact"><span>History playback</span><strong>Read-only</strong></div>`;
+    footer+=B('Export diagnostics','export-diag','solid');
+  }else if(which==='sound'){
+    body+=`<h3 class="tool-panel-heading">Emergency audio</h3><p class="tool-panel-intro">Audible alerts are optional. Visual SOS indicators remain active.</p>${sosAudioSwitchRow('tools')}<div class="tool-fact"><span>Pending SOS</span><strong>${s.sosAck?'None':'1 unacknowledged'}</strong></div><div class="tool-fact"><span>Audio playback</span><strong>Browser and speaker-dependent</strong></div>`;
+  }else if(which==='about'){
+    body+=`<div class="about-app"><div class="about-logo">G</div><div><h3>GNSS Command</h3><p>Cross-platform, offline-first operational location tracking</p></div></div><div class="tool-fact"><span>Design preview</span><strong>Command V5.14 (interactive prototype)</strong></div><div class="tool-fact"><span>Operating modes</span><strong>Live · Record · View Recording · Travel Back</strong></div><div class="tool-fact"><span>Data authority</span><strong>Original GNSS, durable receipt and browser evidence remain distinct</strong></div><a class="about-contact-row" href="mailto:surajsingh5092@gmail.com" aria-label="Email developer surajsingh5092@gmail.com"><span class="about-contact-symbol" aria-hidden="true">✉</span><span class="about-contact-copy"><strong>Developer contact</strong><small>surajsingh5092@gmail.com</small></span><span class="about-contact-out" aria-hidden="true">↗</span></a>`;
+  }
+  modal('Tools','Inspect system status and control operator tools.',body,footer);
+}
+function openMenu(which){
+  // Compatibility entry points remain useful, but never show a modal made only of buttons.
+  if(which==='records')return openRecords();
+  if(which==='tools')return openTools();
+  if(which==='view')return openMaps();
+  return openUtilityMenu();
+}
+function openUtilityMenu(){
+  const box=$('utilityDropdown'),button=$('utilityButton');const opening=box.hidden;
+  closeModeMenu();
+  if(!opening){closeUtilityMenu();return}
+  box.innerHTML=`<span class="menu-group-title">Explore</span><button role="menuitem" data-action="records-menu">Records</button><button role="menuitem" data-action="tools-menu">Tools</button><button role="menuitem" data-action="maps">Maps &amp; Layers</button><button role="menuitem" data-action="layers">Map layers</button><div class="menu-divider"></div><span class="menu-group-title">Workspace</span><button role="menuitem" data-action="toggle-left">Parties panel</button><button role="menuitem" data-action="toggle-right">Selected details</button><button role="menuitem" data-action="events">Event history</button><button role="menuitem" data-action="sos">SOS emergencies</button><button role="menuitem" data-action="clear-devices">Clear live device list…</button><div class="menu-divider"></div><button role="menuitem" data-action="about">About Command</button>`;
+  box.hidden=false;button.setAttribute('aria-expanded','true');
+}
+function closeUtilityMenu(){const box=$('utilityDropdown');if(!box)return;box.hidden=true;$('utilityButton').setAttribute('aria-expanded','false')}
+function mapPreviewGraphic(){
+  const cover=s.mapRadius==='1'?32:s.mapRadius==='5'?68:s.mapRadius==='10'?83:Math.min(86,Math.max(27,27+s.mapCustomRadius*7));
+  return `<div class="location-preview ${s.mapPreviewReady?'ready':''}">
+    ${s.mapPreviewReady?`<svg viewBox="0 0 640 180" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><path d="M-60 170 Q90 95 170 170 T390 85 T710 180" fill="none" stroke="#bed7cb" stroke-width="26" opacity=".4"/><path d="M-20 45 165 102 360 27 650 94 M160 -20 260 210 M410 -25 505 210" fill="none" stroke="#cad9d4" stroke-width="8"/><path d="M-40 94 Q150 12 310 110 T710 67" fill="none" stroke="#a7c5c8" stroke-width="18" opacity=".6"/><circle cx="324" cy="96" r="${cover}" fill="#3d957014" stroke="#287a5a" stroke-width="2.5" stroke-dasharray="8 6"/><circle cx="324" cy="96" r="5" fill="#287a5a" stroke="white" stroke-width="3"/></svg><div class="preview-label"><strong>${esc(s.mapPreviewLabel)}</strong><small>Requested coverage · illustrative preview, not downloaded map data</small></div>`:
+    `<div class="empty-preview"><span>◎</span><b>Map preview</b><small>Enter a location or latitude, longitude and select Search.</small></div>`}
+  </div>`
+}
+function mapGetBody(){
+  const chips=[['1','1 km'],['5','5 km'],['10','10 km'],['custom','Custom']].map(([v,t])=>B(t,'radius-option',s.mapRadius===v?'active':'',`data-id="${v}"`)).join('');
+  return `<div class="map-form"><div class="field-title">Location</div><div class="location-entry"><input id="mapLocation" aria-label="Place, landmark or comma separated coordinates" placeholder="Place or latitude, longitude" value="${esc(s.mapLocation)}"><button class="btn solid" data-action="map-search">Search</button></div>
+  ${mapPreviewGraphic()}
+  <div class="field-title">Coverage radius</div><div class="radius-options">${chips}</div>
+  ${s.mapRadius==='custom'?`<div class="radius-custom"><label for="customRadius">Radius</label><input id="customRadius" type="number" min="0.1" step="0.1" value="${s.mapCustomRadius}"><select id="customRadiusUnit" aria-label="Radius unit"><option value="km" ${s.mapRadiusUnit==='km'?'selected':''}>km</option><option value="m" ${s.mapRadiusUnit==='m'?'selected':''}>metres</option></select></div>`:''}
+  <label class="switchline"><span><b>Include terrain &amp; elevation data</b><small>Optional · downloaded only where source data exists</small></span><input type="checkbox" role="switch" id="terrainSwitch" ${s.mapTerrain?'checked':''}></label>
+  ${s.mapError?`<div class="inline-error" role="alert"><b>Unable to continue</b><span>${esc(s.mapError)}</span></div>`:''}
+  ${s.mapStep==='consent'?`<div class="inline-status"><b>Additional transfer approval required</b><span>About 12 MB requested; current consent covers only 5 MB.</span><div class="inline-buttons">${B('Approve transfer','approve-map','solid')}${B('Cancel','cancel-map')}</div></div>`:''}
+  ${s.mapStep==='progress'?`<div class="inline-status"><b>Saving offline map</b><span>8 MB received · verified vectors usable · terrain still incomplete.</span><div class="inline-buttons">${B('Use verified part','save-partial','')}${B('Retry missing','retry-map','')}${B('Cancel','cancel-map','danger')}</div></div>`:''}
+  ${s.mapStep==='failed'?`<div class="inline-error" role="alert"><b>Download interrupted</b><span>Saved data remains available. Retry only missing portions.</span><div class="inline-buttons">${B('Retry','retry-map','solid')}${B('Keep partial map','save-partial')}</div></div>`:''}
+  </div>`;
+}
+function mapImportBody(){return `<div class="map-form"><div class="field-title">Existing map file</div>
+<label class="map-file-picker" for="mapFile"><span class="file-icon" aria-hidden="true">⇧</span>
+<span class="file-info"><strong class="file-name">${s.mapImportName?esc(s.mapImportName):'Choose an offline map file'}</strong><small>.gmap.zip, GeoJSON or OSM PBF</small></span>
+<span class="file-browse" aria-hidden="true">Choose file</span>
+<input type="file" id="mapFile" accept=".pbf,.osm.pbf,.geojson,.json,.gmap.zip,.zip" aria-label="Choose offline map file"></label>
+${s.mapError?`<div class="inline-error" role="alert"><b>Import unavailable</b><span>${esc(s.mapError)}</span></div>`:''}
+</div>`}
+function mapListBody(){return `<div class="map-list-heading"><div><b>Your offline maps</b><small>${maps.length} saved maps · click a map to view its details</small></div>${B('Import map','begin-map-import','solid')}</div><div class="map-stack">${maps.map(m=>`<div class="map-row ${s.selectedMap===m.id?'selected':''}"><button class="map-row-main" data-action="activate-map" data-id="${m.id}"><strong>${esc(m.name)}</strong><small>${esc(m.meta)}</small></button><div class="map-row-actions"><span class="soft-tag ${s.selectedMap===m.id?'':'warn'}">${s.selectedMap===m.id?'Active':'Stored'}</span>${B('Details','map-more','',`data-id="${m.id}"`)}${B('Delete','delete-map','danger',`data-id="${m.id}"`)}</div></div>`).join('')||'<div class="inline-status">No offline maps yet. Import one or download a new area.</div>'}</div>`}
+function mapDisplayBody(){return `<div class="map-form">
+<label class="switchline"><span><b>Use all observations</b><small>Off by default · diagnostic dots do not add distance</small></span><input id="displayAll" type="checkbox" role="switch" ${s.allObservations?'checked':''}></label>
+<div class="dot-interval-row"><label for="displayDot">Display dot interval</label><div class="dot-value"><input type="number" id="displayDot" min="10" max="86400" step="10" inputmode="numeric" value="${s.mapDisplayDot}" aria-describedby="dotSeconds"><span id="dotSeconds">seconds</span></div></div>
+<div class="formrow display-opacity"><label for="displayOpacity">Background opacity <strong id="opacityValue">${s.mapDisplayOpacity}%</strong></label><input class="range-control" id="displayOpacity" type="range" min="0" max="100" step="5" value="${s.mapDisplayOpacity}" oninput="document.getElementById('opacityValue').textContent=this.value+'%'"/></div>
+${s.mapError?`<div class="inline-error" role="alert">${esc(s.mapError)}</div>`:''}
+</div>`}
+function openMaps(){
+ const tab=s.tab||'get'; const body={get:mapGetBody,import:mapImportBody,mine:mapListBody,display:mapDisplayBody}[tab]();
+ const tabs=`<div class="tabs map-tabs" role="tablist" aria-label="Map tasks">${[['get','Get a Map'],['import','Import'],['mine','My Maps'],['display','Display']].map(([id,name])=>B(name,'map-tab',tab===id?'active':'',`data-id="${id}" role="tab" aria-selected="${tab===id}"`)).join('')}</div>`;
+ const action=tab==='get'?B('Download map','download-map','solid',s.mapPreviewReady&&s.mapStep==='idle'?'':'disabled'):tab==='import'?B('Import map','import-map','solid'):tab==='display'?B('Apply','apply-map-display','solid'):'';
+ modal('Maps & Layers','Get a map, import an existing file or adjust what is displayed.',tabs+body,B('Close','close-modal')+action);
+}
+function mapSearch(){const q=$('mapLocation')?.value.trim()||'';s.mapLocation=q;s.mapError='';if(!q){s.mapError='Enter a place name or latitude, longitude.';openMaps();return}const parts=q.split(',').map(x=>x.trim());if(parts.length===2&&parts.every(x=>/^[-+]?\d+(\.\d+)?$/.test(x))){const lat=Number(parts[0]),lon=Number(parts[1]);if(lat<-90||lat>90||lon<-180||lon>180){s.mapError='Latitude must be between −90 and 90; longitude between −180 and 180.';openMaps();return}}else if(q.length<3){s.mapError='Enter at least three characters for a location search.';openMaps();return}
+if(/^(fail|error|unavailable)$/i.test(q)){s.mapError='Location search unavailable. Check the place name or enter latitude, longitude.';openMaps();return}
+s.mapPreviewLabel=q;s.mapPreviewReady=true;openMaps()}
+function mapDownload(){s.mapLocation=$('mapLocation')?.value.trim()||s.mapLocation;s.mapTerrain=!!$('terrainSwitch')?.checked;if(s.mapRadius==='custom'){const n=Number($('customRadius')?.value||s.mapCustomRadius),unit=$('customRadiusUnit')?.value||s.mapRadiusUnit;const metres=n*(unit==='km'?1000:1);if(!Number.isFinite(n)||metres<100||metres>100000){s.mapError='Set a radius between 100 m and 100 km.';openMaps();return}s.mapCustomRadius=n;s.mapRadiusUnit=unit}if(!s.mapPreviewReady){s.mapError='Search and preview the area before downloading.';openMaps();return}s.mapError='';s.mapStep='consent';openMaps()}
+function mapImportReview(){const f=$('mapFile')?.files?.[0];if(f){s.mapImportName=f.name;s.mapImportSize=f.size}const name=s.mapImportName;if(!name){s.mapError='Choose an existing map file to import.';openMaps();return}if(!/\.(gmap\.zip|osm\.pbf|pbf|geojson|json|zip)$/i.test(name)){s.mapError='Unsupported format. Choose .gmap.zip, GeoJSON or OSM PBF.';openMaps();return}if(s.mapImportSize>1024*1024*1024){s.mapError='This file exceeds the 1 GB input safeguard; choose a smaller map.';openMaps();return}if(/corrupt|broken|invalid/i.test(name)){s.mapError='This file failed the simulated format validation. No maps were changed.';openMaps();return}
+modal('Import this map?','Confirm the map file before adding it to the library.',`<div class="confirm-map"><strong>${esc(name)}</strong><small>Original coverage, centre and available terrain/elevation are preserved where supported. Existing maps remain unchanged.</small></div>`,B('Cancel','open-map-import')+B('Import','confirm-map-import','solid'))}
+function mapMore(id){
+ const m=maps.find(x=>x.id===Number(id));if(!m)return;
+ const bits=m.meta.split(' · ');
+ const stateLabel=bits[0]||'Saved';
+ const contents=bits.slice(1).join(' · ')||'Stored source';
+ const retryNeeded=/partial|missing|incomplete/i.test(m.meta);
+ const active=s.selectedMap===m.id;
+ modal('Map details',m.name,
+ `<div class="map-detail-summary"><div class="map-detail-symbol" aria-hidden="true">▧</div><div><strong>${esc(m.name)}</strong><small>${esc(stateLabel)} · offline library</small></div></div>
+ <div class="map-detail-facts"><div class="fact"><span>Availability</span><span>${esc(stateLabel)}</span></div><div class="fact"><span>Stored contents</span><span>${esc(contents)}</span></div></div>`,
+ `${B('‹ Back','back-mymaps')}${B('Export package','export-map','',`data-id="${m.id}"`)}${B('Retry missing','resume-map','',`data-id="${m.id}" ${retryNeeded?'':'disabled title="No known missing map data"'}`)}${B(active?'Already active':'Use this map','activate-map','solid',`data-id="${m.id}" ${active?'disabled':''}`)}`);
+}
+
+function basicModal(name,sub,body){modal(name,sub,body,B('Close','close-modal'))}
+function openLayers(){
+ modal('Map layers','Adjust what is visible in this view.',
+ `<label class="switchline layer-switch"><span><b>Qualified tracks</b></span><input type="checkbox" role="switch" aria-label="Qualified tracks" id="trackOn" ${s.showTrack?'checked':''}></label>
+  <label class="switchline layer-switch"><span><b>Party labels</b></span><input type="checkbox" role="switch" aria-label="Party labels" id="labelsOn" ${s.showLabels?'checked':''}></label>
+  <label class="switchline layer-switch"><span><b>Terrain</b><small>Requires saved DEM products.</small></span><input type="checkbox" role="switch" aria-label="Terrain" id="terrainOn" ${s.showTerrain?'checked':''}></label>`,
+ `${B('Close','close-modal')}${B('Apply layers','apply-layers','solid')}`)
+}
+function openQuality(){openTools('quality')}
+function openDiagnostics(){
+ modal('Diagnostics','Read-model health, transport and retained event evidence',`<div class="fact"><span>Receiver</span><span>Accepting original GNSS</span></div><div class="fact"><span>Durable receipt</span><span>Command SQLite before ACK</span></div><div class="fact"><span>Qualified history</span><span>Current policy and gaps</span></div><div class="fact"><span>Browser presentation</span><span>Separate from durable receipt</span></div><div class="fact"><span>Travel Back</span><span>Read-only explicit refresh</span></div><div class="note">Diagnostics can be inspected without placing raw JSON or debug details over the map.</div><div class="item-actions" style="margin-top:12px">${B('Event journal','events')}${B('Command results','phone-results')}${B('Export sanitized report','export-diag')}</div>`,B('Close','close-modal'));
+}
+function openPhone(){
+ const historical=s.mode==='view'||s.mode==='travel';if(historical&&s.phoneTab==='send')s.phoneTab='journal';const ts=[['send','Send instruction'],['enroll','Enrollment'],['journal','Results']];
+ let body=`<div class="tabs phone-tabs">${ts.map(([id,label])=>B(label,'phone-tab',s.phoneTab===id?'active':'',`data-id="${id}" ${historical&&id==='send'?'disabled title="Return to LIVE to send instructions"':''}`)).join('')}</div>${historical?'<div class="note" style="margin-bottom:12px">Historical view is read-only. Switch to LIVE to issue instructions; existing results remain inspectable.</div>':''}`;
+ if(s.phoneTab==='send'){
+  const scope=`<div class="formrow"><label for="phoneTarget">Recipients</label><select id="phoneTarget"><option value="selected" ${s.phoneScope==='selected'?'selected':''}>Selected party (${parties.find(p=>p.id===s.selected)?.name})</option><option value="all" ${s.phoneScope==='all'?'selected':''}>All enrolled (20 demo recipients)</option><option value="custom" ${s.phoneScope==='custom'?'selected':''}>Choose recipients</option></select></div>`;
+  const custom=s.phoneScope==='custom'?`<div class="compact-list">${parties.slice(0,8).map(p=>`<label class="toggle-line"><input type="checkbox" role="switch" class="phone-recipient" value="${p.id}" ${p.id===s.selected?'checked':''}><span><strong>${p.name}</strong><small>${p.contact} · verified enrollment simulation</small></span></label>`).join('')}</div>`:'';
+  const ops=[['sync','Sync All Now'],['report','Set reporting interval'],['adaptive','Adaptive storage'],['start','Start tracking'],['stop','Stop tracking'],['alert','Phone alert']];
+  const opfield=s.phoneOp==='report'?`<div class="formrow"><label for="phoneInterval">Reporting interval (seconds)</label><input id="phoneInterval" type="number" min="5" max="86400" value="15"></div>`:s.phoneOp==='adaptive'?`<div class="formrow"><label for="phoneAdaptive">Adaptive persistence</label><select id="phoneAdaptive"><option value="on">ON</option><option value="off">OFF</option></select></div>`:s.phoneOp==='alert'?`<div class="formgrid"><div class="formrow"><label for="alertMode">Alert mode</label><select id="alertMode"><option value="normal">Normal attention</option><option value="urgent">Urgent repeating</option></select></div><div class="formrow"><label for="phoneTtl">TTL (seconds)</label><input id="phoneTtl" type="number" min="5" max="3600" value="300"></div></div><div class="formrow"><label for="alertText">Message · up to 160 characters</label><input id="alertText" maxlength="160" placeholder="Optional operational message"></div><div class="formgrid"><div class="formrow"><label>Urgent duration · sec</label><input id="alertDuration" type="number" min="5" max="120" value="60"></div><div class="formrow"><label>Repeat every · sec</label><input id="alertRepeat" type="number" min="5" max="30" value="10"></div></div>`:`<div class="note">${s.phoneOp==='sync'?'Uses existing durable outbox, including when tracking is OFF.':s.phoneOp==='start'?'May be blocked unless the Android user interface is visible and preflight succeeds.':'Stops GNSS collection; sender and SOS remain separate.'}</div>`;
+  body+=`<div class="phone-form">${scope}${custom}<div class="formrow"><label for="phoneCmd">What should the phone do?</label><select id="phoneCmd">${ops.map(([v,l])=>`<option value="${v}" ${s.phoneOp===v?'selected':''}>${l}</option>`).join('')}</select></div>${opfield}<div class="footer-helper">Requested state, durable phone receipt and actual applied result are different. Offline/legacy phones may remain unknown or unsupported.</div></div>`;
+ } else if(s.phoneTab==='enroll'){
+ body+=`<div class="note">The Command ID is public identity, not the enrollment secret. Verify each phone UUID on Android and transfer its per-phone credential privately. Network contact alone does not establish trust.</div><div class="formrow" style="margin-top:12px"><label>Command ID · public</label><input readonly value="a7fd-2b90-6e41-..." aria-label="Public Command ID"></div>${parties.slice(0,4).map((p,i)=>`<div class="control-status"><div><b>${p.name}</b><small>${i===2?'Offline · previously enrolled':'Authenticated contact shown as preview only'}</small></div><span class="soft-tag ${i===2?'warn':''}">${i===2?'Stale':'Verified'}</span></div>`).join('')}<div class="footer-helper">Enroll, revoke or replace credentials from the real loopback Command console. This mockup never generates or reveals secrets.</div>`;
+ } else {
+ body+=`<div class="filter-row"><label for="journalFilter">Filter outcomes</label><select id="journalFilter" class="form-select-compact"><option value="all">All results</option><option value="pending">Pending / unknown</option><option value="applied">Applied / acknowledged</option></select></div><div id="controlResults"></div><div class="footer-helper">Every recipient has its own result and authenticated custody. A queued request is not proof of execution.</div>`;
+ }
+ modal('Phone controls','Authenticated per-phone commands, enrollment and durable results',body,B('Close','close-modal')+(s.phoneTab==='send'?B('Review instruction','phone-review','solid'):''));
+ if(s.phoneTab==='journal')renderControlResults();
+}
+
+function renderControlResults(){
+ const root=$('controlResults');if(!root)return;
+ const filter=$('journalFilter')?.value||'all';
+ const rows=s.controlJournal.filter(x=>filter==='all'||filter==='pending'&&/unknown|queued|pending/i.test(x.status)||filter==='applied'&&/applied|acknowledged/i.test(x.status));
+ root.innerHTML=rows.map(x=>{
+  const complete=/applied|acknowledged/i.test(x.status), warning=/unknown|pending|queued|sent/i.test(x.status);
+  const stateClass=complete?'complete':warning?'pending':'neutral';
+  return `<div class="control-result-row">
+    <div class="control-result-main"><div class="control-result-heading"><strong>${esc(x.op)}</strong><span class="result-state ${stateClass}">${esc(x.status)}</span></div>
+      <small>${esc(x.phone)} · ${esc(x.id)}</small><p>${esc(x.note)}</p></div>
+    <div class="control-result-actions">${B('Details','control-result-detail','',`data-id="${x.id}" aria-label="View ${esc(x.op)} result for ${esc(x.phone)}"`)}${/queued/i.test(x.status)?B('Cancel queued','control-cancel','danger',`data-id="${x.id}"`):''}</div>
+  </div>`
+ }).join('')||'<p class="records-empty">No matching instruction results.</p>';
+}
+
+function preparePhoneReview(){
+ const scope=$('phoneTarget')?.value||'selected',op=$('phoneCmd')?.value||'sync';
+ let recipients=scope==='selected'?[s.selected]:scope==='all'?parties.filter(x=>x.id!=='p07').map(x=>x.id):Array.from(document.querySelectorAll('.phone-recipient:checked')).map(x=>x.value);
+ if(!recipients.length){info('Select at least one recipient');return}
+ const opname={sync:'Sync All Now',report:'Set reporting interval',adaptive:'Adaptive storage',start:'Start tracking',stop:'Stop tracking',alert:'Phone alert'}[op];
+ const val=op==='report'?`interval ${$('phoneInterval')?.value||'15'} seconds`:op==='adaptive'?`adaptive ${$('phoneAdaptive')?.value||'off'}`:op==='alert'?`${$('alertMode')?.value||'normal'} · TTL ${$('phoneTtl')?.value||300} s · ${$('alertText')?.value||'(no message)'}`:'No additional values';
+ s.phoneDraft={op,opname,recipients,value:val};
+ const recipientNames=esc(recipients.slice(0,6).map(id=>parties.find(p=>p.id===id)?.name||id).join(', '))+(recipients.length>6?' and '+(recipients.length-6)+' others':'');
+ const params=val==='No additional values'?'':`<div class="review-row"><span>Requested parameters</span><strong>${esc(val)}</strong></div>`;
+ modal('Review instruction','Confirm recipients and operation before queuing.',`<div class="review-summary" aria-label="Instruction summary"><div class="review-row"><span>Operation</span><strong>${esc(opname)}</strong></div><div class="review-row"><span>Recipients</span><strong>${recipients.length} · ${recipientNames}</strong></div>${params}</div><p class="review-help">Queuing requests an action; it does not prove the phone has applied it. Verified results appear in Phone Controls → Results.</p>`,B('‹ Back','phone-controls')+B('Queue instruction','phone-submit','solid'));
+}
+function openEvents(){openRecords('events')}
+function renderEvents(filter){
+ s.eventFilter=filter;
+ document.querySelectorAll('[data-action="event-filter"]').forEach(b=>{const isActive=b.dataset.id===filter;b.classList.toggle('active',isActive);b.setAttribute('aria-pressed',String(isActive))});
+ const e=$('eventsList');if(!e)return;const items=[['sos','SOS · Party 18',s.sosAck?'Human acknowledged':'Command received · human ACK pending'],['sos','SOS · Party 11','Acknowledged at 10:22'],['contact','Party 07 connection','Last contact 11:58; browser history polling independent'],['contact','History backlog','12,040 retained observations simulated for field scale']];
+ e.innerHTML=items.filter(x=>filter==='all'||x[0]===filter).map(x=>`<div class="record-row event-record-row"><div class="record-main"><strong>${esc(x[1])}</strong><small>${esc(x[2])}</small></div><span class="event-kind">${x[0]==='sos'?'SOS':'Connectivity'}</span></div>`).join('')||'<div class="empty-records">No events match this filter.</div>';
+}
+
+function chooseParty(id){s.selected=id;if(innerWidth<=800){s.left=false;s.right=true}render()}
+function flipPanel(which){s[which]=!s[which];if(innerWidth<=800&&s[which])s[which==='left'?'right':'left']=false;render()}
+function stopTick(){clearInterval(interval);interval=null}
+function updateTimelineProgress(){
+ const slider=$('scrubber');if(slider){slider.value=String(s.seek);const percent=slider.nextElementSibling;if(percent)percent.textContent=Math.round(s.seek)+'%'}
+ const play=$('rail')?.querySelector('[data-action="play"]');if(play){play.textContent=s.play?'Ⅱ':'▶';play.setAttribute('aria-label',s.play?'Pause playback':'Play timeline')}
+}
+function togglePlay(){
+ if((s.mode==='view'&&!s.selectedSaved)||(s.mode==='travel'&&!s.range))return;
+ s.play=!s.play;
+ if(s.play){
+  stopTick();
+  interval=setInterval(()=>{s.seek=Math.min(100,s.seek+s.speed);if(s.seek>=100){s.play=false;stopTick()}updateTimelineProgress()},550);
+ }else stopTick();
+ updateTimelineProgress();
+}
+window.addEventListener('resize',()=>{
+  if(capturePicker?.open)requestAnimationFrame(()=>capturePositionCalendar(capturePicker.open));
+  if(innerWidth<=800){if(s.left&&s.right)s.right=false}
+  else if(innerWidth<=1190){if(s.right&&s.left)s.right=false}
+  render();
+});
+function eventClick(e){const btn=e.target.closest('[data-action]');if(!btn||btn.disabled)return;if(btn.closest('#utilityDropdown'))closeUtilityMenu();const a=btn.dataset.action,id=btn.dataset.id;switch(a){case'mode-picker':openMode();break;case'utility-menu':openUtilityMenu();break;case'records-tab':openRecords(id);break;case'tools-tab':openTools(id);break;case'choose-mode':switchMode(btn.dataset.mode);break;case'capture-calendar-toggle':captureOpenCalendar(btn.dataset.which);break;case'capture-calendar-prev':captureShiftCalendar(btn.dataset.which,-1);break;case'capture-calendar-next':captureShiftCalendar(btn.dataset.which,1);break;case'capture-calendar-day':captureSelectDate(btn.dataset.which,btn.dataset.date);break;case'capture-calendar-today':captureSelectDate(btn.dataset.which,new Date().toISOString().slice(0,10));break;case'close-modal':closeModal();break;case'return-records':openRecords('saved');break;case'quality-guard-cancel':dismissQualityGuard();break;case'quality-guard-apply':continueAfterQualityApply();break;case'toggle-left':flipPanel('left');break;case'toggle-right':flipPanel('right');break;case'close-panels':s.left=false;s.right=false;render();break;case'choose-party':chooseParty(btn.dataset.party);break;case'party-filter':s.partyFilter=id;renderPanels();break;case'workspace-menu':openMenu('workspace');break;case'records-menu':openRecords();break;case'tools-menu':openTools();break;case'view-menu':openMaps();break;case'goto-record':switchMode('record');break;case'goto-travel':switchMode('travel');break;case'record-start':recordStart();break;case'confirm-start':if(s.record!=='idle')break;s.record='active';s.recordFrom=document.querySelector('input[name=startAt]:checked')?.value||'now';closeModal();render();break;case'record-pause':s.record=s.record==='paused'?'active':'paused';render();break;case'record-save':showRecForm();break;
+case'confirm-save':{
+ const n=$('recName')?.value.trim(),selected=[...document.querySelectorAll('.rec-party:checked')].map(b=>b.dataset.party);
+ if(!n||selected.length===0){info('Enter a name and include at least one party');break}
+ const final=s.record==='stopped',id='R-'+Date.now();
+ saved.unshift({id,name:n,description:$('recDesc')?.value||'',included:selected,meta:`Just saved · ${selected.length} parties · ${final?'finished recording':'immutable snapshot'}`});
+ s.selectedSaved=id;
+ if(final){s.record='idle';s.stoppedDraft=null;closeModal();render();showRecordingSaved(id,n)}
+ else{closeModal();render();info('Immutable snapshot saved · recording continues')}
+ break}
+case'record-stop':recordStop();break;
+case'record-discard':confirmDiscardStopped();break;
+case'discard-back-to-save':showRecForm();break;
+case'confirm-discard':s.record='idle';s.stoppedDraft=null;closeModal();render();info('Unsaved recording discarded');break;
+case'view-newly-saved':{
+ if(!saved.some(r=>r.id===id))break;
+ s.selectedSaved=id;s.mode='view';s.viewSeen=true;s.play=false;stopTick();s.seek=0;
+ closeModal();render();break}
+case'record-facts':basicModal('Recording evidence','Capture is only confirmed after browser presentation is applied.',`<div class="fact"><span>Owner</span><span>Single exclusive browser</span></div><div class="fact"><span>Capture</span><span>Applied rendered states</span></div><div class="fact"><span>Unverified intervals</span><span>Explicitly retained</span></div>`);break;case'library':openLibrary();break;case'sort-new':s.sort='new';openLibrary();break;case'sort-old':s.sort='old';openLibrary();break;case'select-recording':selectRecording(id);break;case'open-recording':if(!s.selectedSaved||!saved.some(r=>r.id===s.selectedSaved))break;if(s.record==='active'||s.record==='paused'){info('Finish recording before opening saved playback');break}s.play=false;stopTick();closeModal();s.mode='view';s.viewSeen=true;s.seek=0;render();break;case'edit-recording':{const rec=saved.find(x=>x.id===id);modal('Edit recording details','Changes are metadata overlays; original saved evidence remains immutable.',`<div class="formrow"><label>Name</label><input id="editRecordName" value="${esc(rec.name)}"></div>`,B('Cancel','return-records')+B('Save metadata','save-record-name','solid',`data-id="${id}"`));break}case'save-record-name':{const n=$('editRecordName').value.trim();if(!n){info('Name cannot be blank');break}saved.find(x=>x.id===id).name=n;openLibrary();break}case'delete-recording':{const rec=saved.find(x=>x.id===id);if(!rec)break;modal('Delete recording','',`<p class="delete-confirm-message">Delete <strong>“${esc(rec.name)}”</strong>? This cannot be undone.</p>`,B('Cancel','return-records')+B('Delete','confirm-delete-recording','destructive',`data-id="${id}"`));break}case'confirm-delete-recording':{const idx=saved.findIndex(x=>x.id===id);if(idx>=0)saved.splice(idx,1);if(s.selectedSaved===id){s.selectedSaved=null;if(s.mode==='view'){s.mode='live';s.viewSeen=false;s.play=false;stopTick();render()}}openLibrary();break}case'export-recording':info('Portable recording export is future #38 scope');break;case'follow':s.follow=!s.follow;render();break;case'play':togglePlay();break;case'seek-back':s.seek=Math.max(0,s.seek-10);updateTimelineProgress();break;case'seek-forward':s.seek=Math.min(100,s.seek+10);updateTimelineProgress();break;case'play-facts':basicModal('Playback evidence','Saved presentation time is not GNSS capture time.',`<div class="fact"><span>Follow Original</span><span>${s.follow?'ON':'OFF'}</span></div><div class="fact"><span>Hidden-party gate</span><span>Always enforced</span></div><div class="fact"><span>Historical SOS</span><span>Informational, not actionable</span></div>`);break;case'range':openRange();break;case'apply-range':applyRange();break;case'refresh':s.pending=false;render();info('Travel snapshot refreshed');break;case'sos':openSos();break;case'sos-ack':s.sosAck=true;closeModal();render();info('Human acknowledgement recorded for one event');break;case'sos-locate':s.returnMode=s.mode;s.play=false;stopTick();s.mode='live';closeModal();render();info('SOS located in Live');break;case'sos-back':if(s.returnMode){s.mode=s.returnMode;s.returnMode=null;s.play=false;render()}break;case'zoom-in':s.zoom=Math.min(2.2,Math.round((s.zoom+.2)*10)/10);renderMap();break;case'zoom-out':s.zoom=Math.max(.7,Math.round((s.zoom-.2)*10)/10);renderMap();break;case'fit':s.zoom=1;elMapOrigin('center center');renderMap();info('All parties fitted in view');break;case'focus-selected':{s.zoom=1.55;const pos={p18:'20% 44%',p11:'41% 54%',p07:'69% 38%',p03:'77% 64%'}[s.selected]||'center center';elMapOrigin(pos);renderMap();info('Focused selected party');break;}case'maps':s.tab='get';openMaps();break;case'map-tab':s.tab=id;s.mapError='';openMaps();break;case'map-search':mapSearch();break;case'radius-option':s.mapLocation=$('mapLocation')?.value||s.mapLocation;s.mapTerrain=!!$('terrainSwitch')?.checked;s.mapRadius=id;openMaps();break;case'begin-map-import':s.tab='import';s.mapError='';openMaps();break;case'open-map-import':s.tab='import';openMaps();break;case'back-mymaps':s.tab='mine';openMaps();break;case'map-more':mapMore(id);break;case'apply-map-display':{const n=Number($('displayDot')?.value);if(!Number.isFinite(n)||n<10||n>86400||n%10!==0){s.mapError='Dot interval must be 10–86,400 seconds in increments of 10.';openMaps();break}s.mapDisplayDot=n;s.mapDisplayOpacity=Number($('displayOpacity')?.value);s.allObservations=!!$('displayAll')?.checked;closeModal();renderMap();info('Display preferences applied');break;}case'activate-map':s.selectedMap=Number(id);s.tab='mine';openMaps();info('Offline map activated');break;case'resume-map':s.mapStep='progress';s.tab='get';openMaps();break;case'map-preview':info('Previewed requested coverage, not downloaded features');break;case'map-advanced':basicModal('Advanced map geometry','Contextual options for expert operators',`<div class="formgrid"><div class="formrow"><label>Latitude</label><input type="number" value="27.492"></div><div class="formrow"><label>Longitude</label><input type="number" value="77.673"></div></div><div class="formrow"><label>Shape</label><select><option>Circle</option><option>Legacy rectangle</option></select></div>`);break;case'map-display':s.tab='display';openMaps();break;case'approve-map':s.mapStep='progress';openMaps();break;case'cancel-map':s.mapStep='idle';openMaps();break;case'save-partial':s.mapStep='idle';s.selectedMap=2;s.tab='mine';openMaps();info('Verified partial map saved');break;case'retry-map':s.mapStep='progress';openMaps();info('Retry only missing data');break;case'export-map':info('Standalone map export requested');break;case'delete-map':{
+ const m=maps.find(x=>x.id===Number(id));if(!m)break;
+ modal('Delete map','',`<p class="delete-question">Are you sure you want to delete <strong>${esc(m.name)}</strong>?</p>`,
+ B('Cancel','back-mymaps')+B('Delete','confirm-delete-map','danger danger-confirm',`data-id="${m.id}"`));
+};break;case'confirm-delete-map':{const i=maps.findIndex(x=>x.id===Number(id));if(i>=0)maps.splice(i,1);if(s.selectedMap===Number(id))s.selectedMap=0;s.tab='mine';renderMap();openMaps();break}case'download-map':mapDownload();break;case'import-map':mapImportReview();break;case'confirm-map-import':{const importedId=Math.max(0,...maps.map(m=>m.id))+1;s.selectedMap=importedId;maps.push({id:importedId,name:s.mapImportName.replace(/\.(gmap\.zip|osm\.pbf|pbf|geojson|json|zip)$/i,''),meta:'Imported · original extent and assets preserved'});s.mapImportName='';s.mapImportSize=0;s.tab='mine';renderMap();openMaps();info('Map imported and available offline');break;}case'layers':openLayers();break;case'apply-layers':s.showTrack=$('trackOn').checked;s.showLabels=$('labelsOn').checked;s.showTerrain=$('terrainOn').checked;closeModal();render();break;case'theme':s.theme=s.theme==='day'?'night':'day';closeModal();render();break;case'labels':s.showLabels=!s.showLabels;closeModal();render();break;case'tracks':s.showTrack=!s.showTrack;closeModal();render();break;case'about':openTools('about');break;case'quality':openQuality();break;case'quality-preview':info('Quality policy preview');break;case'apply-quality':applyQuality();break;case'quality-reset':restoreQualityDraft();break;case'diagnostics':openDiagnostics();break;case'export-diag':info('Sanitized diagnostics exported');break;case'phone-controls':s.phoneTab='send';openPhone();break;case'phone-tab':if((s.mode==='travel'||s.mode==='view')&&id==='send')break;s.phoneTab=id;openPhone();break;case'phone-results':s.phoneTab='journal';openPhone();break;case'control-result-detail':{const r=s.controlJournal.find(x=>x.id===id);if(r)modal('Instruction result',`${r.id} · ${r.phone}`,`<div class="result-detail"><div class="fact"><span>Requested</span><strong>${esc(r.op)}</strong></div><div class="fact"><span>Outcome</span><strong>${esc(r.status)}</strong></div><p class="dialog-explanation">${esc(r.note)}.</p></div>`,B('‹ Back','phone-results'));break}case'control-cancel':{const r=s.controlJournal.find(x=>x.id===id);if(r){r.status='Cancelled while queued';r.note='No phone execution attempted (simulated)';renderControlResults()}break}case'phone-review':if(s.mode==='travel'||s.mode==='view'){info('Switch to LIVE to issue a remote instruction');break}preparePhoneReview();break;case'phone-submit':{if(!s.phoneDraft){info('No reviewed instruction');break}for(const recipient of s.phoneDraft.recipients.slice(0,21)){const p=parties.find(x=>x.id===recipient);s.controlJournal.unshift({id:'C-'+(301+s.controlJournal.length),phone:p?.name||recipient,op:s.phoneDraft.opname,status:'Queued',note:'Awaiting durable Android receipt · simulated'})}s.phoneDraft=null;closeModal();s.phoneTab='journal';openPhone();break}case'clear-devices':modal('Clear live device list','Actively reporting devices may reappear.',`<div class="formrow"><label>Type CLEAR to confirm</label><input id="clearConfirm" autocomplete="off"></div><p class="note">Do not erase original GNSS history, deduplication or remote configuration.</p>`,B('Cancel','close-modal')+B('Confirm clear','confirm-clear','danger'));break;case'confirm-clear':if($('clearConfirm').value!=='CLEAR'){info('Enter CLEAR exactly');break}closeModal();info('Known device list cleared in preview');break;case'inspect':basicModal('Observation inspection','Original fixes, qualification and chronological gaps.',`<div class="fact"><span>Selected party</span><span>${parties.find(x=>x.id===s.selected).name}</span></div><div class="fact"><span>Original observed_at</span><span>Preserved</span></div><div class="fact"><span>Quality</span><span>Derived and auditable</span></div>`);break;case'events':openEvents();break;case'event-filter':renderEvents(id);break;case'sos-pending':s.alertTab='pending';openSos();break;case'sos-history':s.alertTab='history';openSos();break;default:info('This control has a design-only action')}}
+function refreshRecordCount(){
+ const all=Array.from(document.querySelectorAll('.rec-party'));
+ const selected=all.filter(i=>i.checked).length;
+ const count=$('recCount');if(count)count.textContent=`${selected} of ${all.length} selected`;
+ const master=$('recAll');if(master){master.checked=all.length>0&&selected===all.length;master.setAttribute('aria-checked',String(master.checked))}
+ const confirm=document.querySelector('[data-action="confirm-save"]');if(confirm)confirm.disabled=selected===0;
+}
+document.addEventListener('toggle',e=>{if(e.target.id==='evidenceFold'&&e.target.isConnected)s.evidenceOpenByParty[e.target.dataset.party]=e.target.open},true);
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&s.modal==='Capture range'&&capturePicker?.open){e.preventDefault();e.stopImmediatePropagation();const which=capturePicker.open;captureOpenCalendar(which);$(which+'DateButton')?.focus();}},true);document.addEventListener('click',eventClick);
+document.addEventListener('pointerdown',e=>{
+ if(!capturePicker?.open)return;
+ if(e.target.closest('#captureCalendarPopover')||e.target.closest('[data-action="capture-calendar-toggle"]'))return;
+ captureDismissCalendar();
+},true);
+$('modalBody').addEventListener('scroll',()=>{
+ if(capturePicker?.open)capturePositionCalendar(capturePicker.open);
+},{passive:true});
+document.addEventListener('click',e=>{if(!e.target.closest('#modePickerWrap'))closeModeMenu();if(!e.target.closest('#utilityAnchor'))closeUtilityMenu()});// Modal tasks are explicitly dismissed through Close / Cancel or Escape.
+// Clicking the dimmed canvas does not silently abandon the operator's work.
+$('backdrop').addEventListener('click',e=>{if(e.target===$('backdrop'))e.stopPropagation()});document.addEventListener('keydown',e=>{if(e.key==='Tab'&&s.modal&&$('backdrop').classList.contains('open')&&$('qualityLeaveGuard').hidden){const list=[...$('backdrop').querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href]')].filter(x=>x.getClientRects().length);if(list.length){const first=list[0],last=list[list.length-1];if(e.shiftKey&&(document.activeElement===first||!$('backdrop').contains(document.activeElement))){e.preventDefault();last.focus()}else if(!e.shiftKey&&(document.activeElement===last||!$('backdrop').contains(document.activeElement))){e.preventDefault();first.focus()}}}if(e.key==='Escape'){if(!$('qualityLeaveGuard').hidden){dismissQualityGuard();return}if(!$('modeDropdown').hidden){closeModeMenu();$('modeButton').focus();return}if(!$('utilityDropdown').hidden){closeUtilityMenu();$('utilityButton').focus();return}if(s.modal)closeModal();else{s.left=false;s.right=false;render()}}if((e.key==='ArrowDown'||e.key==='ArrowUp')&&!$('modeDropdown').hidden){const opts=Array.from($('modeDropdown').querySelectorAll('button:not(:disabled)'));const curr=opts.indexOf(document.activeElement);const next=e.key==='ArrowDown'?curr+1:curr-1;opts[(next+opts.length)%opts.length]?.focus();e.preventDefault()}if((e.key==='ArrowDown'||e.key==='ArrowUp')&&document.activeElement?.id==='modeButton'&&$('modeDropdown').hidden){openMode();$('modeDropdown').querySelector('[aria-checked="true"]')?.focus();e.preventDefault()}});document.addEventListener('input',e=>{if(e.target.id==='libraryQuery')renderLibrary();if(e.target.id==='partySearch'){s.partyQuery=e.target.value;const old=e.target.selectionStart;renderPanels();const fresh=$('partySearch');fresh?.focus();fresh?.setSelectionRange(old,old)}if(e.target.id==='scrubber'){s.seek=Number(e.target.value);const label=e.target.nextElementSibling;if(label)label.textContent=Math.round(s.seek)+'%'}});document.addEventListener('change',e=>{
+ if(e.target.matches('[data-sos-audio-switch]')){
+  s.audio=e.target.checked;
+  const status=s.audio?'On · actual audibility depends on the browser and speakers':'Off · visual SOS alerts remain available';
+  document.querySelectorAll('[data-audio-state]').forEach(el=>el.textContent=status);
+  // Do not reconstruct the modal: preserve focus, scroll, and selected SOS/Tools tab.
+ }
+ if(e.target.id==='followOriginalSwitch'){s.follow=e.target.checked;info('Follow Original '+(s.follow?'enabled':'disabled'));}
+ if(e.target.id==='fromTime'||e.target.id==='toTime')captureSetError('');
+ if(e.target.id==='recAll'){document.querySelectorAll('.rec-party').forEach(b=>b.checked=e.target.checked);refreshRecordCount()}
+ else if(e.target.classList.contains('rec-party'))refreshRecordCount();
+ if(e.target.classList.contains('quality-toggle')){const rule=e.target.dataset.rule;const field=$('qual-'+rule);if(field)field.disabled=!e.target.checked}
+ if(e.target.id==='speed')s.speed=Number(e.target.value.replace('×',''));if(e.target.id==='phoneTarget'){s.phoneScope=e.target.value;openPhone()}if(e.target.id==='phoneCmd'){s.phoneOp=e.target.value;openPhone()}if(e.target.id==='journalFilter')renderControlResults();if(e.target.id==='recordsSort'){s.sort=e.target.value;renderLibrary()}if(e.target.id==='mapFile'){const f=e.target.files?.[0];s.mapImportName=f?.name||'';s.mapImportSize=f?.size||0;s.mapError='';const title=document.querySelector('.map-file-picker .file-name');if(title)title.textContent=s.mapImportName||'Choose an offline map file'}});
+render();
+// Simulated receipt events: only connected parties advance, never infer an offline phone's present backlog.
+setInterval(()=>{for(const [id,d] of Object.entries(progressByParty)){const p=parties.find(x=>x.id===id);if(!p||p.contact!=='Connected'||!d.recent||d.received>=d.total)continue;const advance=Math.min(d.total-d.received,3+Number(id.slice(1))%8);d.received+=advance;d.reportedPending=Math.max(0,d.reportedPending-advance)}updateInspectorTelemetry()},2800);
+</script></body></html>
