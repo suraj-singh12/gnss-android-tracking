@@ -173,7 +173,7 @@ async function stop() {
   await page.waitForSelector(".sos-alert:not(.acknowledged)");
   assert.equal(await page.locator(".sos-alert:not(.acknowledged)").count(), 1);
   assert.equal(
-    await page.locator(".sos-alert button:not(:disabled)").count(),
+    await page.locator(".sos-alert button:not(:disabled)").filter({hasText:"Acknowledge this SOS"}).count(),
     1,
   );
   assert.equal(

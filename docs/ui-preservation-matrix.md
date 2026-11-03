@@ -282,3 +282,14 @@ in `docs/design/issue37/` and the integrated workflow demonstrate actual Command
 fixtures, including populated library, 21-party/20-subset playback, hidden restriction,
 interruption and responsive panel states. They are not pixel-diff baselines or physical
 field acceptance. #34 navigation/Travel Back and #38 packaging remain out of scope.
+
+## Operational modes / Travel Back (#34)
+
+| Capability | Authority / preserved behavior | Regression |
+| --- | --- | --- |
+| Active/paused recording | #27 lifecycle and exclusive browser; Snapshot leaves navigation locked | Existing persisted playback browser scenario now asserts lock then final Stop |
+| Saved playback | #37 frozen source, original visibility, Follow Original, interruption clock | `recording-playback.cjs`, existing Go playback tests |
+| Travel Back | Retained original capture time; existing `Derive` quality/segments/distance | `travel_test.go`, `travel-back.cjs` |
+| Later stored history | Immutable response until manual Refresh View; no Android sync | Frozen-map browser comparison and late-arrival Go test |
+| SOS Locate/Return | Independent LIVE alarm/ACK; suspend/restore paused historical context | Actual receiver SOS in `travel-back.cjs` |
+| Map/panels/themes | Existing renderer, panel sizes and Day/Night tokens; shared transport | Actual application captures in `docs/design/issue34/final-review` |

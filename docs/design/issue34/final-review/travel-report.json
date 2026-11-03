@@ -1,0 +1,8 @@
+{
+  "physical_acceptance": false,
+  "passed": true,
+  "parties": 21,
+  "late_join": true,
+  "manual_refresh": true,
+  "pause_return": true
+}

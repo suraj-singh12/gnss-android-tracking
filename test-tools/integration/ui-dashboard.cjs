@@ -1015,8 +1015,8 @@ async function wait(check) {
   await page.locator("#open-sos").click();
   assert.equal(await page.locator(".sos-alert:not(.acknowledged)").count(), 2);
   await page
-    .locator(".sos-alert button:not(:disabled)")
-    .filter({ hasText: "Locate event observation" })
+    .locator(".sos-alert").filter({hasText:"Charlie"})
+    .getByRole("button",{name:"Locate"}).last()
     .click();
   await page.waitForSelector('[data-layer="located-sos"]');
   assert.equal(

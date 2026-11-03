@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="color-scheme" content="light dark"/>
+<title>GNSS Command Centre | #34 Compact Timeline Preview</title>
+<style>
+:root{--ink:#24343b;--muted:#596970;--line:#d9e2df;--accent:#17654c;--bg:#f3f5f4;--toolbar:#fafcfb;--surface:#fff;--hover:#e9f1ed;--selected:#edf5f0;--danger:#a51621;--danger-bg:#fff0ee;--control:#b2c2bc;--shadow:#142c3a22;font:13px/1.4 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden}body{background:var(--surface);color:var(--ink)}button,input,select{font:inherit}button{border:1px solid var(--control);border-radius:6px;background:var(--surface);color:var(--ink);padding:6px 9px;min-height:32px;font-weight:500;cursor:pointer;white-space:nowrap}button:hover:not(:disabled){background:var(--hover)}button:disabled{opacity:.4;cursor:not-allowed}button:focus-visible,input:focus-visible,select:focus-visible,.party-card:focus-visible{outline:2px solid #338cb2;outline-offset:2px}.primary{background:var(--accent);border-color:var(--accent);color:white;font-weight:700}.primary:hover:not(:disabled){filter:brightness(1.1);background:var(--accent)}[hidden]{display:none!important}
+body.night{--ink:#e4edf0;--muted:#a1b1b9;--line:#385160;--accent:#83caae;--bg:#15252e;--toolbar:#1b2d37;--surface:#1a2a34;--hover:#283e46;--selected:#244139;--danger:#ff9296;--danger-bg:#38252a;--control:#526974;--shadow:#0006;color-scheme:dark}body.night .primary{color:#15252e}
+.app{display:flex;flex-direction:column;height:100vh;height:100dvh;width:100%;min-height:0;overflow:hidden}.head{display:flex;align-items:center;gap:11px;padding:8px 15px;min-height:60px;border-bottom:1px solid var(--line);background:var(--surface);z-index:10}.logo{background:#17654c;color:white;border-radius:8px;width:30px;height:30px;display:grid;place-items:center;font-size:14px;font-weight:800;flex:none}.brand{flex:1;min-width:0}.brand strong{display:block;font-size:16px;font-weight:750;white-space:nowrap;line-height:1.2}.brand small{font-size:11px;color:var(--accent);white-space:nowrap}.head-actions{display:flex;align-items:center;gap:6px}.head-actions button{font-size:12px}.head-actions .sos{border-color:var(--danger);color:var(--danger);font-weight:750}.preview-meta{background:var(--toolbar);border-bottom:1px solid var(--line);color:var(--muted);font-size:11px;padding:5px 15px;display:flex;align-items:center;justify-content:space-between;gap:7px}.preview-meta button{min-height:25px;padding:3px 9px;font-size:11px}.mode-strip{display:flex;align-items:center;justify-content:center;gap:12px;background:var(--surface);border-bottom:1px solid var(--line);padding:7px 12px;min-height:54px;position:relative;z-index:9}.mode-tabs{display:flex;align-items:center;gap:3px;background:var(--toolbar);border:1px solid var(--line);border-radius:7px;padding:3px;min-width:0}.mode-tabs button{border:0;background:transparent;min-height:33px;padding:6px 12px;font-size:12px;font-weight:600;border-radius:5px}.mode-tabs button.active{background:var(--selected);color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}.mode-context{font-size:12px;color:var(--muted);min-width:0}.mode-right{display:flex;gap:6px;flex-shrink:0}.work{display:grid;grid-template-columns:220px minmax(0,1fr) 250px;min-height:0;flex:1;position:relative}.work.no-left{grid-template-columns:0 minmax(0,1fr) 250px}.work.no-right{grid-template-columns:220px minmax(0,1fr) 0}.work.no-left.no-right{grid-template-columns:0 minmax(0,1fr) 0}.side{background:var(--surface);min-width:0;min-height:0;overflow:auto;padding:12px;border-color:var(--line)}.left{grid-column:1;border-right:1px solid var(--line)}.right{grid-column:3;border-left:1px solid var(--line)}.no-left .left,.no-right .right{visibility:hidden;padding:0;overflow:hidden}.side-title{display:flex;align-items:center;gap:8px;justify-content:space-between;margin-bottom:9px}.side-title strong{font-size:15px}.side-title span{font-size:12px;color:var(--muted);margin-left:auto}.x{font-size:18px;padding:3px 7px;min-height:30px}.party-card{border:1px solid var(--line);border-left:3px solid var(--pc,#2867ac);border-radius:7px;background:var(--toolbar);padding:9px 8px;margin:6px 0;font-size:12px;cursor:pointer}.party-card.selected{background:var(--selected);border-color:var(--accent)}.party-card strong{font-size:13px}.party-card p{color:var(--muted);margin:4px 0 0}.party-card .line{display:flex;align-items:center;gap:6px}.party-card .line input{margin-left:auto;width:16px;height:16px;accent-color:#17654c}.readonly{border:1px solid var(--line);border-radius:6px;padding:8px;font-size:12px;color:var(--muted);background:var(--toolbar);margin-bottom:12px}.rtitle{font-size:17px;font-weight:750;margin:0 0 3px}.kv{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line);font-size:12px}.kv span:first-child{color:var(--muted)}.kv span:last-child{text-align:right;overflow-wrap:anywhere}.detail-actions{display:flex;gap:5px;margin-top:13px}.detail-actions button{flex:1;min-width:0}.detail-tag{display:inline-block;border-radius:4px;background:var(--selected);color:var(--accent);padding:4px 6px;font-size:11px;font-weight:650}
+.map{grid-column:2;min-width:0;min-height:0;position:relative;overflow:hidden;background:var(--bg)}svg.map-canvas{width:100%;height:100%;display:block;touch-action:none;cursor:grab}svg.map-canvas.grabbing{cursor:grabbing}.terrain{fill:none;stroke:var(--line);stroke-width:2}.maplabel{fill:var(--muted);font-size:13px;font-weight:550;opacity:.7}.maptop{position:absolute;left:13px;top:14px;font-size:12px;color:var(--muted);pointer-events:none}.maptools{position:absolute;right:10px;top:9px;display:flex;align-items:center;gap:5px;z-index:3;max-width:calc(100% - 20px)}.maptools button{font-size:12px;padding:6px 9px;background:var(--surface)}.maptools button.active{border-color:var(--accent);background:var(--selected)}.left-restore{position:absolute;left:0;top:10px;z-index:4;border-radius:0 6px 6px 0}.map-desc{position:absolute;top:54px;left:13px;right:13px;font-size:12px;color:var(--muted);pointer-events:none}.pending{position:absolute;top:83px;left:13px;max-width:min(420px,calc(100% - 26px));background:var(--surface);border:1px solid var(--control);border-radius:6px;padding:9px 11px;z-index:4;box-shadow:0 3px 8px #0001;font-size:12px}.pending b{color:var(--accent)}.layer-panel{position:absolute;right:10px;top:49px;width:245px;max-width:calc(100% - 20px);background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:12px;z-index:7;box-shadow:0 9px 23px var(--shadow)}.layer-panel label{display:flex;gap:7px;padding:8px 0;border-bottom:1px solid var(--line);font-size:12px}.layer-panel input{accent-color:#17654c}.map-credit{position:absolute;left:11px;bottom:92px;color:var(--muted);font-size:11px;max-width:80%}.rail{position:absolute;left:9px;right:9px;bottom:8px;z-index:3;background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:10px 12px;box-shadow:0 2px 4px #00000008;display:grid;gap:9px}.rail-top{display:flex;align-items:center;justify-content:space-between;gap:7px;min-width:0}.rail-top strong{font-size:12px}.rail-top .authority{color:var(--muted);font-size:11px;min-width:0}.rail-bottom{display:flex;gap:8px;align-items:center;min-width:0;flex-wrap:nowrap}.seek{flex:1;min-width:30px;accent-color:#17654c;cursor:pointer}.elapsed{font-size:11px;white-space:nowrap;color:var(--muted)}.play{background:var(--accent);color:var(--surface);border:1px solid var(--accent);width:36px;padding:5px;flex:none;font-size:16px}.speed{border:1px solid var(--control);color:var(--ink);background:var(--surface);border-radius:5px;padding:6px 3px;max-width:64px;font-size:12px}.time-inputs{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.time-inputs label{display:flex;gap:5px;align-items:center;font-size:11px;color:var(--muted)}.time-inputs input{border:1px solid var(--line);border-radius:5px;padding:4px 5px;background:var(--surface);color:var(--ink);font-size:11px;max-width:180px}.rail-top .refresh{color:var(--accent);border-color:var(--accent);font-size:11px;min-height:29px}.recording-status{color:var(--muted);font-size:11px}.rec-actions{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:8px;align-items:center}.rec-buttons{grid-column:2;display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:6px}.rec-actions .recording-status{grid-column:3;min-width:0}.rec-actions button{font-size:12px}.ribbon{position:absolute;right:12px;bottom:96px;z-index:3;font-size:11px;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:5px;padding:5px 7px}.sos-banner{position:absolute;right:14px;top:89px;z-index:5;background:var(--danger-bg);border:1px solid var(--danger);border-left:4px solid var(--danger);padding:10px;border-radius:6px;max-width:280px;box-shadow:0 4px 14px var(--shadow)}.sos-banner strong{font-size:12px;color:var(--danger)}.sos-banner p{margin:5px 0 8px;font-size:12px}.sos-banner button{font-size:12px;margin-right:4px}.frozen-chip{font-size:11px;color:var(--muted);margin:4px 0}.foot{min-height:25px;padding:4px 12px;color:var(--muted);background:var(--toolbar);border-top:1px solid var(--line);font-size:11px}.tooltip{position:absolute;left:50%;transform:translateX(-50%);top:160px;z-index:15;background:var(--ink);color:var(--surface);padding:8px 12px;border-radius:6px;font-size:12px;box-shadow:0 4px 14px var(--shadow);max-width:80%;text-align:center;pointer-events:none}.overlay{position:absolute;inset:0;background:#0005;display:flex;align-items:center;justify-content:center;padding:15px;z-index:20}.dialog{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:19px;max-width:400px;width:100%;box-shadow:0 14px 34px var(--shadow)}.dialog h3{margin:0 0 9px;font-size:16px}.dialog p{font-size:13px;color:var(--muted)}.dialog-actions{display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap;margin-top:16px}.mode-bottom{position:absolute;right:13px;bottom:158px;font-size:11px;padding:5px 8px;background:var(--surface);color:var(--muted);border:1px solid var(--line);border-radius:5px;z-index:2}.map-point{cursor:pointer}.map-point text{fill:var(--ink);paint-order:stroke;stroke:var(--bg);stroke-width:4;stroke-linejoin:round;font-size:12px}.map-point .ring{fill:none;stroke:var(--accent);stroke-width:2;stroke-dasharray:3 2}
+@media(max-width:1160px){.mode-context{display:none}.maptop{display:none}.map-desc{top:56px}.head-actions button{font-size:11px}}
+@media(max-width:950px){.brand strong{font-size:14px}.work,.work.no-left,.work.no-right,.work.no-left.no-right{display:block}.map{height:100%;width:100%}.left,.right{position:absolute;top:64px;max-height:min(52dvh,calc(100% - 190px));width:320px;max-width:72vw;box-shadow:0 8px 24px var(--shadow);z-index:6}.left{left:0}.right{right:0}.no-left .left,.no-right .right{display:none}.ribbon{bottom:145px}.map-credit{bottom:132px}}
+@media(max-width:1050px){.rec-actions{grid-template-columns:minmax(0,1fr)}.rec-buttons,.rec-actions .recording-status{grid-column:1;justify-self:center;text-align:center}}
+@media(max-width:620px){.head{gap:5px;padding:6px;min-height:55px}.brand strong{font-size:12px}.brand small{font-size:10px}.head-actions{gap:3px}.head-actions button{font-size:10px;padding:5px}.preview-meta{font-size:9px;padding:5px 7px}.preview-meta button{font-size:10px;padding:3px 5px}.mode-strip{justify-content:flex-start;overflow-x:auto;padding:6px;gap:5px;min-height:50px}.mode-tabs{flex:none}.mode-tabs button{padding:5px 7px;font-size:10px}.mode-right button{padding:5px 6px;font-size:10px}.left,.right{max-height:42dvh;width:min(280px,72vw);top:55px;padding:8px}.party-card{padding:6px;margin:4px 0}.maptools{gap:3px;right:6px;top:7px}.maptools button{padding:4px 6px;font-size:10px;min-height:30px}.map-desc{top:52px;font-size:10px;left:8px}.pending{top:82px;left:8px;font-size:10px;padding:7px;max-width:calc(100% - 16px)}.sos-banner{top:112px;right:7px;max-width:195px}.rail{left:5px;right:5px;bottom:5px;padding:8px;gap:6px}.rail-top{flex-wrap:wrap}.rail-bottom{gap:4px}.elapsed{font-size:10px}.time-inputs{gap:4px}.time-inputs input{max-width:142px}.time-inputs label{font-size:10px}.mode-bottom{bottom:195px;right:7px}.map-credit{bottom:188px;font-size:10px}.ribbon{display:none}.foot{font-size:9px}.maptools #focus{display:none}}
+@media(max-height:530px){.mode-bottom,.map-credit{display:none}.rail{padding:6px}.side{font-size:11px}}
+
+/* Issue #34 refined media timeline: centred transport, visual rhythm and
+   disclosure-only diagnostics, without changing the live recording controls. */
+.demo-actions{display:flex;gap:6px;align-items:center;flex-shrink:0}
+.demo-actions button:first-child{border-style:dashed;opacity:.83}
+.rail:has(.scrub-row){gap:8px;padding:12px 15px 10px}
+.rail .media-heading{align-items:center;gap:12px;flex-wrap:wrap}
+.media-heading-text{min-width:0}
+.media-heading .current-time{display:block;font-size:14px;line-height:1.25;letter-spacing:-.01em;font-weight:750}
+.media-heading .time-authority{font-weight:650}
+.media-heading .authority{font-size:11px;margin-top:3px}
+.media-heading .refresh{display:inline-flex;gap:7px;align-items:center;justify-content:center;min-width:132px;min-height:37px;padding:7px 12px;background:var(--surface);color:var(--accent);font-weight:700;font-size:12px;border:1px solid var(--control);border-radius:7px;white-space:nowrap}
+.media-heading .refresh.has-new-data{border-color:var(--accent);background:var(--selected)}
+.new-data-dot{width:7px;height:7px;border-radius:50%;background:var(--accent)}
+.range-controls{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;min-width:0}
+.range-dates{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0}
+.date-arrow{color:var(--muted);font-size:15px}
+.date-field{display:flex;gap:7px;align-items:center;color:var(--muted);font-size:11px;min-width:0}
+.date-field input{width:184px;min-width:0;max-width:none;min-height:37px;padding:6px 8px;border:1px solid var(--line);background:var(--toolbar);border-radius:7px;color:var(--ink);font:inherit;font-size:12px;line-height:1.2;color-scheme:light}
+body.night .date-field input{color-scheme:dark}
+.observation-menu{position:relative;margin:0;flex:none}
+.observation-menu summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:9px;border:1px solid var(--line);border-radius:7px;background:var(--toolbar);color:var(--ink);font-weight:650;font-size:11px;padding:8px 10px;min-height:37px;min-width:126px;cursor:pointer}
+.observation-menu summary::-webkit-details-marker{display:none}
+.observation-menu summary span{color:var(--muted);font-weight:450;font-size:17px;line-height:0}
+.observation-options{position:absolute;top:calc(100% + 5px);right:0;background:var(--surface);border:1px solid var(--line);border-radius:8px;width:min(250px,78vw);box-shadow:0 8px 24px var(--shadow);z-index:16;padding:5px}
+.observation-options button{border:none;border-radius:5px;width:100%;display:flex;align-items:center;justify-content:space-between;text-align:left;padding:10px 9px;white-space:normal;font-size:12px}
+.observation-options button[aria-pressed=true]{color:var(--accent);background:var(--selected);font-weight:700}
+.observation-options button small{display:block;font-size:10px;color:var(--muted);font-weight:450}
+.observation-options p{padding:6px 9px 3px;font-size:10px;color:var(--muted);margin:0}
+.scrub-row{display:flex;align-items:center;gap:12px;min-width:0;padding:4px 0 2px}
+.scrub-endpoint{font-size:11px;color:var(--muted);font-weight:550;white-space:nowrap;min-width:46px}
+.scrub-endpoint:last-child{text-align:right}
+.rail .scrub-row .seek{height:6px;min-width:30px;flex:1;margin:0;background:linear-gradient(to right,var(--accent) 0%,var(--accent) var(--progress,0%),var(--line) var(--progress,0%),var(--line) 100%);border-radius:20px;appearance:none;-webkit-appearance:none;outline-offset:7px;cursor:pointer}
+.rail .scrub-row .seek::-webkit-slider-runnable-track{height:6px;border:none;border-radius:20px;background:transparent}
+.rail .scrub-row .seek::-moz-range-track{height:6px;border:none;border-radius:20px;background:transparent}
+.rail .scrub-row .seek::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:17px;height:17px;border-radius:50%;border:3px solid var(--surface);background:var(--accent);box-shadow:0 0 0 1px var(--control),0 1px 4px var(--shadow);margin-top:-6px}
+.rail .scrub-row .seek::-moz-range-thumb{width:12px;height:12px;border:3px solid var(--surface);border-radius:50%;background:var(--accent);box-shadow:0 0 0 1px var(--control)}
+.transport-row{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:8px;min-width:0}
+.transport-main{display:flex;align-items:center;justify-content:center;gap:9px}
+.rail .transport-main button{display:grid;place-items:center;padding:0;flex:none}
+.rail .transport-main .skip{border:1px solid transparent;border-radius:7px;min-width:38px;width:38px;height:38px;color:var(--ink);background:transparent}
+.rail .transport-main .skip:hover{border-color:var(--line);background:var(--hover)}
+.transport-main .skip svg{fill:currentColor;stroke:currentColor;stroke-width:1;stroke-linejoin:round}
+.rail .transport-main .play{width:46px;height:46px;min-width:46px;min-height:46px;background:#17654c;color:white;border:1px solid #17654c;border-radius:50%;box-shadow:0 2px 5px #00000015}
+.rail .transport-main .play svg{fill:currentColor;stroke:currentColor;stroke-width:2.7;stroke-linecap:round;stroke-linejoin:round}
+.rail .transport-main .play:hover{background:#124e3a;color:white}
+.transport-settings{justify-self:end;min-width:0}
+.speed-label{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted)}
+.rail .speed-label .speed{width:85px;max-width:none;min-width:85px;min-height:39px;padding:7px 9px;background:var(--toolbar);border:1px solid var(--line);border-radius:7px;color:var(--ink);font-weight:700;font-size:12px}
+.follow-switch{display:flex;gap:7px;align-items:center;font-size:12px;font-weight:650}
+.follow-switch input{accent-color:#17654c;width:16px;height:16px}
+@media(max-width:850px){
+ .range-controls{gap:7px}
+ .range-dates{gap:6px}
+ .date-field input{width:166px}
+ .observation-menu summary{min-width:120px}
+}
+@media(max-width:620px){
+ .demo-actions{gap:3px}
+ .demo-actions button{font-size:9px;padding:3px 4px}
+ .preview-meta span{max-width:45%;font-size:9px;line-height:1.2}
+ .rail:has(.scrub-row){padding:10px 9px 8px;gap:8px}
+ .media-heading .current-time{font-size:12px}
+ .media-heading .authority{font-size:10px}
+ .media-heading .refresh{min-width:0;min-height:32px;padding:6px 9px;font-size:10px}
+ .range-dates{width:100%;flex-wrap:nowrap;gap:4px}
+ .date-field{gap:3px;min-width:0;flex:1}
+ .date-field input{width:100%;min-width:0;max-width:none;font-size:10px;padding:6px 3px;min-height:34px}
+ .date-arrow{font-size:12px}
+ .observation-menu summary{min-width:0;min-height:31px;padding:5px 8px;font-size:10px}
+ .scrub-row{gap:7px}
+ .scrub-endpoint{min-width:37px;font-size:10px}
+ .transport-main{gap:4px}
+ .rail .transport-main .skip{width:34px;min-width:34px;height:34px}
+ .rail .transport-main .play{width:42px;min-width:42px;min-height:42px;height:42px}
+ .speed-label{gap:4px;font-size:10px}
+ .rail .speed-label .speed{width:67px;min-width:67px;min-height:36px;font-size:11px;padding:5px}
+}
+@media(max-width:380px){.speed-label>span{display:none}.date-arrow{display:none}.date-field input{font-size:9px}.transport-main{gap:2px}}
+
+
+/* #34 compact operator timeline: controls only, details on demand. */
+/* The range popover rises above panels without changing the map stack order. */
+.rail:has(.timeline-range[open]){z-index:15}
+.rail:has(.scrub-row){padding:8px 12px 7px;gap:4px}
+.rail .media-heading{min-height:30px;gap:9px;flex-wrap:nowrap}
+.media-heading .current-time{font-size:12px;line-height:1.15;font-weight:750;white-space:nowrap}
+.media-heading .authority{display:none}
+.timeline-heading-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;min-width:0}
+.timeline-range{position:relative;min-width:0;z-index:12}
+.timeline-range>summary{display:flex;align-items:center;gap:7px;max-width:100%;border:1px solid var(--line);border-radius:6px;padding:5px 9px;background:var(--toolbar);color:var(--ink);cursor:pointer;font-size:11px;font-weight:600;min-height:29px;white-space:nowrap;list-style:none}
+.timeline-range>summary::-webkit-details-marker{display:none}
+.timeline-range>summary:hover{background:var(--hover)}
+.timeline-range[open]>summary{border-color:var(--accent)}
+.timeline-range .date-glyph{color:var(--muted);flex:none}
+.timeline-popover{position:absolute;right:0;bottom:calc(100% + 7px);z-index:30;width:min(304px,calc(100vw - 32px));padding:12px;background:var(--surface);border:1px solid var(--line);border-radius:8px;box-shadow:0 12px 32px var(--shadow);font-size:12px}
+.timeline-popover h3{font-size:12px;margin:0 0 9px;font-weight:750}
+.timeline-popover .range-form{display:grid;gap:9px}
+.timeline-popover .range-form label{display:grid;gap:3px;color:var(--muted);font-size:11px}
+.timeline-popover .range-form input{width:100%;min-width:0;height:34px;border:1px solid var(--control);border-radius:6px;padding:4px 7px;font-size:12px;color:var(--ink);background:var(--surface);color-scheme:light}
+body.night .timeline-popover .range-form input{color-scheme:dark}
+.timeline-popover .range-divider{height:1px;background:var(--line);margin:11px 0}
+.timeline-popover .filter-title{color:var(--muted);font-size:11px;margin:0 0 6px}
+.timeline-popover .filter-pills{display:flex;gap:5px}
+.timeline-popover .filter-pills button{flex:1;min-width:0;white-space:normal;padding:5px 7px;font-size:11px;min-height:32px}
+.timeline-popover .filter-pills button[aria-pressed=true]{border-color:var(--accent);background:var(--selected);color:var(--accent);font-weight:700}
+.timeline-popover small{display:block;font-size:10px;line-height:1.35;color:var(--muted);margin-top:8px}
+.rail .media-heading .refresh{min-width:0;min-height:29px;padding:5px 9px;font-size:11px;border-radius:6px;font-weight:650}
+.rail .scrub-row{gap:9px;padding:3px 0 2px;min-height:22px}
+.rail .scrub-endpoint{font-size:10px;min-width:37px}
+.rail .transport-row{gap:4px;min-height:38px}
+.rail .transport-main{gap:5px}
+.rail .transport-main .skip{min-width:31px;width:31px;height:31px}
+.rail .transport-main .play{width:37px;height:37px;min-width:37px;min-height:37px}
+.rail .transport-main .play svg{width:19px;height:19px}
+.rail .speed-label{gap:5px}
+.rail .speed-label>span{font-size:10px}
+.rail .speed-label .speed{width:72px;min-width:72px;min-height:31px;padding:4px 7px;font-size:11px;border-radius:6px}
+.follow-switch{font-size:11px;gap:5px;white-space:nowrap}
+.follow-switch input{width:14px;height:14px}
+@media(max-width:620px){
+ .rail:has(.scrub-row){padding:7px 8px 6px;gap:3px}
+ .rail .media-heading{gap:4px;min-height:28px}
+ .media-heading .current-time{font-size:11px}
+ .timeline-heading-actions{gap:4px}
+ .timeline-range>summary{font-size:10px;padding:4px 6px;min-height:28px;gap:4px}
+ .rail .media-heading .refresh{font-size:10px;min-height:28px;padding:4px 7px}
+ .rail .scrub-row{gap:5px}
+ .rail .scrub-endpoint{min-width:32px;font-size:9px}
+ .rail .transport-main .skip{min-width:29px;width:29px;height:29px}
+ .rail .transport-main .play{width:35px;height:35px;min-width:35px;min-height:35px}
+ .rail .speed-label>span{display:none}
+ .rail .speed-label .speed{width:63px;min-width:63px;font-size:10px;padding:4px}
+ .timeline-popover{right:-40px;width:min(300px,calc(100vw - 22px))}
+ .follow-switch{font-size:10px}
+}
+@media(max-width:370px){.timeline-range .date-glyph{display:none}.timeline-range>summary{font-size:9px}.media-heading .current-time{font-size:10px}}
+
+
+/* Preview-only simulations are discoverable, never part of Command controls. */
+.demo-scenarios{position:relative;z-index:25}
+.demo-scenarios>summary{list-style:none;cursor:pointer;color:var(--muted);font-size:11px;padding:3px 7px;min-height:25px;border:1px solid var(--line);border-radius:6px;background:var(--surface)}
+.demo-scenarios>summary::-webkit-details-marker{display:none}
+.demo-scenarios>summary:hover{background:var(--hover)}
+.demo-scenarios-options{position:absolute;top:calc(100% + 5px);right:0;z-index:26;padding:6px;display:grid;gap:5px;min-width:160px;background:var(--surface);border:1px solid var(--line);border-radius:7px;box-shadow:0 8px 20px var(--shadow)}
+.demo-scenarios-options button{font-size:11px;text-align:left}
+@media(max-width:620px){.demo-scenarios>summary{font-size:10px;padding:3px 5px}.preview-meta span{max-width:none}}
+
+</style>
+</head>
+<body>
+<div class="app" id="app">
+<header class="head"><span class="logo">G</span><div class="brand"><strong>GNSS Command Centre</strong><small>● Command Connected · 5/5 Parties</small></div><div class="head-actions"><button id="theme">View: Day</button><button id="audio">SOS alarm: ready</button><button class="sos" id="sosHeader">SOS 0</button></div></header>
+<div class="preview-meta"><span>ISSUE #34 · DESIGN PREVIEW · SIMULATED DATA</span><details class="demo-scenarios"><summary>Demo scenarios</summary><div class="demo-scenarios-options"><button data-act="incoming" title="Preview only: simulate GNSS arriving during Travel Back">Simulate late GNSS</button><button id="demoSOS">Trigger SOS</button></div></details></div>
+<div class="mode-strip"><div class="mode-tabs" role="group" aria-label="Operational mode"><button data-mode="live">LIVE</button><button data-mode="rec">RECORDING LIVE</button><button data-mode="saved">VIEW RECORDING</button><button data-mode="travel" class="active">TRAVEL BACK</button></div><span class="mode-context" id="context">Capture-time reconstruction</span><div class="mode-right"><button id="exit" hidden>Exit → LIVE</button><button id="back" hidden>Go Back</button></div></div>
+<div class="work" id="work">
+<aside class="side left" aria-label="Parties"><div class="side-title"><strong>Parties</strong><span>5 / 5</span><button id="collapse" class="x" aria-label="Collapse Parties">‹</button></div><div id="parties"></div></aside>
+<main class="map" aria-label="GNSS map workspace"><svg id="map" class="map-canvas" viewBox="0 0 920 620" tabindex="0" aria-label="Simulated GNSS map">
+<g id="scene"><rect x="-1000" y="-1000" width="3000" height="2600" fill="var(--bg)"/><g id="terrain" hidden><path class="terrain" d="M-100 170Q175 80 315 180T610 195T1150 135M-100 190Q175 100 315 200T610 215T1150 155M-100 210Q175 120 315 220T610 235T1150 175M-100 500Q175 400 395 530T810 450T1150 520M-100 518Q175 418 395 548T810 468T1150 538"/><path class="terrain" d="M80 -100L225 170L462 400L820 740"/><text class="maplabel" x="190" y="180">NORTH RIDGE</text><text class="maplabel" x="640" y="490">LOWER VALLEY</text></g><g id="tracks"></g><g id="dots"></g></g></svg>
+<button id="restore" class="left-restore" hidden aria-label="Restore Parties">›</button><div class="maptop">N ↑ <span id="mapLabel">Original GNSS history · captured positions</span></div>
+<div class="maptools"><button id="plus" aria-label="Zoom in">+</button><button id="minus" aria-label="Zoom out">−</button><button id="fit">Fit parties</button><button id="focus">Focus selected</button><button id="layersButton" aria-expanded="false">Layers</button></div>
+<div class="map-desc" id="mapDesc">Chronological original fixes · qualified geometry · genuine gaps retained</div><div class="pending" id="pending" hidden></div><div class="sos-banner" id="sosBanner" hidden></div>
+<section class="layer-panel" id="layers" hidden aria-label="Layers panel"><div class="side-title"><strong>Layers</strong><button data-act="layers-close" class="x" aria-label="Close Layers">×</button></div><p style="font-size:12px;color:var(--muted)">Vector features remain visible. Toggles use local data only.</p><label><input type="checkbox" id="hill" checked/> Hillshade</label><label><input type="checkbox" id="contour" checked/> Contours</label><label><input type="checkbox" id="elev"/> Elevation</label></section>
+<div class="mode-bottom" id="modeTag">TRAVEL BACK · Capture time</div><div class="map-credit">● Original GNSS &nbsp; — Qualified history &nbsp; Gaps split route sections</div><section class="rail" id="rail" aria-label="Shared timeline"></section>
+</main><aside class="side right" aria-label="Selected party details"><div class="side-title"><strong>Selected party</strong><button id="closeDetails" class="x" aria-label="Close Details">×</button></div><div id="details"></div></aside>
+</div><div class="foot">Offline geographic coordinates · Phone tracking and live SOS continue independently of historical viewing.</div>
+<div class="overlay" id="overlay" hidden><div class="dialog" id="dialog" role="dialog" aria-modal="true" aria-label="Recording action"></div></div><div class="tooltip" id="toast" hidden role="status"></div>
+</div>
+<script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+const units=[{id:'Alpha',color:'#2867ac',x:180,y:443,team:'North team',lat:'28.61390',lon:'77.20900',accuracy:'±4 m',status:'Fresh'}, {id:'Bravo',color:'#9256ae',x:340,y:343,team:'River team',lat:'28.61620',lon:'77.21171',accuracy:'±7 m',status:'Fresh'},{id:'Charlie',color:'#b35c2e',x:497,y:253,team:'East team',lat:'28.61931',lon:'77.21428',accuracy:'±3 m',status:'Fresh'},{id:'Delta',color:'#277e83',x:675,y:342,team:'Ridge team',lat:'28.61012',lon:'77.22005',accuracy:'±5 m',status:'Fresh'},{id:'Echo',color:'#9b5685',x:799,y:210,team:'West team',lat:'28.61816',lon:'77.22349',accuracy:'Unknown',status:'Last known'}];
+const s={mode:'travel',selected:'Charlie',left:true,right:innerWidth>950,night:false,layers:false,terrain:false,playing:false,progress:42,speed:1,pending:false,additional:false,record:'off',recordMode:'from-now',follow:true,back:null,sos:false,acked:false,zoom:1,cx:460,cy:310,visibility:new Set(units.map(u=>u.id)),useAll:false,audio:true,from:'2026-10-28T09:00',to:'2026-10-28T10:00'};
+let toastTimer=null,playTimer=null;const chosen=()=>units.find(u=>u.id===s.selected)||units[0];const clock=v=>{const start=new Date(s.from).getTime(),end=new Date(s.to).getTime();if(!Number.isFinite(start)||!Number.isFinite(end)||end<=start)return '—';return dateTimeLabel(new Date(start+(end-start)*Math.max(0,Math.min(100,v))/100).toISOString())};
+function toast(v){$('toast').textContent=v;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,3000)}
+function viewport(){const w=920/s.zoom,h=620/s.zoom;$('map').setAttribute('viewBox',`${s.cx-w/2} ${s.cy-h/2} ${w} ${h}`)}
+function stopPlayback(){s.playing=false;if(playTimer)clearInterval(playTimer);playTimer=null}
+function animate(){if(playTimer)clearInterval(playTimer);playTimer=null;if(!s.playing)return;playTimer=setInterval(()=>{if(!['travel','saved'].includes(s.mode)){stopPlayback();return}s.progress=Math.min(100,s.progress+(s.speed===1?1:s.speed===5?4:8));if(s.progress>=100)stopPlayback();render()},480)}
+function selectMode(mode){if(['saved','travel'].includes(mode)&&['active','paused'].includes(s.record)){toast('Stop or discard the ongoing recording before viewing history');return}if(mode==='rec'&&s.record==='off'){recordDialog();return}stopPlayback();s.mode=mode;if(mode==='travel'){s.progress=42;s.follow=false}else if(mode==='saved'){s.progress=42;s.follow=true}if(innerWidth<=950){s.left=false;s.right=false}s.layers=false;render()}
+function recordDialog(){$('dialog').innerHTML='<h3>Start Recording</h3><p>Capture what this Command browser actually displays, beginning when you press Start. From Beginning does not backdate presentation evidence.</p><div class="dialog-actions"><button data-act="dialog-close">Cancel</button><button data-act="record-beginning">From Beginning</button><button class="primary" data-act="record-now">From Now</button></div>';$('overlay').hidden=false}
+function stopDialog(){$('dialog').innerHTML='<h3>Recording stopped</h3><p>Stop is final. Save an immutable snapshot or discard this unsaved recording. Original GNSS remains stored.</p><div class="dialog-actions"><button data-act="rec-discard">Discard</button><button class="primary" data-act="rec-save">Save</button></div>';$('overlay').hidden=false}
+function refresh(){if(s.mode!=='travel')return;if(!s.pending){toast('No newly received original GNSS to include');return}s.pending=false;s.additional=true;render();toast('Historical snapshot refreshed · selection and playhead retained')}
+function renderMap(){const hist=['travel','saved'].includes(s.mode),p=Math.min(1,s.progress/100);$('terrain').hidden=!s.terrain;$('mapLabel').textContent=s.mode==='travel'?'Original GNSS history · capture time':s.mode==='saved'?'Frozen display · presentation time':'Blank canvas · live locations';$('mapDesc').textContent=s.mode==='travel'?'Qualified original fixes · no interpolation across gaps':s.mode==='saved'?'Original recorded viewport · read-only evidence':'Live positions · source freshness shown separately from contact';let routes='';if(hist){for(const [i,u] of units.entries()){if(!s.visibility.has(u.id))continue;const x=u.x-95,y=u.y+50,len=95*p*(i%2===0?1:.8);routes+=`<path d="M ${x} ${y} L ${x+len*.30} ${y-len*.18} L ${x+len*.57} ${y-len*.30} M ${x+len*.70} ${y-len*.38} L ${x+len} ${y-len*.52}" fill="none" stroke="${u.color}" stroke-width="2.7" opacity=".65" stroke-linecap="round"/>`;}if(s.additional&&s.mode==='travel')routes+='<path d="M 410 305 L 442 289 L 463 286" fill="none" stroke="#b35c2e" stroke-width="2.7"/>'}$('tracks').innerHTML=routes;let dots='';for(const u of units){if(!s.visibility.has(u.id))continue;const active=u.id===s.selected,x=hist?u.x-90+90*p:u.x,y=hist?u.y+45-45*p:u.y;dots+=`<g class="map-point" data-party="${u.id}" tabindex="0" role="button" aria-label="Select ${u.id}" transform="translate(${x},${y})">${active?'<circle class="ring" r="21"/>':''}<circle r="${active?8:6}" fill="${u.color}" stroke="var(--bg)" stroke-width="2"/><text x="12" y="-11">${u.id}${u.id==='Echo'?' · last known':''}</text></g>`}$('dots').innerHTML=dots;$('modeTag').textContent=({live:'LIVE · Latest positions',rec:'RECORDING LIVE · Presentation time',saved:'VIEWING RECORDING · Presentation time',travel:'TRAVEL BACK · Capture time'})[s.mode];const pending=$('pending');if(s.mode==='travel'&&s.pending){pending.hidden=false;pending.innerHTML='<b>New stored GNSS available</b><div>Historical view is unchanged. Use Refresh View to include it.</div>'}else if(s.mode==='saved'){pending.hidden=false;pending.innerHTML='<b>Frozen display</b><div>Original recorded viewport · read-only evidence</div><div style="font-size:11px;color:var(--muted)">Presentation unverified at this time · evidence remains inspectable</div>'}else{pending.hidden=true;pending.textContent=''}}
+function renderParties(){$('parties').innerHTML=units.map(u=>`<article class="party-card ${u.id===s.selected?'selected':''}" data-party="${u.id}" tabindex="0" role="button" style="--pc:${u.color}"><div class="line"><span style="color:${u.color}">●</span><strong>${u.id}</strong><input data-check="${u.id}" type="checkbox" ${s.visibility.has(u.id)?'checked':''} aria-label="Show ${u.id}"/></div><p>${u.team} · ${s.mode==='saved'?'Read only':s.mode==='travel'?'Original history':u.status}</p><p>${s.mode==='travel'?'Observed '+clock(s.progress):s.mode==='saved'?'Displayed at 12:15':'Command connected'}${u.id==='Echo'?' · Stale':''}</p></article>`).join('');$('work').classList.toggle('no-left',!s.left);$('work').classList.toggle('no-right',!s.right);$('restore').hidden=s.left}
+function renderDetails(){const u=chosen(),hist=['travel','saved'].includes(s.mode);$('details').innerHTML=`<div class="readonly">${s.mode==='travel'?'Original GNSS · READ ONLY':s.mode==='saved'?'Historical · READ ONLY':s.mode==='rec'?'Live view · recording':'Live party state'}</div><div class="rtitle">${u.id}</div><div style="color:var(--muted);font-size:12px">${u.team}</div><div style="margin:12px 0"><span class="detail-tag">${s.mode==='travel'?'Capture time '+clock(s.progress):s.mode==='saved'?'Displayed at 12:15:'+String(Math.round(s.progress*.6)).padStart(2,'0'):u.status}</span></div><div class="kv"><span>Position</span><span>${u.lat}, ${u.lon}</span></div><div class="kv"><span>Accuracy</span><span>${u.accuracy}</span></div><div class="kv"><span>${hist?'Qualified distance':'Travelled distance'}</span><span>${hist?(s.progress*.037).toFixed(1):'3.7'} km</span></div><div class="kv"><span>${s.mode==='saved'?'Presentation time':s.mode==='travel'?'Original observation':'Last observed'}</span><span>${s.mode==='saved'?'12:15:'+String(Math.round(s.progress*.6)).padStart(2,'0'):clock(s.progress)}</span></div>${s.mode==='travel'?'<div class="kv"><span>History continuity</span><span>2 segments · 1 genuine gap</span></div><div class="kv"><span>Quality</span><span>Qualified fixes</span></div>':''}${s.mode==='saved'?'<div class="kv"><span>Original visibility</span><span>Retained</span></div>':''}<div class="detail-actions"><button data-act="focus">Focus</button><button data-act="inspect">Inspect</button></div>${hist?'<p style="color:var(--muted);font-size:11px;margin-top:13px">Historical inspection cannot change LIVE tracking, quality decisions, or SOS.</p>':''}`}
+function dateTimeLabel(value){
+ const d=new Date(value);if(Number.isNaN(d.getTime()))return '—';
+ return d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit',hour12:false});
+}
+function rangeLabel(){
+ const d=new Date(s.from);
+ const date=Number.isNaN(d.getTime())?'Select range':d.toLocaleDateString(undefined,{day:'numeric',month:'short'});
+ return `${date} · ${dateTimeLabel(s.from)}–${dateTimeLabel(s.to)}`;
+}
+function renderRail(){
+ const travel=s.mode==='travel',saved=s.mode==='saved';
+ if(travel||saved){
+  const current=travel?clock(s.progress):'12:15:'+String(Math.round(s.progress*.6)).padStart(2,'0');
+  const timelineStart=travel?dateTimeLabel(s.from):'12:15';
+  const timelineEnd=travel?dateTimeLabel(s.to):'12:16';
+  const speedOptions=[1,5,20].map(v=>`<option value="${v}" ${s.speed===v?'selected':''}>${v}×</option>`).join('');
+  const priorRangeOpen=$('rail').querySelector('.timeline-range')?.open||false;
+  const range=travel?`<details class="timeline-range" ${priorRangeOpen?'open':''}>
+    <summary aria-label="Adjust Travel Back range and observation filters"><span class="date-glyph" aria-hidden="true">◷</span>${rangeLabel()}</summary>
+    <div class="timeline-popover">
+      <h3>History view</h3>
+      <div class="range-form"><label>From<input id="from" type="datetime-local" value="${s.from}" aria-label="Travel Back start"/></label><label>To<input id="to" type="datetime-local" value="${s.to}" aria-label="Travel Back end"/></label></div>
+      <div class="range-divider"></div>
+      <div class="filter-title">Observations</div>
+      <div class="filter-pills" role="group" aria-label="Historical observations"><button data-act="filter-qualified" aria-pressed="${!s.useAll}">Qualified</button><button data-act="filter-raw" aria-pressed="${s.useAll}">All · diagnostics</button></div>
+      <small>Diagnostic observations never contribute to qualified distance. This only changes the view.</small>
+    </div>
+   </details>`:'';
+  const actions=travel?`${range}<button class="refresh ${s.pending?'has-new-data':''}" data-act="refresh" title="Reload already stored GNSS, without contacting phones">${s.pending?'<span class="new-data-dot" aria-hidden="true"></span>':''}<span aria-hidden="true">↻</span> Refresh</button>`:
+   `<label class="follow-switch"><input type="checkbox" id="follow" ${s.follow?'checked':''}/> Follow Original</label>`;
+  $('rail').innerHTML=`<div class="rail-top media-heading"><strong class="current-time">${current} <span class="time-authority">· ${travel?'Capture':'Presentation'} time</span></strong><div class="timeline-heading-actions">${actions}</div></div>
+    <div class="scrub-row"><span class="scrub-endpoint">${timelineStart}</span><input class="seek" id="seek" style="--progress:${s.progress}%" type="range" min="0" max="100" value="${s.progress}" step="1" aria-label="${travel?'Capture-time':'Presentation-time'} timeline"/><span class="scrub-endpoint">${timelineEnd}</span></div>
+    <div class="transport-row"><span class="transport-spacer" aria-hidden="true"></span><div class="transport-main" role="group" aria-label="Playback controls"><button class="skip" data-act="first" aria-label="Beginning" title="Go to beginning"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M5 5v14M18 6l-10 6 10 6V6z"/></svg></button><button data-act="play" class="play" aria-label="${s.playing?'Pause':'Play'}" title="${s.playing?'Pause':'Play'}">${s.playing?'<svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg>':'<svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path d="M8 4.7l11 7.3-11 7.3V4.7z"/></svg>'}</button><button class="skip" data-act="last" aria-label="End" title="Go to end"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M19 5v14M6 6l10 6-10 6V6z"/></svg></button></div><div class="transport-settings"><label class="speed-label"><span>Speed</span><select class="speed" id="speed" aria-label="Playback speed">${speedOptions}</select></label></div></div>`;
+ }else{
+  const active=s.record==='active',paused=s.record==='paused';
+  $('rail').innerHTML=`<div class="rail-top"><strong>${active?'● Recording live':paused?'Recording paused':s.record==='stopped'?'Recording stopped':'Ready to record'}</strong><span class="authority">Original GNSS and SOS continue independently</span></div><div class="rec-actions"><div class="rec-buttons">${s.record==='off'?'<button class="primary" data-act="record-dialog">Start Recording</button>':s.record==='stopped'?'<button class="primary" data-act="rec-save">Save</button><button data-act="rec-discard">Discard</button>':`<button class="primary" data-act="${paused?'rec-resume':'rec-pause'}">${paused?'Resume':'Pause'}</button><button data-act="rec-snapshot">Save Snapshot</button><button data-act="rec-stop">Stop</button>`}</div><span class="recording-status">${active||paused?'Historical modes locked until final Stop/Discard':''}</span></div>`;
+ }
+}
+function renderSOS(){$('sosHeader').textContent='SOS '+(s.sos&&!s.acked?'1':'0');const banner=$('sosBanner');banner.hidden=!s.sos;if(s.sos)banner.innerHTML=`<strong>${s.acked?'SOS acknowledged':'● REAL SOS · Charlie'}</strong><p>Activated 09:42 · Last credible location, not guaranteed current.</p>${!s.acked?'<button data-act="sos-locate" class="primary">Locate → LIVE</button><button data-act="sos-ack">Acknowledge</button>':'<span style="font-size:11px;color:var(--muted)">Operator acknowledgment recorded (demo)</span>'}`;$('back').hidden=!s.back;if(s.back)$('back').textContent='Go Back to '+(s.back.mode==='travel'?'Travel Back':'Recording')}
+function render(){document.body.classList.toggle('night',s.night);$('theme').textContent='View: '+(s.night?'Night':'Day');document.querySelectorAll('[data-mode]').forEach(b=>{b.classList.toggle('active',b.dataset.mode===s.mode);b.disabled=['active','paused'].includes(s.record)&&['saved','travel'].includes(b.dataset.mode);b.title=b.disabled?'Finish the active or paused recording first':''});$('context').textContent=({live:'Latest credible Command positions',rec:'Recording what Command displays',saved:'Frozen presentation-time evidence',travel:'Capture-time reconstruction'})[s.mode];$('exit').hidden=s.mode==='live';$('layers').hidden=!s.layers;$('layersButton').classList.toggle('active',s.layers);$('layersButton').setAttribute('aria-expanded',String(s.layers));renderParties();renderDetails();renderMap();renderRail();renderSOS();viewport()}
+function demoSOS(){s.sos=true;s.acked=false;render();toast('New real SOS received (simulation) · No acknowledgment performed')}
+function locateSOS(){if(['travel','saved'].includes(s.mode))s.back={mode:s.mode,progress:s.progress,speed:s.speed,follow:s.follow,selected:s.selected,cx:s.cx,cy:s.cy,zoom:s.zoom,left:s.left,right:s.right,visibility:new Set(s.visibility),useAll:s.useAll};stopPlayback();s.mode='live';s.selected='Charlie';s.cx=497;s.cy=253;s.zoom=1.65;s.right=true;s.left=false;render();toast('Showing last credible SOS observation · may be stale')}
+function returnHistory(){if(!s.back)return;const x=s.back;s.mode=x.mode;s.progress=x.progress;s.speed=x.speed;s.follow=x.follow;s.selected=x.selected;s.cx=x.cx;s.cy=x.cy;s.zoom=x.zoom;s.left=x.left;s.right=x.right;s.visibility=x.visibility;s.useAll=x.useAll;s.back=null;s.playing=false;render();toast('Historical context restored · playback paused')}
+function handleAction(act){switch(act){case'layers-close':s.layers=false;render();break;case'focus':{const u=chosen();s.cx=u.x;s.cy=u.y;s.zoom=1.55;viewport();break}case'inspect':toast('Read-only evidence/quality inspection (design preview)');break;case'filter-qualified':s.useAll=false;renderRail();toast('Showing qualified geometry only');break;case'filter-raw':s.useAll=true;renderRail();toast('Raw observations are diagnostic; qualified distance is unchanged');break;case'incoming':document.querySelector('.demo-scenarios')?.removeAttribute('open');if(s.mode!=='travel'){toast('Switch to Travel Back to simulate late GNSS');break}s.pending=true;render();toast('New original GNSS stored · current historical snapshot unchanged');break;case'refresh':refresh();break;case'first':s.progress=0;stopPlayback();render();break;case'last':s.progress=100;stopPlayback();render();break;case'play':s.playing=!s.playing;animate();renderRail();break;case'record-dialog':recordDialog();break;case'record-now':case'record-beginning':s.record='active';s.recordMode=act==='record-now'?'from-now':'from-beginning';s.mode='rec';$('overlay').hidden=true;render();break;case'rec-pause':s.record='paused';render();break;case'rec-resume':s.record='active';render();break;case'rec-stop':s.record='stopped';stopDialog();render();break;case'rec-save':s.record='off';s.mode='live';$('overlay').hidden=true;render();toast('Demo recording saved · historical modes available');break;case'rec-discard':s.record='off';s.mode='live';$('overlay').hidden=true;render();toast('Unsaved recording discarded; original GNSS retained');break;case'rec-snapshot':toast('Snapshot saved (demo) · recording continues; historical modes locked');break;case'dialog-close':$('overlay').hidden=true;break;case'sos-locate':locateSOS();break;case'sos-ack':s.acked=true;render();toast('SOS acknowledged in preview only');break}}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-mode]');if(b){selectMode(b.dataset.mode);return}const a=e.target.closest('[data-act]');if(a){handleAction(a.dataset.act);return}const check=e.target.closest('[data-check]');if(check){e.stopPropagation();check.checked?s.visibility.add(check.dataset.check):s.visibility.delete(check.dataset.check);render();return}const party=e.target.closest('[data-party]');if(party){s.selected=party.dataset.party;s.right=true;if(innerWidth<=620)s.left=false;render()}});
+document.addEventListener('change',e=>{if(e.target.id==='speed'){s.speed=Number(e.target.value);if(s.playing)animate()}if(e.target.id==='follow'){s.follow=e.target.checked;toast(s.follow?'Following original recorded display':'Temporary read-only inspection enabled')}if(e.target.id==='all'){s.useAll=e.target.checked;toast(s.useAll?'Raw observations shown as diagnostics, not qualified distance':'Qualified observations only')}if(['elev','hill','contour'].includes(e.target.id)){s.terrain=$('elev').checked||$('contour').checked;renderMap()}if(['from','to'].includes(e.target.id)){const from=$('from')?.value,to=$('to')?.value;if(from&&to&&from>=to){toast('Start must be before end');e.target.value=e.target.id==='from'?s.from:s.to;return}s.from=from||s.from;s.to=to||s.to;renderMap();renderDetails();renderRail();toast('Capture-time range updated (demo)')}});
+document.addEventListener('input',e=>{if(e.target.id==='seek'){s.progress=Number(e.target.value);renderMap();renderDetails();const label=$('rail').querySelector('.rail-top strong'),elapsed=$('rail').querySelector('.elapsed');if(label)label.innerHTML=(s.mode==='travel'?clock(s.progress):'12:15:'+String(Math.round(s.progress*.6)).padStart(2,'0'))+' <span class="time-authority">· '+(s.mode==='travel'?'Capture time':'Presentation time')+'</span>';e.target.style.setProperty('--progress',s.progress+'%')}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){const menu=$('rail').querySelector('.timeline-range[open]');if(menu){menu.open=false;menu.querySelector('summary')?.focus()}else if(!$('overlay').hidden)$('overlay').hidden=true;else if(s.layers){s.layers=false;render()}else if(s.right){s.right=false;render()}}if((e.key==='Enter'||e.key===' ')&&e.target.matches('[data-party]')){e.preventDefault();s.selected=e.target.dataset.party;s.right=true;render()}});
+$('collapse').onclick=()=>{s.left=false;render()};$('restore').onclick=()=>{s.left=true;if(innerWidth<=620)s.right=false;render()};$('closeDetails').onclick=()=>{s.right=false;render()};$('exit').onclick=()=>{stopPlayback();s.mode='live';s.back=null;s.layers=false;render();toast(['active','paused'].includes(s.record)?'LIVE · recording continues independently':'Returned to LIVE')};$('back').onclick=returnHistory;$('demoSOS').onclick=()=>{document.querySelector('.demo-scenarios')?.removeAttribute('open');demoSOS()};$('sosHeader').onclick=()=>toast(s.sos?(s.acked?'SOS acknowledged':'SOS unacknowledged · use Locate or Acknowledge'):'No outstanding SOS in this preview');$('theme').onclick=()=>{s.night=!s.night;render()};$('audio').onclick=()=>{s.audio=!s.audio;$('audio').textContent='SOS alarm: '+(s.audio?'ready':'off');toast('Demo audio readiness only')};$('layersButton').onclick=()=>{s.layers=!s.layers;render()};$('plus').onclick=()=>{s.zoom=Math.min(3,s.zoom*1.3);viewport()};$('minus').onclick=()=>{s.zoom=Math.max(.7,s.zoom/1.3);viewport()};$('fit').onclick=()=>{s.cx=460;s.cy=310;s.zoom=1;viewport()};$('focus').onclick=()=>handleAction('focus');
+const map=$('map');let drag=null;map.addEventListener('pointerdown',e=>{if(e.button!==0||e.target.closest('[data-party]'))return;drag={x:e.clientX,y:e.clientY,cx:s.cx,cy:s.cy};map.setPointerCapture(e.pointerId)});map.addEventListener('pointermove',e=>{if(!drag)return;const r=map.getBoundingClientRect();s.cx=drag.cx-(e.clientX-drag.x)*920/s.zoom/r.width;s.cy=drag.cy-(e.clientY-drag.y)*620/s.zoom/r.height;viewport();map.classList.add('grabbing')});map.addEventListener('pointerup',()=>{drag=null;map.classList.remove('grabbing')});map.addEventListener('pointercancel',()=>{drag=null;map.classList.remove('grabbing')});
+window.addEventListener('resize',()=>{if(innerWidth>950&&!s.left&&!s.right){s.left=true;s.right=true}render()});
+render();
+})();
+</script>
+</body>
+</html>

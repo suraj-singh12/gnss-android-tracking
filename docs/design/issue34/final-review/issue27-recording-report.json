@@ -1,0 +1,18 @@
+{
+  "source": "working-tree",
+  "os_scanout_verified": false,
+  "human_attention_verified": false,
+  "first_confirmation_delay_ms": 1427,
+  "delayed_actual_map_application_ms": 763,
+  "receipt_did_not_establish_delayed_display": true,
+  "lost_ack_retry_preserved_frozen_state": true,
+  "failed_durable_commit_was_unconfirmed": true,
+  "secondary_denied": true,
+  "pinned_map_survived_library_deletion": true,
+  "replayed_browser_checkpoints_verified": 6,
+  "browser_recovery": true,
+  "command_crash_recovery": true,
+  "stopped_participation_manifest_excludes_later_arrivals": true,
+  "snapshot_immutable": true,
+  "passed": true
+}

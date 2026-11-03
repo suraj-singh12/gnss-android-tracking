@@ -1200,3 +1200,31 @@ write evidence. Existing sealed diagnostic and pinned-asset reads remain availab
 Rendering-opportunity evidence is not proof of OS scanout or human attention; gaps
 and uncertain process-death boundaries remain explicit. Sustained multi-day recordings,
 physical Android and native macOS/Windows acceptance remain separate from software CI.
+
+### Operational modes and Travel Back (#34)
+
+The mode strip separates LIVE, RECORDING LIVE, VIEWING RECORDING and TRAVEL BACK.
+Active and operator-paused recordings lock historical entry, including after Save
+Snapshot; final Stop or Discard releases the lock. LIVE navigation never stops
+GNSS receipt, synchronization or SOS. Saved playback retains #37's sealed source,
+presentation clock, Follow Original and original visibility gates.
+
+Travel Back reads retained original GNSS in a read-only SQLite snapshot, independently
+of evidence recording windows. Choose capture-time boundaries in **Capture range &
+diagnostics**, then **Refresh View**. This reads Command storage and never requests
+Android synchronization. Later receipt only changes the pending indication. Refresh
+retains the playhead, speed, party preferences and viewport where possible. The
+current quality policy is disclosed and applied using the existing GNSS derivation;
+this is reconstruction, not recorded operator presentation or frozen evidence.
+Session/missing-sequence boundaries and rejected originals remain available as
+quality decisions. Raw diagnostic dots add no distance. Exclude Offline uses contact
+at snapshot acquisition, not inferred historical connectivity or GNSS quality.
+
+The interactive range has a 32 MiB original-envelope budget and a 30-second read
+deadline. Oversized requests fail explicitly; choose a narrower range. No fixed
+phone count applies. Retained data can be incomplete; there is no interpolation or
+claim that an offline phone's unknown backlog is complete.
+
+Real SOS Locate pauses history, switches to LIVE, shows the last available credible
+location with its age, and offers Go Back. Return restores historical view preferences,
+inspection and panels; playback remains paused. This does not acknowledge SOS.

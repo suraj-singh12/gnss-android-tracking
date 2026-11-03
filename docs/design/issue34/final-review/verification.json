@@ -1,0 +1,50 @@
+{
+  "source": "implementation worktree committed with this evidence",
+  "integration_parent": "6f435942394b805d5e81129bafa3607a41ae0290",
+  "design_reference": "cfb0dfdd26bda4259bb60497470bb71bba48aaa4",
+  "completed_at_utc": "2026-10-30T12:31:59.067221+00:00",
+  "command_race": {
+    "passed": true,
+    "seconds": 429.17
+  },
+  "command_vet": true,
+  "test_tools_race_vet": true,
+  "android_unit": {
+    "passed": 242,
+    "bridge_skips": 36,
+    "failures": 0,
+    "errors": 0
+  },
+  "android_lint_apk": true,
+  "real_bridge": {
+    "passed": 36,
+    "skipped": 0,
+    "failures": 0,
+    "errors": 0
+  },
+  "browser_suites": {
+    "travel-back": true,
+    "ui-dashboard/axe": true,
+    "sos-dashboard": true,
+    "recording-foundation": true,
+    "playback-clips": true,
+    "recording-playback": true
+  },
+  "physical_android_field_acceptance": false,
+  "native_windows_macos_execution": false,
+  "implementation_file_sha256": {
+    ".github/workflows/issue-6-matched-assets.yml": "ab15acd06d54a8349b46c061d1664647446320d13710b6b4f903144c7b86628b",
+    "command/internal/core/http.go": "a45263a1ec0981f505cb1c1dba218523ef86a0b828d4954e6fdf2afc3cef7ee8",
+    "command/web/app.js": "fb7a6688ace116c505cd601a1f6138ae827e5f92ba91723aa86e69a9c6b0cb91",
+    "command/web/index.html": "5c2035bf4e2a2cb26d6d5d98904a480c2ef4a6eaa0c1f40d9d0f376540adbe15",
+    "command/web/playback.js": "2d7059a8d78be67b317d3c4dc81fd978851fd436ef7066a426435f41837093fc",
+    "command/web/style.css": "28b8d838a5b496dd1e50439be99ac77b95b3c7c4001ce5fdd42e477119957433",
+    "test-tools/integration/menu-actions.cjs": "18e3ac318e0b0c95125a5f2a455e2752f620bf7a2ca6a9a56d15cfe64377a92e",
+    "test-tools/integration/recording-playback.cjs": "0eeb4743c152c697976192d1bbf1654c5c422dd347359cd3e0d46593efd8aaf2",
+    "test-tools/integration/sos-dashboard.cjs": "fe8682e23a83bebae4dac4ee03fa27065ae5bec760b3f3f9c5a1e61dce8da89d",
+    "test-tools/integration/ui-dashboard.cjs": "d3a8de786558c96be7f99c6a728c92fa4b14104ae03c624c53faf0aafae9fa39",
+    "command/internal/core/travel.go": "488acf2c7da9fc038ad3006470a2637c203ac1c8f80a2e889055ad9a4b3cb540",
+    "command/internal/core/travel_test.go": "7bf46ed67dab82a29f73bc9edf1de28e4a5456b1cc22bf08a582f1edfe8dd0bb",
+    "test-tools/integration/travel-back.cjs": "6b45652c0f62b9c5bd1d85960e07fa33f9eec3334a02c4b4e631160f5a6874f7"
+  }
+}

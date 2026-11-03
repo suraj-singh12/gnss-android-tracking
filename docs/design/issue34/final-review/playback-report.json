@@ -1,0 +1,15 @@
+{
+  "source": "working-tree",
+  "physical_acceptance": false,
+  "passed": true,
+  "parties": 21,
+  "included": 20,
+  "timeline_duration": 21.367298637999998,
+  "immutable_map_after_deletion": true,
+  "pinned_terrain_after_deletion": true,
+  "deterministic_rewind": true,
+  "process_restart": true,
+  "delayed_history_redraw": true,
+  "historical_sos_read_only": true,
+  "real_command_browser_pause_overlap": true
+}

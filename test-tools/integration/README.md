@@ -1016,3 +1016,14 @@ not public-provider or physical-device acceptance.
 component fixture with synthetic pinned metadata responses. It tests the real shared
 clip helper and missing-proof handling; it is not a substitute for the real saved
 recording/terrain/deletion scenario above.
+
+### Operational modes (#34)
+
+`travel-back.cjs` uses a production Command binary, SQLite, original protocol fixture
+envelopes and Chromium. It covers 21 parties, capture-time replay, retained-history
+refresh without arrival-driven redraw, real SOS Locate/Return and paused restoration,
+then captures Day/Night at 390, 960 and 1440 px. Run with `GNSS_COMMAND_BINARY`,
+`GNSS_PLAYWRIGHT_MODULE`, `GNSS_CHROMIUM` and `GNSS_SCREENSHOT_DIR` as for
+`recording-playback.cjs`. It uses loopback ports 18741/18742. These are deterministic
+software fixtures, not physical field evidence. The existing saved playback scenario
+also verifies active/paused/Snapshot navigation locks before final Stop.
