@@ -1,0 +1,105 @@
+name: Independent Command PR 54 QA (Issue 57)
+on:
+  push:
+    branches:
+      - devX/issue-57-command-premerge-qa
+
+permissions:
+  contents: read
+
+jobs:
+  operator-browser-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      SOURCE_REVISION: 773497ff7e89530e087a9417325152580935988f
+    steps:
+      - name: Checkout independent QA harness
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Checkout exact PR 54 production source
+        uses: actions/checkout@v4
+        with:
+          ref: 773497ff7e89530e087a9417325152580935988f
+          path: target
+          persist-credentials: false
+      - name: Assert exact source and independent harness
+        run: |
+          test "$(git -C target rev-parse HEAD)" = "$SOURCE_REVISION"
+          test -z "$(git -C target status --porcelain)"
+          echo "GNSS_QA_TARGET=$GITHUB_WORKSPACE/target" >> "$GITHUB_ENV"
+          echo "GNSS_QA_REPORT=$RUNNER_TEMP/independent-command-qa" >> "$GITHUB_ENV"
+          echo "GNSS_SCREENSHOT_DIR=$RUNNER_TEMP/independent-command-qa/recording-journeys" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/independent-command-qa"
+          git -C target rev-parse HEAD > "$RUNNER_TEMP/independent-command-qa/exact-source.txt"
+          git rev-parse HEAD > "$RUNNER_TEMP/independent-command-qa/harness-source.txt"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.7"
+          cache-dependency-path: target/command/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build exact-source Command
+        run: |
+          (cd target/command && go build -buildvcs=true -o "$RUNNER_TEMP/gnss-qa-command" ./cmd/party-tracker)
+          go version -m "$RUNNER_TEMP/gnss-qa-command" > "$GNSS_QA_REPORT/source-build.txt"
+          grep -F "vcs.revision=$SOURCE_REVISION" "$GNSS_QA_REPORT/source-build.txt"
+          echo "GNSS_COMMAND_BINARY=$RUNNER_TEMP/gnss-qa-command" >> "$GITHUB_ENV"
+      - name: Install Chromium and accessibility auditing
+        run: |
+          npm install --prefix "$RUNNER_TEMP/gnss-independent-browser" playwright @axe-core/playwright
+          "$RUNNER_TEMP/gnss-independent-browser/node_modules/.bin/playwright" install --with-deps chromium
+          echo "GNSS_PLAYWRIGHT_MODULE=$RUNNER_TEMP/gnss-independent-browser/node_modules/playwright" >> "$GITHUB_ENV"
+          echo "GNSS_AXE_MODULE=$RUNNER_TEMP/gnss-independent-browser/node_modules/@axe-core/playwright" >> "$GITHUB_ENV"
+      - name: Independent operator responsive Day-Night screenshots
+        run: |
+          node qa/issue57/command-operator-qa.cjs | tee "$GNSS_QA_REPORT/independent-audit.log"
+      - name: Real 21-party saved-recording and historical playback journey
+        if: success() || failure()
+        run: |
+          test -f "$GNSS_COMMAND_BINARY"
+          mkdir -p "$GNSS_SCREENSHOT_DIR"
+          cd target
+          node test-tools/integration/recording-playback.cjs | tee "$GNSS_QA_REPORT/real-playback-journey.log"
+      - name: Real recording, SOS and main dashboard browser regressions
+        if: success() || failure()
+        run: |
+          test -f "$GNSS_COMMAND_BINARY"
+          cd target
+          node test-tools/integration/recording-foundation.cjs | tee "$GNSS_QA_REPORT/real-recording-journey.log"
+          node test-tools/integration/sos-dashboard.cjs | tee "$GNSS_QA_REPORT/real-sos-dashboard.log"
+          node test-tools/integration/ui-dashboard.cjs | tee "$GNSS_QA_REPORT/real-dashboard.log"
+      - name: Summarize measured QA evidence
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib
+          root=pathlib.Path(os.environ.get("GNSS_QA_REPORT",os.environ["RUNNER_TEMP"]+"/independent-command-qa"))
+          root.mkdir(exist_ok=True)
+          p=root/"operator-qa-report.json"
+          if p.exists():
+              data=json.loads(p.read_text())
+              groups={}
+              for v in data.get("observations",[]):
+                  groups[v.get("type","unknown")]=groups.get(v.get("type","unknown"),0)+1
+              summary={
+                  "tested_source":os.environ["SOURCE_REVISION"],
+                  "actual_browser_screenshots":len(data.get("states",[])),
+                  "observations":groups,
+                  "accessibility_violations":data.get("accessibility",[]),
+                  "physical_acceptance":False,
+                  "real_browser_zoom_tested":False,
+                  "warning":"Operator sign-off and redesign require human inspection of screenshot artifacts."
+              }
+              (root/"qa-summary.json").write_text(json.dumps(summary,indent=2)+"\n")
+              print(json.dumps(summary,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Independent-Command-Issue57-PR54-${{ env.SOURCE_REVISION }}
+          path: ${{ runner.temp }}/independent-command-qa
+          if-no-files-found: warn
+          retention-days: 30
