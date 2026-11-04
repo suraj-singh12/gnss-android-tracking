@@ -1,14 +1,12 @@
 package org.gnss.tracking
 
 import android.content.Context
-import android.graphics.Typeface
 import android.os.Build
 import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
-import android.widget.TextView
 
-/** Independent, read-only health facts; never presented as actionable controls. */
+/** Independent read-only facts. Values come from the existing operational owners. */
 internal class HealthRow(
     context: Context,
     private val label: String,
@@ -16,53 +14,57 @@ internal class HealthRow(
 ) : LinearLayout(context) {
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
-    private val state =
-        TextView(context).apply {
-            textSize = 14f
-            setTypeface(null, Typeface.BOLD)
-            gravity = Gravity.END
-            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        }
-    private val metadata =
-        TextView(context).apply {
-            textSize = 11f
-            gravity = Gravity.END
-            setTextColor(context.getColor(R.color.muted))
-            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+    private val ui = NativeUi(context)
+    private val state = ui.label("Checking", 10.5f, bold = true)
+    private val metadata = ui.label("", 10.5f, muted = true)
+    private val displayLabel =
+        when (label) {
+            "Command" -> "Command delivery"
+            "Storage" -> "Local storage"
+            "Remote control" -> "Trusted control"
+            else -> label
         }
 
     init {
         orientation = HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        minimumHeight = dp(42)
-        setPadding(dp(14), dp(6), dp(14), dp(6))
+        minimumHeight = dp(54)
+        setPadding(dp(10), dp(7), dp(10), dp(7))
         if (Build.VERSION.SDK_INT >= 28) isScreenReaderFocusable = true
         addView(
-            TextView(context).apply {
-                text = label
-                textSize = 13f
-                setTextColor(context.getColor(R.color.muted))
-                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            ui.label(
+                when (label) {
+                    "GNSS" -> "◎"
+                    "Command" -> "⇄"
+                    "Storage" -> "▤"
+                    else -> "◇"
+                },
+                18f,
+                muted = true,
+            ),
+            LayoutParams(dp(29), -2),
+        )
+        addView(
+            ui.column().apply {
+                addView(ui.label(displayLabel, 12f, bold = true))
+                addView(metadata)
             },
             LayoutParams(0, -2, 1f),
         )
-        addView(
-            LinearLayout(context).apply {
-                orientation = VERTICAL
-                addView(state, LayoutParams(-1, -2))
-                addView(metadata, LayoutParams(-1, -2))
-            },
-            LayoutParams(0, -2, 1.8f),
-        )
+        addView(state, LayoutParams(-2, -2))
+        // One semantic node avoids reading decorative icons and values twice.
+        for (i in 0 until childCount) getChildAt(i).importantForAccessibility =
+            View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
         update("Checking")
     }
 
     fun update(value: String, detail: String = "", tone: Int = R.color.muted) {
         state.text = value
-        state.setTextColor(context.getColor(if (tone == R.color.muted) R.color.ink else tone))
+        ui.pill(state, tone == R.color.accent)
+        state.textSize = 10.5f
         metadata.text = detail
         metadata.visibility = if (detail.isEmpty()) View.GONE else View.VISIBLE
         contentDescription =
-            listOf(label, value, detail).filter { it.isNotEmpty() }.joinToString(", ")
+            listOf(displayLabel, value, detail).filter { it.isNotEmpty() }.joinToString(", ")
     }
 }

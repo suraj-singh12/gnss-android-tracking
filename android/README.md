@@ -6,6 +6,24 @@ One Kotlin application module, Android 8.0/API 26 through current platform rules
 
 ## Build and test
 
+### Managed Linux verification setup
+
+Use a full JDK (including `javac`), not just a Java runtime. Check `java -version`
+and `javac -version`. The Android/Command bridge additionally requires the Go
+compiler specified by `command/go.mod`: check `type -a go` and `go version`.
+Some desktop images provide a board game named `go`; select an official Go
+toolchain earlier in PATH rather than changing the integration script.
+
+In a proxy-only execution environment, Java does not automatically use
+`HTTPS_PROXY`. Supply the environment's proxy host/port as Java system properties
+(`https.proxyHost`, `https.proxyPort`, `http.proxyHost`, `http.proxyPort`). Ensure
+these also reach forked Robolectric JVMs, for example with `JAVA_TOOL_OPTIONS`.
+Preserve localhost exclusions for the real integration bridge. Use the configured
+CA trust store; never disable TLS verification. Keep the wrapper distribution
+version and its pinned SHA-256 unchanged. Set `ANDROID_HOME` to an SDK with platform
+35, Build Tools 35.0.0 and Platform Tools. A wrapper download succeeding does not
+prove SDK availability, compiler availability or test execution.
+
 Install JDK 17+ and Android SDK platform 35/build tools 35.0.0. Set `ANDROID_HOME`
 or an untracked `local.properties` with `sdk.dir`. From this directory:
 
@@ -25,7 +43,7 @@ Generated APKs/build output are ignored. No release workflow is provided.
 
 ## Operation
 
-Settings includes **Appearance: Day/Night**. Native configuration/theme resources
+The shared app header includes the **Day/Night** icon on every destination. Native configuration/theme resources
 are set while attaching the Activity, before resource access. The independent
 preference persists; Day is default. Tracking, Settings, Diagnostics, Physical Button
 Test, navigation, protected SOS and native dialogs share semantic palettes. Changing
@@ -42,7 +60,7 @@ and GPS enabled and Battery Saver off; notification refusal needs Settings befor
 that preserved Start intent can continue. Android itself allows an FGS without
 notification permission, but that is not healthy field setup.
 Start Tracking is a visible user action. Stop Tracking requires confirmation and
-stops collection. Saved messages automatically synchronize while the app is visible, without restarting GNSS. The Tracking view's Saved GNSS sync bar uses current Room queue counts: acknowledgements since the view/manual-drain baseline divided by those acknowledgements plus **all currently pending GNSS**. If more observations are recorded while sending, the total increases and the percentage can fall; unresolved saved GNSS remains pending. The percentage refers to Android-local durable delivery, **not** Command's completed history reconstruction or any offline phone inventory. No estimated finish time is asserted. **Sync Now** preserves learned capacity and accelerates the payload ramp using the same Sender; The internal pause mechanism remains for OS/lifecycle budgets; user-facing pause controls are removed. An in-flight request may still finish. SOS and live tracking remain independently eligible. Reopening
+stops collection. Saved messages automatically synchronize while the app is visible, without restarting GNSS. Storage health's retained Saved GNSS sync bar uses current Room queue counts: acknowledgements since the view/manual-drain baseline divided by those acknowledgements plus **all currently pending GNSS**. If more observations are recorded while sending, the total increases and the percentage can fall; unresolved saved GNSS remains pending. The percentage refers to Android-local durable delivery, **not** Command's completed history reconstruction or any offline phone inventory. No estimated finish time is asserted. **Sync Now** preserves learned capacity and accelerates the payload ramp using the same Sender; The internal pause mechanism remains for OS/lifecycle budgets; user-facing pause controls are removed. An in-flight request may still finish. SOS and live tracking remain independently eligible. Reopening
 the Activity does not restart or stop tracking. Reboot and force-stop require
 another explicit Start Tracking. Sticky service recreation can recover tracking
 and outbox after process death when Android permits it; it is not a bypass of
@@ -537,36 +555,46 @@ locked/OEM/Doze behavior remain NOT TESTED without actual hardware.
 
 ## Android redesign (#39)
 
-The full Android interface follows the operator's 44-frame Review V3 PDF export and
-four V4 corrections. See [design system](../docs/design-system.md)
-and [visual acceptance](../docs/ui-acceptance.md).
-Tracking presentation is now authorized to change; acquisition, persistence, Sender,
-service lifetime, authentication and SOS execution remain owned by their existing
-components. Command browser UI and protocol are unchanged.
+The production presentation follows the immutable operator-approved
+[Android V4.6](https://github.com/suraj-singh12/gnss-android-tracking/blob/8d95eafe6fdcd1423027194ea128ae7a8b91236d/docs/design/approved/android-v4.6-interactive.html).
+The two approved preservation clarifications and minimal Day secondary-text contrast
+correction are recorded in [acceptance](../docs/ui-acceptance.md). Earlier V3/PDF/V4.1
+renders in the repository are historical evidence, not the implementation specification.
+The [60-group preservation matrix](../docs/ui-preservation-matrix.md) identifies owners
+and verification. Command V5.14, protocol and approved artifacts are unchanged.
 
-- **Tracking:** prominent party identity, independent tracking/Command pills, real
-  GNSS quality/age, balanced saved-observation metrics and ACK progress, one Sync Now
-  and Start/Stop action row, contextual alerts, anchored protected SOS dock. Large
-  text/landscape keeps actions, deliberate SOS and urgent ACK accessible while facts scroll. The moon/sun
-  control is icon-only and uses the existing persisted appearance preference.
-- **Settings:** five destination rows open Party & Command, Tracking & GNSS, Field
-  readiness, Appearance & SOS and Advanced settings. Nested editors have explicit
-  Save/Cancel and transaction failure feedback. Draft text, focus and caret survive
-  refresh/recreation before Room loads. Back moves to the parent and retains edits;
-  closing with dirty edits asks before discarding. Local Save never proves a Command
-  request or application. The #24 adaptive storage Switch persists immediately,
-  defaults OFF and affects future observations only. Requested/applied/revision and
-  trust/contact evidence remain distinct. Re-enrollment and disabling control ask for
-  confirmation. Credentials are excluded from saved instance state and autofill.
-- **Diagnostics:** seven independently grounded health rows lead to Instructions,
-  Phone Alerts, Saved data & sync and Diagnostic tools. The existing journal supplies
-  newest-first pages of 20, search, outcome shortcuts and type/outcome/time filters.
-  Details show UUID, authority, verification, attempt, outcome/reason, stage timestamps,
-  result custody, Copy ID and sanitized export; Full record expands canonical evidence.
-  Page, filters and selected details survive recreation; unchanged journal refreshes
-  preserve native list controls/focus. Actual alert output/ACK and SOS delivery/history
-  remain separate. Retry, ZIP export, Physical Button Test and advanced logs retain
-  their existing owners. SOS history also pages by 20 and opens actual event details.
+- **Tracking:** collection lifecycle, real GNSS age/accuracy, Room pending/durably ACKed
+  counts, shared Sync now, protected Start/Stop and the approved pale-red Stop in both
+  themes. Sync while stopped uses the existing bounded dataSync service, never GNSS.
+  Larger text and short windows scroll; urgent alerts and failures remain reachable.
+- **Global safety:** the same 1.2-second hold/Room SOS engine is available throughout
+  navigation. Release, movement, multi-touch, route/window-focus loss or Activity pause
+  cancels incomplete touch holds. Committed events survive Activity destruction.
+  SOS transport receipt and Command human acknowledgement remain separate.
+- **Settings:** Party & Command, Command access, Field readiness, Tracking policy,
+  Emergency controls. Party and policy share the canonical interval draft; 5/10/30/60
+  and Custom preserve valid existing values. Save policy changes reporting using saved
+  party/endpoint values, without silently saving other form drafts. Save/Cancel retain
+  existing validation/transactions; failed writes preserve drafts. Adaptive storage
+  persists immediately through its existing owner and remains OFF by default.
+- **Access:** read-only phone/authority UUIDs, private credential, public-ID comparison,
+  explicit authorization and compact Recheck using the existing authenticated owner.
+  Manage access retains public-ID copy/proof details, confirmed disable and reenrollment.
+  Enrollment is distinct from fresh contact. Secrets never enter saved state or exports.
+- **Diagnostics:** four independent health facts and seven task destinations. Recent
+  instructions and full paginated/searchable journal share Room; Filter history has
+  transactional outcome switches and a secondary Canonical categories action retaining
+  all original types/outcomes/time ranges. Policy, storage, security and raw evidence,
+  full instruction/SOS histories/details/copy/export remain in contextual destinations.
+- **Alerts:** Stop output persists intent before cancelling repetition/OS output and
+  records API completion separately, never recipient ACK or proven audibility. Explicit
+  Acknowledge remains durable and idempotent. View alert history stays enabled after ACK
+  and opens the same retained journal. The notification offers independent Stop output
+  and acknowledgement actions. Process recovery cannot resume a locally stopped alert.
+- **Tools:** one real physical-button test uses the existing controller/recorder. Only
+  observed Activity key events become evidence; navigation/pause interrupts listening.
+  Confirmed Clear results clears only its retained test journal. Diagnostic ZIP export
+  reuses the existing sanitized recorder/document-picker operation.
 
 No history-pause action is exposed. Tracking notifications have native **Sync Now**
 and **Stop Tracking** actions, using existing visible handlers, immutable distinct
@@ -591,14 +619,14 @@ save. Historical observations and tracking-service lifecycle are unchanged.
 
 ### Command access and identity (#48)
 
-Settings → **Command access** opens the same destination as Advanced settings. Use
-**Set up Command access**, compare **This phone ID** with Phone controls on the Command
-computer (`http://127.0.0.1:8081`), generate its credential there and transfer it privately.
-Enter the credential, review the public **Command ID**, compare it directly with Command,
-then explicitly **Authorize Command**. Command ID is the persistent authority UUID;
-phone ID is this Android installation; Instruction ID identifies one instruction. The
-configured LAN address routes traffic and does not prove trust. Public copy actions copy
-only the selected UUID. Never share credentials in screenshots, logs or diagnostic ZIPs.
+Settings → **Command access** shows this phone UUID and the enrolled Command authority
+UUID as read-only values. Generate the per-phone private credential on Command, paste
+it, choose **Authorize**, compare both public UUIDs in the review dialog, then confirm.
+**Enrollment steps** explains private transfer; it performs no automatic pairing.
+**Recheck** requests one opportunity through the existing authenticated control owner.
+Manage access → Identity & verification details retains public copy actions and proof
+history. A LAN address, ordinary GNSS ACK or enrollment does not establish current trust.
+Never share credentials in screenshots, logs or diagnostic ZIPs.
 
 **Credential enrolled** means local authorization only. **Contact verified** requires an
 actual verified response (an empty poll also qualifies) for the current binding, less than
@@ -611,6 +639,6 @@ requires consent. Credential rotation/revocation semantics and pending results a
 
 The existing sender provides control opportunities (five-second control interval while
 its existing lifecycle permits); this screen never starts GNSS or another poller. A
-one-shot UI deadline expires the status even when no further telemetry arrives. Room v7
-adds only historical last-success/generation and local-disable metadata, migrating v6
-without changing saved observations, journal or credential storage.
+one-shot UI deadline expires the status even when no further telemetry arrives. Room v7 retains historical last-success/generation and local-disable metadata; v8 adds
+only stop-request/API-completion timestamps in the existing command journal. Migrations
+preserve observations, original outbox identities and credential storage.

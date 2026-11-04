@@ -49,14 +49,14 @@ class SettingsDiagnosticsTest {
             until {
                 all().filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled }
             }
-            openNativeScreen(controller.get(), "Edit connection")
+            openNativeScreen(controller.get(), "Party & Command")
             field("Party name").apply {
                 setText("Unfinished field edit")
                 requestFocus()
                 setSelection(6)
             }
             field("Command address").setText("http://192.168.12.3:8080")
-            field("Phone interval · seconds").setText("35")
+            field("Reporting interval · seconds").setText("35")
             app.operational.value = Operational(health = Health(wifi_connected = true))
             shadowOf(Looper.getMainLooper()).idle()
             assertEquals("Unfinished field edit", field("Party name").text.toString())
@@ -64,24 +64,24 @@ class SettingsDiagnosticsTest {
             until { field("Party name").text.toString() == "Unfinished field edit" }
             assertTrue(field("Party name").hasFocus())
             assertEquals(6, field("Party name").selectionStart)
-            assertEquals("35", field("Phone interval · seconds").text.toString())
+            assertEquals("35", field("Reporting interval · seconds").text.toString())
             assertEquals(original.partyName, app.repository.state().partyName)
             @Suppress("DEPRECATION") controller.get().onBackPressed()
             assertFalse(controller.get().isFinishing)
             assertEquals("Unfinished field edit", field("Party name").text.toString())
-            openNativeScreen(controller.get(), "Edit connection")
+            openNativeScreen(controller.get(), "Party & Command")
             button("Cancel").performClick()
             assertEquals(original.partyName, field("Party name").text.toString())
-            openNativeScreen(controller.get(), "Reporting interval")
-            field("Phone interval · seconds").setText("3")
-            button("Save").performClick()
+            openNativeScreen(controller.get(), "Party & Command")
+            field("Reporting interval · seconds").setText("3")
+            button("Save settings").performClick()
             until {
                 all().filterIsInstance<TextView>().any { it.text.startsWith("Settings not saved") }
             }
             assertEquals(original.localInterval, app.repository.state().localInterval)
             org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()?.dismiss()
-            field("Phone interval · seconds").setText("35")
-            button("Save").performClick()
+            field("Reporting interval · seconds").setText("35")
+            button("Save settings").performClick()
             until {
                 all().filterIsInstance<TextView>().any { it.text.startsWith("Settings saved") }
             }
@@ -100,7 +100,7 @@ class SettingsDiagnosticsTest {
         val saved =
             android.os.Bundle().apply {
                 putString("destination", "Settings")
-                putString("route", "Edit connection")
+                putString("route", "Party & Command")
                 putBundle(
                     "settingsDraft",
                     android.os.Bundle().apply {
@@ -166,10 +166,12 @@ class SettingsDiagnosticsTest {
         fun button(label: String) =
             all().filterIsInstance<Button>().single { it.text == label && it.isShown }
         try {
-            openNativeScreen(controller.get(), "Command Instructions")
+            openNativeScreen(controller.get(), "History search & filters")
+            openNativeScreen(controller.get(), "Instruction filters")
+            controller.get().onBackPressed()
             fun rows() =
                 all().filterIsInstance<Button>().filter {
-                    it.contentDescription?.contains("Open instruction details") == true
+                    it.isShown && it.contentDescription?.contains("Open instruction details") == true
                 }
             until { rows().size == 20 }
             assertTrue(
@@ -229,11 +231,11 @@ class SettingsDiagnosticsTest {
                 all().filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled }
             }
             all().filterIsInstance<Button>().single { it.text == "Diagnostics" }.performClick()
-            assertEquals(7, all().filterIsInstance<HealthRow>().size)
+            assertEquals(4, all().filterIsInstance<HealthRow>().count { it.isShown })
             assertTrue(all().filterIsInstance<HealthRow>().all { !it.isClickable })
             assertTrue(
-                "Overview should contain concise facts, not paragraphs",
-                visibleText().length < 650,
+                "V4.6 overview has only health and seven destination summaries: ${visibleText()}",
+                visibleText().length < 1100,
             )
             assertFalse(
                 all()
@@ -247,7 +249,7 @@ class SettingsDiagnosticsTest {
             assertFalse(
                 all()
                     .filterIsInstance<EditText>()
-                    .single { it.hint?.startsWith("Private credential") == true }
+                    .single { it.hint?.startsWith("Paste Command credential") == true }
                     .isShown
             )
         } finally {

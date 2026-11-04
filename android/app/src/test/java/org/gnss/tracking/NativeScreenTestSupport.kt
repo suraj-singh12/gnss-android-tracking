@@ -10,10 +10,20 @@ internal fun nativeViews(view: View): List<View> =
             (0 until view.childCount).flatMap { nativeViews(view.getChildAt(it)) }
         else emptyList()
 
-/**
- * Follow real menu affordances, including parent destinations, rather than bypassing navigation.
- */
+/** Traverse actual V4.6 affordances; never inject private navigation state. */
 internal fun openNativeScreen(activity: MainActivity, name: String) {
+    if (name == "Instruction filters") {
+        openNativeScreen(activity, "History search & filters")
+        nativeViews(activity.findViewById(android.R.id.content))
+            .filterIsInstance<Button>()
+            .single { it.isShown && it.text == "Filter history" }
+            .performClick()
+        org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
+            .getButton(android.app.AlertDialog.BUTTON_NEUTRAL)
+            .performClick()
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        return
+    }
     if (name == "SOS details") {
         openNativeScreen(activity, "SOS event history")
         nativeViews(activity.findViewById(android.R.id.content))
@@ -29,42 +39,40 @@ internal fun openNativeScreen(activity: MainActivity, name: String) {
     val parents =
         mapOf(
             "Party & Command" to "Settings",
-            "Edit connection" to "Party & Command",
-            "Change trusted Command" to "Party & Command",
-            "Command trust" to "Party & Command",
-            "Tracking & GNSS" to "Settings",
-            "Reporting interval" to "Tracking & GNSS",
-            "Policy details" to "Tracking & GNSS",
+            "Command access" to "Settings",
+            "Tracking policy" to "Settings",
             "Field readiness" to "Settings",
-            "Appearance & SOS" to "Settings",
-            "Advanced settings" to "Settings",
-            "Command access" to "Advanced settings",
+            "Emergency controls" to "Settings",
+            "Manage Command access" to "Command access",
+            "Identity & verification details" to "Manage Command access",
+            "Policy details" to "Tracking policy",
             "Command Instructions" to "Diagnostics",
+            "History search & filters" to "Command Instructions",
+            "Instruction filters" to "History search & filters",
             "Phone Alerts" to "Diagnostics",
             "Saved data & sync" to "Diagnostics",
-            "Storage health" to "Saved data & sync",
+            "Transfer recovery" to "Saved data & sync",
+            "Storage health" to "Transfer recovery",
             "Diagnostic tools" to "Diagnostics",
-            "Physical Button Test" to "Diagnostic tools",
             "Advanced logs" to "Diagnostic tools",
-            "SOS event history" to "Diagnostic tools",
+            "SOS event history" to "Diagnostics",
+            "GNSS details" to "Diagnostics",
+            "Command contact" to "Diagnostics",
         )
-    if (name == "Instruction filters") {
-        openNativeScreen(activity, "Command Instructions")
-        nativeViews(activity.findViewById(android.R.id.content))
-            .filterIsInstance<Button>()
-            .single { it.isShown && it.text == "Filters" }
-            .performClick()
-        return
-    }
     parents[name]?.let { openNativeScreen(activity, it) }
-    val all = nativeViews(activity.findViewById(android.R.id.content))
-    val actionLabel = if (name == "Reporting interval") "Change interval" else name
+    val label =
+        when (name) {
+            "Manage Command access" -> "Manage access & trust"
+            "SOS event history" -> "SOS history"
+            "Phone Alerts" -> "Phone alerts"
+            else -> name
+        }
     val target =
-        all.single {
+        nativeViews(activity.findViewById(android.R.id.content)).single {
             it.isShown &&
                 it.isClickable &&
-                ((it is Button && it.text == actionLabel) ||
-                    it.contentDescription?.toString()?.startsWith("$name. ") == true)
+                ((it is Button && it.text == label) ||
+                    it.contentDescription?.startsWith("$label. ") == true)
         }
     check(
         target.performAccessibilityAction(

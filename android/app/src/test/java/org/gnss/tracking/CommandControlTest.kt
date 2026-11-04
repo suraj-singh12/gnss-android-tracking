@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.google.gson.Gson
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.*
 import org.junit.Assert.*
@@ -33,6 +34,7 @@ class CommandControlTest {
     private var responseDelayMillis = 0L
     private var alertAttempts = 0
     private var alertStops = 0
+    private var failOutputStop = false
     private var outputBlocked = false
     private val output =
         object : PhoneAlertOutput {
@@ -50,6 +52,7 @@ class CommandControlTest {
             }
 
             override fun stop(id: String) {
+                if (failOutputStop) error("injected OS cancellation failure")
                 alertStops++
             }
         }
@@ -297,6 +300,103 @@ class CommandControlTest {
     }
 
     @Test
+    fun stopOnlyIsDurableIdempotentAndStillAllowsExplicitAck() = runBlocking {
+        val command = alert()
+        instructions = listOf(command)
+        poll()
+        val id = command["id"] as String
+        engine.stopAlertOutput(id)
+        val stopped = repository.dao.command(id)!!
+        assertEquals("unknown", stopped.state)
+        assertTrue(stopped.localOutputStoppedAt > 0)
+        assertFalse(stopped.confirmed)
+        engine.stopAlertOutput(id)
+        assertEquals(stopped.revision, repository.dao.command(id)!!.revision)
+        engine =
+            CommandControl(
+                repository,
+                transport,
+                { key },
+                { _, _ -> PersistencePolicy() },
+                {},
+                { "blocked" to "test" },
+                clock = clock,
+                alertOutput = output,
+            )
+        engine.tickAlerts()
+        assertEquals(
+            stopped.localOutputStoppedAt,
+            repository.dao.command(id)!!.localOutputStoppedAt,
+        )
+        repeat(3) { poll() }
+        assertEquals(1, alertAttempts)
+        assertTrue(repository.dao.command(id)!!.confirmed)
+        assertEquals(1, repository.dao.unresolvedCommands())
+        engine.acknowledgeAlert(id)
+        assertEquals("recipient_acknowledged", repository.dao.command(id)!!.state)
+        assertEquals(
+            stopped.localOutputStoppedAt,
+            repository.dao.command(id)!!.localOutputStoppedAt,
+        )
+    }
+
+    @Test
+    fun failedOutputCancellationRetainsIntentWithoutClaimingCompletedStopOrAck() = runBlocking {
+        val command = alert()
+        instructions = listOf(command)
+        poll()
+        val id = command["id"] as String
+        failOutputStop = true
+        assertTrue(runCatching { engine.stopAlertOutput(id) }.isFailure)
+        val requested = repository.dao.command(id)!!
+        assertTrue(requested.localOutputStopRequestedAt > 0)
+        assertEquals(0L, requested.localOutputStoppedAt)
+        assertEquals("unknown", requested.state)
+        repeat(3) { poll() }
+        assertEquals(1, alertAttempts)
+        val sealed = repository.dao.command(id)!!.result()
+        failOutputStop = false
+        engine.stopAlertOutput(id)
+        assertEquals(sealed, repository.dao.command(id)!!.result())
+        assertTrue(repository.dao.command(id)!!.localOutputStoppedAt > 0)
+        assertEquals("unknown", repository.dao.command(id)!!.state)
+        engine.acknowledgeAlert(id)
+        assertEquals("recipient_acknowledged", repository.dao.command(id)!!.state)
+    }
+
+    @Test
+    fun concurrentLocalStopAndAcknowledgementCannotDowngradeHumanAck() = runBlocking {
+        val command = alert()
+        instructions = listOf(command)
+        poll()
+        val id = command["id"] as String
+        kotlinx.coroutines.coroutineScope {
+            launch { engine.stopAlertOutput(id) }
+            launch { engine.acknowledgeAlert(id) }
+        }
+        assertEquals("recipient_acknowledged", repository.dao.command(id)!!.state)
+        engine.stopAlertOutput(id)
+        assertEquals("recipient_acknowledged", repository.dao.command(id)!!.state)
+    }
+
+    @Test
+    fun stopOnlyStorageFailureDoesNotInventAckOrSavedStop() = runBlocking {
+        val command = alert()
+        instructions = listOf(command)
+        poll()
+        val id = command["id"] as String
+        db.openHelper.writableDatabase.execSQL(
+            "CREATE TRIGGER fail_stop BEFORE UPDATE ON command_journal WHEN NEW.localOutputStopRequestedAt>0 BEGIN SELECT RAISE(ABORT, 'injected stop failure'); END"
+        )
+        assertTrue(runCatching { engine.stopAlertOutput(id) }.isFailure)
+        assertEquals("output_attempted", repository.dao.command(id)!!.state)
+        assertEquals(0L, repository.dao.command(id)!!.localOutputStoppedAt)
+        db.openHelper.writableDatabase.execSQL("DROP TRIGGER fail_stop")
+        engine.stopAlertOutput(id)
+        assertEquals("unknown", repository.dao.command(id)!!.state)
+    }
+
+    @Test
     fun urgentRepeatsBoundedActualExpiryAndAuthenticatedCancel() = runBlocking {
         val command = alert()
         instructions = listOf(command)
@@ -500,7 +600,11 @@ class CommandControlTest {
         }
         val migrated =
             Room.databaseBuilder(context, TrackingDatabase::class.java, name)
-                .addMigrations(TrackingDatabase.MIGRATION_5_6, TrackingDatabase.MIGRATION_6_7)
+                .addMigrations(
+                    TrackingDatabase.MIGRATION_5_6,
+                    TrackingDatabase.MIGRATION_6_7,
+                    TrackingDatabase.MIGRATION_7_8,
+                )
                 .build()
         try {
             val restored = Repository(migrated, clock)

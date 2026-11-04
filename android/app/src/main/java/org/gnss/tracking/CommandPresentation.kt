@@ -34,6 +34,12 @@ internal fun commandInstructionDetails(row: CommandRecord): String = buildString
         "Execution: ${if (row.attempted) "Attempt recorded" else "No execution attempt recorded"}"
     )
     appendLine("Reason: ${row.reason}")
+    if (row.localOutputStopRequestedAt > 0)
+        appendLine("Local output stop requested: ${utc(row.localOutputStopRequestedAt)}")
+    if (row.localOutputStoppedAt > 0)
+        appendLine(
+            "Local output stopped: ${utc(row.localOutputStoppedAt)} · recipient ACK is separate"
+        )
     commandReasonExplanation(row.reason)?.let { appendLine(it) }
     appendLine(commandOutcomeExplanation(row.state))
     appendLine("Created: ${row.created.takeIf { it > 0 }?.let(::utc) ?: "Unknown"}")

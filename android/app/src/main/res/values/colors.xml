@@ -1,20 +1,20 @@
 <resources>
     <color name="surface">#FFFFFF</color>
-    <color name="background">#F4F7F8</color>
-    <color name="ink">#182C36</color>
-    <color name="muted">#5D727D</color>
-    <color name="line">#DBE4E8</color>
+    <color name="background">#F3F6F6</color>
+    <color name="ink">#23363C</color>
+    <color name="muted">#61747A</color>
+    <color name="line">#DCE6E6</color>
     <color name="control_line">#B2C2BC</color>
-    <color name="accent">#07796F</color>
-    <color name="danger">#843E4B</color>
-    <color name="warning">#A05E15</color>
+    <color name="accent">#176D60</color>
+    <color name="danger">#833C4A</color>
+    <color name="warning">#936020</color>
     <color name="disabled_ink">#829189</color>
     <color name="ripple">#3317654C</color>
-    <color name="emergency_action">#71333F</color>
-    <color name="emergency_surface">#F6E9EC</color>
-    <color name="action">#087B72</color>
-    <color name="secondary">#13669E</color>
-    <color name="secondary_surface">#E7F2FA</color>
-    <color name="positive_surface">#E0F3EE</color>
-    <color name="warning_surface">#FFF2DE</color>
+    <color name="emergency_action">#833C4A</color>
+    <color name="emergency_surface">#F7E9EC</color>
+    <color name="action">#176D60</color>
+    <color name="secondary">#176D60</color>
+    <color name="secondary_surface">#F7FAF9</color>
+    <color name="positive_surface">#E5F3ED</color>
+    <color name="warning_surface">#FDF0DC</color>
 </resources>

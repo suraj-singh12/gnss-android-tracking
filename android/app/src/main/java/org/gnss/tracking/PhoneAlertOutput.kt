@@ -99,11 +99,22 @@ class NotificationPhoneAlertOutput(private val context: Context) : PhoneAlertOut
                 action,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
+        val stop =
+            PendingIntent.getBroadcast(
+                context,
+                0,
+                Intent(context, PhoneAlertActionReceiver::class.java).apply {
+                    this.action = "org.gnss.tracking.STOP_PHONE_ALERT_OUTPUT"
+                    data = Uri.parse("gnss-phone-alert://stop/${row.id}")
+                },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
         val open =
             PendingIntent.getActivity(
                 context,
                 0,
-                Intent(context, MainActivity::class.java),
+                Intent(context, MainActivity::class.java)
+                    .setAction("org.gnss.tracking.OPEN_PHONE_ALERTS"),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
         val notification =
@@ -127,6 +138,7 @@ class NotificationPhoneAlertOutput(private val context: Context) : PhoneAlertOut
                 .addAction(
                     Notification.Action.Builder(null, "Acknowledge / Stop Alert", pending).build()
                 )
+                .addAction(Notification.Action.Builder(null, "Stop output", stop).build())
                 .setCategory(Notification.CATEGORY_MESSAGE)
                 .setVisibility(Notification.VISIBILITY_PRIVATE)
                 .setOngoing(true)
@@ -169,8 +181,14 @@ class NotificationPhoneAlertOutput(private val context: Context) : PhoneAlertOut
 class PhoneAlertActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (
-            intent.action != "org.gnss.tracking.ACK_PHONE_ALERT" ||
-                intent.data?.scheme != "gnss-phone-alert"
+            intent.action !in
+                listOf(
+                    "org.gnss.tracking.ACK_PHONE_ALERT",
+                    "org.gnss.tracking.STOP_PHONE_ALERT_OUTPUT",
+                ) ||
+                intent.data?.scheme != "gnss-phone-alert" ||
+                intent.data?.host !=
+                    (if (intent.action == "org.gnss.tracking.ACK_PHONE_ALERT") "ack" else "stop")
         )
             return
         val id = intent.data?.lastPathSegment ?: return
@@ -179,7 +197,9 @@ class PhoneAlertActionReceiver : BroadcastReceiver() {
         val app = context.applicationContext as TrackingApp
         app.workScope.launch {
             try {
-                app.acknowledgePhoneAlert(id)
+                if (intent.action == "org.gnss.tracking.STOP_PHONE_ALERT_OUTPUT")
+                    app.stopPhoneAlertOutput(id)
+                else app.acknowledgePhoneAlert(id)
             } finally {
                 result.finish()
             }

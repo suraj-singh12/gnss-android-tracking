@@ -121,6 +121,16 @@ class PhoneAlertNotificationTest {
             val notification =
                 manager.activeNotifications.first { it.tag.endsWith(row.id) }.notification
             assertEquals("Acknowledge / Stop Alert", notification.actions[0].title.toString())
+            assertEquals("Stop output", notification.actions[1].title.toString())
+            notification.actions[1].actionIntent.send()
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            withTimeout(5000) {
+                while (app.repository.dao.command(row.id)!!.localOutputStoppedAt == 0L) delay(10)
+            }
+            assertEquals("unknown", app.repository.dao.command(row.id)!!.state)
+            assertEquals("unknown", app.repository.dao.command(other.id)!!.state)
+            assertEquals(1, manager.activeNotifications.size)
+
             assertTrue(
                 Shadows.shadowOf(notification.actions[0].actionIntent).flags and
                     android.app.PendingIntent.FLAG_IMMUTABLE != 0
@@ -137,7 +147,7 @@ class PhoneAlertNotificationTest {
             notification.actions[0].actionIntent.send()
             Shadows.shadowOf(Looper.getMainLooper()).idle()
             delay(50)
-            assertEquals(2L, app.repository.dao.command(row.id)!!.revision)
+            assertEquals(3L, app.repository.dao.command(row.id)!!.revision)
             assertFalse(app.repository.dao.command(row.id)!!.confirmed)
             assertEquals(1, manager.activeNotifications.size)
             // Model process loss after ACK commit but before OS cancellation.

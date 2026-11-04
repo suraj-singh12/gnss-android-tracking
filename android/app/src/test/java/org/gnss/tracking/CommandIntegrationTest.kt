@@ -57,14 +57,24 @@ class CommandIntegrationTest {
         http.dispatcher.executorService.shutdown()
     }
 
-    private fun request(url: String, body: String? = null, headers: Map<String, String> = emptyMap()): Response {
+    private fun request(
+        url: String,
+        body: String? = null,
+        headers: Map<String, String> = emptyMap(),
+    ): Response {
         // Fixture-driven controls acquire the same exclusive ownership as the
         // browser. No production authorization bypass is added to the bridge.
-        val lease = if (url.endsWith("/local/recording")) {
-            val claimed = request(bridge.local + "/local/presentation/claim", "{}", mapOf("Origin" to bridge.local))
-            assertEquals(claimed.body, 200, claimed.code)
-            JSONObject(claimed.body)
-        } else null
+        val lease =
+            if (url.endsWith("/local/recording")) {
+                val claimed =
+                    request(
+                        bridge.local + "/local/presentation/claim",
+                        "{}",
+                        mapOf("Origin" to bridge.local),
+                    )
+                assertEquals(claimed.body, 200, claimed.code)
+                JSONObject(claimed.body)
+            } else null
         try {
             val builder = Request.Builder().url(url).header("Accept", "application/json")
             headers.forEach { (name, value) -> builder.header(name, value) }
@@ -74,13 +84,23 @@ class CommandIntegrationTest {
             }
             if (body != null) builder.post(body.toRequestBody("application/json".toMediaType()))
             http.newCall(builder.build()).execute().use {
-                return Response(it.code, it.body!!.string(), it.header("Retry-After"),
-                    it.header("Content-Type")?.substringBefore(';') == "application/json")
+                return Response(
+                    it.code,
+                    it.body!!.string(),
+                    it.header("Retry-After"),
+                    it.header("Content-Type")?.substringBefore(';') == "application/json",
+                )
             }
         } finally {
-            if (lease != null) request(bridge.local + "/local/presentation/close",
-                JSONObject().put("token", lease.getString("token")).put("epoch", lease.getString("epoch")).toString(),
-                mapOf("Origin" to bridge.local))
+            if (lease != null)
+                request(
+                    bridge.local + "/local/presentation/close",
+                    JSONObject()
+                        .put("token", lease.getString("token"))
+                        .put("epoch", lease.getString("epoch"))
+                        .toString(),
+                    mapOf("Origin" to bridge.local),
+                )
         }
     }
 
@@ -332,6 +352,7 @@ class CommandIntegrationTest {
         val ackToCustody = mutableListOf<Double>()
         val arrivals = mutableMapOf<String, Long>()
         val cancelStarts = mutableMapOf<String, Long>()
+        val failLocalStop = mutableSetOf<String>()
         val cancelToStop = mutableListOf<Double>()
         val attempts = mutableMapOf<String, Int>()
         val output = NotificationPhoneAlertOutput(context)
@@ -399,6 +420,7 @@ class CommandIntegrationTest {
                         }
 
                         override fun stop(id: String) {
+                            if (failLocalStop.remove(id)) error("Injected OS cancellation failure")
                             output.stop(id)
                             cancelStarts.remove(id)?.let {
                                 cancelToStop.add((System.nanoTime() - it) / 1e6)
@@ -498,6 +520,35 @@ class CommandIntegrationTest {
                 )
                 poll(fleet) // offline members reconnect before expiry
                 for ((index, peer) in fleet.withIndex()) {
+                    if (index == 0) {
+                        val id = ids[index]
+                        if (n == 1 && mode == "urgent") {
+                            failLocalStop.add(id)
+                            assertTrue(runCatching { peer.engine.stopAlertOutput(id) }.isFailure)
+                            assertEquals(
+                                0L,
+                                peer.p.repository.dao.command(id)!!.localOutputStoppedAt,
+                            )
+                            poll(listOf(peer))
+                            assertTrue(peer.p.repository.dao.command(id)!!.confirmed)
+                        }
+                        val before = peer.p.repository.dao.command(id)!!
+                        peer.engine.stopAlertOutput(id)
+                        val stopped = peer.p.repository.dao.command(id)!!
+                        assertEquals("unknown", stopped.state)
+                        assertTrue(
+                            stopped.localOutputStopRequestedAt > 0 &&
+                                stopped.localOutputStoppedAt > 0
+                        )
+                        if (before.localOutputStopRequestedAt > 0)
+                            assertEquals(before.result(), stopped.result())
+                        poll(listOf(peer))
+                        assertTrue(peer.p.repository.dao.command(id)!!.confirmed)
+                        peer.engine = engine(peer.p, peer.key)
+                        peer.engine.tickAlerts()
+                        poll(listOf(peer))
+                        assertEquals(1, attempts[id])
+                    }
                     val started = System.nanoTime()
                     peer.engine.acknowledgeAlert(
                         ids[index]

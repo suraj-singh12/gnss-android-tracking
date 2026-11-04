@@ -173,9 +173,12 @@ class TrackingApp : Application() {
     val adaptiveRequests = MutableStateFlow(0L)
     private var policyWrite: Job? = null
     private var policyRequest = 0L
-    @Volatile var pendingAdaptive: Boolean? = null
+    @Volatile
+    var pendingAdaptive: Boolean? = null
         private set
-    @Volatile var adaptiveSaveFailed = false
+
+    @Volatile
+    var adaptiveSaveFailed = false
         private set
 
     @Synchronized
@@ -185,24 +188,26 @@ class TrackingApp : Application() {
         pendingAdaptive = enabled
         adaptiveSaveFailed = false
         adaptiveRequests.value++
-        return durableWork.launch {
-            previous?.join()
-            val result = runCatching {
-                persistencePolicy.setEnabled(enabled, utc(SystemClock.wallMillis()))
-            }
-            recorder.event(
-                if (result.isSuccess) DiagnosticEvent.PERSISTENCE_POLICY_CHANGED
-                else DiagnosticEvent.PERSISTENCE_POLICY_FAILED,
-                persistencePolicy = persistencePolicy.state,
-            )
-            synchronized(this@TrackingApp) {
-                if (request == policyRequest) {
-                    adaptiveSaveFailed = result.isFailure
-                    pendingAdaptive = null
-                    adaptiveRequests.value++
+        return durableWork
+            .launch {
+                previous?.join()
+                val result = runCatching {
+                    persistencePolicy.setEnabled(enabled, utc(SystemClock.wallMillis()))
+                }
+                recorder.event(
+                    if (result.isSuccess) DiagnosticEvent.PERSISTENCE_POLICY_CHANGED
+                    else DiagnosticEvent.PERSISTENCE_POLICY_FAILED,
+                    persistencePolicy = persistencePolicy.state,
+                )
+                synchronized(this@TrackingApp) {
+                    if (request == policyRequest) {
+                        adaptiveSaveFailed = result.isFailure
+                        pendingAdaptive = null
+                        adaptiveRequests.value++
+                    }
                 }
             }
-        }.also { policyWrite = it }
+            .also { policyWrite = it }
     }
 
     val workScope = durableWork
@@ -229,9 +234,31 @@ class TrackingApp : Application() {
         )
     }
 
+    suspend fun stopPhoneAlertOutput(id: String) {
+        try {
+            commandControl.stopAlertOutput(id)
+            operational.update {
+                if (it.error?.startsWith("Alert output stop") == true) it.copy(error = null) else it
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            operational.update {
+                it.copy(
+                    error =
+                        "Alert output stop could not be confirmed. Retry from alert details; recipient acknowledgement is a separate recorded action."
+                )
+            }
+        }
+    }
+
     suspend fun acknowledgePhoneAlert(id: String) {
         try {
             commandControl.acknowledgeAlert(id)
+            operational.update {
+                if (it.error?.startsWith("Alert acknowledgement") == true) it.copy(error = null)
+                else it
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {

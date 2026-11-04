@@ -59,7 +59,7 @@ class SosActivityTest {
         val activity = Robolectric.buildActivity(MainActivity::class.java).setup()
         val sos =
             buttons(activity.get().window.decorView as ViewGroup).first {
-                it.text == "HOLD FOR SOS"
+                it.text == "Hold to activate SOS"
             }
         sos.performClick()
         assertNull(app.repository.dao.latestSos())
@@ -79,7 +79,7 @@ class SosActivityTest {
         try {
             val button =
                 buttons(activity.get().window.decorView as ViewGroup).single {
-                    it.text == "HOLD FOR SOS"
+                    it.text == "Hold to activate SOS"
                 }
             button.layout(0, 0, 240, 64)
             fun touch(action: Int) {

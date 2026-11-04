@@ -1,4 +1,132 @@
-# Issue #6 integrated UI acceptance
+# UI acceptance evidence
+
+## Issue #39 V4.6 — environment repair and baseline gate (2026-11-04)
+
+Authorized source: `9547985efd84c7229025b0b1c56812099589dc6b`, freshly fetched
+`integration/combined-upgrades`. The mandatory baseline gate passed before production
+implementation began. This section records the exact unchanged-source baseline and
+environment work; final implementation evidence is recorded separately below.
+
+- `/usr/bin/go` is a desktop Go board game (`--help` describes local two-player
+  play), not the compiler. An isolated official Go **1.24.7 linux/amd64** toolchain
+  was selected using PATH. Its downloaded archive SHA-256 matched the official
+  release index: `da18191ddb7db8a9339816f3e2b54bdded8047cdc2a5d67059478f8d1595c43f`.
+  The existing bridge script was not changed.
+- Direct external DNS is unavailable in this proxy-only environment. Java did not
+  consume HTTP_PROXY/HTTPS_PROXY automatically. Explicit Java HTTP/HTTPS proxy
+  properties enabled the unchanged wrapper to download **Gradle 8.11.1** and
+  enforce its existing SHA-256
+  `f397b287023acdba1e9f6fc5ea72d22dd63669d59ed4a289a29b1a76eee151c6`.
+- The initial Debian Java **21.0.12.1** installation lacked JAVA_COMPILER (`javac`).
+  Installed isolated Temurin **17.0.21+9**, verifying publisher archive SHA-256
+  `8b9b611d917e3dfd8419d3566b5949226f69b052fed7e109c1368add1dfe8711`.
+  JAVA_HOME selects that full JDK; existing system CA trust remains enabled.
+- Installed Android platform **35 revision 2**, Build Tools **35.0.0** and Platform
+  Tools **37.0.1** under an isolated ANDROID_HOME, checking archives against the
+  official Android repository metadata. No build dependency or SDK target changed.
+- Gradle's forked Robolectric JVMs also need proxy/CA properties. GRADLE_OPTS alone
+  fixed wrapper/dependency downloads but not those forks. The initial unit attempt
+  failed framework resolution with UnknownHostException and was stopped; that is
+  infrastructure failure, not application regression evidence. JAVA_TOOL_OPTIONS
+  now propagates the same proxy/CA properties to the test JVMs.
+- Baseline `./gradlew testDebugUnitTest lintDebug assembleDebug --max-workers=2
+  --console=plain`: **BUILD SUCCESSFUL**, 9m46s. XML: **278 tests, 242 passed,
+  36 bridge-dependent skipped, zero failures/errors**. Lint XML: **zero errors,
+  112 warnings**. Debug APK assembled. This tests unchanged application source at
+  the pinned integration SHA; concurrent changes were setup documentation only.
+- Baseline `test-tools/integration/run.sh --max-workers=2 --console=plain` with the
+  repaired environment: **BUILD SUCCESSFUL**, 19m42s. The scoped
+  `CommandIntegrationTest` XML reports **36/36 passed, zero skipped/failures/errors**,
+  1115.644s test time. These are the same 36 methods skipped by the ordinary run,
+  not additional unique tests. Real Kotlin/Room/Sender and Go HTTP/SQLite ran.
+
+### V4.6 Day text contrast — operator approved minimal correction
+
+During native token implementation, the exact immutable V4.6 `--muted: #697C82`
+was checked against its approved Day surfaces. WCAG relative-luminance contrast is
+**4.3695:1 on #FFFFFF**, **4.0208:1 on #F3F6F6** and **4.1608:1 on #F7FAF9**.
+The artifact uses this token for small secondary text. The existing
+`NativeUiAccessibilityTest.semanticTextPairsMeetNormalTextContrastInBothThemes`
+requires at least 4.5:1, as does the existing design-system accessibility contract.
+Exact token parity and that requirement cannot both hold for those text pairs.
+
+Operator-approved narrowly scoped exception: Day secondary text **#61747A**, the first
+passing shade when subtracting the same integer RGB amount from the approved
+token (eight per channel). Ratios: **4.5071:1 on #F3F6F6**, **4.8980:1 on white**.
+The operator replied **“Approve minimal contrast correction”** in this implementation
+session. The production Day secondary-text token uses that shade. The immutable
+approved artifact, test threshold and approved typography remain unchanged.
+
+### Implemented contract and final verification ledger
+
+The existing #39 branch was reconciled against the latest fetched integration parent,
+not `main`: `devX/issue-39-android-settings-diagnostics` descends from `9547985e…`;
+its historical PR #44 work at `5307c79…` is already integrated. Canonical agent guidance
+is synchronized from `9e237edfc7ce0b9218b93ecd661d83203a40a0e5`, file only. PR #64
+remains draft/unmerged; its 15 rules/52 corrections were read as requirements, not code.
+
+V4.6 is the pinned artifact at `8d95eafe6fdcd1423027194ea128ae7a8b91236d`.
+The [60-group matrix](ui-preservation-matrix.md) records production ownership and
+preservation. Advanced diagnostics/history/configuration remain contextual; acknowledged
+View alert history opens the canonical retained journal. No Command production,
+protocol, approved design or dependency/wrapper changes are included.
+
+Room 7→8 adds stop-request and cancellation-return timestamps to the existing command
+journal. Local stop commits intent before cancelling repetition/OS output; recipient ACK
+is independent. API cancellation failure leaves completion unconfirmed and retryable.
+Local completion does **not** revise an already sealed Command `unknown` wire result;
+its exact revision/digest remain unchanged until an explicit recipient ACK. The real
+bridge regression exercises stop-only, OS failure, custody, retry/restart and subsequent ACK.
+
+Final implementation verification: **PENDING execution against committed source**.
+Intermediate working-tree runs caught and corrected reused layout-parameter geometry,
+large-font SOS clipping, stale retained-history filters, filter event-queue timing and
+sealed terminal-result semantics. They are not relabelled as final-commit evidence.
+The last full navigation-render probe before final polish passed all 14 theme/size
+cases in 2m41s. Final full suites, lint, APK and bridge must validate the committed code.
+
+Reproduction environment used in this session (paths are disposable tool installations):
+
+```sh
+export JAVA_HOME=/workspace/scratch/gnss-toolchains/jdk-17.0.21+9
+export ANDROID_HOME=/workspace/scratch/gnss-toolchains/android-sdk
+export PATH="$JAVA_HOME/bin:/workspace/scratch/gnss-toolchains/go/bin:$PATH"
+export GRADLE_OPTS="-Dhttps.proxyHost=proxy -Dhttps.proxyPort=8080 -Dhttp.proxyHost=proxy -Dhttp.proxyPort=8080 -Djavax.net.ssl.trustStore=/etc/ssl/certs/java/cacerts"
+export JAVA_TOOL_OPTIONS="$GRADLE_OPTS"
+# From android/ (ordinary run deliberately skips the bridge-dependent methods):
+GNSS_SCREENSHOT_DIR=/workspace/scratch/gnss-toolchains/final-native ./gradlew testDebugUnitTest lintDebug assembleDebug --max-workers=2 --console=plain
+# From repository root; real Kotlin/Room/Sender → Go/SQLite, race-enabled bridge:
+test-tools/integration/run.sh --max-workers=2 --console=plain
+```
+
+Use the environment's configured proxy/CA paths on another machine; no TLS or checksum
+bypass is permitted. The localhost bridge does not use the external Java proxy path.
+No exact-parent CI run was available during the baseline; local verification repaired
+that gate. The existing integration-targeted workflow can validate the draft PR head.
+
+### Visual/accessibility and anti-regression boundary
+
+Native renders use real MainActivity/native controls with test-only Room/Operational
+fixtures, never production demo records. Coverage: Day/Night, 360×800, 480×960, 390×842,
+1×/1.5× font scales, 800×360/960×480 landscape, nested screens and dialog states.
+Global SOS remains fixed while content scrolls; native 48 dp touch targets accommodate
+Android accessibility even where the HTML's visual control is 40–43 px. Android owns
+notification/permission/document-picker geometry. Software rendering does not prove
+TalkBack, actual sound/vibration, physical GNSS or key delivery.
+
+| Quality rules / historical corrections | Implementation and verification boundary |
+| --- | --- |
+| Rules 1–3; corrections 27–39 | Same authorities/drafts; direct five Settings and seven Diagnostics destinations; mandatory hold; one Filter history entry with binary switches and contextual canonical categories; one genuine physical-test interface; no screen-key proof |
+| Rules 4–9; corrections 40–45 | Fixed SOS/native scroll containment, compact task actions, grouped peer menus/separators, concise GNSS/contact, identical pale-red Stop in both themes, consistent chevrons/icons; native geometry/render and contrast checks |
+| Rules 10–15; corrections 46–52 | Read-only public UUIDs, compact Authorize/Recheck/help, protected private input, cancel-safe review, saved ordinary drafts/routes/query/filter/page/selection, unchanged-view focus preservation, actual lifecycle/Room/ACK/trust states and contextual evidence |
+| Corrections 1–26 | Command-specific map/recording/calendar/audio changes are outside this Android scope; shared containment, interaction preservation and operational-truth principles apply. Command V5.14 is untouched |
+
+Physical acceptance remains **NOT TESTED**: actual Android permission/locked-screen/
+Doze/OEM/service recovery, GNSS freshness/accuracy in the field, DND/mute/channel sound
+and vibration, hardware buttons, TalkBack/switch access and real offline/LAN multi-phone
+operation. Native macOS/Windows execution is also not established by Linux integration.
+Use the existing [device acceptance](../android/DEVICE-ACCEPTANCE.md) procedure.
+No field-stable/release claim, merge, release or Issue #39 closure is authorized.
 
 ## DEM reliability and Map & Layers follow-up on PR #19
 
