@@ -485,6 +485,17 @@ class CommandControlTest {
         assertEquals("unknown", repository.dao.command(active["id"] as String)!!.state)
         poll()
         assertEquals(2, alertAttempts)
+        val recovered = repository.dao.command(active["id"] as String)!!
+        assertTrue(recovered.confirmed)
+        assertEquals(0L, recovered.localOutputStopRequestedAt)
+        engine.stopAlertOutput(recovered.id)
+        val stopped = repository.dao.command(recovered.id)!!
+        assertEquals(recovered.result(), stopped.result())
+        assertTrue(stopped.confirmed)
+        assertTrue(stopped.localOutputStopRequestedAt > 0 && stopped.localOutputStoppedAt > 0)
+        assertEquals(1, repository.dao.unresolvedCommands())
+        engine.acknowledgeAlert(recovered.id)
+        assertEquals("recipient_acknowledged", repository.dao.command(recovered.id)!!.state)
     }
 
     @Test

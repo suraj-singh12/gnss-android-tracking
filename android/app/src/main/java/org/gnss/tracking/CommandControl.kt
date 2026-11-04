@@ -942,12 +942,20 @@ class CommandControl(
                 return@withLock
             if (row.localOutputStopRequestedAt == 0L) {
                 // Persist intent first. Interrupted output may never resume after restart.
-                finish(
-                    row.copy(localOutputStopRequestedAt = clock.wallMillis()),
-                    "unknown",
-                    "Local output stop requested; recipient acknowledgement pending",
-                    "Cancellation pending; actual audibility unknown",
-                )
+                val requested = row.copy(localOutputStopRequestedAt = clock.wallMillis())
+                if (row.state == "unknown") {
+                    // Recovery may already have sealed this exact terminal result. A
+                    // local cancellation must not revise it, even before custody arrives.
+                    dao.updateCommand(
+                        requested.event(clock.wallMillis(), "Local output stop requested")
+                    )
+                } else
+                    finish(
+                        requested,
+                        "unknown",
+                        "Local output stop requested; recipient acknowledgement pending",
+                        "Cancellation pending; actual audibility unknown",
+                    )
             }
             alertNext.remove(id)
             alertDeadline.remove(id)

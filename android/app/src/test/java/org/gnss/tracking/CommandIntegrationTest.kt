@@ -520,8 +520,19 @@ class CommandIntegrationTest {
                 )
                 poll(fleet) // offline members reconnect before expiry
                 for ((index, peer) in fleet.withIndex()) {
-                    if (index == 0) {
+                    if (index <= 1) {
                         val id = ids[index]
+                        if (index == 1) {
+                            // Cold-start recovery may already have sealed an unknown result
+                            // before the user asks to cancel any remaining OS output.
+                            peer.engine = engine(peer.p, peer.key)
+                            peer.engine.tickAlerts()
+                            poll(listOf(peer))
+                            val recovered = peer.p.repository.dao.command(id)!!
+                            assertEquals("unknown", recovered.state)
+                            assertTrue(recovered.confirmed)
+                            assertEquals(0L, recovered.localOutputStopRequestedAt)
+                        }
                         if (n == 1 && mode == "urgent") {
                             failLocalStop.add(id)
                             assertTrue(runCatching { peer.engine.stopAlertOutput(id) }.isFailure)
@@ -540,7 +551,7 @@ class CommandIntegrationTest {
                             stopped.localOutputStopRequestedAt > 0 &&
                                 stopped.localOutputStoppedAt > 0
                         )
-                        if (before.localOutputStopRequestedAt > 0)
+                        if (before.state == "unknown")
                             assertEquals(before.result(), stopped.result())
                         poll(listOf(peer))
                         assertTrue(peer.p.repository.dao.command(id)!!.confirmed)

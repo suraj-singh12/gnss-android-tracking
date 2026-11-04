@@ -150,6 +150,19 @@ Protected-input correction targeted run: **39 tests passed, zero failures/errors
 `PhoneAlertNotificationTest`), before the final commit. Real TalkBack/Switch Access
 was not executed. Final implementation verification: **PENDING execution against
 committed source**.
+The `98c37224390ea90f4045a7dc9382a5db471d91e3` full invocation was
+intentionally stopped after 403.739s (exit 143) during self-review; it supplies no
+completed final-suite evidence. A new regression reproduced a stop-only defect after
+cold-start recovery: an already confirmed `unknown` alert had no local-stop intent,
+and requesting Stop Output revised its sealed result. The fix persists local intent
+and OS cancellation evidence without revising **any** pre-existing `unknown` result,
+including one awaiting custody. The regression checks unchanged wire result and
+confirmation, durable local timestamps, retained unresolved status and subsequent
+explicit recipient ACK. The corrected CommandControl class passed all 26 cases,
+zero failures/errors/skips (`recovered-stop-fixed.log`), before the final commit.
+The real bridge additionally covers recovered alerts in the
+5/20-phone fleets, alongside the existing stop/retry/OS-failure scenario.
+
 Intermediate working-tree runs caught and corrected reused layout-parameter geometry,
 large-font SOS clipping, stale retained-history filters, filter event-queue timing and
 sealed terminal-result semantics. They are not relabelled as final-commit evidence.
