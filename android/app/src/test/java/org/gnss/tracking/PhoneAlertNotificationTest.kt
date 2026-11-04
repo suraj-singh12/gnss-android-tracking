@@ -42,6 +42,14 @@ class PhoneAlertNotificationTest {
             app.acknowledgePhoneAlert(row.id)
             assertEquals("recipient_acknowledged", app.repository.dao.command(row.id)!!.state)
             assertFalse(app.repository.dao.command(row.id)!!.confirmed)
+            assertNull(app.operational.value.error)
+            app.operational.value =
+                app.operational.value.copy(error = "Alert output stop could not be confirmed")
+            app.acknowledgePhoneAlert(row.id)
+            assertNull(app.operational.value.error)
+            app.operational.value = app.operational.value.copy(error = "Tracking needs attention")
+            app.acknowledgePhoneAlert(row.id)
+            assertEquals("Tracking needs attention", app.operational.value.error)
         } finally {
             app.finishForTests()
         }

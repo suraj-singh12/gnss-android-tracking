@@ -315,7 +315,11 @@ class TrackingApp : Application() {
         try {
             commandControl.acknowledgeAlert(id)
             operational.update {
-                if (it.error?.startsWith("Alert acknowledgement") == true) it.copy(error = null)
+                if (
+                    it.error?.startsWith("Alert acknowledgement") == true ||
+                        it.error?.startsWith("Alert output stop") == true
+                )
+                    it.copy(error = null)
                 else it
             }
         } catch (e: CancellationException) {

@@ -160,12 +160,28 @@ class MainActivityStartupTest {
             val button = field<Button>(activity.get(), "startButton")
             assertFalse(button.isEnabled)
             assertEquals("Loading settings…", button.text.toString())
+            openNativeScreen(activity.get(), "Party & Command")
+            val label =
+                nativeViews(activity.get().findViewById(android.R.id.content))
+                    .filterIsInstance<TextView>()
+                    .single {
+                        it.text == "Reporting interval · seconds" &&
+                            it.labelFor != android.view.View.NO_ID
+                    }
+            val intervalEditor =
+                activity.get().findViewById<android.widget.EditText>(label.labelFor)
+            assertFalse(
+                "Mirrored editor must wait for its canonical draft",
+                intervalEditor.isEnabled,
+            )
+            openNativeScreen(activity.get(), "Tracking")
             button.performClick()
             assertTrue(app.operational.value.error!!.contains("still loading"))
             assertNull(shadowOf(app).nextStartedService)
             release.complete(Unit)
             transaction.join()
             await { button.isEnabled }
+            assertTrue(intervalEditor.isEnabled)
             button.performClick()
             await { !field<Boolean>(activity.get(), "pendingStart") }
             assertNotNull(shadowOf(app).nextStartedService)

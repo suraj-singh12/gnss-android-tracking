@@ -27,6 +27,8 @@ class MainActivity : Activity() {
     private lateinit var endpoint: EditText
     private lateinit var interval: EditText
     private var v46PartyInterval: EditText? = null
+    private var v46IntervalPicker: Spinner? = null
+    private var restoredCustomInterval = false
     private val routeScrolls = mutableMapOf<String, Int>()
     private var mainScroll: ScrollView? = null
     private lateinit var exportStatus: TextView
@@ -221,6 +223,7 @@ class MainActivity : Activity() {
             v46Outcomes.clear()
             v46Outcomes.addAll(it)
         }
+        restoredCustomInterval = savedInstanceState?.getBoolean("customIntervalChoice") ?: false
         draftState = savedInstanceState?.getBundle("settingsDraft")
         selectedSos = savedInstanceState?.getString("selectedSos")
         sosPage = savedInstanceState?.getInt("sosPage") ?: 0
@@ -1539,6 +1542,7 @@ class MainActivity : Activity() {
             exportDiagnosticsButton,
             ::navigate,
         )
+        sosHold.monitorFocus(root)
         savedInstanceState?.getBundle("routeScrolls")?.let { positions ->
             positions.keySet().forEach { routeScrolls[it] = positions.getInt(it) }
         }
@@ -3448,6 +3452,7 @@ class MainActivity : Activity() {
                 .apply {
                     id = View.generateViewId()
                     inputType = android.text.InputType.TYPE_CLASS_NUMBER
+                    isEnabled = interval.isEnabled
                 }
         field(form, "Reporting interval · seconds", partyInterval)
         var mirroring = false
@@ -3519,6 +3524,7 @@ class MainActivity : Activity() {
                         choices,
                     )
             }
+        v46IntervalPicker = picker
         add(policyCard, picker)
         val customLabel = ui.label("Custom interval · seconds", 11f, bold = true)
         add(policyCard, customLabel, 10)
@@ -3527,10 +3533,11 @@ class MainActivity : Activity() {
         val customHint = ui.label("5–86,400 seconds · multiples of 5", 10.5f, true)
         add(policyCard, customHint)
         var pickerPosition = -1
-        var customSelected = false
+        var customSelected = restoredCustomInterval
         fun renderPicker() {
             val predefined = listOf("5", "10", "30", "60").indexOf(interval.text.toString())
-            val index = if (customSelected || predefined < 0) 4 else predefined
+            val index =
+                if (customSelected || interval.hasFocus() || predefined < 0) 4 else predefined
             pickerPosition = index
             picker.setSelection(index)
             customLabel.visibility = if (index == 4) View.VISIBLE else View.GONE
@@ -3545,7 +3552,10 @@ class MainActivity : Activity() {
                     if (position == pickerPosition) return
                     pickerPosition = position
                     customSelected = position == 4
-                    if (position < 4) interval.setText(listOf("5", "10", "30", "60")[position])
+                    if (position < 4) {
+                        interval.clearFocus()
+                        interval.setText(listOf("5", "10", "30", "60")[position])
+                    }
                     renderPicker()
                     if (position == 4) interval.requestFocus()
                 }
@@ -4142,6 +4152,7 @@ class MainActivity : Activity() {
         v46Refresh = {
             val state = savedInstallation
             val op = app.operational.value
+            v46PartyInterval?.isEnabled = interval.isEnabled
             recoveryFailure.text =
                 op.error?.takeIf { it.startsWith("Saved delivery retry") }.orEmpty()
             recoveryFailure.visibility =
@@ -4752,6 +4763,7 @@ class MainActivity : Activity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean("consumedNotificationAction", consumedNotificationAction)
+        outState.putBoolean("customIntervalChoice", v46IntervalPicker?.selectedItemPosition == 4)
         outState.putStringArrayList("v46Outcomes", ArrayList(v46Outcomes))
         mainScroll?.let { routeScrolls[route] = it.scrollY }
         outState.putBundle(
@@ -4848,7 +4860,27 @@ class MainActivity : Activity() {
         internal const val EXPORT_DIAGNOSTICS = 40
     }
 
+    override fun dispatchTouchEvent(event: android.view.MotionEvent): Boolean {
+        if (::sosHold.isInitialized) sosHold.onWindowTouch(event)
+        return super.dispatchTouchEvent(event)
+    }
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (
+            ::sosHold.isInitialized &&
+                event.action == KeyEvent.ACTION_DOWN &&
+                event.keyCode in
+                    listOf(
+                        KeyEvent.KEYCODE_TAB,
+                        KeyEvent.KEYCODE_DPAD_UP,
+                        KeyEvent.KEYCODE_DPAD_DOWN,
+                        KeyEvent.KEYCODE_DPAD_LEFT,
+                        KeyEvent.KEYCODE_DPAD_RIGHT,
+                        KeyEvent.KEYCODE_BACK,
+                        KeyEvent.KEYCODE_ESCAPE,
+                    )
+        )
+            sosHold.cancel()
         if (resumed && app.physicalButtonTest.listening) {
             val interactive =
                 runCatching { getSystemService(android.os.PowerManager::class.java).isInteractive }
@@ -4971,7 +5003,8 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
-        if (::sosHold.isInitialized) sosHold.cancel()
+        resumed = false
+        if (::sosHold.isInitialized) sosHold.dispose()
         if (pendingStart && (!isChangingConfigurations || savingStart))
             app.operational.update { it.copy(starting = false) }
         physicalButtonRefresh?.cancel()

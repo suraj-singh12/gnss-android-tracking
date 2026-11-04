@@ -570,7 +570,12 @@ and verification. Command V5.14, protocol and approved artifacts are unchanged.
 - **Global safety:** the same 1.2-second hold/Room SOS engine is available throughout
   navigation. Release, movement, multi-touch, route/window-focus loss or Activity pause
   cancels incomplete touch holds. Committed events survive Activity destruction.
-  SOS transport receipt and Command human acknowledgement remain separate.
+  SOS transport receipt and Command human acknowledgement remain separate. The
+  explicit accessibility action waits 1.2 seconds, announces pending state and exposes
+  Cancel; ordinary announcements/same-node focus do not cancel it. Deliberate focus
+  movement, navigation and pause cancel unfinished attempts. Repeated actions cannot
+  bypass protection. Enter/Space/DPAD-center use the same full-duration hold. Actual
+  TalkBack/Switch Access remains a physical acceptance item.
 - **Settings:** Party & Command, Command access, Field readiness, Tracking policy,
   Emergency controls. Party and policy share the canonical interval draft; 5/10/30/60
   and Custom preserve valid existing values. Save policy changes reporting using saved

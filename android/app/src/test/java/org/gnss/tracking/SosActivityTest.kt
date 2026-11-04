@@ -64,6 +64,8 @@ class SosActivityTest {
         sos.performClick()
         assertNull(app.repository.dao.latestSos())
         assertTrue(sos.performLongClick())
+        assertNull(app.repository.dao.latestSos())
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1200))
         assertTrue(app.sosNotice.value!!.contains("SOS"))
         activity.pause().stop().destroy()
         val row = saved()
@@ -153,6 +155,32 @@ class SosActivityTest {
             activity.pause().stop().destroy()
         }
     }
+
+    @Test
+    @LooperMode(LooperMode.Mode.PAUSED)
+    fun protectedAccessibilityAttemptCancelsOnPauseButCommittedActivationSurvivesDestroy() =
+        runBlocking {
+            val activity = Robolectric.buildActivity(MainActivity::class.java).setup()
+            val button =
+                buttons(activity.get().window.decorView as ViewGroup).single {
+                    it.text == "Hold to activate SOS"
+                }
+            try {
+                assertTrue(button.performLongClick())
+                shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(600))
+                activity.pause().stop()
+                shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1400))
+                assertTrue(app.repository.dao.sosHistory().isEmpty())
+                activity.start().resume()
+                assertTrue(button.performLongClick())
+                shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1200))
+                activity.pause().stop().destroy()
+                assertNull(saved().deliveredAt)
+                assertEquals(1, app.repository.dao.sosHistory().size)
+            } finally {
+                if (app.activityVisible) activity.pause().stop().destroy()
+            }
+        }
 
     @Test
     fun centralEngineWorksWhileServiceActiveAndActivityHiddenWithoutNewLocationListener() =

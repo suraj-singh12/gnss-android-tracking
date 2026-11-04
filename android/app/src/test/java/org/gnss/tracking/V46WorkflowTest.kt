@@ -36,6 +36,47 @@ class V46WorkflowTest {
     }
 
     @Test
+    fun customEditorKeepsLeadingPresetDigitAndRestoresExplicitChoice() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<TrackingApp>()
+        app.repository.settings("A", "Alpha", "http://192.168.1.2:8080", 35)
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        fun all() = nativeViews(controller.get().findViewById(android.R.id.content))
+        fun editor() =
+            all().filterIsInstance<EditText>().single {
+                it.contentDescription == "Custom interval · seconds"
+            }
+        fun picker() =
+            all().filterIsInstance<Spinner>().single {
+                it.contentDescription == "Reporting interval"
+            }
+        try {
+            await {
+                all().filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled }
+            }
+            openNativeScreen(controller.get(), "Tracking policy")
+            editor().requestFocus()
+            editor().setText("5")
+            assertTrue("Typing the first digit of 50 must not hide Custom", editor().isShown)
+            controller.recreate()
+            await {
+                all().filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled }
+            }
+            assertTrue(editor().isShown)
+            assertEquals(4, picker().selectedItemPosition)
+            editor().append("0")
+            assertEquals("50", editor().text.toString())
+            picker().setSelection(0)
+            shadowOf(Looper.getMainLooper()).idle()
+            assertFalse(editor().isShown)
+            assertEquals("5", editor().text.toString())
+            assertEquals(35, app.repository.state().localInterval)
+        } finally {
+            controller.pause().stop().destroy()
+            app.finishForTests()
+        }
+    }
+
+    @Test
     fun customPolicyRoundTripsAndFilterCancellationIsTransactional() = runBlocking {
         val app = ApplicationProvider.getApplicationContext<TrackingApp>()
         app.repository.settings("A", "Alpha", "http://192.168.1.2:8080", 35)
@@ -299,6 +340,14 @@ class V46WorkflowTest {
                     "Navigation cancels $name hold",
                     app.repository.dao.sosHistory().isEmpty(),
                 )
+            }
+            for (destination in listOf("Command access", "Diagnostics")) {
+                openNativeScreen(controller.get(), destination)
+                assertTrue(button().performLongClick())
+                advance(600)
+                openNativeScreen(controller.get(), "Tracking")
+                advance(1400)
+                assertTrue(app.repository.dao.sosHistory().isEmpty())
             }
             openNativeScreen(controller.get(), "Settings")
             val b = button()

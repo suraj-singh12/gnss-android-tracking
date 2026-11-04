@@ -103,18 +103,53 @@ opening, and checks endpoint/binding generation under CommandControl's existing 
 before private-key storage. The Tracking save caption now reads writer commitment,
 pending work and failures instead of inferring saved observations from Tracking ON.
 
-### Pending SOS accessibility decision (P0)
+### Approved protected SOS accessibility clarification
 
-`SosHoldGesture` enforces continuous 1200 ms for pointer input, but its pre-existing
-accessibility long-click invokes activation immediately. Android ACTION_LONG_CLICK
-contains no duration or release event. The operator has been asked whether to replace
-that shortcut with an explicit protected accessibility action waiting 1200 ms and
-cancelling on navigation/focus loss/pause, or require continuous touch/keyboard hold.
-No authorization for that clarification has been assumed. Until resolved, this is a
-visible production-readiness blocker; passing pointer tests do not prove protected
-accessibility activation. See matrix IDs 43/60. Physical accessibility remains separate.
+The operator explicitly approved replacing immediate ACTION_LONG_CLICK activation with
+an explicit protected accessibility action, with **the full 1200 ms delay**, accessible
+pending feedback and Cancel, cancellation on navigation/deliberate focus change/pause,
+no duplicate/bypass, and the existing SOS engine/durability/delivery unchanged. The
+operator also required that ordinary reader announcements/focus updates not cancel it
+and authorized proceeding **without another design review**.
 
-Final implementation verification: **PENDING execution against committed source**.
+The adapter now exposes a labelled protected long-click action and changes the standard
+accessible Click action to **Cancel SOS activation** while pending. Touching Cancel or
+using the focused keyboard action cancels without starting another hold. Repeated
+accessibility actions do not reset the timer or duplicate activation; after completion,
+another accessibility attempt requires leaving/refocusing the control. Announcements,
+content updates and clear/reacquire notifications on the same node are ignored by the
+cancellation monitor; actual focus on another control cancels. Native input-focus
+restoration to its starting target is tolerated. Window loss, explicit navigation keys,
+Activity pause/destruction and outside touch cancel unfinished attempts. Continuous
+1200 ms touch behavior is preserved; Enter/Space/DPAD-center also require a full hold.
+The optional existing triple-volume shortcut retains its separately approved pattern.
+Only the original app SOS engine can commit/transmit an event.
+
+Native framework-action tests cover minimum delay (no activation at 1199 ms), Cancel,
+interruption/disposal, duplicate actions, keyboard hold/release, focus on another
+control, ordinary announcements/same-node focus, global navigation and post-activation
+Activity destruction. These are software tests, **not real TalkBack or Switch Access**.
+ADB reports no attached device; those physical checks remain explicitly pending.
+
+A separate reproduced Custom-interval regression (`35 → type first digit 5 of 50`)
+hid the editor as if a preset had been selected. The fix preserves editing focus and
+explicit Custom choice across recreation, while explicit preset selection still hides
+Custom. The Party interval mirror also follows the canonical editor's loading/enabled
+state, preventing early edits from being overwritten by initial storage loading.
+
+The complete Android command at `1adb1d4e77d23653c61bbccb9ea5caf86d989a69` passed:
+**290 tests, 254 passed, 36 bridge-dependent skipped, zero failures/errors; lint zero
+errors/fatals and 131 warnings; debug APK built**, 9m59s. Its APK contains that exact
+source SHA in DEX; SHA-256 `87396ed175569513f5a25f13bf4c8a910756ef6f66ae5fbd9b85401c63479fe5`.
+The follow-on bridge invocation was interrupted during setup for the above input fixes;
+it is not integration evidence. Cached XML left by that interruption is excluded from
+counts. Final evidence below must validate the subsequent implementation commit.
+
+Protected-input correction targeted run: **39 tests passed, zero failures/errors/skips**
+(`SosHoldGestureTest`, `SosActivityTest`, `V46WorkflowTest`, `MainActivityStartupTest`,
+`PhoneAlertNotificationTest`), before the final commit. Real TalkBack/Switch Access
+was not executed. Final implementation verification: **PENDING execution against
+committed source**.
 Intermediate working-tree runs caught and corrected reused layout-parameter geometry,
 large-font SOS clipping, stale retained-history filters, filter event-queue timing and
 sealed terminal-result semantics. They are not relabelled as final-commit evidence.
