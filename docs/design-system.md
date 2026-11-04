@@ -5,6 +5,102 @@ Issue #6 builds on combined GNSS + SOS source
 service/backend state. Typography and semantics are shared; Android uses native
 controls and Command uses accessible HTML controls.
 
+## Operator UI/UX quality gate — 15 reusable rules
+
+These operator-established, cross-screen rules come from approved/refined Command V5.4–V5.14 and Android V4-series design reviews. Apply them to every future proposed UI-affecting change **before** requesting operator design approval. They supplement, not override, a pinned approved screen-specific design. Cross-project reference: [Design Quality Rules in Systems Library](https://app.notion.com/p/40e85dbdf080819297d0dcc92f7f0cf0).
+
+1. **One function, one clear interface:** no duplicate screens, competing buttons or unnecessary navigation.
+2. **Match control to intent:** switches for binary state, exclusive selection controls for modes, buttons for actions, chevrons for navigation.
+3. **Put controls at point of use:** do not create extra pages for a setting already owned by the current task screen.
+4. **Keep geometry stable:** opening pickers, switching tabs, status/telemetry refresh cannot unexpectedly reflow the workspace.
+5. **Contain transient UI:** popovers and calendars remain within their parent dialog/workspace and never block required actions.
+6. **Remove clutter:** redundant prose, grey explanation cards, repeated titles and excess controls need justification.
+7. **Place separators only between peer rows:** not directly above/below a note, button, single content block or unrelated section.
+8. **Use measured hierarchy:** compact, consistent typography, rows, space and alignment; avoid empty oversized containers.
+9. **Make actions semantically distinct:** normal, affirmative and destructive actions follow consistent emphasis and confirmation.
+10. **Preserve intent and drafts:** Cancel cancels, unsaved edits are protected, and switch/filter selections persist as intended.
+11. **Do not reset active interactions:** refreshing live data preserves open menus, tabs, filters, focus, scroll and in-progress edits.
+12. **Write precise labels:** clear task-oriented verbs/nouns; avoid ambiguous labels and gratuitous trailing ellipses.
+13. **Tell the operational truth:** queued ≠ delivered, received ≠ applied, SOS transport ACK ≠ human ACK, output attempt ≠ audible sound.
+14. **Test real workflows:** navigation, cancellation, failure, night/day, compact screens, overlays and state transitions—not only first screenshots.
+15. **Preserve useful capability when simplifying:** remove duplicate presentation, never working security/recovery/evidence functionality.
+
+**Mandatory design self-review:** inventory affected screens and existing controls; trace the real source/action for each state; identify redundant competing UI; render and interact with main/nested/dialog states at representative sizes; review contrast/accessibility and platform conventions; reject the proposal if any rule fails. Stop for explicit operator approval before production UI implementation. Physical-device acceptance must be distinguished from simulated browser verification.
+
+## Mandatory anti-regression audit before showing a UI proposal
+
+Check the 15 core rules first, then screen the affected workflow against the 52 historical failure checks below. Scope checks to applicable surfaces but explicitly review *adjacent screens, dialogs and the whole task path*. Do not mark a prototype complete solely because it renders or click handlers execute.
+
+**Required design quality gate:** (a) map every control to one clear purpose and owner, (b) challenge duplication, unnecessary prose, oversized actions and wrong control types, (c) verify stable layout and bounded transient surfaces, (d) compare Day/Night, narrow/short widths, larger text and empty/error/offline states, (e) exercise cancellation, drafts, real-status semantics and adjacent journeys, (f) check no previously working capability disappears, (g) record applicable exceptions and test evidence *before asking the operator to review*. When there is a genuine conflict with the pinned approved UI, ask for scope-specific approval instead of silently changing it.
+
+These are **examples of past mistakes to proactively avoid**, not instructions to reproduce outdated screen content. The approved design and actual authoritative runtime state still govern.
+
+### Command — 26 observed corrections
+
+1. Avoid verbose technical prose and debug information cluttering the map-first workspace.
+2. Do not render Capture Range or Diagnostics as naïve expanding boxes on top of the map.
+3. Move debug and technical evidence into appropriate secondary disclosures.
+4. Mode selection must be a compact anchored dropdown, not an oversized modal.
+5. Eliminate redundant Library, Capture Range and Refresh entry-point buttons.
+6. Use one contextual Phone Controls interface, not duplicated top-bar actions.
+7. Keep map-dominant workspace; side panels compact, collapsible, organized.
+8. Present actionable operational status before detailed technical evidence.
+9. Unify Maps & Layers navigation, acquisition/import and saved-map management.
+10. Do not add unnecessary map actions; put Details before Delete.
+11. Keep selected states, neutral/positive/destructive actions and confirmation styles consistent.
+12. Avoid oversized or inconsistently sized task dialogs.
+13. Switching Tool tabs must not resize/reflow the parent dialog.
+14. Use compact result rows rather than repeated explanatory grey cards.
+15. Present Phone Control results in consistent condensed rows, not large cards.
+16. Stop Recording must stop capture immediately and open Save Recording, not a confusing Save & Stop confirmation.
+17. Preserve an unsaved stopped recording until the operator saves or explicitly confirms discard.
+18. Follow Original must be a small, labeled switch, not an oversized button.
+19. Avoid browser-default date/time picker styling that clashes with Command.
+20. Opening a calendar must not push Observation Filters or other form elements downward.
+21. Avoid huge empty space created by inline-expanded pickers.
+22. Constrain calendar size and placement to its parent dialog, including on short screens.
+23. Never let a picker obstruct Apply, Cancel or other required footer actions.
+24. Tools → SOS Sound uses a right-aligned binary switch, not a large Enable Sound button.
+25. SOS Emergencies audio control belongs in the content/status area as a switch, not the event-action footer.
+26. Live/playback updates must preserve open menus, tabs, disclosures, speed choices and drafts.
+
+### Android — 26 observed corrections
+
+27. Reporting interval picker must represent valid legacy/custom values instead of silently coercing them.
+28. Protected on-screen SOS requires a mandatory 1.2-second hold; do not offer a disabling switch.
+29. Remove unreachable prototype-only Appearance and Notification Preview pages; keep actual controls/notifications.
+30. Do not lose existing security/recovery/diagnostic functions when simplifying navigation.
+31. Put Volume-key SOS shortcut switch on Emergency Controls, not behind another page.
+32. Keep SOS History in Diagnostics; do not duplicate its Settings entry.
+33. Use consistent switches, not checkboxes, for the approved instruction-filter selections.
+34. Remove redundant Filter History control when the existing filter workflow already covers it.
+35. Consolidate Physical Button Test controls and history into one owned interface.
+36. Remove Test Volume + and Test Volume − screen buttons; an armed test observes actual physical keys.
+37. A screen tap/synthetic event is never proof of genuine hardware-key observation.
+38. Do not introduce a duplicate Physical Button Test destination when Diagnostic Tools can own the interface.
+39. Do not create competing Advanced Diagnostics and Export Diagnostic ZIP interfaces for the same function.
+40. Remove separators directly above notes, buttons, lone blocks or unrelated sections; separate peers only.
+41. Remove redundant Command Contact explanation when honest state labels convey it.
+42. Remove GNSS Details prose about Command-owned quality filters/derived distance when unnecessary.
+43. Stop Tracking should be a pale-red, softly bordered caution action, not a generic neutral button.
+44. Use the identical operator-approved pale-red Stop Tracking treatment in Day and Night modes.
+45. Place dropdown chevrons at a deliberate consistent inset; avoid awkward excessive padding.
+46. Remove repetitive Wi-Fi/IP trust disclaimer once the trust boundary is clear from the design.
+47. Show Command authority UUID as read-only credential-derived identity, not an editable field or status.
+48. Use a short compact Recheck action, not an oversized Recheck Authenticated Contact button.
+49. Treat Enrollment Steps as quiet secondary help, not a competing full-sized primary action.
+50. Do not mix badge sizes, font families, input styles and row patterns within the identity/status area.
+51. Remove redundant Command Enrollment heading inside a page already titled Command Access.
+52. Unenrolled and enrolled Command Access states must use the same read-only identity/status row grammar.
+
+### Enforcement and maintenance
+
+- **Before design:** owner inventory, redundancy scan and data/lifecycle semantics.
+- **Before sharing design:** reject and fix any applicable listed failure; inspect real rendered flows, not isolated component screenshots.
+- **Before implementation:** freeze approved prototype and record deliberate exceptions in the relevant issue.
+- **Before PR completion:** attach test evidence for interaction, state persistence, visual parity and preservation; distinguish simulated rendering from native/device behavior.
+- **On further operator correction:** update this same canonical rules/checklist section and the cross-project Systems Library record; do not scatter new design-rules files.
+
 ## Foundations
 
 Neutral surfaces `#F3F5F4`, white cards, ink `#24343B`, secondary ink `#607077`,
