@@ -78,6 +78,23 @@ Local completion does **not** revise an already sealed Command `unknown` wire re
 its exact revision/digest remain unchanged until an explicit recipient ACK. The real
 bridge regression exercises stop-only, OS failure, custody, retry/restart and subsequent ACK.
 
+First implementation run at `a222313fef6cefa2af3fe48d994d37e8175defd9`:
+`testDebugUnitTest lintDebug assembleDebug --max-workers=2 --console=plain` stopped
+with **286 tests: 247 passed, 3 failed, 36 bridge-dependent skipped**, 9m31s.
+Failures were AppearanceTest (pre-V4.6 palette/picker), DialogVisualTest (removed
+routes), and NotificationVisualTest (native alert-action ellipsis at 1.5×). Lint/APK
+completion and bridge were not established by that failed run. The old test routes
+were replaced with real current affordances, and alert actions use compact independent
+**ACK alert** / **Stop output** labels. No geometry assertion was weakened.
+
+The correction also keeps Start/Stop key-test controls in one compact stable row,
+disables empty Clear results, retains detailed device/mechanism evidence in Advanced
+logs, and moves selected-document export onto the existing application work scope.
+Picker/cancel/write/progress/failure status has one Operational owner and is visible
+at every export entry; rotation retains the job. Process termination can interrupt a
+document provider write; after a new process no completed export is inferred.
+The recorder, sanitizer, URI/document operation and observation ownership are unchanged.
+
 Final implementation verification: **PENDING execution against committed source**.
 Intermediate working-tree runs caught and corrected reused layout-parameter geometry,
 large-font SOS clipping, stale retained-history filters, filter event-queue timing and

@@ -929,7 +929,7 @@ class CommandControl(
             val row = dao.command(id) ?: return@withLock
             if (!row.trusted || row.operation != "alert") return@withLock
             if (row.state == "recipient_acknowledged") {
-                alertOutput?.stop(id)
+                checkNotNull(alertOutput) { "Local output cancellation unavailable" }.stop(id)
                 return@withLock
             }
             if (row.state !in listOf("output_attempted", "alert_blocked", "unknown"))
@@ -945,7 +945,7 @@ class CommandControl(
             }
             alertNext.remove(id)
             alertDeadline.remove(id)
-            alertOutput?.stop(id)
+            checkNotNull(alertOutput) { "Local output cancellation unavailable" }.stop(id)
             val saved = dao.command(id) ?: return@withLock
             if (saved.localOutputStoppedAt == 0L) {
                 // Command seals terminal 'unknown' results. Record local API completion

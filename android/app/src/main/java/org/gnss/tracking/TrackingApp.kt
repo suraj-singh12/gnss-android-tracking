@@ -22,6 +22,9 @@ data class Operational(
     val historyPaused: Boolean = false,
     val transferActive: Boolean = false,
     val drainStarting: Boolean = false,
+    val diagnosticExportSelecting: Boolean = false,
+    val diagnosticExporting: Boolean = false,
+    val diagnosticExportStatus: String? = null,
 )
 
 class TrackingApp : Application() {
@@ -232,6 +235,62 @@ class TrackingApp : Application() {
                 activityVisible || operational.value.tracking || operational.value.transferActive
             },
         )
+    }
+
+    /**
+     * Same recorder/document operation, app-owned so Activity/theme recreation cannot cancel it.
+     */
+    @Synchronized
+    fun exportDiagnostics(uri: android.net.Uri) {
+        if (operational.value.diagnosticExporting) return
+        operational.update {
+            it.copy(
+                diagnosticExportSelecting = false,
+                diagnosticExporting = true,
+                diagnosticExportStatus = getString(R.string.diagnostics_exporting),
+            )
+        }
+        workScope.launch {
+            var temporary: java.io.File? = null
+            try {
+                val file = java.io.File.createTempFile("gnss-export-", ".zip", cacheDir)
+                temporary = file
+                val info = packageManager.getPackageInfo(packageName, 0)
+                val version =
+                    if (android.os.Build.VERSION.SDK_INT >= 28) info.longVersionCode
+                    else {
+                        @Suppress("DEPRECATION") info.versionCode.toLong()
+                    }
+                recorder.export(
+                    file,
+                    DiagnosticBuild(
+                        info.versionName ?: "unknown",
+                        version,
+                        android.os.Build.VERSION.SDK_INT,
+                        BuildConfig.SOURCE_REVISION,
+                    ),
+                    repository.dao.commandHistory(),
+                )
+                contentResolver.openOutputStream(uri, "wt")?.use { out ->
+                    file.inputStream().use { it.copyTo(out) }
+                } ?: error("Cannot open selected document")
+                operational.update {
+                    it.copy(diagnosticExportStatus = getString(R.string.diagnostics_exported))
+                }
+            } catch (e: CancellationException) {
+                operational.update {
+                    it.copy(diagnosticExportStatus = getString(R.string.diagnostics_export_failed))
+                }
+                throw e
+            } catch (_: Exception) {
+                operational.update {
+                    it.copy(diagnosticExportStatus = getString(R.string.diagnostics_export_failed))
+                }
+            } finally {
+                withContext(NonCancellable + Dispatchers.IO) { temporary?.delete() }
+                operational.update { it.copy(diagnosticExporting = false) }
+            }
+        }
     }
 
     suspend fun stopPhoneAlertOutput(id: String) {

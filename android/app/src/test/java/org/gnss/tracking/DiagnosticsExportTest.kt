@@ -51,7 +51,13 @@ abstract class DiagnosticsExportChecks {
             assertEquals(Intent.ACTION_CREATE_DOCUMENT, intent.action)
             assertEquals("application/zip", intent.type)
             assertTrue(intent.getStringExtra(Intent.EXTRA_TITLE)!!.startsWith("gnss-diagnostics-"))
-            assertEquals(before, app.operational.value)
+            assertEquals(
+                before.copy(
+                    diagnosticExportSelecting = true,
+                    diagnosticExportStatus = "Choose an export destination",
+                ),
+                app.operational.value,
+            )
             assertNull(shadowOf(app).nextStartedService)
         } finally {
             controller.pause().stop().destroy()
@@ -104,6 +110,7 @@ abstract class DiagnosticsExportChecks {
                     Activity.RESULT_OK,
                     Intent().setData(Uri.fromFile(file)),
                 )
+            controller.recreate()
             withTimeout(10000) {
                 while (!status(controller.get()).text.startsWith("Diagnostics exported")) {
                     shadowOf(Looper.getMainLooper()).idle()
@@ -134,6 +141,59 @@ abstract class DiagnosticsExportChecks {
             controller.pause().stop().destroy()
             service.destroy()
             file.delete()
+        }
+    }
+
+    @Test
+    fun failedDestinationAndCancelledPickerNeverReportAnExportedDocument() = runBlocking {
+        val app: TrackingApp = ApplicationProvider.getApplicationContext()
+        app.repository.state()
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            val method =
+                MainActivity::class
+                    .java
+                    .getDeclaredMethod(
+                        "onActivityResult",
+                        Int::class.javaPrimitiveType,
+                        Int::class.javaPrimitiveType,
+                        Intent::class.java,
+                    )
+                    .apply { isAccessible = true }
+            method.invoke(
+                controller.get(),
+                MainActivity.EXPORT_DIAGNOSTICS,
+                Activity.RESULT_CANCELED,
+                null,
+            )
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(
+                "Export cancelled before writing",
+                app.operational.value.diagnosticExportStatus,
+            )
+            val missing = File(app.cacheDir, "missing-${Protocol.newId()}/report.zip")
+            method.invoke(
+                controller.get(),
+                MainActivity.EXPORT_DIAGNOSTICS,
+                Activity.RESULT_OK,
+                Intent().setData(Uri.fromFile(missing)),
+            )
+            withTimeout(10000) {
+                while (
+                    app.operational.value.diagnosticExporting ||
+                        app.operational.value.diagnosticExportStatus?.startsWith(
+                            "Diagnostics export failed"
+                        ) != true
+                ) {
+                    shadowOf(Looper.getMainLooper()).idle()
+                    delay(10)
+                }
+            }
+            assertFalse(missing.exists())
+            assertFalse(app.operational.value.tracking)
+            assertNull(shadowOf(app).nextStartedService)
+        } finally {
+            controller.pause().stop().destroy()
         }
     }
 

@@ -72,12 +72,27 @@ class V46WorkflowTest {
             }
             assertEquals(35, app.repository.state().localInterval)
             ShadowAlertDialog.getLatestAlertDialog()?.dismiss()
+            openNativeScreen(controller.get(), "Party & Command")
+            val nameLabel =
+                all().filterIsInstance<TextView>().single {
+                    it.text == "Party name" && it.labelFor != android.view.View.NO_ID
+                }
+            controller
+                .get()
+                .findViewById<EditText>(nameLabel.labelFor)
+                .setText("Unsaved party draft")
+            openNativeScreen(controller.get(), "Tracking policy")
             custom.setText("45")
             click("Save policy")
             await {
                 all().filterIsInstance<TextView>().any { it.text.startsWith("Settings saved") }
             }
             assertEquals(45, app.repository.state().localInterval)
+            assertEquals("Alpha", app.repository.state().partyName)
+            assertEquals(
+                "Unsaved party draft",
+                controller.get().findViewById<EditText>(nameLabel.labelFor).text.toString(),
+            )
             controller.recreate()
             await {
                 all().filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled }

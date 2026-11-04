@@ -36,8 +36,9 @@ class MainActivity : Activity() {
     private lateinit var physicalButtonStatus: TextView
     private lateinit var physicalButtonStart: Button
     private lateinit var physicalButtonStop: Button
+    private lateinit var physicalButtonClear: Button
+    private var physicalButtonDetails: TextView? = null
     private var physicalButtonRefresh: Job? = null
-    private var exporting = false
     private lateinit var sosStatus: TextView
     private lateinit var sosDetails: TextView
     private lateinit var sosHistoryPage: LinearLayout
@@ -1015,17 +1016,19 @@ class MainActivity : Activity() {
                 app.physicalButtonTest.stop()
                 refreshPhysicalButtonHistory()
             }
-        physicalButtonAction("Clear Results") {
-            AlertDialog.Builder(this)
-                .setTitle("Clear physical test results?")
-                .setMessage("Only the retained physical-test event history is affected.")
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Clear results") { _, _ ->
-                    app.physicalButtonTest.clearResults()
-                    refreshPhysicalButtonHistory()
-                }
-                .show()
-        }
+        physicalButtonClear =
+            physicalButtonAction("Clear results") {
+                AlertDialog.Builder(this)
+                    .setTitle("Clear physical test results?")
+                    .setMessage("Only the retained physical-test event history is affected.")
+                    .setNegativeButton("Cancel", null)
+                    .setPositiveButton("Clear results") { _, _ ->
+                        app.physicalButtonTest.clearResults()
+                        refreshPhysicalButtonHistory()
+                    }
+                    .show()
+            }
+        physicalButtonClear.isEnabled = false
         physicalButtonSummary =
             TextView(this).apply {
                 textSize = 14f
@@ -1059,10 +1062,21 @@ class MainActivity : Activity() {
                         scope.launch {
                             try {
                                 withContext(Dispatchers.IO) { app.repository.retryDelivery() }
+                                app.operational.update {
+                                    if (it.error?.startsWith("Saved delivery retry") == true)
+                                        it.copy(error = null)
+                                    else it
+                                }
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {
                                 status.text = getString(R.string.cannot_start, e.message)
+                                app.operational.update {
+                                    it.copy(
+                                        error =
+                                            "Saved delivery retry could not be saved; check storage."
+                                    )
+                                }
                             }
                         }
                     }
@@ -1433,8 +1447,17 @@ class MainActivity : Activity() {
         content = diagnosticTools
         val exportDiagnosticsButton =
             button("Export diagnostics") {
-                if (!exporting) {
+                if (
+                    !app.operational.value.diagnosticExporting &&
+                        !app.operational.value.diagnosticExportSelecting
+                ) {
                     try {
+                        app.operational.update {
+                            it.copy(
+                                diagnosticExportSelecting = true,
+                                diagnosticExportStatus = "Choose an export destination",
+                            )
+                        }
                         startActivityForResult(
                             Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                                 addCategory(Intent.CATEGORY_OPENABLE)
@@ -1447,11 +1470,23 @@ class MainActivity : Activity() {
                             EXPORT_DIAGNOSTICS,
                         )
                     } catch (e: android.content.ActivityNotFoundException) {
-                        exportStatus.text = getString(R.string.diagnostics_no_picker)
+                        app.operational.update {
+                            it.copy(
+                                diagnosticExportSelecting = false,
+                                diagnosticExportStatus = getString(R.string.diagnostics_no_picker),
+                            )
+                        }
                     }
                 }
             }
         exportStatus = text("Sanitized ZIP · tracking continues", 13f)
+        scope.launch {
+            app.operational.collect { op ->
+                op.diagnosticExportStatus?.let { exportStatus.text = it }
+                exportDiagnosticsButton.isEnabled =
+                    !op.diagnosticExporting && !op.diagnosticExportSelecting
+            }
+        }
         content = pages.getValue("Tracking")
         startButton =
             button("Loading settings…") {
@@ -3239,7 +3274,19 @@ class MainActivity : Activity() {
             add(p, ui.label(title, 11.5f, true), 12)
         }
         fun export(p: LinearLayout, title: String) {
-            action(p, title) { exportButton.performClick() }
+            val button = action(p, title) { exportButton.performClick() }
+            val feedback =
+                ui.label("", 10.5f, true).apply {
+                    accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+                }
+            add(p, feedback, 4)
+            scope.launch {
+                app.operational.collect { op ->
+                    feedback.text = op.diagnosticExportStatus.orEmpty()
+                    feedback.visibility = if (feedback.text.isEmpty()) View.GONE else View.VISIBLE
+                    button.isEnabled = !op.diagnosticExporting && !op.diagnosticExportSelecting
+                }
+            }
         }
         fun peerRow(p: LinearLayout, title: String, value: TextView) {
             val row = LinearLayout(this).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
@@ -3810,7 +3857,17 @@ class MainActivity : Activity() {
             )
         }
         add(savedCard, savedMetrics)
+        add(
+            routes.getValue("Storage health"),
+            ui.label("Unresolved observations", 11f, bold = true),
+            12,
+        )
         add(routes.getValue("Storage health"), unresolvedDetail)
+        add(
+            routes.getValue("Storage health"),
+            ui.label("Last durable message ACK", 11f, bold = true),
+            12,
+        )
         add(routes.getValue("Storage health"), ackDetail)
         val savedSync = action(savedCard, "Sync All Now", true) { syncNowButton.performClick() }
         export(savedCard, "Export transfer evidence")
@@ -3827,21 +3884,55 @@ class MainActivity : Activity() {
         add(recovery, recoveryCount)
         add(recovery, ui.label("Retained until matching durable Command receipt", 11.5f, true))
         add(recovery, retryButton, 12)
+        val recoveryFailure =
+            ui.label("", 11f).apply {
+                setTextColor(getColor(R.color.danger))
+                accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+            }
+        add(recovery, recoveryFailure, 6)
         menu(recovery, "Storage health", "Unresolved rows, persistence and delivery evidence")
         routeParents["Storage health"] = "Transfer recovery"
         val tools = routes.getValue("Diagnostic tools")
         tools.removeAllViews()
         tools.setPadding(dp(17), dp(11), dp(17), dp(17))
-        val physical = routes.getValue("Physical Button Test")
-        val physicalViews = (2 until physical.childCount).map { physical.getChildAt(it) }
         val physicalCard = ui.card(tools, 0)
         add(physicalCard, ui.label("Physical button test", 14f, bold = true))
-        physicalViews
-            .filter { it !== exportStatus && (it !is Button || it.text != "Export test results") }
-            .forEach { add(physicalCard, it, 6) }
+        add(physicalCard, physicalButtonStatus, 10)
+        note(
+            physicalCard,
+            "Press the phone's volume keys while this test is listening. SOS shortcut is paused during the test.",
+        )
+        val testActions = LinearLayout(this)
+        for (button in listOf(physicalButtonStart, physicalButtonStop)) {
+            detach(button)
+            ui.style(button)
+            testActions.addView(
+                button,
+                LinearLayout.LayoutParams(0, -2, 1f).apply {
+                    if (button === physicalButtonStop) leftMargin = dp(8)
+                },
+            )
+        }
+        add(physicalCard, testActions, 11)
+        val observed = LinearLayout(this).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
+        observed.addView(
+            ui.label("Observed events", 12f, bold = true),
+            LinearLayout.LayoutParams(0, -2, 1f),
+        )
+        detach(physicalButtonClear)
+        ui.style(physicalButtonClear)
+        observed.addView(physicalButtonClear, LinearLayout.LayoutParams(-2, -2))
+        add(physicalCard, observed, 17)
+        add(physicalCard, physicalButtonSummary, 7)
+        physicalButtonSummary.textSize = 10.5f
+        add(physicalCard, physicalButtonPanel, 7)
         section(tools, "Maintenance")
         add(tools, exportButton)
         add(tools, exportStatus, 4)
+        physicalButtonDetails =
+            ui.label("Physical test evidence loading…", 12f, true).also {
+                add(routes.getValue("Advanced logs"), it, 12)
+            }
         section(tools, "Advanced")
         menu(tools, "Advanced logs", "Retained incidents, technical and security evidence")
         // Keep the canonical full console as the advanced history workflow.
@@ -4037,6 +4128,10 @@ class MainActivity : Activity() {
         v46Refresh = {
             val state = savedInstallation
             val op = app.operational.value
+            recoveryFailure.text =
+                op.error?.takeIf { it.startsWith("Saved delivery retry") }.orEmpty()
+            recoveryFailure.visibility =
+                if (recoveryFailure.text.isEmpty()) View.GONE else View.VISIBLE
             alertFailure.text = op.error?.takeIf { it.startsWith("Alert ") }.orEmpty()
             alertFailure.visibility = if (alertFailure.text.isEmpty()) View.GONE else View.VISIBLE
             val setup = preflight.snapshot()
@@ -4409,7 +4504,7 @@ class MainActivity : Activity() {
         )
         if (v46Layout && op.tracking) NativeUi(this).stopStyle(startButton)
         else NativeUi(this).style(startButton, primary = !op.tracking, danger = op.tracking)
-        startButton.minHeight = dp(if (resources.configuration.fontScale > 1.25f) 72 else 48)
+        startButton.minHeight = dp(48)
         startButton.text =
             when {
                 !initialized -> "Loading settings…"
@@ -4710,48 +4805,18 @@ class MainActivity : Activity() {
     @Deprecated("Platform document result")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != EXPORT_DIAGNOSTICS || resultCode != RESULT_OK || exporting) return
-        val uri = data?.data ?: return
-        exporting = true
-        exportStatus.text = getString(R.string.diagnostics_exporting)
-        // Snapshot ZIP on the recorder worker, then copy to the user-selected document on IO.
-        // A slow document provider cannot stall the recorder or any tracking loop.
-        scope.launch {
-            var temporary: java.io.File? = null
-            try {
-                withContext(Dispatchers.IO) {
-                    val file = java.io.File.createTempFile("gnss-export-", ".zip", cacheDir)
-                    temporary = file
-                    val info = packageManager.getPackageInfo(packageName, 0)
-                    val versionCode =
-                        if (Build.VERSION.SDK_INT >= 28) info.longVersionCode
-                        else {
-                            @Suppress("DEPRECATION") info.versionCode.toLong()
-                        }
-                    app.recorder.export(
-                        file,
-                        DiagnosticBuild(
-                            info.versionName ?: "unknown",
-                            versionCode,
-                            Build.VERSION.SDK_INT,
-                            BuildConfig.SOURCE_REVISION,
-                        ),
-                        app.repository.dao.commandHistory(),
-                    )
-                    contentResolver.openOutputStream(uri, "wt")?.use { out ->
-                        file.inputStream().use { it.copyTo(out) }
-                    } ?: error("Cannot open selected document")
-                }
-                exportStatus.text = getString(R.string.diagnostics_exported)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                exportStatus.text = getString(R.string.diagnostics_export_failed)
-            } finally {
-                withContext(NonCancellable + Dispatchers.IO) { temporary?.delete() }
-                exporting = false
+        if (requestCode != EXPORT_DIAGNOSTICS || app.operational.value.diagnosticExporting) return
+        val uri = data?.data
+        if (resultCode != RESULT_OK || uri == null) {
+            app.operational.update {
+                it.copy(
+                    diagnosticExportSelecting = false,
+                    diagnosticExportStatus = "Export cancelled before writing",
+                )
             }
+            return
         }
+        app.exportDiagnostics(uri)
     }
 
     companion object {
@@ -4807,13 +4872,15 @@ class MainActivity : Activity() {
                 history?.activityWasInterrupted == true -> "Interrupted · SOS shortcut restored"
                 else -> "Test inactive"
             }
-        physicalButtonStart.visibility =
-            if (app.physicalButtonTest.listening) View.GONE else View.VISIBLE
-        physicalButtonStop.visibility =
-            if (app.physicalButtonTest.listening) View.VISIBLE else View.GONE
+        physicalButtonStart.visibility = View.VISIBLE
+        physicalButtonStop.visibility = View.VISIBLE
         physicalButtonStart.isEnabled = !app.physicalButtonTest.listening
         physicalButtonStop.isEnabled = app.physicalButtonTest.listening
         if (history == null) return
+        if (::physicalButtonClear.isInitialized)
+            physicalButtonClear.isEnabled = history.retainedEvents.isNotEmpty()
+        physicalButtonDetails?.text =
+            "Physical-key evidence\n${history.manufacturer?:"Unknown manufacturer"} · ${history.model?:"Unknown model"}\nAndroid ${history.androidVersion?:"Unknown"} / API ${history.androidApi?:"Unknown"}\n${history.activityResult} · ${history.activityReason}\nInterrupted: ${history.activityWasInterrupted} · writer failures ${history.writerIoFailures} · queue dropped ${history.diagnosticQueueDroppedTotal}\n${PhysicalButtonTestController.BACKGROUND_STATUS}\n${PhysicalButtonTestController.LOCKED_SCREEN_STATUS}\n${PhysicalButtonTestController.MEDIA_SESSION_STATUS}"
         val last = history.retainedEvents.lastOrNull()
         val localTime = { value: String? ->
             value?.let {

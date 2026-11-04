@@ -136,7 +136,7 @@ class NotificationPhoneAlertOutput(private val context: Context) : PhoneAlertOut
                 )
                 .setContentIntent(open)
                 .addAction(
-                    Notification.Action.Builder(null, "Acknowledge / Stop Alert", pending).build()
+                    Notification.Action.Builder(null, "ACK alert", pending).build()
                 )
                 .addAction(Notification.Action.Builder(null, "Stop output", stop).build())
                 .setCategory(Notification.CATEGORY_MESSAGE)

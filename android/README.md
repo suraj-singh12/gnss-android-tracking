@@ -594,7 +594,9 @@ and verification. Command V5.14, protocol and approved artifacts are unchanged.
 - **Tools:** one real physical-button test uses the existing controller/recorder. Only
   observed Activity key events become evidence; navigation/pause interrupts listening.
   Confirmed Clear results clears only its retained test journal. Diagnostic ZIP export
-  reuses the existing sanitized recorder/document-picker operation.
+  reuses the existing sanitized recorder/document-picker operation on the app work
+  scope. Rotation retains the write; every entry shows the same actual export status.
+  Process death can interrupt a provider write and never implies successful export.
 
 No history-pause action is exposed. Tracking notifications have native **Sync Now**
 and **Stop Tracking** actions, using existing visible handlers, immutable distinct

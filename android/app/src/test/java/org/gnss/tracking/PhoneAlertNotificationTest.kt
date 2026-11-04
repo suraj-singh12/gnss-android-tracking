@@ -120,7 +120,7 @@ class PhoneAlertNotificationTest {
             assertTrue(restricted.second.contains("output unknown"))
             val notification =
                 manager.activeNotifications.first { it.tag.endsWith(row.id) }.notification
-            assertEquals("Acknowledge / Stop Alert", notification.actions[0].title.toString())
+            assertEquals("ACK alert", notification.actions[0].title.toString())
             assertEquals("Stop output", notification.actions[1].title.toString())
             notification.actions[1].actionIntent.send()
             Shadows.shadowOf(Looper.getMainLooper()).idle()

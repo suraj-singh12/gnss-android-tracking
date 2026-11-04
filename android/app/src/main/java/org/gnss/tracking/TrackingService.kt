@@ -200,8 +200,14 @@ class TrackingService : Service() {
             loopError = "Precise location permission unavailable at service start"
             runCatching { resources.stop() }
             runCatching { publishDiagnostics(power.snapshot(), true) }
-            app.operational.value =
+            app.operational.update { previous ->
                 Operational(error = "Precise location permission required to track")
+                    .copy(
+                        diagnosticExportSelecting = previous.diagnosticExportSelecting,
+                        diagnosticExporting = previous.diagnosticExporting,
+                        diagnosticExportStatus = previous.diagnosticExportStatus,
+                    )
+            }
             stopSelf()
             return START_NOT_STICKY
         }
@@ -227,11 +233,17 @@ class TrackingService : Service() {
             loopError = "Foreground/GNSS startup failed: ${e.javaClass.simpleName}"
             Log.e(TAG, loopError!!)
             runCatching { publishDiagnostics(power.snapshot(), true) }
-            app.operational.value =
+            app.operational.update { previous ->
                 Operational(
-                    error =
-                        "${e.message ?: "Unable to start GNSS"}. Open the app and Start Tracking again."
-                )
+                        error =
+                            "${e.message ?: "Unable to start GNSS"}. Open the app and Start Tracking again."
+                    )
+                    .copy(
+                        diagnosticExportSelecting = previous.diagnosticExportSelecting,
+                        diagnosticExporting = previous.diagnosticExporting,
+                        diagnosticExportStatus = previous.diagnosticExportStatus,
+                    )
+            }
             stopSelf()
             return START_NOT_STICKY
         }
