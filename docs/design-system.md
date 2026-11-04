@@ -5,6 +5,28 @@ Issue #6 builds on combined GNSS + SOS source
 service/backend state. Typography and semantics are shared; Android uses native
 controls and Command uses accessible HTML controls.
 
+## Operator UI/UX quality gate — 15 reusable rules
+
+These operator-established, cross-screen rules come from approved/refined Command V5.4–V5.14 and Android V4-series design reviews. Apply them to every future proposed UI-affecting change **before** requesting operator design approval. They supplement, not override, a pinned approved screen-specific design. Cross-project reference: [Design Quality Rules in Systems Library](https://app.notion.com/p/40e85dbdf080819297d0dcc92f7f0cf0).
+
+1. **One function, one clear interface:** no duplicate screens, competing buttons or unnecessary navigation.
+2. **Match control to intent:** switches for binary state, exclusive selection controls for modes, buttons for actions, chevrons for navigation.
+3. **Put controls at point of use:** do not create extra pages for a setting already owned by the current task screen.
+4. **Keep geometry stable:** opening pickers, switching tabs, status/telemetry refresh cannot unexpectedly reflow the workspace.
+5. **Contain transient UI:** popovers and calendars remain within their parent dialog/workspace and never block required actions.
+6. **Remove clutter:** redundant prose, grey explanation cards, repeated titles and excess controls need justification.
+7. **Place separators only between peer rows:** not directly above/below a note, button, single content block or unrelated section.
+8. **Use measured hierarchy:** compact, consistent typography, rows, space and alignment; avoid empty oversized containers.
+9. **Make actions semantically distinct:** normal, affirmative and destructive actions follow consistent emphasis and confirmation.
+10. **Preserve intent and drafts:** Cancel cancels, unsaved edits are protected, and switch/filter selections persist as intended.
+11. **Do not reset active interactions:** refreshing live data preserves open menus, tabs, filters, focus, scroll and in-progress edits.
+12. **Write precise labels:** clear task-oriented verbs/nouns; avoid ambiguous labels and gratuitous trailing ellipses.
+13. **Tell the operational truth:** queued ≠ delivered, received ≠ applied, SOS transport ACK ≠ human ACK, output attempt ≠ audible sound.
+14. **Test real workflows:** navigation, cancellation, failure, night/day, compact screens, overlays and state transitions—not only first screenshots.
+15. **Preserve useful capability when simplifying:** remove duplicate presentation, never working security/recovery/evidence functionality.
+
+**Mandatory design self-review:** inventory affected screens and existing controls; trace the real source/action for each state; identify redundant competing UI; render and interact with main/nested/dialog states at representative sizes; review contrast/accessibility and platform conventions; reject the proposal if any rule fails. Stop for explicit operator approval before production UI implementation. Physical-device acceptance must be distinguished from simulated browser verification.
+
 ## Foundations
 
 Neutral surfaces `#F3F5F4`, white cards, ink `#24343B`, secondary ink `#607077`,
