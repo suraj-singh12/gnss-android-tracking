@@ -3665,7 +3665,7 @@ class MainActivity : Activity() {
         val authorize =
             ui.button("Authorize") {
                 val state = savedInstallation ?: return@button
-                if (checking) return@button
+                if (checking || enrollmentSecret != null) return@button
                 if (state.controlDisabled) return@button
                 if (state.controlEnrollment != null) {
                     checking = true
@@ -3689,6 +3689,8 @@ class MainActivity : Activity() {
                     require(key.device == state.deviceId)
                     secret.text.clear()
                     accessError.text = ""
+                    enrollmentSecret = key
+                    val reviewedGeneration = state.endpointGeneration
                     AlertDialog.Builder(this)
                         .setTitle("Authorize Command?")
                         .setMessage(
@@ -3696,17 +3698,29 @@ class MainActivity : Activity() {
                         )
                         .setNegativeButton("Cancel", null)
                         .setPositiveButton("Authorize") { _, _ ->
-                            app.workScope.launch {
-                                try {
-                                    app.commandControl.bind(key) { app.controlKeys.save(key) }
-                                } catch (_: Exception) {
-                                    withContext(Dispatchers.Main) {
-                                        accessError.text =
-                                            "Authorization failed; verify identity and secure storage"
+                            val approved = enrollmentSecret
+                            enrollmentSecret = null
+                            if (approved == null) {
+                                accessError.text =
+                                    "Authorization review expired; paste the private credential and compare identities again."
+                            } else
+                                app.workScope.launch {
+                                    try {
+                                        app.commandControl.bind(
+                                            approved,
+                                            expectedGeneration = reviewedGeneration,
+                                        ) {
+                                            app.controlKeys.save(approved)
+                                        }
+                                    } catch (_: Exception) {
+                                        withContext(Dispatchers.Main) {
+                                            accessError.text =
+                                                "Authorization failed; verify identity and secure storage"
+                                        }
                                     }
                                 }
-                            }
                         }
+                        .setOnDismissListener { enrollmentSecret = null }
                         .show()
                 } catch (_: Exception) {
                     accessError.text = "Enter a valid gnss1 credential for this phone UUID."
@@ -4140,9 +4154,20 @@ class MainActivity : Activity() {
             notificationReadiness.text =
                 if (setup.notifications == true) "Allowed" else "Blocked / unknown"
             batteryReadiness.text = if (setup.powerSave == true) "Saver on" else "Review"
+            val collection = app.observationPersistence.state
             trackingCopy.text =
-                if (op.tracking) "GNSS observations saved locally"
-                else "No new GNSS collection in progress"
+                when {
+                    op.stopping -> "Stopping GNSS collection"
+                    op.starting -> "Preparing GNSS collection"
+                    !op.tracking -> "No new GNSS collection in progress"
+                    collection.writeFailures > 0 ||
+                        collection.overflow > 0 ||
+                        (state?.knownCollectionLoss ?: 0) > 0 ->
+                        "Collection active · storage needs attention"
+                    collection.awaitingCommit > 0 -> "Collecting GNSS · saving on phone"
+                    collection.committedObservations > 0 -> "GNSS observations saved locally"
+                    else -> "Collecting GNSS · awaiting first saved observation"
+                }
             trackingBadge.text =
                 when {
                     op.starting -> "Starting"

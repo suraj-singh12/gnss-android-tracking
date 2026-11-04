@@ -264,9 +264,15 @@ class CommandControl(
             availabilityState.value = value
         }
 
-    suspend fun bind(value: ControlCredential, save: () -> Unit) =
+    suspend fun bind(value: ControlCredential, expectedGeneration: Long? = null, save: () -> Unit) =
         mutex.withLock {
-            require(repository.state().deviceId == value.device) {
+            val current = repository.state()
+            require(
+                expectedGeneration == null || current.endpointGeneration == expectedGeneration
+            ) {
+                "Enrollment review expired after a binding change; compare identities again"
+            }
+            require(current.deviceId == value.device) {
                 "Credential targets a different phone; compare its identity in Command"
             }
             stopAlerts("Local authorization replaced")

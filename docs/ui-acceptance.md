@@ -95,6 +95,25 @@ at every export entry; rotation retains the job. Process termination can interru
 document provider write; after a new process no completed export is inferred.
 The recorder, sanitizer, URI/document operation and observation ownership are unchanged.
 
+The `bbf2902151f482387c46bc044814f0e7869600f5` full run was deliberately
+interrupted after 370.709s (client exit 143) for the pending-consent hardening; it is
+**not** a completed unit/lint/APK result and its bridge was not started. The correction
+clears the existing private review candidate on pause/dismiss, blocks repeated review
+opening, and checks endpoint/binding generation under CommandControl's existing mutex
+before private-key storage. The Tracking save caption now reads writer commitment,
+pending work and failures instead of inferring saved observations from Tracking ON.
+
+### Pending SOS accessibility decision (P0)
+
+`SosHoldGesture` enforces continuous 1200 ms for pointer input, but its pre-existing
+accessibility long-click invokes activation immediately. Android ACTION_LONG_CLICK
+contains no duration or release event. The operator has been asked whether to replace
+that shortcut with an explicit protected accessibility action waiting 1200 ms and
+cancelling on navigation/focus loss/pause, or require continuous touch/keyboard hold.
+No authorization for that clarification has been assumed. Until resolved, this is a
+visible production-readiness blocker; passing pointer tests do not prove protected
+accessibility activation. See matrix IDs 43/60. Physical accessibility remains separate.
+
 Final implementation verification: **PENDING execution against committed source**.
 Intermediate working-tree runs caught and corrected reused layout-parameter geometry,
 large-font SOS clipping, stale retained-history filters, filter event-queue timing and

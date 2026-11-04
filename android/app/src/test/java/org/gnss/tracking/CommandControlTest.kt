@@ -157,6 +157,22 @@ class CommandControlTest {
     }
 
     @Test
+    fun staleEnrollmentReviewCannotReplaceBindingOrWritePrivateKeys() = runBlocking {
+        val before = repository.state()
+        var stored = false
+        assertTrue(
+            runCatching {
+                    engine.bind(key, expectedGeneration = before.endpointGeneration - 1) {
+                        stored = true
+                    }
+                }
+                .isFailure
+        )
+        assertFalse(stored)
+        assertEquals(before, repository.state())
+    }
+
+    @Test
     fun emptyAuthenticatedPollPersistsHistoryButRestartRequiresFreshContact() = runBlocking {
         engine.step()
         val state = repository.state()

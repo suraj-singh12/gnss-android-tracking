@@ -130,6 +130,20 @@ class CommandEnrollmentUiTest {
                     )
                     review.getButton(AlertDialog.BUTTON_NEGATIVE).performClick()
                     assertNull(app.repository.state().controlEnrollment)
+                    input.setText("gnss1:$authority:$phone:$enrollment:${"01".repeat(32)}")
+                    click("Authorize")
+                    val interruptedReview = ShadowAlertDialog.getLatestAlertDialog()
+                    controller.pause()
+                    controller.resume()
+                    interruptedReview.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+                    settle()
+                    assertNull(app.repository.state().controlEnrollment)
+                    assertTrue(
+                        nativeViews(root).filterIsInstance<TextView>().any {
+                            it.text.toString().startsWith("Authorization review expired")
+                        }
+                    )
+
                     click("Enrollment steps ›")
                     assertTrue(ShadowAlertDialog.getLatestAlertDialog().isShowing)
                     ShadowAlertDialog.getLatestAlertDialog()
