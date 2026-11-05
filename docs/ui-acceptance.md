@@ -163,6 +163,22 @@ zero failures/errors/skips (`recovered-stop-fixed.log`), before the final commit
 The real bridge additionally covers recovered alerts in the
 5/20-phone fleets, alongside the existing stop/retry/OS-failure scenario.
 
+The local `beb5d258be13cf43a262754624ee7a05354311cd` verification process was
+lost during the managed-environment restart before it recorded completion; no local
+pass is claimed for it. The same exact commit's [CI run 41871320929](https://github.com/suraj-singh12/gnss-android-tracking/actions/runs/41871320929)
+completed ordinary Android tests: **296 total, 259 passed, one failed, 36 skipped**;
+`PhoneAlertNotificationTest` still expected revision 3 instead of 2 after the sealed-result
+fix. Lint/APK completion was not established; subsequent Go checks and the real
+bridge were skipped after that test failure. A local
+single-case reproduction confirmed `expected 3 but was 2` (42s). The corrected test
+explicitly checks that native Stop Output preserves the original result and that native
+ACK advances exactly once; it no longer expects the removed stop revision. The
+combined notification/CommandControl targeted run passed **29 tests, zero failures,
+errors or skips**, 49s (`recovered-notification-fixed.log`), before committing the
+test-only correction.
+The same CI run's deterministic map-software job passed; public-provider acquisition
+failed due to timeouts/transfer ceilings. Command code and those limits are unchanged.
+
 Intermediate working-tree runs caught and corrected reused layout-parameter geometry,
 large-font SOS clipping, stale retained-history filters, filter event-queue timing and
 sealed terminal-result semantics. They are not relabelled as final-commit evidence.
