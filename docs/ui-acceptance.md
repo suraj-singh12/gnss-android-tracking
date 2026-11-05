@@ -1,5 +1,20 @@
 # UI acceptance evidence
 
+## Issue #39 V4.6 — current delivered implementation
+
+**Implemented: all 60 functional groups / 25 native routes.** Final tested code:
+`df876693ff7fcb06416ee8db3017b3efda672b9a`, from integration parent
+`9547985efd84c7229025b0b1c56812099589dc6b`. The integrated CI job passed fresh Android,
+real bridge, Go/protocol/stress, browser and matched-asset checks at that exact code.
+The separate public-provider job failed/partially completed at its unchanged transfer
+ceiling; overall CI is not all green. Physical Android/TalkBack/Switch Access and native
+macOS/Windows acceptance remain **NOT TESTED**. No field-stable/release claim.
+
+See the [60-group matrix](ui-preservation-matrix.md), final exact-code CI section below,
+and [source-specific CI summary](evidence/issue-39/v46/ci-df87669-summary.json).
+Historical attempts and environment repairs below retain their original revisions.
+Subsequent delivery edits are documentation/evidence only; tested runtime code stays df.
+
 ## Issue #39 V4.6 — environment repair and baseline gate (2026-11-04)
 
 Authorized source: `9547985efd84c7229025b0b1c56812099589dc6b`, freshly fetched
@@ -300,6 +315,116 @@ from the unchanged source. No network policy, TLS, dependencies or production co
 were changed to mask this setup restriction. These are Linux browser results, not
 Android or native macOS/Windows execution.
 
+
+
+### Committed browser fix and matched local build evidence
+
+`df876693ff7fcb06416ee8db3017b3efda672b9a` commits only the browser helper and
+canonical documentation/evidence. Android tree `ef30ff2a9e419b36cdc39b73321e2acec08f4473`,
+Command tree `0ce2a387782aea5cc8746b7fea1a8757874e0f72` and protocol tree
+`3ab8f201c1d72bf7141eaf7a629fa7a39f6f3012` are identical to e9. Existing exact-e9
+Android/integration results above retain their provenance; they are not relabelled as
+executions at df. No Android/Command/protocol source changed for the helper correction.
+
+The complete real recording-playback suite **passed at exact df87669**, exit 0:
+[report](evidence/issue-39/v46/playback-df87669.json),
+[log](evidence/issue-39/v46/playback-df87669.log). It used a clean-source Linux Command
+binary at df, system Chromium 151.0.7922.173 and official Playwright, including the
+previously failing 1440 px transition to Travel Back and all unchanged assertions.
+
+```sh
+GNSS_COMMAND_BINARY=/workspace/scratch/gnss-toolchains/gnss-command-df87669 \
+GNSS_PLAYWRIGHT_MODULE=/workspace/scratch/gnss-toolchains/browser/node_modules/playwright \
+GNSS_CHROMIUM=/usr/bin/chromium \
+GNSS_SCREENSHOT_DIR=/workspace/scratch/gnss-toolchains/playback-df87669 \
+SOURCE_REVISION=df876693ff7fcb06416ee8db3017b3efda672b9a \
+node test-tools/integration/recording-playback.cjs
+```
+
+Matched **local development acceptance builds** were produced at exact df using the
+existing workflow's build/verification commands: `./gradlew assembleDebug
+--max-workers=2 --console=plain` (**PASS, 10s**), Go **1.24.7** cross-builds
+`CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -p 2 -buildvcs=true ...`, equivalent
+Windows amd64 build and the Linux browser target. The APK contains df in DEX; `aapt`
+confirmed package `org.gnss.tracking`; `apksigner verify --print-certs` passed. Both
+Command binaries report **vcs.revision=df87669… / vcs.modified=false**. Source files
+were unchanged and checkouts clean at build time. No native macOS/Windows execution
+or release signing/field stability is claimed.
+
+[Asset manifest](evidence/issue-39/v46/assets-df87669-manifest.json),
+[SHA256SUMS](evidence/issue-39/v46/assets-df87669-SHA256SUMS),
+[macOS build info](evidence/issue-39/v46/assets-df87669-GNSS-Command-macos-arm64.build-info.txt),
+[Windows build info](evidence/issue-39/v46/assets-df87669-GNSS-Command-windows-x64.exe.build-info.txt),
+[APK package](evidence/issue-39/v46/assets-df87669-android-package.txt),
+[signature evidence](evidence/issue-39/v46/assets-df87669-android-signing.txt) and
+[Android build log](evidence/issue-39/v46/assets-df87669-android-build.log.gz) retain actual outputs.
+Binaries are in `/workspace/scratch/gnss-toolchains/assets-df87669/`; no release published.
+
+Additional reusable environment diagnosis: Go 1.24.7's VCS root detector expects a
+`.git` **directory**. In the linked application worktree (`.git` file), even
+`-buildvcs=true` produced successful binaries **without VCS revision fields**; the
+verification assertion rejected them as matched assets. The correction used a local
+shared-object full clone of the existing issue branch, detached at the **same df SHA**,
+with a real `.git` directory. Rebuilding then yielded the correct revision and
+`vcs.modified=false`. No source edits, fake version flags, dependency changes or
+mutation of the implementation checkout/main were involved. The same workflow commands
+in a clean CI clone also use a real Git directory. See the existing
+[test-tool instructions](../test-tools/README.md) for the reusable procedure.
+
+### Final exact-code CI — PASS for the integrated job
+
+CI [41965185906](https://github.com/suraj-singh12/gnss-android-tracking/actions/runs/41965185906),
+job [127040445482](https://github.com/suraj-singh12/gnss-android-tracking/actions/runs/41965185906/job/127040445482),
+completed **successfully at `df876693ff7fcb06416ee8db3017b3efda672b9a`**.
+This is fresh execution at the final code/helper revision, not a relabelled e9 pass.
+
+| Existing workflow check | Executed result at df |
+| --- | --- |
+| Android unit/lint/debug APK | **PASS**, 13m35s; saved ordinary XML counts **296 total, 260 passed, 36 bridge-dependent skipped, zero failures/errors** |
+| Command and test-tools race tests / vet / protocol checks | **PASS** |
+| Measured simultaneous synchronization and saturated-history authenticated controls with fresh SOS/LIVE | **Both PASS**; software fixture evidence, not physical fleet certification |
+| Real Kotlin/Room/Sender → race-enabled Go HTTP/SQLite | **PASS**, 18m09s; **36/36, zero skipped/failures/errors** |
+| Browser regression entry points | **All PASS**: sos-dashboard, ui-dashboard (including axe), recording-foundation, recording-playback, travel-back, playback-clips, control-ui, history-dashboard, windows-stability, map-download-ui, map-radius-ui and sync-capacity |
+| macOS ARM64 / Windows AMD64 builds | **PASS**, source df; native execution unperformed |
+| Source cleanliness / embedded binary revisions / APK signature / checksum manifest | **PASS**, all three CI artifacts verified at df |
+| CI uploads | **PASS**, Android APK, both Command binaries, acceptance evidence and test reports uploaded |
+| Independent deterministic map software job | **PASS** |
+| Independent real public-provider job | **FAIL / PARTIAL**, unchanged 30,000,000-byte transfer ceiling; details below |
+
+The bridge executes the same 36 methods skipped in the ordinary run: **296 distinct
+reported cases executed across the two phases**, not 332 unique passes. Lint passed;
+the separately retained local lint XML reports **128 warnings**, not zero warnings.
+
+[Exact job/step states, counts and artifact metadata](evidence/issue-39/v46/ci-df87669-summary.json),
+[full integrated log](evidence/issue-39/v46/ci-df87669-integrated.log.gz),
+[CI asset manifest](evidence/issue-39/v46/ci-df87669-manifest.json) and
+[full provider log](evidence/issue-39/v46/ci-df87669-provider.log.gz) retain the source-specific evidence.
+Local and CI builds have separate checksum manifests; no byte-identical-build claim is made.
+Use these **CI acceptance artifacts** for shared review (development builds, not a release):
+
+- [Android debug APK](https://github.com/suraj-singh12/gnss-android-tracking/actions/runs/41965185906/artifacts/13388583355)
+- [macOS ARM64 Command](https://github.com/suraj-singh12/gnss-android-tracking/actions/runs/41965185906/artifacts/13388777889)
+- [Windows AMD64 Command](https://github.com/suraj-singh12/gnss-android-tracking/actions/runs/41965185906/artifacts/13388388745)
+- [Manifest, build/signature information and full native/browser renders](https://github.com/suraj-singh12/gnss-android-tracking/actions/runs/41965185906/artifacts/13388269349)
+- [JUnit/lint/browser reports](https://github.com/suraj-singh12/gnss-android-tracking/actions/runs/41965185906/artifacts/13388179399)
+
+Artifact metadata records expiry; acceptance binaries/evidence have 30-day retention.
+Their manifest and logs remain in this repository after CI artifact expiry. The bundle's
+SETUP.md is a snapshot of this document at code df; this later canonical ledger records
+completed verification without changing that tested code.
+
+**The overall workflow is not all green.** Real DEM acquire/decode and bounded online
+map acceptance **passed**, and Mathura vector/terrain acquisition passed. Automatic
+geographic/offline-restart acceptance and several non-preset radius/layer cases remained
+failed/partial at the existing transfer cap (for example, regional fallback requested
+113,679,871 bytes against a 30,000,000-byte CI ceiling). The public-provider job therefore
+failed despite its successful subcases. No transfer guard, Command production code or
+approved Command design was altered. This is preserved as a separate map-provider
+acceptance limitation, not called an Android or deterministic map-test pass.
+
+Final delivery after df changes **documentation/evidence only**. Android, Command,
+protocol and the corrected playback helper retain the exact tested source content.
+No unchanged expensive suite is manually rerun for that documentation delivery.
 
 
 Reproduction environment used in this session (paths are disposable tool installations):

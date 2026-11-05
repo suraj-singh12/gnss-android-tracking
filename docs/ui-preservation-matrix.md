@@ -13,7 +13,10 @@ routes**, nine approved dialog families, retained retry/error/document-picker fl
 and three existing notification families. The complete control/data grouping is
 below; shared export, routing and native cancellation behaviors retain single owners.
 Status here describes implementation. **All IDs 01–60 are present once** and have
-production owners; implemented/test source is `e9b7691dab9765dfae0864575b9c45d3c8dbb114`.
+production owners. Final exact-code CI source is
+`df876693ff7fcb06416ee8db3017b3efda672b9a` (production code unchanged from e9;
+includes the verified playback test-helper correction). The integrated CI job passed;
+physical/native acceptance and separate real-provider limitations remain in the ledger.
 Executed source-specific results, retained native renders and remaining physical
 limitations are in [ui-acceptance.md](ui-acceptance.md); test names alone are not passes.
 Application/protocol authorities remain the existing ones. The delivery documentation
