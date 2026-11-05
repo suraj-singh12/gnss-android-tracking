@@ -1,0 +1,356 @@
+{
+  "source": "e9b7691dab9765dfae0864575b9c45d3c8dbb114",
+  "trees": {
+    "android": "ef30ff2a9e419b36cdc39b73321e2acec08f4473",
+    "command": "0ce2a387782aea5cc8746b7fea1a8757874e0f72",
+    "protocol": "3ab8f201c1d72bf7141eaf7a629fa7a39f6f3012",
+    "test-tools": "490dfa66afc097cd00037480dac1d1a9b8321c95"
+  },
+  "commands": {
+    "android": {
+      "command": [
+        "./gradlew",
+        "testDebugUnitTest",
+        "lintDebug",
+        "assembleDebug",
+        "--max-workers=2",
+        "--console=plain"
+      ],
+      "cwd": "android",
+      "exit_code": 0,
+      "seconds": 607.263
+    },
+    "bridge": {
+      "command": [
+        "test-tools/integration/run.sh",
+        "--max-workers=2",
+        "--console=plain"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 1147.289
+    }
+  },
+  "tests": {
+    "android": {
+      "counts": {
+        "tests": 296,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 36,
+        "passed": 260
+      },
+      "classes": [
+        {
+          "class": "org.gnss.tracking.PendingOutboxDiagnosticsTest",
+          "tests": 6,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.IncidentRecorderTest",
+          "tests": 25,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.CommandConsoleUiTest",
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.AdaptivePersistenceTest",
+          "tests": 15,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.MainActivityStartupTest",
+          "tests": 18,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.TrackingNotificationTest",
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.TrackingLifecycleTest",
+          "tests": 16,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.SosActivityTest",
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.SosHoldGestureTest",
+          "tests": 10,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.LocationSourceTest",
+          "tests": 5,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.DiagnosticsExportApi26Test",
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.DiagnosticsExportApi35Test",
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.AdaptiveSettingsTest",
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.PhoneAlertNotificationTest",
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.FixDisplayTest",
+          "tests": 5,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.NetworkEvidenceTest",
+          "tests": 2,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.CommandIntegrationTest",
+          "tests": 36,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 36
+        },
+        {
+          "class": "org.gnss.tracking.SavedGnssSyncProgressTest",
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.SosTriggerTest",
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.HistoryDeliveryTest",
+          "tests": 16,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.V46WorkflowTest",
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.SosEngineTest",
+          "tests": 12,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.NativeUiAccessibilityTest",
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.DialogVisualTest",
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.NotificationVisualTest",
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.RepositoryTest",
+          "tests": 12,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.PhysicalButtonActivityTest",
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.GnssDiagnosticsTest",
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.UiNavigationVisualTest",
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.PhysicalButtonControllerTest",
+          "tests": 2,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.CommandControlTest",
+          "tests": 26,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.ProtocolTest",
+          "tests": 8,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.ObservationPersistenceTest",
+          "tests": 11,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.SenderTest",
+          "tests": 14,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.PhysicalButtonJournalTest",
+          "tests": 2,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.CommandEnrollmentUiTest",
+          "tests": 2,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.LocationFailureTest",
+          "tests": 7,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.DiagnosticsExportApi28Test",
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.SettingsDiagnosticsTest",
+          "tests": 5,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "class": "org.gnss.tracking.AppearanceTest",
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      ]
+    },
+    "bridge": {
+      "counts": {
+        "tests": 36,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 36
+      },
+      "classes": [
+        {
+          "class": "org.gnss.tracking.CommandIntegrationTest",
+          "tests": 36,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      ]
+    }
+  },
+  "lint": {
+    "Error": 0,
+    "Fatal": 0,
+    "Warning": 128,
+    "Information": 0
+  },
+  "apk": {
+    "bytes": 3616756,
+    "sha256": "cba104ca2a281f956e862c81d8dacc6d2e35b018c96cdc3373f003bd59bcbcd5",
+    "exact_source_in_dex": true
+  }
+}

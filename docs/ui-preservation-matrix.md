@@ -12,8 +12,12 @@ Coverage: **18 approved destinations + 7 contextual retained destinations = 25 n
 routes**, nine approved dialog families, retained retry/error/document-picker flows,
 and three existing notification families. The complete control/data grouping is
 below; shared export, routing and native cancellation behaviors retain single owners.
-Status here describes implementation. Executed source-specific results and physical
+Status here describes implementation. **All IDs 01–60 are present once** and have
+production owners; implemented/test source is `e9b7691dab9765dfae0864575b9c45d3c8dbb114`.
+Executed source-specific results, retained native renders and remaining physical
 limitations are in [ui-acceptance.md](ui-acceptance.md); test names alone are not passes.
+Application/protocol authorities remain the existing ones. The delivery documentation
+and evidence do not replace the exact-source execution ledger.
 
 Approved clarifications: advanced diagnostics/history/evidence/configuration stay in
 contextual secondary destinations; acknowledged **View alert history** stays enabled

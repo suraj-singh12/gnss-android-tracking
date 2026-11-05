@@ -143,13 +143,12 @@ errors/fatals and 131 warnings; debug APK built**, 9m59s. Its APK contains that 
 source SHA in DEX; SHA-256 `87396ed175569513f5a25f13bf4c8a910756ef6f66ae5fbd9b85401c63479fe5`.
 The follow-on bridge invocation was interrupted during setup for the above input fixes;
 it is not integration evidence. Cached XML left by that interruption is excluded from
-counts. Final evidence below must validate the subsequent implementation commit.
+counts. The later committed-source results are recorded separately below.
 
 Protected-input correction targeted run: **39 tests passed, zero failures/errors/skips**
 (`SosHoldGestureTest`, `SosActivityTest`, `V46WorkflowTest`, `MainActivityStartupTest`,
 `PhoneAlertNotificationTest`), before the final commit. Real TalkBack/Switch Access
-was not executed. Final implementation verification: **PENDING execution against
-committed source**.
+was not executed. Final committed-source verification is recorded below.
 The `98c37224390ea90f4045a7dc9382a5db471d91e3` full invocation was
 intentionally stopped after 403.739s (exit 143) during self-review; it supplies no
 completed final-suite evidence. A new regression reproduced a stop-only defect after
@@ -183,7 +182,125 @@ Intermediate working-tree runs caught and corrected reused layout-parameter geom
 large-font SOS clipping, stale retained-history filters, filter event-queue timing and
 sealed terminal-result semantics. They are not relabelled as final-commit evidence.
 The last full navigation-render probe before final polish passed all 14 theme/size
-cases in 2m41s. Final full suites, lint, APK and bridge must validate the committed code.
+cases in 2m41s. These probes remain historical; the committed-source results below
+are the final acceptance evidence.
+
+### Completed Android run and final message correction — 2026-11-05 UTC
+
+At `30570210215411081632a611381d737b9c4cfdd7`, the complete Android command
+passed in **640.384s**: **296 total, 260 passed, 36 bridge-dependent skipped,
+zero failures/errors**; lint **0 errors/fatals, 128 warnings**; debug APK
+**3,616,745 bytes**, SHA-256
+`56e5eda8e9de2782fb3807e2ec166f5d25222528e48ec074a43eb73550d574dd`, exact
+source SHA present in DEX. All **796 native renders** were generated. These are
+valid results for that source, not evidence for a later revision. Its
+[CI run 41956645618](https://github.com/suraj-singh12/gnss-android-tracking/actions/runs/41956645618)
+also passed Android, Go/protocol and both measured stress steps. The next source push
+cancelled its active bridge step; subsequent assets/browser steps were skipped. The
+deterministic map job passed, public-provider job failed on timeouts/transfer ceilings.
+This is not an overall-green CI or integration-pass claim.
+
+Its real bridge invocation was deliberately interrupted after **775.131s**, exit 143,
+for a final truthful-failure-message correction; no bridge pass is claimed. If local
+recipient ACK is already durable or in Command custody but an OS cancellation retry
+fails, the old combined failure banner must not claim Command ACK is unconfirmed.
+The message now directs the user to the retained acknowledgement and delivery status;
+underlying storage, sender and ACK/stop semantics are unchanged. The existing three
+PhoneAlertNotificationTest cases passed, zero failures/errors/skips, **42s**, before
+commit. No new test mirrors this low-impact literal-message change.
+
+Frozen implementation source is now **`e9b7691dab9765dfae0864575b9c45d3c8dbb114`**.
+Complete Android/lint/APK and the separate real bridge execution against this exact
+revision **PASSED**. The bridge ran all 36 methods skipped by the ordinary invocation.
+
+### Final committed-source execution ledger
+
+| Check at `e9b7691dab9765dfae0864575b9c45d3c8dbb114` | Actual result |
+| --- | --- |
+| `cd android && ./gradlew testDebugUnitTest lintDebug assembleDebug --max-workers=2 --console=plain` | **PASS**, exit 0, **607.263s** (10m7s); **296 total, 260 passed, 36 bridge-dependent skipped, zero failures/errors** |
+| Lint XML | **0 Error, 0 Fatal, 128 Warning**; not warning-free |
+| Debug APK | **Built**, **3,616,756 bytes**; exact source SHA present in DEX; SHA-256 `cba104ca2a281f956e862c81d8dacc6d2e35b018c96cdc3373f003bd59bcbcd5` |
+| `test-tools/integration/run.sh --max-workers=2 --console=plain` | **PASS**, exit 0, **1147.289s** (19m05s Gradle output); **36/36 passed, zero skipped/failures/errors**, real Kotlin/Room/Sender → race-enabled Go HTTP/SQLite |
+| Native render/geometry evidence | **796 generated images**, Day/Night, narrow/wide, portrait/landscape and 1×/1.5×; 20 representative final-source images retained |
+| Physical Android / TalkBack / Switch Access / field audio/GNSS | **NOT TESTED**, ADB lists no attached devices |
+
+The bridge's 36 cases are the same methods skipped in the ordinary run: **296
+cases executed across the two invocations**, not 332 distinct passing cases. Its
+expanded real-alert fleet case covers local stop, OS failure, Command custody, retry,
+process recovery of an already sealed `unknown` result, unchanged wire revision/digest,
+and subsequent explicit recipient ACK in 1/5/20-phone fixtures. Stop output does not
+acknowledge SOS or create recipient ACK.
+
+[Exact commands/source trees](evidence/issue-39/v46/verification.json),
+[per-class counts, lint and APK identity](evidence/issue-39/v46/summary.json),
+[bridge XML archive](evidence/issue-39/v46/bridge-test-results.zip) and
+[bridge log](evidence/issue-39/v46/bridge.log.gz) retain the final local evidence.
+
+[Native render inventory and hashes](evidence/issue-39/v46/native-renders.json)
+records the local run's 796 filenames/dimensions/hashes and which 20 images are retained.
+The [Android XML archive](evidence/issue-39/v46/android-test-results.zip),
+[Gradle log](evidence/issue-39/v46/android.log.gz) and
+[lint XML](evidence/issue-39/v46/lint-results-debug.xml.gz) retain actual outputs.
+Native controls use test-only Room/Operational/input fixtures, not production demo
+records, physical GNSS or hardware-key evidence. Final-source Night Tracking and
+1.5× native urgent-notification renders were manually reviewed; the earlier review
+of unchanged layout covered enrollment, policy, filters, peer key-test controls and
+separate ACK/Stop actions. Geometry/contrast assertions passed in the complete suite.
+Representative images: [Tracking Day](evidence/issue-39/v46/android-day-390x842-1.0-tracking-active.png),
+[Tracking Night](evidence/issue-39/v46/android-night-390x842-1.0-tracking-active.png),
+[Diagnostics](evidence/issue-39/v46/android-day-390x842-1.0-diagnostics.png),
+[physical-test tools](evidence/issue-39/v46/android-day-390x842-1.0-diagnostic-tools.png),
+[large-text native alert](evidence/issue-39/v46/android-day-360-1.5-notification-urgent.png).
+
+CI [run 41959230200](https://github.com/suraj-singh12/gnss-android-tracking/actions/runs/41959230200)
+at this exact source initially failed five API-26 framework-resolution cases:
+`DiagnosticsExportApi26Test` (three), `GnssDiagnosticsTest.unavailablePowerApisStayNullOnMinimumSdk`
+and `MainActivityStartupTest.readySingleTapStartsExactlyOnceAndBecomesActiveAfterDurableStartup[26]`.
+Each failed in **MavenArtifactFetcher**, caused by an HTTP IOException, before its
+application assertions; **296 total, 255 passed, five failed, 36 skipped**, 9m19s.
+These are recorded failures, not skipped or passed tests. The available job log does
+not expose the underlying HTTP status. The report artifact was fetched through the
+GitHub app, but its signed storage URL is blocked from the execution workspace (proxy
+403); no network-policy/TLS/checksum bypass was attempted. The same API-26 cases
+passed locally from the legitimate framework cache. A job-specific retry of the failed
+integrated job was requested (original job `127021663503`); no dependency or wrapper
+version changed.
+The independent deterministic map job passed; public-provider failures remain separate.
+
+The retry passed Android (**296 total, 260 passed, 36 bridge skips**), Go tests/vet and
+protocol checks, both measured stress steps, and real integration (**36/36, zero
+skips/failures/errors**). Portable macOS/Windows compilation succeeded. Browser checks
+passed SOS dashboard, UI dashboard and recording foundation, then failed
+`recording-playback.cjs:879`: after switching to 1440 px, `headerAction` tried to click
+the intentionally hidden mobile header summary. Command's existing desktop menu groups
+are exposed directly. This is a scoped test-helper defect; **Command production is
+unchanged**. Checksum verification and asset uploads were skipped after that failure.
+[Job/step states](evidence/issue-39/v46/ci-e9-jobs.json),
+[complete integrated log](evidence/issue-39/v46/ci-e9-integrated-retry.log.gz) and
+[separate provider log](evidence/issue-39/v46/ci-e9-provider.log.gz) retain that evidence.
+
+The helper now opens the mobile summary only when visible, then uses the existing
+visible group/control. No assertion is removed and no DOM state is simulated.
+The full affected playback suite **passed locally** against real Command/SQLite and
+Chromium: 21 parties / 20 included, immutable map/terrain after deletion, deterministic
+rewind, process restart, delayed history redraw, read-only historical SOS and real
+pause overlap. This was a **pre-commit working-tree** run, explicitly labelled
+`e9b7691-plus-uncommitted-desktop-helper` in its
+[report](evidence/issue-39/v46/playback-helper-working-tree.json) and
+[log](evidence/issue-39/v46/playback-helper-working-tree.log); not an exact-new-commit
+CI pass. JavaScript syntax check also passed. Only this browser test helper changed;
+Android, Command and protocol source trees remain byte-for-byte at the tested e9
+revision. CI must validate the new helper commit and remaining browser/asset stages.
+
+Local browser setup: official npm Playwright **1.64.1** installed externally.
+Its bundled Chromium download was blocked by the configured proxy (`cdn.playwright.dev`,
+403 Domain forbidden). Used the existing supported `GNSS_CHROMIUM` option with system
+**Chromium 151.0.7922.173 (Debian 13)**; Node **24.19.0**, real locally built Command
+from the unchanged source. No network policy, TLS, dependencies or production code
+were changed to mask this setup restriction. These are Linux browser results, not
+Android or native macOS/Windows execution.
+
+
 
 Reproduction environment used in this session (paths are disposable tool installations):
 
@@ -226,6 +343,29 @@ Doze/OEM/service recovery, GNSS freshness/accuracy in the field, DND/mute/channe
 and vibration, hardware buttons, TalkBack/switch access and real offline/LAN multi-phone
 operation. Native macOS/Windows execution is also not established by Linux integration.
 Use the existing [device acceptance](../android/DEVICE-ACCEPTANCE.md) procedure.
+For this V4.6 candidate, supplement its historical SOS cases with the current protected
+input contract (these steps are **NOT TESTED** on hardware):
+
+1. On Tracking, Settings and nested Diagnostics, touch-hold SOS continuously for
+   1200 ms; release/move away before completion must save no SOS. Verify an actual
+   completed hold creates one durable event and retains delivery/operator-ACK separation.
+2. With TalkBack, invoke “Activate SOS with 1.2-second protection.” Confirm pending
+   feedback and the exposed Cancel action; no event may appear before the full delay.
+   Exercise Cancel, deliberate focus on another control, navigation, window loss and
+   Activity pause before completion. Verify no event after each interrupted attempt.
+3. While pending, allow ordinary announcements/content updates and same-node focus
+   clear/reacquire; a legitimate unchanged attempt must complete. Repeat the activation
+   action during the delay and immediately afterwards: no timer reset or duplicate SOS.
+   Deliberately leave/refocus before beginning a new attempt.
+4. Repeat with Switch Access where supported, including action-menu selection,
+   cancellation and scan focus. Check that incidental reader/menu transitions do not
+   cancel, while deliberately moving to a different control does. Also verify keyboard
+   Enter/Space/DPAD-center needs the full hold and early key release cancels.
+5. For phone alerts, independently verify Stop output vs recipient ACK, restart and
+   failed cancellation, DND/mute/channel behavior and retained acknowledged history.
+   Record device/Android/reader versions, timestamps and Android/Command exports;
+   output API return alone cannot prove audibility or human receipt.
+
 No field-stable/release claim, merge, release or Issue #39 closure is authorized.
 
 ## DEM reliability and Map & Layers follow-up on PR #19
