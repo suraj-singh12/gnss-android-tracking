@@ -328,7 +328,7 @@ class TrackingApp : Application() {
             operational.update {
                 it.copy(
                     error =
-                        "Alert acknowledgement could not be saved or output stopped. Reopen the alert and retry; Command acknowledgement remains unconfirmed."
+                        "Alert acknowledgement could not be saved or output stopped. Reopen the alert and retry; check the retained acknowledgement and delivery status."
                 )
             }
         }
