@@ -1,6 +1,6 @@
 /workspace/scratch/gnss-toolchains/assets-df87669/GNSS-Command-windows-x64.exe: go1.24.7
 	path	github.com/suraj-singh12/gnss-android-tracking/command/cmd/party-tracker
-	mod	github.com/suraj-singh12/gnss-android-tracking/command	v0.0.0-20261105040123-df876693ff7f	
+	mod	github.com/suraj-singh12/gnss-android-tracking/command	v0.0.0-20261105040123-df876693ff7f
 	dep	github.com/davecgh/go-spew	v1.1.1	h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 	dep	github.com/ncruces/go-sqlite3	v0.28.0	h1:AQVTUPgfamONl09LS+4rGFbHmLKM8/QrJJJi1UukjEQ=
 	dep	github.com/ncruces/julianday	v1.0.0	h1:fH0OKwa7NWvniGQtxdJRxAgkBMolni2BjDHaWTxqt7M=

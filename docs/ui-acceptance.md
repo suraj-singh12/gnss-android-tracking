@@ -359,6 +359,8 @@ or release signing/field stability is claimed.
 [signature evidence](evidence/issue-39/v46/assets-df87669-android-signing.txt) and
 [Android build log](evidence/issue-39/v46/assets-df87669-android-build.log.gz) retain actual outputs.
 Binaries are in `/workspace/scratch/gnss-toolchains/assets-df87669/`; no release published.
+Standalone build-info display files trim trailing whitespace from Go stdout; build
+fields and binary checksums are unchanged. Full CI logs retain their original output.
 
 Additional reusable environment diagnosis: Go 1.24.7's VCS root detector expects a
 `.git` **directory**. In the linked application worktree (`.git` file), even
