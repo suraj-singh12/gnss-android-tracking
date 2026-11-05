@@ -1,4 +1,499 @@
-# Issue #6 integrated UI acceptance
+# UI acceptance evidence
+
+## Issue #39 V4.6 — current delivered implementation
+
+**Implemented: all 60 functional groups / 25 native routes.** Final tested code:
+`df876693ff7fcb06416ee8db3017b3efda672b9a`, from integration parent
+`9547985efd84c7229025b0b1c56812099589dc6b`. The integrated CI job passed fresh Android,
+real bridge, Go/protocol/stress, browser and matched-asset checks at that exact code.
+The separate public-provider job failed/partially completed at its unchanged transfer
+ceiling; overall CI is not all green. Physical Android/TalkBack/Switch Access and native
+macOS/Windows acceptance remain **NOT TESTED**. No field-stable/release claim.
+
+See the [60-group matrix](ui-preservation-matrix.md), final exact-code CI section below,
+and [source-specific CI summary](evidence/issue-39/v46/ci-df87669-summary.json).
+Historical attempts and environment repairs below retain their original revisions.
+Subsequent delivery edits are documentation/evidence only; tested runtime code stays df.
+
+## Issue #39 V4.6 — environment repair and baseline gate (2026-11-04)
+
+Authorized source: `9547985efd84c7229025b0b1c56812099589dc6b`, freshly fetched
+`integration/combined-upgrades`. The mandatory baseline gate passed before production
+implementation began. This section records the exact unchanged-source baseline and
+environment work; final implementation evidence is recorded separately below.
+
+- `/usr/bin/go` is a desktop Go board game (`--help` describes local two-player
+  play), not the compiler. An isolated official Go **1.24.7 linux/amd64** toolchain
+  was selected using PATH. Its downloaded archive SHA-256 matched the official
+  release index: `da18191ddb7db8a9339816f3e2b54bdded8047cdc2a5d67059478f8d1595c43f`.
+  The existing bridge script was not changed.
+- Direct external DNS is unavailable in this proxy-only environment. Java did not
+  consume HTTP_PROXY/HTTPS_PROXY automatically. Explicit Java HTTP/HTTPS proxy
+  properties enabled the unchanged wrapper to download **Gradle 8.11.1** and
+  enforce its existing SHA-256
+  `f397b287023acdba1e9f6fc5ea72d22dd63669d59ed4a289a29b1a76eee151c6`.
+- The initial Debian Java **21.0.12.1** installation lacked JAVA_COMPILER (`javac`).
+  Installed isolated Temurin **17.0.21+9**, verifying publisher archive SHA-256
+  `8b9b611d917e3dfd8419d3566b5949226f69b052fed7e109c1368add1dfe8711`.
+  JAVA_HOME selects that full JDK; existing system CA trust remains enabled.
+- Installed Android platform **35 revision 2**, Build Tools **35.0.0** and Platform
+  Tools **37.0.1** under an isolated ANDROID_HOME, checking archives against the
+  official Android repository metadata. No build dependency or SDK target changed.
+- Gradle's forked Robolectric JVMs also need proxy/CA properties. GRADLE_OPTS alone
+  fixed wrapper/dependency downloads but not those forks. The initial unit attempt
+  failed framework resolution with UnknownHostException and was stopped; that is
+  infrastructure failure, not application regression evidence. JAVA_TOOL_OPTIONS
+  now propagates the same proxy/CA properties to the test JVMs.
+- Baseline `./gradlew testDebugUnitTest lintDebug assembleDebug --max-workers=2
+  --console=plain`: **BUILD SUCCESSFUL**, 9m46s. XML: **278 tests, 242 passed,
+  36 bridge-dependent skipped, zero failures/errors**. Lint XML: **zero errors,
+  112 warnings**. Debug APK assembled. This tests unchanged application source at
+  the pinned integration SHA; concurrent changes were setup documentation only.
+- Baseline `test-tools/integration/run.sh --max-workers=2 --console=plain` with the
+  repaired environment: **BUILD SUCCESSFUL**, 19m42s. The scoped
+  `CommandIntegrationTest` XML reports **36/36 passed, zero skipped/failures/errors**,
+  1115.644s test time. These are the same 36 methods skipped by the ordinary run,
+  not additional unique tests. Real Kotlin/Room/Sender and Go HTTP/SQLite ran.
+
+### V4.6 Day text contrast — operator approved minimal correction
+
+During native token implementation, the exact immutable V4.6 `--muted: #697C82`
+was checked against its approved Day surfaces. WCAG relative-luminance contrast is
+**4.3695:1 on #FFFFFF**, **4.0208:1 on #F3F6F6** and **4.1608:1 on #F7FAF9**.
+The artifact uses this token for small secondary text. The existing
+`NativeUiAccessibilityTest.semanticTextPairsMeetNormalTextContrastInBothThemes`
+requires at least 4.5:1, as does the existing design-system accessibility contract.
+Exact token parity and that requirement cannot both hold for those text pairs.
+
+Operator-approved narrowly scoped exception: Day secondary text **#61747A**, the first
+passing shade when subtracting the same integer RGB amount from the approved
+token (eight per channel). Ratios: **4.5071:1 on #F3F6F6**, **4.8980:1 on white**.
+The operator replied **“Approve minimal contrast correction”** in this implementation
+session. The production Day secondary-text token uses that shade. The immutable
+approved artifact, test threshold and approved typography remain unchanged.
+
+### Implemented contract and final verification ledger
+
+The existing #39 branch was reconciled against the latest fetched integration parent,
+not `main`: `devX/issue-39-android-settings-diagnostics` descends from `9547985e…`;
+its historical PR #44 work at `5307c79…` is already integrated. Canonical agent guidance
+is synchronized from `9e237edfc7ce0b9218b93ecd661d83203a40a0e5`, file only. PR #64
+remains draft/unmerged; its 15 rules/52 corrections were read as requirements, not code.
+
+V4.6 is the pinned artifact at `8d95eafe6fdcd1423027194ea128ae7a8b91236d`.
+The [60-group matrix](ui-preservation-matrix.md) records production ownership and
+preservation. Advanced diagnostics/history/configuration remain contextual; acknowledged
+View alert history opens the canonical retained journal. No Command production,
+protocol, approved design or dependency/wrapper changes are included.
+
+Room 7→8 adds stop-request and cancellation-return timestamps to the existing command
+journal. Local stop commits intent before cancelling repetition/OS output; recipient ACK
+is independent. API cancellation failure leaves completion unconfirmed and retryable.
+Local completion does **not** revise an already sealed Command `unknown` wire result;
+its exact revision/digest remain unchanged until an explicit recipient ACK. The real
+bridge regression exercises stop-only, OS failure, custody, retry/restart and subsequent ACK.
+
+First implementation run at `a222313fef6cefa2af3fe48d994d37e8175defd9`:
+`testDebugUnitTest lintDebug assembleDebug --max-workers=2 --console=plain` stopped
+with **286 tests: 247 passed, 3 failed, 36 bridge-dependent skipped**, 9m31s.
+Failures were AppearanceTest (pre-V4.6 palette/picker), DialogVisualTest (removed
+routes), and NotificationVisualTest (native alert-action ellipsis at 1.5×). Lint/APK
+completion and bridge were not established by that failed run. The old test routes
+were replaced with real current affordances, and alert actions use compact independent
+**ACK alert** / **Stop output** labels. No geometry assertion was weakened.
+
+The correction also keeps Start/Stop key-test controls in one compact stable row,
+disables empty Clear results, retains detailed device/mechanism evidence in Advanced
+logs, and moves selected-document export onto the existing application work scope.
+Picker/cancel/write/progress/failure status has one Operational owner and is visible
+at every export entry; rotation retains the job. Process termination can interrupt a
+document provider write; after a new process no completed export is inferred.
+The recorder, sanitizer, URI/document operation and observation ownership are unchanged.
+
+The `bbf2902151f482387c46bc044814f0e7869600f5` full run was deliberately
+interrupted after 370.709s (client exit 143) for the pending-consent hardening; it is
+**not** a completed unit/lint/APK result and its bridge was not started. The correction
+clears the existing private review candidate on pause/dismiss, blocks repeated review
+opening, and checks endpoint/binding generation under CommandControl's existing mutex
+before private-key storage. The Tracking save caption now reads writer commitment,
+pending work and failures instead of inferring saved observations from Tracking ON.
+
+### Approved protected SOS accessibility clarification
+
+The operator explicitly approved replacing immediate ACTION_LONG_CLICK activation with
+an explicit protected accessibility action, with **the full 1200 ms delay**, accessible
+pending feedback and Cancel, cancellation on navigation/deliberate focus change/pause,
+no duplicate/bypass, and the existing SOS engine/durability/delivery unchanged. The
+operator also required that ordinary reader announcements/focus updates not cancel it
+and authorized proceeding **without another design review**.
+
+The adapter now exposes a labelled protected long-click action and changes the standard
+accessible Click action to **Cancel SOS activation** while pending. Touching Cancel or
+using the focused keyboard action cancels without starting another hold. Repeated
+accessibility actions do not reset the timer or duplicate activation; after completion,
+another accessibility attempt requires leaving/refocusing the control. Announcements,
+content updates and clear/reacquire notifications on the same node are ignored by the
+cancellation monitor; actual focus on another control cancels. Native input-focus
+restoration to its starting target is tolerated. Window loss, explicit navigation keys,
+Activity pause/destruction and outside touch cancel unfinished attempts. Continuous
+1200 ms touch behavior is preserved; Enter/Space/DPAD-center also require a full hold.
+The optional existing triple-volume shortcut retains its separately approved pattern.
+Only the original app SOS engine can commit/transmit an event.
+
+Native framework-action tests cover minimum delay (no activation at 1199 ms), Cancel,
+interruption/disposal, duplicate actions, keyboard hold/release, focus on another
+control, ordinary announcements/same-node focus, global navigation and post-activation
+Activity destruction. These are software tests, **not real TalkBack or Switch Access**.
+ADB reports no attached device; those physical checks remain explicitly pending.
+
+A separate reproduced Custom-interval regression (`35 → type first digit 5 of 50`)
+hid the editor as if a preset had been selected. The fix preserves editing focus and
+explicit Custom choice across recreation, while explicit preset selection still hides
+Custom. The Party interval mirror also follows the canonical editor's loading/enabled
+state, preventing early edits from being overwritten by initial storage loading.
+
+The complete Android command at `1adb1d4e77d23653c61bbccb9ea5caf86d989a69` passed:
+**290 tests, 254 passed, 36 bridge-dependent skipped, zero failures/errors; lint zero
+errors/fatals and 131 warnings; debug APK built**, 9m59s. Its APK contains that exact
+source SHA in DEX; SHA-256 `87396ed175569513f5a25f13bf4c8a910756ef6f66ae5fbd9b85401c63479fe5`.
+The follow-on bridge invocation was interrupted during setup for the above input fixes;
+it is not integration evidence. Cached XML left by that interruption is excluded from
+counts. The later committed-source results are recorded separately below.
+
+Protected-input correction targeted run: **39 tests passed, zero failures/errors/skips**
+(`SosHoldGestureTest`, `SosActivityTest`, `V46WorkflowTest`, `MainActivityStartupTest`,
+`PhoneAlertNotificationTest`), before the final commit. Real TalkBack/Switch Access
+was not executed. Final committed-source verification is recorded below.
+The `98c37224390ea90f4045a7dc9382a5db471d91e3` full invocation was
+intentionally stopped after 403.739s (exit 143) during self-review; it supplies no
+completed final-suite evidence. A new regression reproduced a stop-only defect after
+cold-start recovery: an already confirmed `unknown` alert had no local-stop intent,
+and requesting Stop Output revised its sealed result. The fix persists local intent
+and OS cancellation evidence without revising **any** pre-existing `unknown` result,
+including one awaiting custody. The regression checks unchanged wire result and
+confirmation, durable local timestamps, retained unresolved status and subsequent
+explicit recipient ACK. The corrected CommandControl class passed all 26 cases,
+zero failures/errors/skips (`recovered-stop-fixed.log`), before the final commit.
+The real bridge additionally covers recovered alerts in the
+5/20-phone fleets, alongside the existing stop/retry/OS-failure scenario.
+
+The local `beb5d258be13cf43a262754624ee7a05354311cd` verification process was
+lost during the managed-environment restart before it recorded completion; no local
+pass is claimed for it. The same exact commit's [CI run 41871320929](https://github.com/suraj-singh12/gnss-android-tracking/actions/runs/41871320929)
+completed ordinary Android tests: **296 total, 259 passed, one failed, 36 skipped**;
+`PhoneAlertNotificationTest` still expected revision 3 instead of 2 after the sealed-result
+fix. Lint/APK completion was not established; subsequent Go checks and the real
+bridge were skipped after that test failure. A local
+single-case reproduction confirmed `expected 3 but was 2` (42s). The corrected test
+explicitly checks that native Stop Output preserves the original result and that native
+ACK advances exactly once; it no longer expects the removed stop revision. The
+combined notification/CommandControl targeted run passed **29 tests, zero failures,
+errors or skips**, 49s (`recovered-notification-fixed.log`), before committing the
+test-only correction.
+The same CI run's deterministic map-software job passed; public-provider acquisition
+failed due to timeouts/transfer ceilings. Command code and those limits are unchanged.
+
+Intermediate working-tree runs caught and corrected reused layout-parameter geometry,
+large-font SOS clipping, stale retained-history filters, filter event-queue timing and
+sealed terminal-result semantics. They are not relabelled as final-commit evidence.
+The last full navigation-render probe before final polish passed all 14 theme/size
+cases in 2m41s. These probes remain historical; the committed-source results below
+are the final acceptance evidence.
+
+### Completed Android run and final message correction — 2026-11-05 UTC
+
+At `30570210215411081632a611381d737b9c4cfdd7`, the complete Android command
+passed in **640.384s**: **296 total, 260 passed, 36 bridge-dependent skipped,
+zero failures/errors**; lint **0 errors/fatals, 128 warnings**; debug APK
+**3,616,745 bytes**, SHA-256
+`56e5eda8e9de2782fb3807e2ec166f5d25222528e48ec074a43eb73550d574dd`, exact
+source SHA present in DEX. All **796 native renders** were generated. These are
+valid results for that source, not evidence for a later revision. Its
+[CI run 41956645618](https://github.com/suraj-singh12/gnss-android-tracking/actions/runs/41956645618)
+also passed Android, Go/protocol and both measured stress steps. The next source push
+cancelled its active bridge step; subsequent assets/browser steps were skipped. The
+deterministic map job passed, public-provider job failed on timeouts/transfer ceilings.
+This is not an overall-green CI or integration-pass claim.
+
+Its real bridge invocation was deliberately interrupted after **775.131s**, exit 143,
+for a final truthful-failure-message correction; no bridge pass is claimed. If local
+recipient ACK is already durable or in Command custody but an OS cancellation retry
+fails, the old combined failure banner must not claim Command ACK is unconfirmed.
+The message now directs the user to the retained acknowledgement and delivery status;
+underlying storage, sender and ACK/stop semantics are unchanged. The existing three
+PhoneAlertNotificationTest cases passed, zero failures/errors/skips, **42s**, before
+commit. No new test mirrors this low-impact literal-message change.
+
+Frozen implementation source is now **`e9b7691dab9765dfae0864575b9c45d3c8dbb114`**.
+Complete Android/lint/APK and the separate real bridge execution against this exact
+revision **PASSED**. The bridge ran all 36 methods skipped by the ordinary invocation.
+
+### Final committed-source execution ledger
+
+| Check at `e9b7691dab9765dfae0864575b9c45d3c8dbb114` | Actual result |
+| --- | --- |
+| `cd android && ./gradlew testDebugUnitTest lintDebug assembleDebug --max-workers=2 --console=plain` | **PASS**, exit 0, **607.263s** (10m7s); **296 total, 260 passed, 36 bridge-dependent skipped, zero failures/errors** |
+| Lint XML | **0 Error, 0 Fatal, 128 Warning**; not warning-free |
+| Debug APK | **Built**, **3,616,756 bytes**; exact source SHA present in DEX; SHA-256 `cba104ca2a281f956e862c81d8dacc6d2e35b018c96cdc3373f003bd59bcbcd5` |
+| `test-tools/integration/run.sh --max-workers=2 --console=plain` | **PASS**, exit 0, **1147.289s** (19m05s Gradle output); **36/36 passed, zero skipped/failures/errors**, real Kotlin/Room/Sender → race-enabled Go HTTP/SQLite |
+| Native render/geometry evidence | **796 generated images**, Day/Night, narrow/wide, portrait/landscape and 1×/1.5×; 20 representative final-source images retained |
+| Physical Android / TalkBack / Switch Access / field audio/GNSS | **NOT TESTED**, ADB lists no attached devices |
+
+The bridge's 36 cases are the same methods skipped in the ordinary run: **296
+cases executed across the two invocations**, not 332 distinct passing cases. Its
+expanded real-alert fleet case covers local stop, OS failure, Command custody, retry,
+process recovery of an already sealed `unknown` result, unchanged wire revision/digest,
+and subsequent explicit recipient ACK in 1/5/20-phone fixtures. Stop output does not
+acknowledge SOS or create recipient ACK.
+
+[Exact commands/source trees](evidence/issue-39/v46/verification.json),
+[per-class counts, lint and APK identity](evidence/issue-39/v46/summary.json),
+[bridge XML archive](evidence/issue-39/v46/bridge-test-results.zip) and
+[bridge log](evidence/issue-39/v46/bridge.log.gz) retain the final local evidence.
+
+[Native render inventory and hashes](evidence/issue-39/v46/native-renders.json)
+records the local run's 796 filenames/dimensions/hashes and which 20 images are retained.
+The [Android XML archive](evidence/issue-39/v46/android-test-results.zip),
+[Gradle log](evidence/issue-39/v46/android.log.gz) and
+[lint XML](evidence/issue-39/v46/lint-results-debug.xml.gz) retain actual outputs.
+Native controls use test-only Room/Operational/input fixtures, not production demo
+records, physical GNSS or hardware-key evidence. Final-source Night Tracking and
+1.5× native urgent-notification renders were manually reviewed; the earlier review
+of unchanged layout covered enrollment, policy, filters, peer key-test controls and
+separate ACK/Stop actions. Geometry/contrast assertions passed in the complete suite.
+Representative images: [Tracking Day](evidence/issue-39/v46/android-day-390x842-1.0-tracking-active.png),
+[Tracking Night](evidence/issue-39/v46/android-night-390x842-1.0-tracking-active.png),
+[Diagnostics](evidence/issue-39/v46/android-day-390x842-1.0-diagnostics.png),
+[physical-test tools](evidence/issue-39/v46/android-day-390x842-1.0-diagnostic-tools.png),
+[large-text native alert](evidence/issue-39/v46/android-day-360-1.5-notification-urgent.png).
+
+CI [run 41959230200](https://github.com/suraj-singh12/gnss-android-tracking/actions/runs/41959230200)
+at this exact source initially failed five API-26 framework-resolution cases:
+`DiagnosticsExportApi26Test` (three), `GnssDiagnosticsTest.unavailablePowerApisStayNullOnMinimumSdk`
+and `MainActivityStartupTest.readySingleTapStartsExactlyOnceAndBecomesActiveAfterDurableStartup[26]`.
+Each failed in **MavenArtifactFetcher**, caused by an HTTP IOException, before its
+application assertions; **296 total, 255 passed, five failed, 36 skipped**, 9m19s.
+These are recorded failures, not skipped or passed tests. The available job log does
+not expose the underlying HTTP status. The report artifact was fetched through the
+GitHub app, but its signed storage URL is blocked from the execution workspace (proxy
+403); no network-policy/TLS/checksum bypass was attempted. The same API-26 cases
+passed locally from the legitimate framework cache. A job-specific retry of the failed
+integrated job was requested (original job `127021663503`); no dependency or wrapper
+version changed.
+The independent deterministic map job passed; public-provider failures remain separate.
+
+The retry passed Android (**296 total, 260 passed, 36 bridge skips**), Go tests/vet and
+protocol checks, both measured stress steps, and real integration (**36/36, zero
+skips/failures/errors**). Portable macOS/Windows compilation succeeded. Browser checks
+passed SOS dashboard, UI dashboard and recording foundation, then failed
+`recording-playback.cjs:879`: after switching to 1440 px, `headerAction` tried to click
+the intentionally hidden mobile header summary. Command's existing desktop menu groups
+are exposed directly. This is a scoped test-helper defect; **Command production is
+unchanged**. Checksum verification and asset uploads were skipped after that failure.
+[Job/step states](evidence/issue-39/v46/ci-e9-jobs.json),
+[complete integrated log](evidence/issue-39/v46/ci-e9-integrated-retry.log.gz) and
+[separate provider log](evidence/issue-39/v46/ci-e9-provider.log.gz) retain that evidence.
+
+The helper now opens the mobile summary only when visible, then uses the existing
+visible group/control. No assertion is removed and no DOM state is simulated.
+The full affected playback suite **passed locally** against real Command/SQLite and
+Chromium: 21 parties / 20 included, immutable map/terrain after deletion, deterministic
+rewind, process restart, delayed history redraw, read-only historical SOS and real
+pause overlap. This was a **pre-commit working-tree** run, explicitly labelled
+`e9b7691-plus-uncommitted-desktop-helper` in its
+[report](evidence/issue-39/v46/playback-helper-working-tree.json) and
+[log](evidence/issue-39/v46/playback-helper-working-tree.log); not an exact-new-commit
+CI pass. JavaScript syntax check also passed. Only this browser test helper changed;
+Android, Command and protocol source trees remain byte-for-byte at the tested e9
+revision. CI must validate the new helper commit and remaining browser/asset stages.
+
+Local browser setup: official npm Playwright **1.64.1** installed externally.
+Its bundled Chromium download was blocked by the configured proxy (`cdn.playwright.dev`,
+403 Domain forbidden). Used the existing supported `GNSS_CHROMIUM` option with system
+**Chromium 151.0.7922.173 (Debian 13)**; Node **24.19.0**, real locally built Command
+from the unchanged source. No network policy, TLS, dependencies or production code
+were changed to mask this setup restriction. These are Linux browser results, not
+Android or native macOS/Windows execution.
+
+
+
+### Committed browser fix and matched local build evidence
+
+`df876693ff7fcb06416ee8db3017b3efda672b9a` commits only the browser helper and
+canonical documentation/evidence. Android tree `ef30ff2a9e419b36cdc39b73321e2acec08f4473`,
+Command tree `0ce2a387782aea5cc8746b7fea1a8757874e0f72` and protocol tree
+`3ab8f201c1d72bf7141eaf7a629fa7a39f6f3012` are identical to e9. Existing exact-e9
+Android/integration results above retain their provenance; they are not relabelled as
+executions at df. No Android/Command/protocol source changed for the helper correction.
+
+The complete real recording-playback suite **passed at exact df87669**, exit 0:
+[report](evidence/issue-39/v46/playback-df87669.json),
+[log](evidence/issue-39/v46/playback-df87669.log). It used a clean-source Linux Command
+binary at df, system Chromium 151.0.7922.173 and official Playwright, including the
+previously failing 1440 px transition to Travel Back and all unchanged assertions.
+
+```sh
+GNSS_COMMAND_BINARY=/workspace/scratch/gnss-toolchains/gnss-command-df87669 \
+GNSS_PLAYWRIGHT_MODULE=/workspace/scratch/gnss-toolchains/browser/node_modules/playwright \
+GNSS_CHROMIUM=/usr/bin/chromium \
+GNSS_SCREENSHOT_DIR=/workspace/scratch/gnss-toolchains/playback-df87669 \
+SOURCE_REVISION=df876693ff7fcb06416ee8db3017b3efda672b9a \
+node test-tools/integration/recording-playback.cjs
+```
+
+Matched **local development acceptance builds** were produced at exact df using the
+existing workflow's build/verification commands: `./gradlew assembleDebug
+--max-workers=2 --console=plain` (**PASS, 10s**), Go **1.24.7** cross-builds
+`CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -p 2 -buildvcs=true ...`, equivalent
+Windows amd64 build and the Linux browser target. The APK contains df in DEX; `aapt`
+confirmed package `org.gnss.tracking`; `apksigner verify --print-certs` passed. Both
+Command binaries report **vcs.revision=df87669… / vcs.modified=false**. Source files
+were unchanged and checkouts clean at build time. No native macOS/Windows execution
+or release signing/field stability is claimed.
+
+[Asset manifest](evidence/issue-39/v46/assets-df87669-manifest.json),
+[SHA256SUMS](evidence/issue-39/v46/assets-df87669-SHA256SUMS),
+[macOS build info](evidence/issue-39/v46/assets-df87669-GNSS-Command-macos-arm64.build-info.txt),
+[Windows build info](evidence/issue-39/v46/assets-df87669-GNSS-Command-windows-x64.exe.build-info.txt),
+[APK package](evidence/issue-39/v46/assets-df87669-android-package.txt),
+[signature evidence](evidence/issue-39/v46/assets-df87669-android-signing.txt) and
+[Android build log](evidence/issue-39/v46/assets-df87669-android-build.log.gz) retain actual outputs.
+Binaries are in `/workspace/scratch/gnss-toolchains/assets-df87669/`; no release published.
+Standalone build-info display files trim trailing whitespace from Go stdout; build
+fields and binary checksums are unchanged. Full CI logs retain their original output.
+
+Additional reusable environment diagnosis: Go 1.24.7's VCS root detector expects a
+`.git` **directory**. In the linked application worktree (`.git` file), even
+`-buildvcs=true` produced successful binaries **without VCS revision fields**; the
+verification assertion rejected them as matched assets. The correction used a local
+shared-object full clone of the existing issue branch, detached at the **same df SHA**,
+with a real `.git` directory. Rebuilding then yielded the correct revision and
+`vcs.modified=false`. No source edits, fake version flags, dependency changes or
+mutation of the implementation checkout/main were involved. The same workflow commands
+in a clean CI clone also use a real Git directory. See the existing
+[test-tool instructions](../test-tools/README.md) for the reusable procedure.
+
+### Final exact-code CI — PASS for the integrated job
+
+CI [41965185906](https://github.com/suraj-singh12/gnss-android-tracking/actions/runs/41965185906),
+job [127040445482](https://github.com/suraj-singh12/gnss-android-tracking/actions/runs/41965185906/job/127040445482),
+completed **successfully at `df876693ff7fcb06416ee8db3017b3efda672b9a`**.
+This is fresh execution at the final code/helper revision, not a relabelled e9 pass.
+
+| Existing workflow check | Executed result at df |
+| --- | --- |
+| Android unit/lint/debug APK | **PASS**, 13m35s; saved ordinary XML counts **296 total, 260 passed, 36 bridge-dependent skipped, zero failures/errors** |
+| Command and test-tools race tests / vet / protocol checks | **PASS** |
+| Measured simultaneous synchronization and saturated-history authenticated controls with fresh SOS/LIVE | **Both PASS**; software fixture evidence, not physical fleet certification |
+| Real Kotlin/Room/Sender → race-enabled Go HTTP/SQLite | **PASS**, 18m09s; **36/36, zero skipped/failures/errors** |
+| Browser regression entry points | **All PASS**: sos-dashboard, ui-dashboard (including axe), recording-foundation, recording-playback, travel-back, playback-clips, control-ui, history-dashboard, windows-stability, map-download-ui, map-radius-ui and sync-capacity |
+| macOS ARM64 / Windows AMD64 builds | **PASS**, source df; native execution unperformed |
+| Source cleanliness / embedded binary revisions / APK signature / checksum manifest | **PASS**, all three CI artifacts verified at df |
+| CI uploads | **PASS**, Android APK, both Command binaries, acceptance evidence and test reports uploaded |
+| Independent deterministic map software job | **PASS** |
+| Independent real public-provider job | **FAIL / PARTIAL**, unchanged 30,000,000-byte transfer ceiling; details below |
+
+The bridge executes the same 36 methods skipped in the ordinary run: **296 distinct
+reported cases executed across the two phases**, not 332 unique passes. Lint passed;
+the separately retained local lint XML reports **128 warnings**, not zero warnings.
+
+[Exact job/step states, counts and artifact metadata](evidence/issue-39/v46/ci-df87669-summary.json),
+[full integrated log](evidence/issue-39/v46/ci-df87669-integrated.log.gz),
+[CI asset manifest](evidence/issue-39/v46/ci-df87669-manifest.json) and
+[full provider log](evidence/issue-39/v46/ci-df87669-provider.log.gz) retain the source-specific evidence.
+Local and CI builds have separate checksum manifests; no byte-identical-build claim is made.
+Use these **CI acceptance artifacts** for shared review (development builds, not a release):
+
+- [Android debug APK](https://github.com/suraj-singh12/gnss-android-tracking/actions/runs/41965185906/artifacts/13388583355)
+- [macOS ARM64 Command](https://github.com/suraj-singh12/gnss-android-tracking/actions/runs/41965185906/artifacts/13388777889)
+- [Windows AMD64 Command](https://github.com/suraj-singh12/gnss-android-tracking/actions/runs/41965185906/artifacts/13388388745)
+- [Manifest, build/signature information and full native/browser renders](https://github.com/suraj-singh12/gnss-android-tracking/actions/runs/41965185906/artifacts/13388269349)
+- [JUnit/lint/browser reports](https://github.com/suraj-singh12/gnss-android-tracking/actions/runs/41965185906/artifacts/13388179399)
+
+Artifact metadata records expiry; acceptance binaries/evidence have 30-day retention.
+Their manifest and logs remain in this repository after CI artifact expiry. The bundle's
+SETUP.md is a snapshot of this document at code df; this later canonical ledger records
+completed verification without changing that tested code.
+
+**The overall workflow is not all green.** Real DEM acquire/decode and bounded online
+map acceptance **passed**, and Mathura vector/terrain acquisition passed. Automatic
+geographic/offline-restart acceptance and several non-preset radius/layer cases remained
+failed/partial at the existing transfer cap (for example, regional fallback requested
+113,679,871 bytes against a 30,000,000-byte CI ceiling). The public-provider job therefore
+failed despite its successful subcases. No transfer guard, Command production code or
+approved Command design was altered. This is preserved as a separate map-provider
+acceptance limitation, not called an Android or deterministic map-test pass.
+
+Final delivery after df changes **documentation/evidence only**. Android, Command,
+protocol and the corrected playback helper retain the exact tested source content.
+No unchanged expensive suite is manually rerun for that documentation delivery.
+
+
+Reproduction environment used in this session (paths are disposable tool installations):
+
+```sh
+export JAVA_HOME=/workspace/scratch/gnss-toolchains/jdk-17.0.21+9
+export ANDROID_HOME=/workspace/scratch/gnss-toolchains/android-sdk
+export PATH="$JAVA_HOME/bin:/workspace/scratch/gnss-toolchains/go/bin:$PATH"
+export GRADLE_OPTS="-Dhttps.proxyHost=proxy -Dhttps.proxyPort=8080 -Dhttp.proxyHost=proxy -Dhttp.proxyPort=8080 -Djavax.net.ssl.trustStore=/etc/ssl/certs/java/cacerts"
+export JAVA_TOOL_OPTIONS="$GRADLE_OPTS"
+# From android/ (ordinary run deliberately skips the bridge-dependent methods):
+GNSS_SCREENSHOT_DIR=/workspace/scratch/gnss-toolchains/final-native ./gradlew testDebugUnitTest lintDebug assembleDebug --max-workers=2 --console=plain
+# From repository root; real Kotlin/Room/Sender → Go/SQLite, race-enabled bridge:
+test-tools/integration/run.sh --max-workers=2 --console=plain
+```
+
+Use the environment's configured proxy/CA paths on another machine; no TLS or checksum
+bypass is permitted. The localhost bridge does not use the external Java proxy path.
+No exact-parent CI run was available during the baseline; local verification repaired
+that gate. The existing integration-targeted workflow can validate the draft PR head.
+
+### Visual/accessibility and anti-regression boundary
+
+Native renders use real MainActivity/native controls with test-only Room/Operational
+fixtures, never production demo records. Coverage: Day/Night, 360×800, 480×960, 390×842,
+1×/1.5× font scales, 800×360/960×480 landscape, nested screens and dialog states.
+Global SOS remains fixed while content scrolls; native 48 dp touch targets accommodate
+Android accessibility even where the HTML's visual control is 40–43 px. Android owns
+notification/permission/document-picker geometry. Software rendering does not prove
+TalkBack, actual sound/vibration, physical GNSS or key delivery.
+
+| Quality rules / historical corrections | Implementation and verification boundary |
+| --- | --- |
+| Rules 1–3; corrections 27–39 | Same authorities/drafts; direct five Settings and seven Diagnostics destinations; mandatory hold; one Filter history entry with binary switches and contextual canonical categories; one genuine physical-test interface; no screen-key proof |
+| Rules 4–9; corrections 40–45 | Fixed SOS/native scroll containment, compact task actions, grouped peer menus/separators, concise GNSS/contact, identical pale-red Stop in both themes, consistent chevrons/icons; native geometry/render and contrast checks |
+| Rules 10–15; corrections 46–52 | Read-only public UUIDs, compact Authorize/Recheck/help, protected private input, cancel-safe review, saved ordinary drafts/routes/query/filter/page/selection, unchanged-view focus preservation, actual lifecycle/Room/ACK/trust states and contextual evidence |
+| Corrections 1–26 | Command-specific map/recording/calendar/audio changes are outside this Android scope; shared containment, interaction preservation and operational-truth principles apply. Command V5.14 is untouched |
+
+Physical acceptance remains **NOT TESTED**: actual Android permission/locked-screen/
+Doze/OEM/service recovery, GNSS freshness/accuracy in the field, DND/mute/channel sound
+and vibration, hardware buttons, TalkBack/switch access and real offline/LAN multi-phone
+operation. Native macOS/Windows execution is also not established by Linux integration.
+Use the existing [device acceptance](../android/DEVICE-ACCEPTANCE.md) procedure.
+For this V4.6 candidate, supplement its historical SOS cases with the current protected
+input contract (these steps are **NOT TESTED** on hardware):
+
+1. On Tracking, Settings and nested Diagnostics, touch-hold SOS continuously for
+   1200 ms; release/move away before completion must save no SOS. Verify an actual
+   completed hold creates one durable event and retains delivery/operator-ACK separation.
+2. With TalkBack, invoke “Activate SOS with 1.2-second protection.” Confirm pending
+   feedback and the exposed Cancel action; no event may appear before the full delay.
+   Exercise Cancel, deliberate focus on another control, navigation, window loss and
+   Activity pause before completion. Verify no event after each interrupted attempt.
+3. While pending, allow ordinary announcements/content updates and same-node focus
+   clear/reacquire; a legitimate unchanged attempt must complete. Repeat the activation
+   action during the delay and immediately afterwards: no timer reset or duplicate SOS.
+   Deliberately leave/refocus before beginning a new attempt.
+4. Repeat with Switch Access where supported, including action-menu selection,
+   cancellation and scan focus. Check that incidental reader/menu transitions do not
+   cancel, while deliberately moving to a different control does. Also verify keyboard
+   Enter/Space/DPAD-center needs the full hold and early key release cancels.
+5. For phone alerts, independently verify Stop output vs recipient ACK, restart and
+   failed cancellation, DND/mute/channel behavior and retained acknowledged history.
+   Record device/Android/reader versions, timestamps and Android/Command exports;
+   output API return alone cannot prove audibility or human receipt.
+
+No field-stable/release claim, merge, release or Issue #39 closure is authorized.
 
 ## DEM reliability and Map & Layers follow-up on PR #19
 

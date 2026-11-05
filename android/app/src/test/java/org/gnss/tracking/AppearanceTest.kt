@@ -1,8 +1,6 @@
 package org.gnss.tracking
 
 import android.content.res.Configuration
-import android.view.View
-import android.view.ViewGroup
 import android.widget.Button
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.*
@@ -12,51 +10,50 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
-import org.robolectric.shadows.ShadowAlertDialog
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = TrackingApp::class)
 class AppearanceTest {
-    private fun descendants(v: View): List<View> =
-        listOf(v) +
-            if (v is ViewGroup) (0 until v.childCount).flatMap { descendants(v.getChildAt(it)) }
-            else emptyList()
-
     @Test
     fun savedAppearanceSelectsNativePaletteWithoutStartingTracking() {
         val app = ApplicationProvider.getApplicationContext<TrackingApp>()
         for (night in listOf(false, true)) {
             app.getSharedPreferences("appearance", 0).edit().putBoolean("night", night).commit()
             val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
-            val a = controller.get()
-            assertEquals(
-                if (night) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO,
-                a.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK,
-            )
-            assertEquals(
-                if (night) 0xffeaf4f5.toInt() else 0xff182c36.toInt(),
-                a.getColor(R.color.ink),
-            )
-            val root = a.findViewById<View>(android.R.id.content)
-            descendants(root)
-                .filterIsInstance<Button>()
-                .single { it.text == "Settings" }
-                .performClick()
-            openNativeScreen(a, "Appearance & SOS")
-            val choice = a.findViewById<Button>(R.id.appearance)
-            assertEquals(
-                "Appearance, ${if(night) "Night" else "Day"}",
-                choice.contentDescription.toString(),
-            )
-            choice.performClick()
-            val dialog = ShadowAlertDialog.getLatestAlertDialog()
-            assertEquals("Appearance", shadowOf(dialog).title.toString())
-            assertEquals(2, dialog.listView.adapter.count)
-            assertEquals("Day", dialog.listView.adapter.getItem(0))
-            assertEquals("Night", dialog.listView.adapter.getItem(1))
-            dialog.dismiss()
-            assertNull(shadowOf(a).nextStartedService)
-            controller.pause().stop().destroy()
+            try {
+                val a = controller.get()
+                assertEquals(
+                    if (night) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO,
+                    a.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK,
+                )
+                assertEquals(
+                    if (night) 0xffe6eef0.toInt() else 0xff23363c.toInt(),
+                    a.getColor(R.color.ink),
+                )
+                for (root in listOf("Tracking", "Settings", "Diagnostics")) {
+                    openNativeScreen(a, root)
+                    val toggle = a.findViewById<Button>(R.id.tracking_appearance)
+                    assertTrue("Global theme on $root", toggle.isShown)
+                    assertEquals(
+                        if (night) "Switch to Day mode" else "Switch to Night mode",
+                        toggle.contentDescription.toString(),
+                    )
+                }
+                a.findViewById<Button>(R.id.tracking_appearance).performClick()
+                assertEquals(
+                    !night,
+                    app.getSharedPreferences("appearance", 0).getBoolean("night", night),
+                )
+                controller.recreate()
+                assertEquals(
+                    if (night) 0xff23363c.toInt() else 0xffe6eef0.toInt(),
+                    controller.get().getColor(R.color.ink),
+                )
+                assertNull(shadowOf(controller.get()).nextStartedService)
+                assertFalse(app.operational.value.tracking)
+            } finally {
+                controller.pause().stop().destroy()
+            }
         }
         app.getSharedPreferences("appearance", 0).edit().putBoolean("night", false).commit()
         app.recorder.close()

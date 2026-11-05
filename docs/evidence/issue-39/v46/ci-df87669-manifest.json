@@ -1,0 +1,21 @@
+{
+  "source_revision": "df876693ff7fcb06416ee8db3017b3efda672b9a",
+  "android_version": "0.1",
+  "command_protocol": 1,
+  "android_min_sdk": 26,
+  "android_target_sdk": 35,
+  "assets": {
+    "GNSS-Tracker-debug.apk": {
+      "sha256": "95130377f14fbe1d9a216e9245b5fa257ea17cc95e7e429b795cc82457597bf9",
+      "bytes": 3136924
+    },
+    "GNSS-Command-macos-arm64": {
+      "sha256": "cb68d4f37369ab542e407c05253b3a0c31851a48085571909343227a5569795a",
+      "bytes": 23074834
+    },
+    "GNSS-Command-windows-x64.exe": {
+      "sha256": "29033474ed59ad4c3466faf8af46d81944fa6d1e7634dda4d3fdf388aa494532",
+      "bytes": 24418304
+    }
+  }
+}

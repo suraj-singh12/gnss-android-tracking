@@ -35,6 +35,8 @@ data class CommandRecord(
     val attemptedAt: Long = 0,
     val completedAt: Long = 0,
     val confirmedAt: Long = 0,
+    @ColumnInfo(defaultValue = "0") val localOutputStopRequestedAt: Long = 0,
+    @ColumnInfo(defaultValue = "0") val localOutputStoppedAt: Long = 0,
 ) {
     fun result() = CommandResult(id, revision, state, reason, effective, received, attempted)
 
@@ -262,9 +264,15 @@ class CommandControl(
             availabilityState.value = value
         }
 
-    suspend fun bind(value: ControlCredential, save: () -> Unit) =
+    suspend fun bind(value: ControlCredential, expectedGeneration: Long? = null, save: () -> Unit) =
         mutex.withLock {
-            require(repository.state().deviceId == value.device) {
+            val current = repository.state()
+            require(
+                expectedGeneration == null || current.endpointGeneration == expectedGeneration
+            ) {
+                "Enrollment review expired after a binding change; compare identities again"
+            }
+            require(current.deviceId == value.device) {
                 "Credential targets a different phone; compare its identity in Command"
             }
             stopAlerts("Local authorization replaced")
@@ -313,6 +321,12 @@ class CommandControl(
         // rather than waiting for a scheduler that was just stopped. No wake-up,
         // listener, service or continuing timer is created.
         if (flushStopResult) stepOnce(true) {}
+    }
+
+    /** One explicit UI opportunity through the same authenticated conversation. */
+    suspend fun recheck() {
+        mutex.withLock { next = 0 }
+        step()
     }
 
     private suspend fun stepOnce(immediate: Boolean, stopped: () -> Unit) =
@@ -914,6 +928,54 @@ class CommandControl(
                 .event(clock.wallMillis(), "$state · $reason · Result pending delivery")
         )
     }
+
+    /** Local output cancellation is not a recipient acknowledgement. */
+    suspend fun stopAlertOutput(id: String) =
+        mutex.withLock {
+            val row = dao.command(id) ?: return@withLock
+            if (!row.trusted || row.operation != "alert") return@withLock
+            if (row.state == "recipient_acknowledged") {
+                checkNotNull(alertOutput) { "Local output cancellation unavailable" }.stop(id)
+                return@withLock
+            }
+            if (row.state !in listOf("output_attempted", "alert_blocked", "unknown"))
+                return@withLock
+            if (row.localOutputStopRequestedAt == 0L) {
+                // Persist intent first. Interrupted output may never resume after restart.
+                val requested = row.copy(localOutputStopRequestedAt = clock.wallMillis())
+                if (row.state == "unknown") {
+                    // Recovery may already have sealed this exact terminal result. A
+                    // local cancellation must not revise it, even before custody arrives.
+                    dao.updateCommand(
+                        requested.event(clock.wallMillis(), "Local output stop requested")
+                    )
+                } else
+                    finish(
+                        requested,
+                        "unknown",
+                        "Local output stop requested; recipient acknowledgement pending",
+                        "Cancellation pending; actual audibility unknown",
+                    )
+            }
+            alertNext.remove(id)
+            alertDeadline.remove(id)
+            checkNotNull(alertOutput) { "Local output cancellation unavailable" }.stop(id)
+            val saved = dao.command(id) ?: return@withLock
+            if (saved.localOutputStoppedAt == 0L) {
+                // Command seals terminal 'unknown' results. Record local API completion
+                // without changing the exact wire result/revision/digest already in custody.
+                // Only an explicit recipient ACK may transition that sealed alert result.
+                dao.updateCommand(
+                    saved
+                        .copy(localOutputStoppedAt = clock.wallMillis())
+                        .event(
+                            clock.wallMillis(),
+                            "Local notification cancellation returned; actual audibility unknown",
+                        )
+                )
+            }
+            next = 0
+        }
 
     // Called only by Android local UI paths. Persist the human event before stopping/reporting.
     suspend fun acknowledgeAlert(id: String) =

@@ -31,7 +31,8 @@ internal class NativeUi(private val context: Context) {
             textSize = size
             setTextColor(color(if (muted) R.color.muted else R.color.ink))
             if (bold) setTypeface(null, Typeface.BOLD)
-            setPadding(0, dp(3), 0, dp(3))
+            includeFontPadding = false
+            setPadding(0, 0, 0, 0)
         }
 
     fun add(parent: LinearLayout, view: View, gap: Int = 0) {
@@ -55,7 +56,7 @@ internal class NativeUi(private val context: Context) {
 
     fun style(button: Button, primary: Boolean = false, danger: Boolean = false) {
         button.isAllCaps = false
-        button.textSize = 14f
+        button.textSize = 12f
         button.minHeight = dp(48)
         button.minimumWidth = 0
         button.setPadding(dp(12), dp(8), dp(12), dp(8))
@@ -77,12 +78,27 @@ internal class NativeUi(private val context: Context) {
         button.gravity = Gravity.CENTER
     }
 
+    fun stopStyle(button: Button) {
+        style(button)
+        button.setTextColor(android.graphics.Color.parseColor("#8C3449"))
+        button.background =
+            RippleDrawable(
+                ColorStateList.valueOf(color(R.color.ripple)),
+                GradientDrawable().apply {
+                    setColor(android.graphics.Color.parseColor("#F9E9ED"))
+                    setStroke(dp(1), android.graphics.Color.parseColor("#E9BEC8"))
+                    cornerRadius = dp(11).toFloat()
+                },
+                null,
+            )
+    }
+
     fun menu(parent: LinearLayout, title: String, subtitle: String, action: () -> Unit) =
         LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(16), dp(14), dp(14), dp(14))
-            minimumHeight = dp(80)
+            minimumHeight = dp(60)
             background =
                 RippleDrawable(ColorStateList.valueOf(color(R.color.ripple)), surface(), null)
             isClickable = true
@@ -91,8 +107,8 @@ internal class NativeUi(private val context: Context) {
             if (android.os.Build.VERSION.SDK_INT >= 28) isScreenReaderFocusable = true
             addView(
                 column().apply {
-                    addView(label(title, 16f, bold = true))
-                    if (subtitle.isNotEmpty()) addView(label(subtitle, 12f, muted = true))
+                    addView(label(title, 12.5f, bold = true))
+                    if (subtitle.isNotEmpty()) addView(label(subtitle, 10.5f, muted = true))
                     importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
                 },
                 LinearLayout.LayoutParams(0, -2, 1f),
@@ -103,8 +119,22 @@ internal class NativeUi(private val context: Context) {
                 }
             )
             setOnClickListener { action() }
-            add(parent, this, 12)
+            add(parent, this, 1)
         }
+
+    fun input(editor: EditText) {
+        editor.textSize = 14f
+        editor.minHeight = dp(48)
+        editor.setPadding(dp(11), dp(10), dp(11), dp(10))
+        editor.setTextColor(color(R.color.ink))
+        editor.setHintTextColor(color(R.color.muted))
+        editor.background =
+            GradientDrawable().apply {
+                setColor(color(R.color.surface))
+                cornerRadius = dp(10).toFloat()
+                setStroke(dp(1), android.graphics.Color.parseColor("#B9C9C9"))
+            }
+    }
 
     fun fact(parent: LinearLayout, caption: String, value: String): TextView {
         val row = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL }

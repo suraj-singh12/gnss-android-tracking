@@ -1,7 +1,7 @@
 package org.gnss.tracking
 
+import android.app.AlertDialog
 import android.content.ClipboardManager
-import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Looper
@@ -21,22 +21,63 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.shadows.ShadowAlertDialog
 
+/**
+ * Real Room/native views; contact fixtures are presentation evidence, not authenticated traffic.
+ */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = TrackingApp::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class CommandEnrollmentUiTest {
+    private suspend fun settle() {
+        repeat(15) {
+            shadowOf(Looper.getMainLooper()).idle()
+            delay(15)
+        }
+    }
+
+    private fun capture(
+        root: ViewGroup,
+        activity: MainActivity,
+        width: Int,
+        height: Int,
+        label: String,
+    ) {
+        val density = activity.resources.displayMetrics.density
+        root.measure(
+            View.MeasureSpec.makeMeasureSpec((width * density).toInt(), View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec((height * density).toInt(), View.MeasureSpec.EXACTLY),
+        )
+        root.layout(0, 0, root.measuredWidth, root.measuredHeight)
+        nativeViews(root)
+            .filterIsInstance<TextView>()
+            .filter { it.isShown && it.width > 0 }
+            .forEach {
+                assertTrue(
+                    "Text fits: ${it.text}",
+                    it.layout == null || it.layout.height <= it.height,
+                )
+            }
+        System.getenv("GNSS_SCREENSHOT_DIR")?.let {
+            val file = File(it, "enrollment-$label.png")
+            file.parentFile!!.mkdirs()
+            val image = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
+            root.draw(Canvas(image))
+            file.outputStream().use { stream ->
+                image.compress(Bitmap.CompressFormat.PNG, 100, stream)
+            }
+            image.recycle()
+        }
+    }
+
     @Test
     fun enrollmentAndSixStatesPreservePublicIdentityAndNativeLayout() = runBlocking {
         val app = ApplicationProvider.getApplicationContext<TrackingApp>()
-        val output = System.getenv("GNSS_SCREENSHOT_DIR")?.let { File(it).apply { mkdirs() } }
-        for (night in listOf(false, true)) {
-            withContext(Dispatchers.IO) {
+        try {
+            for (night in listOf(false, true)) {
+                app.getSharedPreferences("appearance", 0).edit().putBoolean("night", night).commit()
                 app.repository.settings("Alpha", "Alpha", "http://192.168.1.10:8080", 10)
-            }
-            app.getSharedPreferences("appearance", 0).edit().putBoolean("night", night).commit()
-            org.robolectric.RuntimeEnvironment.setQualifiers("w360dp-h800dp-port")
-            withContext(Dispatchers.IO) {
                 app.repository.edit {
                     it.copy(
                         controlAuthority = null,
@@ -44,182 +85,112 @@ class CommandEnrollmentUiTest {
                         controlDisabled = false,
                     )
                 }
-            }
-            val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
-            val activity = controller.get()
-            app.activityVisible =
-                false // deterministic presentation fixture; no synthetic network traffic
-            val root = activity.findViewById<ViewGroup>(android.R.id.content)
-            suspend fun settle() {
-                repeat(15) {
-                    shadowOf(Looper.getMainLooper()).idle()
-                    delay(15)
-                }
-                val density = activity.resources.displayMetrics.density
-                root.measure(
-                    View.MeasureSpec.makeMeasureSpec(
-                        (360 * density).toInt(),
-                        View.MeasureSpec.EXACTLY,
-                    ),
-                    View.MeasureSpec.makeMeasureSpec(
-                        (800 * density).toInt(),
-                        View.MeasureSpec.EXACTLY,
-                    ),
-                )
-                root.layout(0, 0, root.measuredWidth, root.measuredHeight)
-            }
-            fun click(label: String) {
-                nativeViews(root)
-                    .filterIsInstance<Button>()
-                    .single { it.isShown && it.text == label }
-                    .performClick()
-            }
-            fun capture(label: String) {
-                nativeViews(root)
-                    .filterIsInstance<TextView>()
-                    .filter { it.isShown && it.width > 0 }
-                    .forEach {
-                        assertTrue(
-                            "Text must fit its view: ${it.text}",
-                            it.layout == null || it.layout.height <= it.height,
-                        )
-                    }
-                if (output != null) {
-                    val image =
-                        Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
-                    root.draw(Canvas(image))
-                    File(output, "enrollment-${if(night) "night" else "day"}-$label.png")
-                        .outputStream()
-                        .use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
-                    image.recycle()
-                }
-            }
-            try {
-                settle()
-                click("Settings")
-                settle()
-                // Discoverable direct entry opens the existing Command access destination.
-                nativeViews(root)
-                    .single {
-                        it.isShown && it.contentDescription?.startsWith("Command access.") == true
-                    }
-                    .performClick()
-                settle()
-                capture("not-enrolled")
-                click("Set up Command access")
-                settle()
-                capture("compare-phone")
-                click("Copy phone ID")
-                val clipboard =
-                    activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                assertEquals(
-                    app.repository.state().deviceId,
-                    clipboard.primaryClip!!.getItemAt(0).text.toString(),
-                )
-                click("I have the private credential")
-                settle()
-                capture("private-entry-empty")
-                val input =
-                    nativeViews(root).filterIsInstance<EditText>().single {
-                        it.hint == "Private credential"
-                    }
-                input.setText("invalid")
-                click("Review authorization")
-                settle()
-                assertTrue(
+                val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+                val activity = controller.get()
+                app.activityVisible = false
+                val root = activity.findViewById<ViewGroup>(android.R.id.content)
+                fun click(label: String) =
+                    nativeViews(root)
+                        .filterIsInstance<Button>()
+                        .single { it.isShown && it.text == label }
+                        .performClick()
+                fun visible(label: String) =
                     nativeViews(root).filterIsInstance<TextView>().any {
-                        it.isShown && it.text.toString().startsWith("Credential invalid")
+                        it.isShown && it.text == label
                     }
-                )
-                val authority = Protocol.newId()
-                val enrollment = Protocol.newId()
-                val phone = app.repository.state().deviceId
-                input.setText("gnss1:$authority:$phone:$enrollment:${"01".repeat(32)}")
-                click("Review authorization")
-                settle()
-                assertEquals("", input.text.toString())
-                capture("review-authority")
-                assertTrue(
-                    nativeViews(root).filterIsInstance<TextView>().any {
-                        it.isShown && it.text.contains(authority)
-                    }
-                )
-                click("Continue")
-                settle()
-                val confirmation = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
-                assertTrue(confirmation.isShowing)
-                if (output != null) {
-                    val decor = confirmation.window!!.decorView
-                    val density = activity.resources.displayMetrics.density
-                    decor.measure(
-                        View.MeasureSpec.makeMeasureSpec(
-                            (340 * density).toInt(),
-                            View.MeasureSpec.EXACTLY,
-                        ),
-                        View.MeasureSpec.makeMeasureSpec(
-                            (700 * density).toInt(),
-                            View.MeasureSpec.AT_MOST,
-                        ),
-                    )
-                    decor.layout(0, 0, decor.measuredWidth, decor.measuredHeight)
-                    val image =
-                        Bitmap.createBitmap(decor.width, decor.height, Bitmap.Config.ARGB_8888)
-                    decor.draw(Canvas(image))
-                    File(output, "enrollment-${if(night) "night" else "day"}-confirmation.png")
-                        .outputStream()
-                        .use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
-                    image.recycle()
-                }
-                confirmation
-                    .getButton(android.content.DialogInterface.BUTTON_NEGATIVE)
-                    .performClick()
-                click("Cancel")
-                settle()
-                // Synthetic contact telemetry, with real Room/native presentation. Crypto is tested
-                // in CommandControlTest.
-                for ((index, label) in
-                    listOf(
-                            "Credential enrolled",
-                            "Contact verified",
-                            "Contact unavailable",
-                            "Authentication failed",
-                            "Disabled on this phone",
-                        )
-                        .withIndex()) {
-                    val generation = 100L + index
-                    val contact =
-                        when (index) {
-                            1 ->
-                                AuthenticatedContact(
-                                    generation,
-                                    authority,
-                                    enrollment,
-                                    SystemClock.wallMillis(),
-                                    SystemClock.elapsedMillis(),
-                                )
-                            2 ->
-                                AuthenticatedContact(
-                                    generation,
-                                    authority,
-                                    enrollment,
-                                    SystemClock.wallMillis() - 31000,
-                                    SystemClock.elapsedMillis() - 31000,
-                                )
-                            3 ->
-                                AuthenticatedContact(
-                                    generation,
-                                    authority,
-                                    enrollment,
-                                    failure = ContactFailure.AUTHENTICATION,
-                                )
-                            else -> null
+                try {
+                    settle()
+                    openNativeScreen(activity, "Command access")
+                    settle()
+                    capture(root, activity, 360, 800, "$night-not-enrolled")
+                    assertTrue(visible("Not enrolled"))
+                    val input =
+                        nativeViews(root).filterIsInstance<EditText>().single {
+                            it.hint == "Paste Command credential"
                         }
-                    CommandControl::class
-                        .java
-                        .getDeclaredField("contact")
-                        .apply { isAccessible = true }
-                        .set(app.commandControl, contact)
-                    withContext(Dispatchers.IO) {
+                    assertFalse(input.isSaveEnabled)
+                    input.setText("invalid")
+                    click("Authorize")
+                    assertTrue(visible("Enter a valid gnss1 credential for this phone UUID."))
+                    val authority = Protocol.newId()
+                    val enrollment = Protocol.newId()
+                    val phone = app.repository.state().deviceId
+                    input.setText(
+                        "gnss1:$authority:${Protocol.newId()}:$enrollment:${"01".repeat(32)}"
+                    )
+                    click("Authorize")
+                    assertNull(app.repository.state().controlEnrollment)
+                    input.setText("gnss1:$authority:$phone:$enrollment:${"01".repeat(32)}")
+                    click("Authorize")
+                    assertEquals("", input.text.toString())
+                    val review = ShadowAlertDialog.getLatestAlertDialog()
+                    assertEquals("Authorize Command?", shadowOf(review).title.toString())
+                    assertTrue(
+                        review.findViewById<TextView>(android.R.id.message).text.contains(authority)
+                    )
+                    review.getButton(AlertDialog.BUTTON_NEGATIVE).performClick()
+                    assertNull(app.repository.state().controlEnrollment)
+                    input.setText("gnss1:$authority:$phone:$enrollment:${"01".repeat(32)}")
+                    click("Authorize")
+                    val interruptedReview = ShadowAlertDialog.getLatestAlertDialog()
+                    controller.pause()
+                    controller.resume()
+                    interruptedReview.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+                    settle()
+                    assertNull(app.repository.state().controlEnrollment)
+                    assertTrue(
+                        nativeViews(root).filterIsInstance<TextView>().any {
+                            it.text.toString().startsWith("Authorization review expired")
+                        }
+                    )
+
+                    click("Enrollment steps ›")
+                    assertTrue(ShadowAlertDialog.getLatestAlertDialog().isShowing)
+                    ShadowAlertDialog.getLatestAlertDialog()
+                        .getButton(AlertDialog.BUTTON_POSITIVE)
+                        .performClick()
+                    for ((index, label) in
+                        listOf(
+                                "Credential enrolled",
+                                "Contact verified",
+                                "Contact unavailable",
+                                "Authentication failed",
+                                "Disabled on this phone",
+                            )
+                            .withIndex()) {
+                        val generation = 100L + index
+                        val contact =
+                            when (index) {
+                                1 ->
+                                    AuthenticatedContact(
+                                        generation,
+                                        authority,
+                                        enrollment,
+                                        SystemClock.wallMillis(),
+                                        SystemClock.elapsedMillis(),
+                                    )
+                                2 ->
+                                    AuthenticatedContact(
+                                        generation,
+                                        authority,
+                                        enrollment,
+                                        SystemClock.wallMillis() - 31000,
+                                        SystemClock.elapsedMillis() - 31000,
+                                    )
+                                3 ->
+                                    AuthenticatedContact(
+                                        generation,
+                                        authority,
+                                        enrollment,
+                                        failure = ContactFailure.AUTHENTICATION,
+                                    )
+                                else -> null
+                            }
+                        CommandControl::class
+                            .java
+                            .getDeclaredField("contact")
+                            .apply { isAccessible = true }
+                            .set(app.commandControl, contact)
                         app.repository.edit {
                             it.copy(
                                 controlAuthority = authority,
@@ -230,51 +201,47 @@ class CommandEnrollmentUiTest {
                                 controlLastGeneration = null,
                             )
                         }
+                        settle()
+                        assertTrue("Contact state $label", visible(label))
+                        capture(root, activity, 360, 800, "$night-state-$index")
+                        if (index == 1) {
+                            controller.pause()
+                            org.robolectric.shadows.ShadowSystemClock.advanceBy(
+                                java.time.Duration.ofSeconds(31)
+                            )
+                            controller.resume()
+                            settle()
+                            assertTrue(visible("Contact unavailable"))
+                        }
                     }
+                    openNativeScreen(activity, "Identity & verification details")
                     settle()
-                    assertTrue(
-                        "$label is displayed",
-                        nativeViews(root).filterIsInstance<TextView>().any {
-                            it.isShown && it.text == label
-                        },
+                    click("Copy Command ID")
+                    assertEquals(
+                        authority,
+                        activity
+                            .getSystemService(ClipboardManager::class.java)
+                            .primaryClip!!
+                            .getItemAt(0)
+                            .text
+                            .toString(),
                     )
-                    capture("state-$index")
-                    if (index == 1) {
-                        controller.pause()
-                        org.robolectric.shadows.ShadowSystemClock.advanceBy(
-                            java.time.Duration.ofSeconds(31)
-                        )
-                        controller.resume()
-                        assertTrue(
-                            nativeViews(root).filterIsInstance<TextView>().any {
-                                it.isShown && it.text == "Contact unavailable"
-                            }
-                        )
-                    }
+                    capture(root, activity, 360, 800, "$night-identity")
+                    assertFalse(app.operational.value.tracking)
+                } finally {
+                    controller.pause().stop().destroy()
                 }
-                // Identity copy remains separate from secrets and instruction IDs.
-                nativeViews(root)
-                    .single {
-                        it.isShown &&
-                            it.contentDescription?.startsWith("Identity & verification details.") ==
-                                true
-                    }
-                    .performClick()
-                settle()
-                capture("identity-details")
-                click("Copy Command ID")
-                assertEquals(authority, clipboard.primaryClip!!.getItemAt(0).text.toString())
-            } finally {
-                controller.pause().stop().destroy()
             }
+        } finally {
+            app.finishForTests()
         }
     }
 
     @Test
     fun enrollmentLayoutsScrollAndKeepPrivateDraftFocusAtLargeText() = runBlocking {
         val app = ApplicationProvider.getApplicationContext<TrackingApp>()
-        val output = System.getenv("GNSS_SCREENSHOT_DIR")?.let { File(it).apply { mkdirs() } }
         try {
+            app.repository.state()
             for (night in listOf(false, true)) for ((width, height) in
                 listOf(360 to 800, 800 to 360)) {
                 app.getSharedPreferences("appearance", 0).edit().putBoolean("night", night).commit()
@@ -289,85 +256,14 @@ class CommandEnrollmentUiTest {
                     app.resources.displayMetrics,
                 )
                 val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
-                val activity = controller.get()
-                app.activityVisible = false
-                val root = activity.findViewById<ViewGroup>(android.R.id.content)
-                suspend fun settle() {
-                    repeat(12) {
-                        shadowOf(Looper.getMainLooper()).idle()
-                        delay(10)
-                    }
-                    val density = activity.resources.displayMetrics.density
-                    root.measure(
-                        View.MeasureSpec.makeMeasureSpec(
-                            (width * density).toInt(),
-                            View.MeasureSpec.EXACTLY,
-                        ),
-                        View.MeasureSpec.makeMeasureSpec(
-                            (height * density).toInt(),
-                            View.MeasureSpec.EXACTLY,
-                        ),
-                    )
-                    root.layout(0, 0, root.measuredWidth, root.measuredHeight)
-                }
-                fun click(label: String) {
-                    nativeViews(root)
-                        .filterIsInstance<Button>()
-                        .single { it.isShown && it.text == label }
-                        .performClick()
-                }
-                fun capture(label: String) {
-                    val scroll =
-                        nativeViews(root).filterIsInstance<android.widget.ScrollView>().first()
-                    scroll.scrollTo(0, scroll.getChildAt(0).height)
-                    assertTrue(
-                        "Content remains scrollable inside the window",
-                        scroll.height > 0 && scroll.height <= root.height,
-                    )
-                    if (output != null) {
-                        val image =
-                            Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
-                        root.draw(Canvas(image))
-                        File(
-                                output,
-                                "enrollment-${if(night) "night" else "day"}-${width}x${height}-1.5-$label.png",
-                            )
-                            .outputStream()
-                            .use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
-                        image.recycle()
-                    }
-                }
                 try {
                     settle()
-                    click("Settings")
+                    openNativeScreen(controller.get(), "Command access")
                     settle()
-                    nativeViews(root)
-                        .single {
-                            it.isShown &&
-                                it.contentDescription?.startsWith("Command access.") == true
-                        }
-                        .performClick()
-                    settle()
-                    nativeViews(root)
-                        .single {
-                            it.isShown &&
-                                it.contentDescription?.startsWith(
-                                    "Identity & verification details."
-                                ) == true
-                        }
-                        .performClick()
-                    settle()
-                    capture("details-bottom")
-                    click("‹ Command access")
-                    settle()
-                    click("How to authorize this Command")
-                    settle()
-                    capture("compare-bottom")
-                    click("I have the private credential")
-                    settle()
+                    fun root() = controller.get().findViewById<ViewGroup>(android.R.id.content)
                     val field =
-                        nativeViews(root).filterIsInstance<EditText>().single {
-                            it.hint == "Private credential"
+                        nativeViews(root()).filterIsInstance<EditText>().single {
+                            it.hint == "Paste Command credential"
                         }
                     field.setText("draft")
                     field.requestFocus()
@@ -376,21 +272,31 @@ class CommandEnrollmentUiTest {
                     settle()
                     assertTrue(field.hasFocus())
                     assertEquals(3, field.selectionStart)
-                    field.text.clear()
-                    capture("entry-bottom")
-                    val phoneId = withContext(Dispatchers.IO) { app.repository.state().deviceId }
-                    field.setText(
-                        "gnss1:${Protocol.newId()}:$phoneId:${Protocol.newId()}:${"01".repeat(32)}"
+                    capture(
+                        root(),
+                        controller.get(),
+                        width,
+                        height,
+                        "$night-${width}x$height-large",
                     )
-                    click("Review authorization")
-                    settle()
                     controller.recreate()
+                    settle()
                     val restored =
-                        nativeViews(controller.get().findViewById(android.R.id.content))
-                            .filterIsInstance<EditText>()
-                            .single { it.hint == "Private credential" }
+                        nativeViews(root()).filterIsInstance<EditText>().single {
+                            it.hint == "Paste Command credential"
+                        }
+                    assertTrue(restored.isShown)
                     assertEquals("", restored.text.toString())
-                    assertTrue("Review recreation returns to private entry", restored.isShown)
+                    val scroll =
+                        nativeViews(root()).filterIsInstance<android.widget.ScrollView>().first()
+                    capture(
+                        root(),
+                        controller.get(),
+                        width,
+                        height,
+                        "$night-${width}x$height-recreated",
+                    )
+                    assertTrue(scroll.height > 0 && scroll.height <= root().height)
                 } finally {
                     controller.pause().stop().destroy()
                 }

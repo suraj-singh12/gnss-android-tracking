@@ -96,29 +96,32 @@ class DialogVisualTest {
                     else dialog.dismiss()
                 }
                 settle()
-                openNativeScreen(a, "Appearance & SOS")
-                a.findViewById<Button>(R.id.appearance).performClick()
-                capture("appearance")
-                openNativeScreen(a, "Diagnostic tools")
+                openNativeScreen(a, "Command access")
+                click("Enrollment steps ›")
+                capture("enrollment-steps")
+                openNativeScreen(a, "Transfer recovery")
                 click("Retry saved messages")
                 capture("retry")
-                openNativeScreen(a, "Change trusted Command")
-                click("Confirm change")
+                openNativeScreen(a, "Manage Command access")
+                click("Re-enroll Command")
                 capture("change-command")
+                click("Disable remote control")
+                capture("disable-command")
+                assertFalse(app.repository.state().controlDisabled)
+                app.repository.edit { it.copy(controlAuthority = null, controlEnrollment = null) }
+                settle()
                 openNativeScreen(a, "Command access")
-                click("How to authorize this Command")
-                click("I have the private credential")
                 all()
                     .filterIsInstance<EditText>()
-                    .single { it.hint == "Private credential" }
+                    .single { it.hint == "Paste Command credential" }
                     .setText("gnss1:$authority:${initial.deviceId}:$enrollment:${"01".repeat(32)}")
-                click("Review authorization")
-                click("Continue")
+                click("Authorize")
                 capture("authorize")
-                assertEquals(enrollment, app.repository.state().controlEnrollment)
-                click("Cancel")
-                click("Disable remote control locally")
-                capture("disable-command")
+                assertNull(app.repository.state().controlEnrollment)
+                app.repository.edit {
+                    it.copy(controlAuthority = authority, controlEnrollment = enrollment)
+                }
+                settle()
                 assertEquals(enrollment, app.repository.state().controlEnrollment)
                 openNativeScreen(a, "Tracking")
                 app.operational.value = Operational(tracking = true)
@@ -128,19 +131,61 @@ class DialogVisualTest {
                 assertTrue(app.operational.value.tracking)
                 app.operational.value = Operational()
                 settle()
-                openNativeScreen(a, "Reporting interval")
+                openNativeScreen(a, "Party & Command")
                 val field =
                     all().filterIsInstance<EditText>().single {
-                        it.hint?.startsWith("5–86400") == true
+                        it.contentDescription == "Custom interval · seconds"
                     }
-                field.setText("3")
-                click("Save")
+                val intervalLabel =
+                    all().filterIsInstance<android.widget.TextView>().single {
+                        it.text == "Reporting interval · seconds" && it.labelFor != View.NO_ID
+                    }
+                a.findViewById<EditText>(intervalLabel.labelFor).setText("3")
+                click("Save settings")
                 capture("invalid-interval")
                 @Suppress("DEPRECATION") a.onBackPressed()
                 openNativeScreen(a, "Tracking")
                 @Suppress("DEPRECATION") a.onBackPressed()
                 capture("unsaved-edits")
                 assertFalse(a.isFinishing)
+                openNativeScreen(a, "History search & filters")
+                click("Filter history")
+                capture("instruction-filter")
+                val alertId = Protocol.newId()
+                app.repository.dao.insertCommand(
+                    CommandRecord(
+                        alertId,
+                        authority,
+                        initial.deviceId,
+                        enrollment,
+                        "alert",
+                        1,
+                        System.currentTimeMillis(),
+                        state = "unknown",
+                        requested =
+                            """{"mode":"urgent","message":"Test-only check in","duration_s":60,"repeat_s":10}""",
+                    )
+                )
+                settle()
+                openNativeScreen(a, "Phone Alerts")
+                settle()
+                click("View alert & acknowledge")
+                capture("phone-alert")
+                assertEquals("unknown", app.repository.dao.command(alertId)!!.state)
+                openNativeScreen(a, "Diagnostic tools")
+                click("Start Test")
+                a.dispatchKeyEvent(
+                    android.view.KeyEvent(
+                        android.view.KeyEvent.ACTION_DOWN,
+                        android.view.KeyEvent.KEYCODE_VOLUME_UP,
+                    )
+                )
+                settle()
+                click("Stop Test")
+                settle()
+                click("Clear results")
+                capture("clear-key-results")
+                assertTrue(app.recorder.physicalButtonHistory().totalPresses > 0)
             } finally {
                 controller.pause().stop().destroy()
             }
