@@ -18,9 +18,8 @@ internal fun openNativeScreen(activity: MainActivity, name: String) {
             .filterIsInstance<Button>()
             .single { it.isShown && it.text == "Filter history" }
             .performClick()
-        org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
-            .getButton(android.app.AlertDialog.BUTTON_NEUTRAL)
-            .performClick()
+        nativeViews(org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog().window!!.decorView)
+            .filterIsInstance<Button>().single { it.isShown && it.text == "Canonical categories" }.performClick()
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
         return
     }

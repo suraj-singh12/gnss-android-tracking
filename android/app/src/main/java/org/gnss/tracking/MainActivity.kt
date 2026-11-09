@@ -181,6 +181,8 @@ class MainActivity : Activity() {
             )
     }
 
+    private fun AlertDialog.Builder.showRefined(): AlertDialog = show().also { NativeUi(this@MainActivity).dialog(it) }
+
     private fun styleQuiet(button: Button) {
         button.isAllCaps = false
         button.textSize = 14f
@@ -365,15 +367,15 @@ class MainActivity : Activity() {
         }
         setContentView(root)
         root.setOnApplyWindowInsetsListener { view, insets ->
-            val (top, bottom) =
-                if (Build.VERSION.SDK_INT >= 30) {
-                    val bars = insets.getInsets(WindowInsets.Type.systemBars())
-                    bars.top to bars.bottom
-                } else {
-                    @Suppress("DEPRECATION")
-                    (insets.systemWindowInsetTop to insets.systemWindowInsetBottom)
-                }
-            view.setPadding(0, top, 0, bottom)
+            if (Build.VERSION.SDK_INT >= 30) {
+                val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
+                val keyboard = insets.getInsets(WindowInsets.Type.ime())
+                view.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, keyboard.bottom))
+            } else {
+                @Suppress("DEPRECATION")
+                view.setPadding(insets.systemWindowInsetLeft, insets.systemWindowInsetTop,
+                    insets.systemWindowInsetRight, insets.systemWindowInsetBottom)
+            }
             insets
         }
         var content = pages.getValue("Tracking")
@@ -444,11 +446,12 @@ class MainActivity : Activity() {
                 addView(
                     Button(this@MainActivity).apply {
                         id = R.id.tracking_appearance
-                        text = if (night) "☀" else "☾"
+                        text = ""
+                        setCompoundDrawables(NativeUi(this@MainActivity).icon(R.drawable.ic_appearance, 24), null, null, null)
                         contentDescription =
                             if (night) "Switch to Day mode" else "Switch to Night mode"
                         styleQuiet(this)
-                        textSize = 24f
+                        setPadding(dp(12), dp(12), dp(12), dp(12))
                         gravity = android.view.Gravity.CENTER
                         minHeight = dp(48)
                         minWidth = dp(48)
@@ -897,7 +900,7 @@ class MainActivity : Activity() {
                         dialog.dismiss()
                     }
                     .setNegativeButton("Cancel", null)
-                    .show()
+                    .showRefined()
             }
         appearanceButton.id = R.id.appearance
         appearanceButton.contentDescription = "Appearance, ${if (night) "Night" else "Day"}"
@@ -1029,7 +1032,7 @@ class MainActivity : Activity() {
                         app.physicalButtonTest.clearResults()
                         refreshPhysicalButtonHistory()
                     }
-                    .show()
+                    .showRefined()
             }
         physicalButtonClear.isEnabled = false
         physicalButtonSummary =
@@ -1083,7 +1086,7 @@ class MainActivity : Activity() {
                             }
                         }
                     }
-                    .show()
+                    .showRefined()
             }
         content = settingsPage
         val enrollmentSettings = group("Command access", false)
@@ -2539,7 +2542,7 @@ class MainActivity : Activity() {
                             withContext(Dispatchers.IO) { app.commandControl.disable() }
                         }
                     }
-                    .show()
+                    .showRefined()
             }
         ui.add(access, disableAccess, 8)
         ui.add(
@@ -2680,7 +2683,7 @@ class MainActivity : Activity() {
                                 }
                             }
                         }
-                        .show()
+                        .showRefined()
                 }
                 .apply { ui.style(this, primary = true) },
             16,
@@ -2842,7 +2845,7 @@ class MainActivity : Activity() {
                         )
                         .setNegativeButton("Cancel", null)
                         .setPositiveButton("Re-enroll") { _, _ -> save(reenroll = true) }
-                        .show()
+                        .showRefined()
                 }
                 .apply { ui.style(this, danger = true) },
             16,
@@ -3379,39 +3382,23 @@ class MainActivity : Activity() {
         peerRow(fix, "GNSS position", gnssSummary)
         val fixValues = LinearLayout(this)
         for ((view, caption) in listOf(fixAccuracy to "Accuracy", fixAge to "Fix age")) {
-            detach(view)
-            view.textSize = 26f
-            view.setTextColor(getColor(R.color.ink))
-            view.setTypeface(null, android.graphics.Typeface.BOLD)
-            fixValues.addView(
-                ui.column().apply {
-                    addView(view)
-                    addView(ui.label(caption, 10.5f, true))
-                },
-                LinearLayout.LayoutParams(0, -2, 1f),
-            )
+            ui.metric(fixValues, view, caption)
         }
         add(fix, fixValues, 10)
         val delivery = ui.card(tracking)
         peerRow(delivery, "Delivery to Command", commandSummary)
         val countValues = LinearLayout(this)
-        for ((view, caption) in
-            listOf(pendingMetric to "Pending locally", deliveredMetric to "Durably ACKed")) {
-            detach(view)
-            view.textSize = 26f
-            countValues.addView(
-                ui.column().apply {
-                    addView(view)
-                    addView(ui.label(caption, 10.5f, true))
-                },
-                LinearLayout.LayoutParams(0, -2, 1f),
-            )
+        for ((view, caption) in listOf(pendingMetric to "Pending locally", deliveredMetric to "Durably ACKed")) {
+            ui.metric(countValues, view, caption)
         }
         add(delivery, countValues, 10)
         val deliveryFoot =
             LinearLayout(this).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
         val retentionCaption =
-            ui.label("Reading retained observations…", 11f, true).apply { minLines = 2 }
+            ui.label("Reading retained observations…", 11f, true).apply {
+                minLines = 2
+                gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+            }
         deliveryFoot.addView(retentionCaption, LinearLayout.LayoutParams(0, -2, 1f))
         detach(syncNowButton)
         ui.style(syncNowButton, primary = true)
@@ -3505,7 +3492,7 @@ class MainActivity : Activity() {
         partyActions.addView(
             ui.button("Save settings") { saveButton.performClick() }
                 .apply { ui.style(this, primary = true) },
-            LinearLayout.LayoutParams(0, -2, 1f),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(8) },
         )
         add(form, partyActions, 13)
         add(party, settingsFeedback)
@@ -3525,6 +3512,7 @@ class MainActivity : Activity() {
                     )
             }
         v46IntervalPicker = picker
+        ui.selector(picker)
         add(policyCard, picker)
         val customLabel = ui.label("Custom interval · seconds", 11f, bold = true)
         add(policyCard, customLabel, 10)
@@ -3583,7 +3571,11 @@ class MainActivity : Activity() {
                 override fun afterTextChanged(s: android.text.Editable?) {}
             }
         )
-        add(policyCard, adaptive, 13)
+        adaptive.textSize = 13f
+        adaptive.setTypeface(null, android.graphics.Typeface.BOLD)
+        policyStatus.textSize = 11f
+        policyStatus.setTextColor(getColor(R.color.muted))
+        add(policyCard, adaptive, 8)
         add(policyCard, policyStatus, 4)
         note(
             policyCard,
@@ -3617,7 +3609,7 @@ class MainActivity : Activity() {
                     operations[which].performClick()
                 }
                 .setNegativeButton("Close", null)
-                .show()
+                .showRefined()
         }
         add(routes.getValue("Policy details"), serviceReadiness)
         val emergency = page("Emergency controls", "Settings")
@@ -3731,7 +3723,7 @@ class MainActivity : Activity() {
                                 }
                         }
                         .setOnDismissListener { enrollmentSecret = null }
-                        .show()
+                        .showRefined()
                 } catch (_: Exception) {
                     accessError.text = "Enter a valid gnss1 credential for this phone UUID."
                     secret.requestFocus()
@@ -3746,7 +3738,7 @@ class MainActivity : Activity() {
                             "1. Open Phone controls on Command.\n2. Compare phone and Command UUIDs.\n3. Transfer the per-phone credential privately.\n4. Confirm fresh authenticated contact."
                         )
                         .setPositiveButton("Done", null)
-                        .show()
+                        .showRefined()
                 }
                 .apply {
                     styleQuiet(this)
@@ -3784,7 +3776,7 @@ class MainActivity : Activity() {
             "Identity & verification details",
             "Public identities and authenticated evidence",
         )
-        action(manage, "Disable remote control") {
+        val disableAccess = action(manage, "Disable remote control") {
             AlertDialog.Builder(this)
                 .setTitle("Disable remote control?")
                 .setMessage(
@@ -3794,8 +3786,9 @@ class MainActivity : Activity() {
                 .setPositiveButton("Disable") { _, _ ->
                     manageOperation { app.commandControl.disable() }
                 }
-                .show()
+                .showRefined()
         }
+        ui.style(disableAccess, danger = true)
         action(manage, "Re-enroll Command") {
             AlertDialog.Builder(this)
                 .setTitle("Start re-enrollment?")
@@ -3816,7 +3809,7 @@ class MainActivity : Activity() {
                         withContext(Dispatchers.Main) { navigate("Command access") }
                     }
                 }
-                .show()
+                .showRefined()
         }
         routeParents["Identity & verification details"] = "Manage Command access"
         routeParents["Policy details"] = "Tracking policy"
@@ -3862,37 +3855,22 @@ class MainActivity : Activity() {
         val cc = ui.card(connectionPage, 0)
         val transport = ui.fact(cc, "Command transport", "Unknown")
         val auth = ui.fact(cc, "Authenticated control", "Unverified")
-        val received = ui.label("", 10.5f, true)
-        add(cc, received, 8)
+        val received = ui.fact(cc, "Last durable receipt", "Unknown")
         val saved = page("Saved data & sync", "Diagnostics")
         val savedCard = ui.card(saved, 0)
         val savedMetrics = LinearLayout(this)
-        for ((view, caption) in
-            listOf(pendingDetail to "Pending observations", deliveredDetail to "Command ACKed")) {
-            detach(view)
-            view.textSize = 26f
-            view.gravity = android.view.Gravity.START
-            savedMetrics.addView(
-                ui.column().apply {
-                    addView(view)
-                    addView(ui.label(caption, 10.5f, true))
-                },
-                LinearLayout.LayoutParams(0, -2, 1f),
-            )
+        for ((view, caption) in listOf(pendingDetail to "Pending observations", deliveredDetail to "Command ACKed")) {
+            ui.metric(savedMetrics, view, caption)
         }
         add(savedCard, savedMetrics)
-        add(
-            routes.getValue("Storage health"),
-            ui.label("Unresolved observations", 11f, bold = true),
-            12,
-        )
-        add(routes.getValue("Storage health"), unresolvedDetail)
-        add(
-            routes.getValue("Storage health"),
-            ui.label("Last durable message ACK", 11f, bold = true),
-            12,
-        )
-        add(routes.getValue("Storage health"), ackDetail)
+        val storageEvidence = ui.card(routes.getValue("Storage health"))
+        add(storageEvidence, ui.label("Unresolved observations", 12f, bold = true))
+        add(storageEvidence, unresolvedDetail, 5)
+        add(storageEvidence, ui.label("Last durable message ACK", 12f, bold = true), 12)
+        add(storageEvidence, ackDetail, 5)
+        historySummary.textSize = 13f
+        historySummary.setTypeface(null, android.graphics.Typeface.BOLD)
+        historyProgressLabel.textSize = 11.5f
         val savedSync = action(savedCard, "Sync All Now", true) { syncNowButton.performClick() }
         export(savedCard, "Export transfer evidence")
         // Recovery has one secondary owner. Retain the existing confirmed retry operation.
@@ -4001,7 +3979,7 @@ class MainActivity : Activity() {
                 .filter { it.text == "Filters" }
         existingFilters.forEach { console.removeView(it) }
         action(console, "Filter history") {
-            val body = ui.column()
+            val body = ui.column().apply { setPadding(dp(24), dp(4), dp(24), dp(8)) }
             val switches = linkedMapOf<String, Switch>()
             for ((key, label) in
                 listOf(
@@ -4012,26 +3990,31 @@ class MainActivity : Activity() {
                 val choice =
                     Switch(this).apply {
                         text = label
+                        textSize = 13f
                         isChecked = key in v46Outcomes
                         minHeight = dp(48)
                     }
                 switches[key] = choice
                 body.addView(choice)
             }
-            AlertDialog.Builder(this)
+            lateinit var filterDialog: AlertDialog
+            add(body, ui.button("Canonical categories") {
+                filterDialog.dismiss()
+                navigate("Instruction filters")
+            }.apply { ui.quiet(this); gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL }, 4)
+            filterDialog = AlertDialog.Builder(this)
                 .setTitle("Instruction filter")
-                .setView(body)
+                .setView(ui.dialogContent(body))
                 .setNegativeButton("Cancel", null)
-                .setNeutralButton("Canonical categories") { _, _ ->
-                    navigate("Instruction filters")
-                }
                 .setPositiveButton("Apply filters") { _, _ ->
                     v46Outcomes.clear()
                     switches.filterValues { it.isChecked }.keys.forEach { v46Outcomes.add(it) }
                     refreshConsole?.invoke()
                 }
-                .show()
+                .showRefined()
         }
+        ui.input(instructionFilter)
+        consoleFilters.values.forEach { ui.selector(it) }
         routeParents["Instruction filters"] = "History search & filters"
         val alertsPage = page("Phone Alerts", "Diagnostics")
         val alertCard = ui.card(alertsPage, 0)
@@ -4086,14 +4069,14 @@ class MainActivity : Activity() {
                                 app.workScope.launch { app.stopPhoneAlertOutput(row.id) }
                             }
                     }
-                    .show()
+                    .showRefined()
             }
         export(alertCard, "Export alert journal")
         fun records(rows: List<CommandRecord>) {
             if (v46Records == rows && recent.childCount > 0) return
             v46Records = rows
             recent.removeAllViews()
-            if (rows.isEmpty()) add(recent, ui.label("No received instructions", 12f, true))
+            if (rows.isEmpty()) add(recent, ui.label("No received instructions", 12.5f, bold = true))
             rows.take(20).forEach { row ->
                 menu(
                         recent,
@@ -4148,6 +4131,52 @@ class MainActivity : Activity() {
                 .catch { alertSummary.text = "Alert history unavailable" }
                 .collect { records(it) }
         }
+        for (name in listOf("Policy details", "Storage health", "Identity & verification details", "Advanced logs")) {
+            val destination = routes.getValue(name)
+            (destination.getChildAt(0) as? Button)?.takeIf { it.text.startsWith("‹") }?.let { destination.removeView(it) }
+            (destination.getChildAt(0) as? TextView)?.takeIf { it.text == name }?.let { destination.removeView(it) }
+            destination.setPadding(dp(17), dp(11), dp(17), dp(17))
+            (destination.getChildAt(0)?.layoutParams as? LinearLayout.LayoutParams)?.topMargin = 0
+        }
+        fun structured(view: TextView) {
+            val parent = view.parent as? LinearLayout ?: return
+            val index = parent.indexOfChild(view)
+            val params = view.layoutParams
+            val separateGroups = parent.background == null
+            if (parent in listOf(routes["Policy details"], routes["Storage health"], routes["Identity & verification details"])) {
+                (params as? LinearLayout.LayoutParams)?.topMargin = if (index == 0) 0 else dp(12)
+            }
+            parent.removeView(view)
+            // The existing single-fact card is now supplied by the shared fact presentation.
+            if (parent.childCount == 0 && parent.background != null) {
+                parent.background = null
+                parent.setPadding(0, 0, 0, 0)
+            }
+            parent.addView(ui.evidence(view, separateGroups), index, params)
+        }
+        listOf(reportingDetails, reportingPolicy, serviceReadiness, diagnosticsSummary, diagnosticTrust, commandTrustEvidence).forEach(::structured)
+        val identityPage = routes.getValue("Identity & verification details")
+        // Existing identity/contact cards retain their bound sources and copy controls.
+        (0 until identityPage.childCount).map { identityPage.getChildAt(it) }
+            .filterIsInstance<LinearLayout>().forEach { panel ->
+                (0 until panel.childCount).map { panel.getChildAt(it) }.filterIsInstance<TextView>().filter { it.visibility != View.GONE }.forEach(::structured)
+            }
+                fun technical(view: TextView) {
+            val parent = view.parent as? LinearLayout ?: return
+            val index = parent.indexOfChild(view)
+            val params = view.layoutParams
+            parent.removeView(view)
+            view.typeface = android.graphics.Typeface.MONOSPACE
+            view.textSize = 12f
+            view.setTextIsSelectable(true)
+            view.setPadding(dp(12), dp(12), dp(12), dp(12))
+            val scroller = ui.dialogContent(ui.column().apply { addView(view, LinearLayout.LayoutParams(-1, -2)) }, 232)
+            scroller.background = ui.surface()
+            scroller.isNestedScrollingEnabled = true
+            parent.addView(scroller, index, params)
+        }
+        listOfNotNull(status, sosDetails, readiness, batterySummary, physicalButtonDetails).forEach(::technical)
+        listOf(settingsFeedback, exportStatus, policyFeedback).forEach(ui::feedback)
         val originalRefresh = refreshTrust
         v46Refresh = {
             val state = savedInstallation
@@ -4165,6 +4194,7 @@ class MainActivity : Activity() {
             notificationReadiness.text =
                 if (setup.notifications == true) "Allowed" else "Blocked / unknown"
             batteryReadiness.text = if (setup.powerSave == true) "Saver on" else "Review"
+            batteryReadiness.setTextColor(getColor(R.color.warning))
             val collection = app.observationPersistence.state
             trackingCopy.text =
                 when {
@@ -4226,7 +4256,7 @@ class MainActivity : Activity() {
             commandSummary.text =
                 if (app.sender.commandReachable == true) "Connected" else "No contact"
             transport.text = if (app.sender.commandReachable == true) "Contact" else "No contact"
-            received.text = "Last durable receipt: ${state?.lastAck?:"None"}"
+            received.text = "${state?.lastAck?:"None"}"
             val label =
                 commandContactLabel(state, app.commandControl.contact, SystemClock.elapsedMillis())
             contact.text = label
@@ -4400,7 +4430,7 @@ class MainActivity : Activity() {
                 )
                 .setNegativeButton("Keep editing", null)
                 .setPositiveButton("Discard edits") { _, _ -> super.onBackPressed() }
-                .show()
+                .showRefined()
         } else super.onBackPressed()
     }
 
@@ -4449,7 +4479,7 @@ class MainActivity : Activity() {
                 stopService(trackingIntent)
                 app.finishTracking()
             }
-            .show()
+            .showRefined()
     }
 
     private fun save(
@@ -4522,7 +4552,7 @@ class MainActivity : Activity() {
                         .setTitle("Check settings")
                         .setMessage(e.message)
                         .setPositiveButton("OK", null)
-                        .show()
+                        .showRefined()
                 }
             }
         if (start) startSave = saveJob
@@ -4532,12 +4562,7 @@ class MainActivity : Activity() {
         if (!::startButton.isInitialized) return
         startButton.isEnabled = initialized && !pendingStart && !op.starting && !op.stopping
         cancelStartButton.visibility = if (pendingStart || op.starting) View.VISIBLE else View.GONE
-        startButton.setCompoundDrawablesWithIntrinsicBounds(
-            if (v46Layout && op.tracking) R.drawable.ic_stop else 0,
-            0,
-            0,
-            0,
-        )
+        startButton.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0)
         if (v46Layout && op.tracking) NativeUi(this).stopStyle(startButton)
         else NativeUi(this).style(startButton, primary = !op.tracking, danger = op.tracking)
         startButton.minHeight = dp(48)
@@ -4549,6 +4574,7 @@ class MainActivity : Activity() {
                 pendingStart || op.starting -> "Starting…"
                 else -> "Start Tracking"
             }
+        if (v46Layout && op.tracking && !op.stopping) NativeUi(this).centeredActionIcon(startButton, R.drawable.ic_stop)
     }
 
     private fun refreshPreflight(): FieldReadiness {
@@ -4951,6 +4977,11 @@ class MainActivity : Activity() {
         }
         physicalButtonSummary.text =
             "${history.totalPresses} key presses · Last ${last?.evidence?.keyName ?: "None"}\n${localTime(last?.at)} · ${history.activityResult}"
+        (physicalButtonEvents.parent as? ScrollView)?.let { viewport ->
+            viewport.layoutParams = viewport.layoutParams.apply {
+                height = dp(if (history.retainedEvents.isEmpty()) 64 else 176)
+            }
+        }
         physicalButtonEvents.text = buildString {
             for (event in history.retainedEvents) {
                 append(localTime(event.at))

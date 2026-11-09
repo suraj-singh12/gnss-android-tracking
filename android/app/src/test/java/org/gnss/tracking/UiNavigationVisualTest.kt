@@ -76,6 +76,7 @@ class UiNavigationVisualTest {
                 Triple(800, 360, 1f),
                 Triple(960, 480, 1.5f),
                 Triple(390, 842, 1f),
+                Triple(390, 842, 1.5f),
             )
         for (night in listOf(false, true)) for ((width, height, font) in cases) {
             app.getSharedPreferences("appearance", 0).edit().putBoolean("night", night).commit()
@@ -113,6 +114,13 @@ class UiNavigationVisualTest {
                         nativeViews(root).filterIsInstance<Button>().filter {
                             it.text in listOf("Tracking", "Settings", "Diagnostics")
                         }) assertEquals("Tab fits", 1, tab.lineCount)
+                    val appearance = a.findViewById<Button>(R.id.tracking_appearance)
+                    val appearanceBounds = android.graphics.Rect(0, 0, appearance.width, appearance.height).apply {
+                        root.offsetDescendantRectToMyCoords(appearance, this)
+                    }
+                    assertTrue("Appearance target remains wholly visible: $appearanceBounds at $width / $height / $font",
+                        appearance.isShown && appearanceBounds.left >= 0 && appearanceBounds.right <= w && appearanceBounds.top >= 0 && appearanceBounds.bottom <= h)
+                    assertEquals("Appearance artwork retains its native vector bounds", (24 * density).toInt(), appearance.compoundDrawables[0].bounds.width())
                     val sos =
                         nativeViews(root).filterIsInstance<Button>().single {
                             it.text == "Hold to activate SOS"
@@ -318,7 +326,11 @@ class UiNavigationVisualTest {
                         "Command Instructions",
                         "Instruction filters",
                         "Phone Alerts",
+                        "History search & filters",
+                        "GNSS details",
+                        "Command contact",
                         "Saved data & sync",
+                        "Transfer recovery",
                         "Storage health",
                         "Diagnostic tools",
                         "Advanced logs",

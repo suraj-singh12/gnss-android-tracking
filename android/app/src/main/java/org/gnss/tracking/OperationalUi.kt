@@ -32,17 +32,16 @@ internal class HealthRow(
         setPadding(dp(10), dp(7), dp(10), dp(7))
         if (Build.VERSION.SDK_INT >= 28) isScreenReaderFocusable = true
         addView(
-            ui.label(
-                when (label) {
-                    "GNSS" -> "◎"
-                    "Command" -> "⇄"
-                    "Storage" -> "▤"
-                    else -> "◇"
-                },
-                18f,
-                muted = true,
-            ),
-            LayoutParams(dp(29), -2),
+            android.widget.ImageView(context).apply {
+                setImageDrawable(ui.icon(when (label) {
+                    "GNSS" -> R.drawable.ic_health_gnss
+                    "Command", "Sync" -> R.drawable.ic_health_transfer
+                    "Storage", "Device space" -> R.drawable.ic_health_storage
+                    else -> R.drawable.ic_health_trust
+                }, 22))
+                scaleType = android.widget.ImageView.ScaleType.CENTER
+            },
+            LayoutParams(dp(29), dp(24)),
         )
         addView(
             ui.column().apply {
