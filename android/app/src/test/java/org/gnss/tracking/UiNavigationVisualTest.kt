@@ -258,6 +258,16 @@ class UiNavigationVisualTest {
                             """{"mode":"urgent","message":"Return to base","duration_s":60,"repeat_s":10}""",
                     )
                 withContext(Dispatchers.IO) { app.repository.dao.insertCommand(alert) }
+                // Room invalidation and the Activity collector are asynchronous. Wait for
+                // the real action instead of assuming the short visual settle is a barrier.
+                withTimeout(15000) {
+                    while (nativeViews(root).filterIsInstance<Button>().none {
+                        it.isShown && it.text == "Acknowledge / Stop Alert"
+                    }) {
+                        shadowOf(Looper.getMainLooper()).idle()
+                        delay(10)
+                    }
+                }
                 settle()
                 capture("tracking-urgent-alert")
                 assertEquals("Urgent alert retains core actions", stableActions, actionBounds())
