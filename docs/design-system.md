@@ -5,6 +5,34 @@ Issue #6 builds on combined GNSS + SOS source
 service/backend state. Typography and semantics are shared; Android uses native
 controls and Command uses accessible HTML controls.
 
+## Current Android V4.6 contract — operator refinement, 9 November 2026
+
+Android follows the [immutable V4.6 reference](https://github.com/suraj-singh12/gnss-android-tracking/blob/8d95eafe6fdcd1423027194ea128ae7a8b91236d/docs/design/approved/android-v4.6-interactive.html)
+and current Issue #39 decisions. This Android-specific section supersedes older
+Android palette/prototype descriptions below; Command's approved design is unchanged.
+Use the current semantic resources in `android/app/src/main/res/values/colors.xml`
+and `values-night/colors.xml`, plus the shared `NativeUi` vocabulary.
+
+- Appearance uses **one half-shaded circular native vector in both themes**: 24dp
+  drawable bounds, approximately 21.6dp artwork, existing 48dp touch target. No sun,
+  moon, emoji or font glyph. Accessible action names are “Switch to Night mode” /
+  “Switch to Day mode”; the existing independent preference/lifecycle remains.
+- Stop Tracking keeps **#F9E9ED fill / #E9BEC8 border / #8C3449 ink in both themes**.
+  Centre its icon and label as a group. Do not replace it with solid red.
+- Selectors use down-chevron vectors with a semantic resource stroke (native background tint resets must not turn them black in Night); navigation uses right-chevron vectors.
+  Use shared outlined inputs, readable stateful disabled surfaces and quiet feedback.
+- Read-only facts use shared label/value hierarchy; technical logs use selectable,
+  wrapping monospace content in bounded surfaces. Preserve the original live sources,
+  unknowns and evidence. Detailed trust evidence has one existing More evidence disclosure.
+- The weighted main ScrollView, fixed SOS dock and navigation are separate siblings.
+  Apply system/cutout/IME insets once at their shared root; do not add a footer-height
+  padding workaround to each destination. A partly visible row may be fully accessible
+  by scrolling. Preserve the protected continuous 1.2-second touch hold and approved
+  protected accessibility action.
+
+[The acceptance ledger](ui-acceptance.md) retains the original 41-finding dispositions,
+source-matched comparisons and executed evidence. Short screens need no filler.
+
 ## Foundations
 
 Neutral surfaces `#F3F5F4`, white cards, ink `#24343B`, secondary ink `#607077`,

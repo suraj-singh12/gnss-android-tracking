@@ -1,6 +1,202 @@
 # UI acceptance evidence
 
-## Issue #39 V4.6 — current delivered implementation
+## Issue #39 — final V4.6 visual refinement (9 November 2026)
+
+This section supersedes earlier visual acceptance only where noted. Historical test
+results below remain tied to their original revisions. Existing draft [PR #65](https://github.com/suraj-singh12/gnss-android-tracking/pull/65)
+continues on `devX/issue-39-android-settings-diagnostics`; no new issue or branch.
+
+### Review inputs and scope
+
+- Starting head `9fae07dae4b9e5a0bac15c318c7254a262c044bd`; current PR base
+  `9547985efd84c7229025b0b1c56812099589dc6b` (`integration/combined-upgrades`).
+  GitHub API verified both; local remote refs were stale. Shell fetch/`gh auth status`
+  failed because the environment's GitHub credential was invalid; the connected
+  GitHub API is the authenticated delivery fallback. No force push is authorized.
+- Binding [V4.6 HTML at 8d95eafe](https://github.com/suraj-singh12/gnss-android-tracking/blob/8d95eafe6fdcd1423027194ea128ae7a8b91236d/docs/design/approved/android-v4.6-interactive.html),
+  Issue #39 decisions, canonical `AGENTS.md` (matching blob
+  `d70594cdf70e63e114bef797983e9a2300dbc50e`), existing design system/preservation
+  matrix, Android component guidance and the **15 rules / 52 corrections** in
+  unmerged draft PR #64 at `376687fec8f593ce7cb12ae191887fc47f277f5c`.
+  PR #64 is a reference, not integrated runtime code; V4.7 is not used.
+- Operator-provided **32-page screenshot PDF**, `Image to PDF 20261109 21.31.15.pdf`,
+  reviewed as four eight-page contact sheets plus enlarged affected pages.
+  PDF SHA-256: `160fd91f6dbb71b61d4213c911d1d9dd81e6e65c449277f8f48bfe927a9b8a51`.
+  Screenshots are visual inputs with no established binary/source provenance.
+- [Original independent findings 01–41, verbatim](https://github.com/suraj-singh12/gnss-android-tracking/issues/39#issuecomment-6745608276)
+  remain preserved in the source comment. Its recommendations are hypotheses,
+  not additional approvals; the numbered dispositions below preserve every item.
+- Existing source-matched native evidence in `docs/evidence/issue-39/v46/` is
+  historical baseline evidence. New captures are actual Android native Views/Skia
+  under Robolectric, **not** a browser prototype or physical-device screenshots.
+
+### Original 41 findings — complete disposition
+
+`Fixed` includes a corrected shared cause; rejected recommendations are stated
+explicitly. `Already correct` means inspected/reproduced native behavior disagrees
+with the screenshot-only diagnosis. No missing data is replaced by illustrative values.
+
+| ID | PDF page(s) / subject | Disposition | Evidence / bounded correction |
+|---|---|---|---|
+| 01 | 01–32 SOS/footer | Already correct for reported bottom clipping; shared inset hardening | Weighted ScrollView ends above separate dock/nav. Progress track below button is not clipped artwork. Root now also respects side/cutout and IME insets; no duplicate footer-height padding. V46PolishTest/native profiles. |
+| 02 | 01 Tracking caption | Already correct | Complete source sentence has no maxLines/ellipsis; page 02 reveals its end. Scroll-end geometry verified. |
+| 03 | 04 Appearance | Fixed | Both glyphs replaced by one balanced 20–22dp half-shaded native vector in the existing 48dp target. Correct action descriptions/persisted toggle retained. |
+| 04 | 03 Stop Tracking | Fixed icon alignment; approved fill retained | Icon and label measured/centred together. Solid-red proposal rejected under explicit operator instruction and correction 43. |
+| 05 | 04 Night Stop | Intentional and approved | Same pale-red treatment in both themes (correction 44). Text #8C3449 / #F9E9ED = **6.6259:1**; fill / Night surface #1C2C33 = **12.2861:1**. Low-contrast premise is false. |
+| 06 | 01–04 status borders | Already correct | Shared pill/surface uses the same 1dp semantic `line` token in both themes; PDF scale is not border-width evidence. |
+| 07 | 01 Sync Now | Fixed | Two-line retained caption keeps stable height and centres its actual text vertically alongside the action. |
+| 08 | 02 error spacing | Already correct | Error belongs to the same scrolling content/gutters; natural viewport remainder is not an extra card margin. No fixed-position banner added. |
+| 09 | 05 Settings whitespace | Intentional and approved | Short Settings list stays short; no filler/help card added. |
+| 10 | 06 Cancel/Save proportions | Fixed shared spacing; ratio claim not reproduced | Existing equal weights retained, explicit peer gap and consistent minimum sizing. Primary Save remains distinct. |
+| 11 | 06 restored-draft feedback | Fixed | Shared quiet, readable feedback typography/spacing/live-region; no gratuitous colorful banner or auto-dismissal of useful state. |
+| 12 | 07 readiness whitespace | Intentional and approved | No invented paragraph or stretched card. |
+| 13 | 07 readiness Review | Fixed | Review/Saver warning uses semantic caution ink; unchanged actual readiness source/actions. |
+| 14 | 13 readiness dialog gap | Already correct native containment; shared typography refined | Standard native list/action geometry retained; shared action styles avoid uppercase/oversized actions. No reduced touch targets. |
+| 15 | 13 dialog title | Fixed | Shared 18sp medium title and sentence-case compact actions. Confirmation listeners unchanged. |
+| 16 | 08 reporting selector | Fixed | Shared outline down-chevron vector with deliberate end inset and semantic resource stroke surviving native background-tint clearing in Night; actual Spinner choices unchanged. |
+| 17 | 08 policy spacing | Fixed | Adaptive row gap reduced to shared compact rhythm; no policy behavior change. |
+| 18 | 08 adaptive hierarchy | Fixed | 13sp emphasized control label; 11sp muted actual policy status. |
+| 19 | 09 policy details | Fixed | Shared read-only fact cards retain requested/effective/local values, revisions, unknowns and evidence; duplicate inner back/title removed. |
+| 20 | 10 Disable remote control | Fixed | Restrained caution surface/ink, protected confirmation retained. |
+| 21 | 11 identities | Fixed | Shared label/value presentation, selectable wrapping IDs/address, all verification evidence retained. |
+| 22 | 11–12 disabled Copy | Fixed | Shared stateful surface plus readable muted text; blanket 38% alpha rejected as unnecessarily illegible. |
+| 23 | 12 last Identity control | Already correct | Partially scrolled row can scroll fully into view; final-content bounds tested. No per-page spacing hack. |
+| 24 | 15 Diagnostics icons | Fixed | Consistent 22dp native outline artwork; semantic health state and single accessibility node preserved. |
+| 25 | 15 SOS history row | Already correct | Initial viewport cut is expected scrolling; page 16 reveals remaining content. Native end bounds tested. |
+| 26 | 17 instruction empty state | Fixed | Modest emphasized empty label; no decorative/fictional content. |
+| 27 | 18,21 history search | Fixed | Existing native rounded outlined input utility; query, focus, keyboard and saved-search owners unchanged. |
+| 28 | 19,22 filter actions | Fixed | Apply filters primary, Cancel quiet, Canonical categories subordinate inside content, all sentence case. Existing category destination reused. |
+| 29 | 19,22 filter switches | Fixed | Shared padded, bounded custom content; three 48dp switch rows. Apply/Cancel transaction preserved. |
+| 30 | 23 canonical selectors | Fixed | Same down-chevron utility as reporting; right-chevron reserved for navigation. |
+| 31 | 24 missing saved-data counts | Fixed | Root cause: value retained zero-width weighted row params when reparented vertically. Shared metric resets explicit width; actual Room pending/durable-ACK values visible. No fabricated zero. |
+| 32 | 26 Storage health dump | Fixed | Shared grouped fact cards retain every metric/reason/explanation and live binding; redundant title/back removed. |
+| 33 | 27 saved-sync heading | Fixed | Medium 13sp heading and 11.5sp actual progress; no change to ACK/pending semantics. |
+| 34 | 27 unresolved count | Fixed | Existing count and durable-ACK evidence grouped with consistent card padding. |
+| 35 | 28 GNSS whitespace | Intentional and approved | Do not pad out a short, useful original-location screen. |
+| 36 | 29 Command contact | Fixed | Shared fact hierarchy; receipt label/value uses same row grammar, no duplicated inline label. |
+| 37 | 30 disabled Stop Test | Fixed | Same readable shared disabled surface as Copy; actual armed state/controller unchanged. |
+| 38 | 31 export cancellation | Fixed | Shared quiet feedback presentation; retained truthful cancellation, no new banner or success. |
+| 39 | 32 Advanced logs | Fixed | Selectable wrapping monospace technical content in bounded scrolling surfaces; all existing evidence retained, duplicate title/back removed. Native selection provides Copy, no duplicate export authority. |
+| 40 | 04 Night brand | Already correct | Existing shared brand surface already has semantic 1dp outline and Night colors; no decorative shadow added. |
+| 41 | 15 SOS history subtitle | Already correct | Duplicate of 25; full row accessible by scrolling, verified through shared viewport geometry. |
+
+Additional small refinements: Identity retains one existing More evidence disclosure
+for detailed trust evidence instead of also repeating it unconditionally; its live
+source and rejection reasons remain available. Compact empty observed-event viewport (real evidence
+still uses the retained bound); matching shared navigation artwork; consistent fact
+labels/values. No synthetic physical-key observations or filler content were added.
+
+### Verification and limitations
+
+Final full verification source: `8c5fb38e6fdd004ff21bc202b4b6da17f15a2f9e`.
+The final command and artifact summary are in
+[`polish-verification.json`](evidence/issue-39/v46/polish-verification.json), with
+raw [test XML](evidence/issue-39/v46/polish-test-results.zip),
+[Android log](evidence/issue-39/v46/polish-android.log.gz) and
+[lint XML](evidence/issue-39/v46/polish-lint.xml.gz).
+
+Executed from `android/` at that exact commit:
+
+```sh
+GNSS_SCREENSHOT_DIR=/workspace/scratch/gnss-ui-polish/final-8c5fb38 \
+  ./gradlew testDebugUnitTest lintDebug assembleDebug --continue --max-workers=2 --console=plain
+```
+
+**BUILD SUCCESSFUL, 17m28s.** JUnit XML: **300 cases, 264 passed, 36 bridge-dependent
+skipped, zero failures/errors**. Lint: **zero errors/fatals, 127 warnings** (warnings
+remain visible in the archived report). Debug APK **3,628,706 bytes**, SHA-256
+`1286a3733158068aad48917edd1a14ec3c6ac8e801d1a16a909589cf98af9bb3`;
+source SHA found in DEX. Debug signing verified with `apksigner` (v2), not a release.
+
+**1,026 native captures** generated; **14 final + 5 explicitly historical images**
+retained. Reviewed the three roots and all retained destinations/dialogs in Day/Night,
+360/390/480dp portraits at 1×/1.5×, 800×360 at 1× and 960×480 at 1.5×, including
+lower scroll positions. Shared synthetic system/side/IME-inset and scroll-end tests,
+short filter-dialog containment, real Room metric visibility, selectable URL/UUID/
+unknown evidence, retained trust disclosure, native selector raster contrast, form/
+filter cancellation, navigation/restoration and the existing safety/lifecycle
+regressions executed. Native captures/fixtures do not establish physical operation.
+The final visual review found no remaining confirmed defect in the inspected native
+states. Expanded system-selector popups and actual IME windows were not separately
+captured; they remain part of device acceptance, alongside the physical checks below.
+
+
+Verification distinctions and development history:
+
+- Existing toolchain repair was reused: Temurin **17.0.21+9**, SDK **35**, Build Tools
+  **35.0.0**, pinned Gradle **8.11.1** and official Go **1.24.7**. Java proxy and
+  system CA settings were retained. No TLS/checksum bypass, wrapper/dependency change
+  or new presentation framework. See the original environment-repair section below.
+- Initial working-tree compile/render probes failed during implementation (presenter
+  reparenting and test assumptions about GNSS versus status counts, scrolled coordinate
+  frames and selectable CharSequence equality). They were corrected; preliminary
+  renders are not treated as final-source acceptance.
+- Full run at `0ee75ef8ba21234a50dab0a3f67c1c3e47190f4b`: **299 cases, 261 passed,
+  36 bridge skips, 2 failed** ([log](evidence/issue-39/v46/polish-0ee-failed.log.gz)).
+  An obsolete moon/sun-text assertion was replaced by stronger vector/action/bounds
+  assertions; a visual test's fixed short settle was replaced by a bounded wait for
+  the real asynchronously rendered Room alert action. No operation/assertion was
+  bypassed. The 10 disclosure/settings/enrollment checks also passed before the
+  final freeze. An environment restart interrupted a subsequent scoped run; its
+  partial captures are **not** a pass.
+- Full run at `14c4d69c82cfabe47df5258cc56d27281c759e79`: **299 cases, 263 passed,
+  36 bridge skips, zero failures/errors; lint zero errors, 127 warnings; APK built**
+  ([log](evidence/issue-39/v46/polish-14c4-android.log.gz)). Final native inspection then
+  found a real Night selector regression: native background-tint clearing removed
+  the child vector tint, exposing its black fallback stroke. The vector now declares
+  its semantic resource stroke; an actual native-raster contrast test protects both
+  themes after tint clearing. This is why the earlier green run is not final acceptance.
+- Real Android–Command bridge/Go results are **reused historical evidence at
+  `df876693ff7fcb06416ee8db3017b3efda672b9a`**, not newly executed integration at this
+  UI refinement revision. Only three Android presentation source files, native
+  vector/ID resources and UI tests changed. Room, Sender, services, SOS hold/engine,
+  CommandControl, phone-alert and notification owners are byte-for-byte unchanged;
+  Command tree `0ce2a387782aea5cc8746b7fea1a8757874e0f72` and protocol tree
+  `3ab8f201c1d72bf7141eaf7a629fa7a39f6f3012` are unchanged. The old real bridge
+  passed **36/36 with zero skips**. Current unit-run bridge skips are not passes.
+
+### Curated native comparisons
+
+Historical “before” source is `e9b7691dab9765dfae0864575b9c45d3c8dbb114`:
+its Android production tree is identical to starting head `9fae07d…`. Four recovered
+original captures were checked against the existing `native-renders.json` SHA-256s.
+Night selector “before” is explicitly the intermediate `14c4d69…` source. All “after”
+captures come from the final full run above. Fixture values/IDs/times may differ;
+these are live test-backed native views, not production demonstrations.
+
+| Surface | Before | After |
+|---|---|---|
+| Appearance / pale Stop — Day | [native](evidence/issue-39/v46/android-day-390x842-1.0-tracking-active.png) | [native](evidence/issue-39/v46/polish-after-appearance-day.png) |
+| Appearance / pale Stop — Night | [native](evidence/issue-39/v46/android-night-390x842-1.0-tracking-active.png) | [native](evidence/issue-39/v46/polish-after-appearance-night.png) |
+| Saved data real metrics | [native](evidence/issue-39/v46/android-day-390x842-1.0-saved-data-sync.png) | [native](evidence/issue-39/v46/polish-after-saved-data-sync.png) |
+| Policy details | [native](evidence/issue-39/v46/polish-before-policy-details.png) | [native](evidence/issue-39/v46/polish-after-policy-details.png) |
+| Storage health | [native](evidence/issue-39/v46/polish-before-storage-health.png) | [native](evidence/issue-39/v46/polish-after-storage-health.png), [bottom](evidence/issue-39/v46/polish-after-storage-health-bottom.png) |
+| Identity / retained disclosure | [native](evidence/issue-39/v46/polish-before-identity-verification-details.png) | [native](evidence/issue-39/v46/polish-after-identity-verification-details.png) |
+| Selectable technical logs | [native](evidence/issue-39/v46/polish-before-advanced-logs.png) | [native](evidence/issue-39/v46/polish-after-advanced-logs.png) |
+| Filter dialog — Night, 1.5× | [native](evidence/issue-39/v46/android-night-dialog-1.5-instruction-filter.png) | [native](evidence/issue-39/v46/polish-after-filter-night-large.png), [Day](evidence/issue-39/v46/polish-after-filter-day.png) |
+| Native Night selector tint | [intermediate native](evidence/issue-39/v46/polish-before-night-policy.png) | [corrected native](evidence/issue-39/v46/polish-after-policy-night.png) |
+
+Representative edge captures: [360dp / 1.5× offline](evidence/issue-39/v46/polish-after-360-large-offline.png),
+[480dp / Night / 1.5×](evidence/issue-39/v46/polish-after-480-night-large.png),
+[landscape / 1.5×](evidence/issue-39/v46/polish-after-landscape-large.png).
+The larger generated set stays outside Git; existing CI uploads its complete native
+capture directory as an artifact when that workflow runs.
+
+
+The runtime owners for GNSS, Room, Sender, SOS hold/engine, alert output/recipient
+ACK, Command enrollment/trust and notification protocols are unchanged. The only
+operational-boundary adjustment is shared window-inset handling; existing navigation,
+forms, confirmation listeners and state restoration are retained. No wire, database,
+Command V5.14, map-provider or approved-design file changed.
+
+Physical-device acceptance remains required for OS navigation modes/cutouts and
+IME geometry on OEM devices, real touch/TalkBack/Switch Access, physical buttons,
+audio and GNSS/background restrictions. `adb devices` found no attached device in
+this session. A native JVM render and synthetic inset test do not establish those
+physical results. Extreme short landscape + large text + an open full-height IME
+must still be evaluated with the actual device's window/keyboard policy.
+
+## Issue #39 V4.6 — historical implementation delivery (before 9 November polish)
 
 **Implemented: all 60 functional groups / 25 native routes.** Final tested code:
 `df876693ff7fcb06416ee8db3017b3efda672b9a`, from integration parent
@@ -13,7 +209,8 @@ macOS/Windows acceptance remain **NOT TESTED**. No field-stable/release claim.
 See the [60-group matrix](ui-preservation-matrix.md), final exact-code CI section below,
 and [source-specific CI summary](evidence/issue-39/v46/ci-df87669-summary.json).
 Historical attempts and environment repairs below retain their original revisions.
-Subsequent delivery edits are documentation/evidence only; tested runtime code stays df.
+At that delivery checkpoint, subsequent edits were documentation/evidence only.
+The 9 November refinement above changes presentation and has its own exact-code evidence.
 
 ## Issue #39 V4.6 — environment repair and baseline gate (2026-11-04)
 
