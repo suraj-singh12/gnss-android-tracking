@@ -3813,7 +3813,9 @@ class MainActivity : Activity() {
         }
         routeParents["Identity & verification details"] = "Manage Command access"
         routeParents["Policy details"] = "Tracking policy"
-        add(routes.getValue("Identity & verification details"), commandTrustEvidence)
+        // The retained More evidence disclosure already mirrors this authoritative source.
+        // Keep one presentation rather than exposing the same trust evidence twice.
+        detach(commandTrustEvidence)
         val diagnostics = routes.getValue("Diagnostics")
         val healthPanel = healthRows.getValue("GNSS").parent as LinearLayout
         detach(healthPanel)
@@ -4154,7 +4156,7 @@ class MainActivity : Activity() {
             }
             parent.addView(ui.evidence(view, separateGroups), index, params)
         }
-        listOf(reportingDetails, reportingPolicy, serviceReadiness, diagnosticsSummary, diagnosticTrust, commandTrustEvidence).forEach(::structured)
+        listOf(reportingDetails, reportingPolicy, serviceReadiness, diagnosticsSummary, diagnosticTrust).forEach(::structured)
         val identityPage = routes.getValue("Identity & verification details")
         // Existing identity/contact cards retain their bound sources and copy controls.
         (0 until identityPage.childCount).map { identityPage.getChildAt(it) }

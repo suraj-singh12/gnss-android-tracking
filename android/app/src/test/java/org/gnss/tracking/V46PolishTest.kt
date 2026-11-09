@@ -57,6 +57,17 @@ class V46PolishTest {
             assertTrue(values.any { it.text.toString() == "2026-11-09T10:20:30Z" })
             source.text = source.text.toString().replace("Unverified", "Unavailable")
             assertTrue(nativeViews(host).filterIsInstance<TextView>().any { it.text.toString() == "Unavailable" })
+            openNativeScreen(a, "Identity & verification details")
+            settle()
+            val disclosure = nativeViews(root).filterIsInstance<Button>().single { it.isShown && it.text == "More evidence & rejection reasons" }
+            val page = disclosure.parent as LinearLayout
+            val evidence = page.getChildAt(page.indexOfChild(disclosure) + 1)
+            assertEquals("Detailed trust evidence has one contextual home", View.GONE, evidence.visibility)
+            disclosure.performClick()
+            assertEquals(View.VISIBLE, evidence.visibility)
+            assertTrue("Retained authoritative trust evidence is still available", nativeViews(evidence).filterIsInstance<TextView>().any { it.isShown && it.text.toString().contains("Unenrolled") })
+            disclosure.performClick()
+            assertEquals(View.GONE, evidence.visibility)
         } finally { controller.pause().stop().destroy(); app.finishForTests() }
     }
 
