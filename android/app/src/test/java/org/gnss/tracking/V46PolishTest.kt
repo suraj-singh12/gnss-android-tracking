@@ -148,4 +148,40 @@ class V46PolishTest {
             dialog.dismiss()
         } finally { controller.pause().stop().destroy(); app.finishForTests() }
     }
+    @Test fun selectorArtworkKeepsContrastAfterNativeBackgroundTintReset() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<TrackingApp>()
+        try {
+            for (night in listOf(false,true)) {
+                app.getSharedPreferences("appearance",0).edit().putBoolean("night",night).commit()
+                val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+                try {
+                    val a=controller.get()
+                    val ui=NativeUi(a)
+                    val selector=Spinner(a)
+                    ui.selector(selector)
+                    // View reapplies its explicit null background tint when assigning a
+                    // background. Child artwork must retain its semantic stroke itself.
+                    selector.backgroundTintList=null
+                    val width=ui.dp(220); val height=ui.dp(48)
+                    val image=android.graphics.Bitmap.createBitmap(width,height,android.graphics.Bitmap.Config.ARGB_8888)
+                    try {
+                        selector.background.setBounds(0,0,width,height)
+                        selector.background.draw(android.graphics.Canvas(image))
+                        fun luminance(c:Int):Double {
+                            fun channel(n:Int):Double { val v=n/255.0; return if(v<=.04045) v/12.92 else Math.pow((v+.055)/1.055,2.4) }
+                            return .2126*channel(android.graphics.Color.red(c))+.7152*channel(android.graphics.Color.green(c))+.0722*channel(android.graphics.Color.blue(c))
+                        }
+                        val base=luminance(a.getColor(R.color.surface))
+                        var contrastingPixels=0
+                        for(x in width-ui.dp(34) until width-ui.dp(10)) for(y in ui.dp(10) until ui.dp(38)) {
+                            val ink=luminance(image.getPixel(x,y))
+                            if((maxOf(ink,base)+.05)/(minOf(ink,base)+.05)>=3) contrastingPixels++
+                        }
+                        assertTrue("Actual selector artwork contrasts in ${if(night) "Night" else "Day"}",contrastingPixels>=ui.dp(10))
+                    } finally { image.recycle() }
+                } finally { controller.pause().stop().destroy() }
+            }
+        } finally { app.finishForTests() }
+    }
+
 }
