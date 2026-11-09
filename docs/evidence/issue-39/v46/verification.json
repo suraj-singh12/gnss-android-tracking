@@ -1,0 +1,34 @@
+{
+  "source": "e9b7691dab9765dfae0864575b9c45d3c8dbb114",
+  "trees": {
+    "android": "ef30ff2a9e419b36cdc39b73321e2acec08f4473",
+    "command": "0ce2a387782aea5cc8746b7fea1a8757874e0f72",
+    "protocol": "3ab8f201c1d72bf7141eaf7a629fa7a39f6f3012",
+    "test-tools": "490dfa66afc097cd00037480dac1d1a9b8321c95"
+  },
+  "results": {
+    "android": {
+      "command": [
+        "./gradlew",
+        "testDebugUnitTest",
+        "lintDebug",
+        "assembleDebug",
+        "--max-workers=2",
+        "--console=plain"
+      ],
+      "cwd": "android",
+      "exit_code": 0,
+      "seconds": 607.263
+    },
+    "bridge": {
+      "command": [
+        "test-tools/integration/run.sh",
+        "--max-workers=2",
+        "--console=plain"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 1147.289
+    }
+  }
+}

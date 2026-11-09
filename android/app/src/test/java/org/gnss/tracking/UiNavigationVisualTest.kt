@@ -76,6 +76,7 @@ class UiNavigationVisualTest {
                 Triple(800, 360, 1f),
                 Triple(960, 480, 1.5f),
                 Triple(390, 842, 1f),
+                Triple(390, 842, 1.5f),
             )
         for (night in listOf(false, true)) for ((width, height, font) in cases) {
             app.getSharedPreferences("appearance", 0).edit().putBoolean("night", night).commit()
@@ -113,9 +114,16 @@ class UiNavigationVisualTest {
                         nativeViews(root).filterIsInstance<Button>().filter {
                             it.text in listOf("Tracking", "Settings", "Diagnostics")
                         }) assertEquals("Tab fits", 1, tab.lineCount)
+                    val appearance = a.findViewById<Button>(R.id.tracking_appearance)
+                    val appearanceBounds = android.graphics.Rect(0, 0, appearance.width, appearance.height).apply {
+                        root.offsetDescendantRectToMyCoords(appearance, this)
+                    }
+                    assertTrue("Appearance target remains wholly visible: $appearanceBounds at $width / $height / $font",
+                        appearance.isShown && appearanceBounds.left >= 0 && appearanceBounds.right <= w && appearanceBounds.top >= 0 && appearanceBounds.bottom <= h)
+                    assertEquals("Appearance artwork retains its native vector bounds", (24 * density).toInt(), appearance.compoundDrawables[0].bounds.width())
                     val sos =
                         nativeViews(root).filterIsInstance<Button>().single {
-                            it.text == "HOLD FOR SOS"
+                            it.text == "Hold to activate SOS"
                         }
                     if (sos.isShown) {
                         val bounds = android.graphics.Rect(0, 0, sos.width, sos.height)
@@ -205,9 +213,11 @@ class UiNavigationVisualTest {
                             .filterIsInstance<TextView>()
                             .filter { it.isShown }
                             .joinToString(" ") { it.text }
-                    assertTrue(visible.contains(if (op.tracking) "Tracking on" else "Tracking off"))
+                    assertTrue(
+                        visible.contains(if (op.tracking) "Tracking active" else "Tracking stopped")
+                    )
                     if (!op.tracking && op.ageMillis != null) {
-                        assertTrue(visible.contains("Last known fix"))
+                        assertTrue(visible.contains("Stopped"))
                         assertFalse(
                             "A stopped snapshot must not imply a current fresh fix",
                             visible.contains("Fresh fix"),
@@ -248,10 +258,29 @@ class UiNavigationVisualTest {
                             """{"mode":"urgent","message":"Return to base","duration_s":60,"repeat_s":10}""",
                     )
                 withContext(Dispatchers.IO) { app.repository.dao.insertCommand(alert) }
+                // Room invalidation and the Activity collector are asynchronous. Wait for
+                // the real action instead of assuming the short visual settle is a barrier.
+                withTimeout(15000) {
+                    while (nativeViews(root).filterIsInstance<Button>().none {
+                        it.isShown && it.text == "Acknowledge / Stop Alert"
+                    }) {
+                        shadowOf(Looper.getMainLooper()).idle()
+                        delay(10)
+                    }
+                }
                 settle()
                 capture("tracking-urgent-alert")
                 assertEquals("Urgent alert retains core actions", stableActions, actionBounds())
-                val urgentAck =
+                var urgentAck =
+                    nativeViews(root).filterIsInstance<Button>().first {
+                        it.isShown && it.text == "Acknowledge / Stop Alert"
+                    }
+                val alertScroll =
+                    nativeViews(root).filterIsInstance<android.widget.ScrollView>().first()
+                alertScroll.fullScroll(View.FOCUS_DOWN)
+                settle()
+                alertScroll.scrollTo(0, alertScroll.getChildAt(0).height)
+                urgentAck =
                     nativeViews(root).filterIsInstance<Button>().first {
                         it.isShown && it.text == "Acknowledge / Stop Alert"
                     }
@@ -262,15 +291,18 @@ class UiNavigationVisualTest {
                 val scrollViewport =
                     nativeViews(root).filterIsInstance<android.widget.ScrollView>().first()
                 val viewportBounds =
-                    android.graphics.Rect(0, 0, scrollViewport.width, scrollViewport.height).apply {
-                        root.offsetDescendantRectToMyCoords(scrollViewport, this)
-                    }
-                val pinned = font > 1.25f || width > height
+                    android.graphics
+                        .Rect(
+                            0,
+                            scrollViewport.scrollY,
+                            scrollViewport.width,
+                            scrollViewport.scrollY + scrollViewport.height,
+                        )
+                        .apply { root.offsetDescendantRectToMyCoords(scrollViewport, this) }
+
                 assertTrue(
                     "Urgent acknowledgement is fully reachable at $width × $height / $font: $ackBounds within $viewportBounds",
-                    ackBounds.top >= 0 &&
-                        ackBounds.bottom <=
-                            (if (pinned) actionBounds().top else viewportBounds.bottom),
+                    ackBounds.top >= 0 && ackBounds.bottom <= viewportBounds.bottom,
                 )
 
                 nativeViews(root)
@@ -293,32 +325,33 @@ class UiNavigationVisualTest {
                     listOf(
                         "Settings",
                         "Party & Command",
-                        "Edit connection",
-                        "Command trust",
-                        "Change trusted Command",
-                        "Tracking & GNSS",
-                        "Reporting interval",
+                        "Tracking policy",
                         "Policy details",
                         "Field readiness",
-                        "Appearance & SOS",
-                        "Advanced settings",
+                        "Emergency controls",
+                        "Manage Command access",
+                        "Identity & verification details",
                         "Command access",
                         "Diagnostics",
                         "Command Instructions",
                         "Instruction filters",
                         "Phone Alerts",
+                        "History search & filters",
+                        "GNSS details",
+                        "Command contact",
                         "Saved data & sync",
+                        "Transfer recovery",
                         "Storage health",
                         "Diagnostic tools",
                         "Advanced logs",
                         "SOS event history",
                         "SOS details",
-                        "Physical Button Test",
+                        "Diagnostic tools",
                     )) {
                     openNativeScreen(a, name)
                     settle()
                     capture(name.lowercase().replace(Regex("[^a-z0-9]+"), "-"))
-                    if (name == "Physical Button Test") {
+                    if (name == "Diagnostic tools") {
                         nativeViews(root)
                             .filterIsInstance<Button>()
                             .single { it.text == "Start Test" }
@@ -340,9 +373,10 @@ class UiNavigationVisualTest {
                     }
                     if (name == "Command Instructions") {
                         nativeViews(root)
-                            .filterIsInstance<Button>()
                             .first {
-                                it.contentDescription?.contains("Open instruction details") == true
+                                it.isShown &&
+                                    it.contentDescription?.contains("Open instruction details") ==
+                                        true
                             }
                             .performClick()
                         settle()
@@ -361,7 +395,7 @@ class UiNavigationVisualTest {
                     settle()
                     capture(name.lowercase().replace(Regex("[^a-z0-9]+"), "-") + "-bottom")
                 }
-                openNativeScreen(a, "Tracking & GNSS")
+                openNativeScreen(a, "Tracking policy")
                 settle()
                 val adaptive =
                     nativeViews(root).filterIsInstance<Switch>().single {
