@@ -1,5 +1,105 @@
 # UI acceptance evidence
 
+## Issue #39 — Android UI process and production polish (20 November 2026)
+
+Continues draft [PR #65](https://github.com/suraj-singh12/gnss-android-tracking/pull/65) on
+`devX/issue-39-android-settings-diagnostics`. Starting head
+`5966bbddde45161a46a3c4207e3e6fe7f4af5ec5` (verified as the remote branch head; PR base
+`integration/combined-upgrades`). Scope: operator instruction to fix the UI development
+process and polish the existing approved V4.6 app without redesign or behaviour change.
+The process is now documented in [android/UI-DEVELOPMENT.md](../android/UI-DEVELOPMENT.md);
+the 15 rules are preserved in [design-system.md](design-system.md). The 41 findings and
+their dispositions below are unchanged.
+
+### Process delivered
+
+- **Centralized styling:** `res/values/dimens.xml` (spacing, layout, radii, stroke,
+  controls, icons, type scale), semantic colour additions (`disabled_*`, approved
+  `stop_*`), `TextRole` type roles and expanded `NativeUi` components (`shape`,
+  `section`, `iconButton`, `switchRow`, `selectorAdapter`, `equalHeights`,
+  `collapsingLabel`, `dialogListAdapter`). Legacy `styleSecondary`/`styleQuiet` and
+  the size-based `label` overload now delegate to the shared system.
+- **Visual regression:** `VisualRegressionTest` (6 profiles, 278 captures per run, 10
+  dialogs, keyboard and system-inset states), `VisualAudit` rules with a self-test, and
+  approved geometry baselines in `app/src/test/resources/visual-baseline/`.
+- **Live inspection:** `android/tools/ui-inspect.sh` (adb navigation by label,
+  screencap, UI Automator bounds, font/display/appearance switching, full tour) and the
+  CI `android-emulator-ui` job that captures the exact-SHA APK on an API 34 emulator.
+
+### Findings and fixes ledger (P-series)
+
+Found by rendering the starting head (Robolectric native, 360×800, Day) and by the new
+audit. "Audit" marks findings the automated rules detected. Baseline evidence:
+[before/after sheets](evidence/issue-39/v46/ui-system/) (before = `5966bbd` 1× render;
+after = this work, 2× render scaled; fixture values differ).
+
+| ID | Surface | Defect | Fix |
+|---|---|---|---|
+| P-01 | All nested pages | App-bar Back drawn as a bordered card; V4.6 `.iconbtn.flat` is borderless | Shared borderless 48dp `iconButton` |
+| P-02 | Tracking hero | "Tracking active" indented ~10dp: legacy refresh re-applied pill padding | Legacy pill skipped in V4.6; hero title flush with card content |
+| P-03 | Tracking cards | Card headings 15/12/12sp | V4.6 `.cardhead` 14sp `Heading` |
+| P-04 | Pills everywhere | 1dp border, 14dp radius; V4.6 `.status` has none | Borderless full pill (finding 06 concerned border-width consistency; the border is now removed per V4.6 CSS) |
+| P-05 | All buttons | Filled primary drew a light outline; 12sp regular labels | Outline = fill; `Button` role 13sp medium, 16dp padding |
+| P-06 | History rows, pagination | Legacy 8dp-radius buttons with a different border (Audit: radius-token) | Shared action styles |
+| P-07 | Tracking policy | Blank gaps around Adaptive storage (empty feedback + legacy padding) | Collapsing feedback, zero legacy padding, shared switch row |
+| P-08 | Selectors | Field 16sp vs inputs 14sp; Instruction-filter captions/popups framework sizes (Audit: type-token) | Shared selector item (Body) and `FieldLabel` captions |
+| P-09 | Command access | Credential hint/text monospace (password input type) | Inputs always sans |
+| P-10 | Switches | Three different label treatments | Shared `switchRow` |
+| P-11 | Manage/Command access | Empty error TextViews took a line (13dp offset) | `collapsingLabel` |
+| P-12 | Diagnostics health | Borderless 12dp list unlike every other list | Shared bordered list, peer-only dividers, 14dp row inset |
+| P-13 | GNSS details | First row used a different grammar than the facts below | Shared `fact` |
+| P-14 | SOS history, SOS details, Instruction details, Instruction filters | In-page "‹ parent" link + 22sp title duplicated the app bar; SOS history named the superseded parent "Diagnostic tools" (Audit: duplicate-header) | Hidden in V4.6; app bar owns Back/title |
+| P-15 | History search rows | Chevron inline after the text, 14sp single style | Navigation-row grammar: bold title, muted time, trailing chevron |
+| P-16 | Instruction details | Status pill stretched full width; acknowledged shown amber | Hugging pill; teal when the outcome group is applied |
+| P-17 | Transfer recovery | Content floated on the page while its parent uses cards | Card |
+| P-18 | Command Instructions | Rows double-inset inside their card | Rows align with the card content edge |
+| P-19 | Dialogs | 16sp message, filled actions flush with the bottom edge, OK 41dp wide (Audit: touch-target), Discard edits shown as affirmative green, Night Stop Tracking confirm differed from the approved Stop, readiness list 16sp, filter link misaligned | 14sp body, 12dp bottom inset, 64dp min width, caution Discard edits, approved Stop in both, Body list rows, aligned link |
+| P-20 | Party & Command, Command access, Physical test | Peer actions of different heights at 1.5×; Save escaped its row (Audit: row-mismatch, escapes-parent) | `equalHeights` |
+| P-21 | Tracking urgent alert | 2dp padding; label and button against the edges | 12dp padding, spacing, shared filled emergency action |
+| P-22 | SOS dock | Dock bordered 16dp, SOS button outlined; V4.6 `.sosbox` 12dp/`.sos-button` border 0 | Tokens; gesture/progress/IDs untouched |
+| P-23 | Navigation | Selected tab had a bordered 12dp wash; V4.6 borderless 10dp | Fixed |
+| P-24 | Landscape | Full stacked SOS dock consumed the short viewport; design-system specifies a compact landscape footer | Caption beside the same button; tighter footer padding (see limitations) |
+| P-25 | Physical-button log | 14sp proportional text in a bordered box | Wash surface, `Mono` |
+| P-26 | Evidence cards | Later panels started with an extra 10dp gap | First item flush with card padding |
+| P-27 | Tracking banners | 13sp off-scale text | `Value` role |
+| P-28 | System navigation bar (Day) | Found on the CI emulator: a dark `#24343B` bar under the light navigation surface | API 27+ uses `surface` with dark icons in Day; Night uses `surface`; API 26 Day keeps the dark bar (no dark-icon support) |
+| P-29 | Visual suite (process) | CI found one geometry difference: the random phone UUID wrapped differently at 1.3× on the identity page | Fixed test-only UUID fixture; only `night-360x640-1.3` identity geometry re-recorded |
+
+Rejected/unchanged: the dock's progress track under the SOS button (protected hold
+feedback), two filled teal actions on stopped Tracking (approved V4.6 hierarchy), the
+Night disabled-surface tone (readable 6:1), the appearance control.
+
+### Verification at `1fcd145e2a946bb515f49584c02e771bcf99b4ff`
+
+From `android/` with Temurin 17.0.21.1, SDK 35, Build Tools 35.0.0, Gradle 8.11.1:
+`./gradlew testDebugUnitTest lintDebug assembleDebug --continue --console=plain` —
+**BUILD SUCCESSFUL**; JUnit **307 tests, 0 failures, 0 errors, 36 bridge-dependent
+skips** (skips are not passes). The run includes `VisualRegressionTest` in compare mode
+(all six profiles: zero audit findings, zero geometry differences, so the baseline
+reproduced: 278 captures) and `VisualAuditSelfTest`. Lint: **0 errors, 130 warnings**
+versus 127 at `8c5fb38`: +4 `GradleDependency` (newer Room/test-core releases are now
+published; no dependency changed) and −1 `SetTextI18n`. No warning is introduced by
+this work. Debug APK 3,714,945 bytes, SHA-256
+`b895dce2405874a32f53dda6f577d6d38c9c9a24815be0109ec44e4b54d3aac9` (debug-signed,
+source revision `1fcd145…` embedded; not a release).
+
+Test change: `SettingsDiagnosticsTest` now lets the recreated Activity's asynchronous
+Room state settle before pressing Cancel (it previously relied on that emission
+landing inside Robolectric's recreate idle). Assertions are unchanged.
+
+The real Android-to-Command bridge was not re-run; Room, Sender, services, SOS
+hold/engine, CommandControl, alerts and notifications are unchanged by this work.
+
+### Remaining limitations and unverified items
+
+- Renders are Robolectric native View/Skia, not physical devices. The emulator job
+  provides real-runtime captures in CI; neither replaces DEVICE-ACCEPTANCE.md.
+- Landscape and keyboard-open layouts on short phones keep a small content viewport
+  because the SOS dock and navigation stay visible by design. Changing that structure
+  needs an operator decision.
+- Not automated: open Spinner popups, real IME windows, OS permission/document picker
+  screens, toasts, TalkBack/Switch Access, OEM fonts and cutouts, physical keys.
+
 ## Issue #39 — final V4.6 visual refinement (9 November 2026)
 
 This section supersedes earlier visual acceptance only where noted. Historical test

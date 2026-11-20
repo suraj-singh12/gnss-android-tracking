@@ -42,7 +42,7 @@ padding.
 | Dimension tokens | `app/src/main/res/values/dimens.xml` | Spacing steps, page/card/list insets, section rhythm, radii, stroke, control heights, button/input/pill padding, icon sizes and the type scale (sp). |
 | Typography roles | `NativeUi.kt` → `TextRole` | Each role = one size token + weight + ink: `Display`, `DialogTitle`, `AppBarTitle`, `AppBarSubtitle`, `Hero`, `Heading`, `Body`, `Button`, `RowTitle`, `Value`, `Label`, `Caption`, `FieldLabel`, `Meta`, `Pill`, `Section`, `Micro`, `Metric`, `Mono`. |
 | Components | `NativeUi.kt` → `NativeUi` | Shared View vocabulary (table below). |
-| Theme | `res/values/styles.xml` | Framework `Theme.Material` Day/Night, system bar colours, sans font family. |
+| Theme | `res/values/styles.xml`, `values-v27/styles.xml` | Framework `Theme.Material` Day/Night, system bar colours (navigation bar = `surface` from API 27; API 26 Day keeps a dark bar because it cannot draw dark icons), sans font family. |
 
 To restyle the whole app, change a token or a `NativeUi` component. Examples:
 
@@ -129,6 +129,10 @@ tools/ui-inspect.sh tour day-1.0-     # capture every destination and nested Set
 `*.xml` files are UI Automator dumps with the real on-screen bounds of every node; use
 them to check alignment, sizes and overlap on the running app.
 
+Command access and its credential/review states set `FLAG_SECURE`, so `screencap`
+returns an empty image there by design (the UI Automator dump still works). Use the
+Robolectric captures or Layout Inspector for those screens.
+
 ### CI emulator capture
 
 The `android-emulator-ui` job in `.github/workflows/issue-6-matched-assets.yml` boots an
@@ -141,7 +145,8 @@ It is emulator evidence, not physical-device acceptance.
 
 `app/src/test/java/org/gnss/tracking/VisualRegressionTest.kt` renders the real
 `MainActivity` with Robolectric native graphics (Android View/Skia), deterministic Room
-fixtures at a fixed instant (`FIXTURE_TIME`, UTC) and xhdpi density, for six profiles:
+fixtures at a fixed instant (`FIXTURE_TIME`, UTC), a fixed test-only phone UUID
+(`FIXTURE_DEVICE`) and xhdpi density, for six profiles:
 
 | Profile | Purpose |
 |---|---|

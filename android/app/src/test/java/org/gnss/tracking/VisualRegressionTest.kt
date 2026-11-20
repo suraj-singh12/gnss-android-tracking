@@ -55,6 +55,7 @@ class VisualRegressionTest(private val profile: Profile) {
     companion object {
         /** Fixed instant for every persisted fixture so labels and wrapping are repeatable. */
         const val FIXTURE_TIME = 1_762_683_630_000L // 2025-11-09T10:20:30Z
+        const val FIXTURE_DEVICE = "6b0f3c2e-9a41-4d7e-8c55-2f1e0a9b7d34"
 
         @JvmStatic
         @ParameterizedRobolectricTestRunner.Parameters(name = "{0}")
@@ -86,7 +87,13 @@ class VisualRegressionTest(private val profile: Profile) {
     @Test
     fun everyScreenPassesLayoutAuditAndMatchesApprovedGeometry() = runBlocking {
         TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
-        val state = withContext(Dispatchers.IO) { app.repository.state() }
+        // Test-only fixed identity before any message exists: a random UUID in a
+        // proportional font can wrap differently and move the identity screens.
+        val state = withContext(Dispatchers.IO) {
+            app.repository.dao.update(app.repository.state().copy(deviceId = FIXTURE_DEVICE))
+            app.repository.state()
+        }
+        assertEquals(FIXTURE_DEVICE, state.deviceId)
         withContext(Dispatchers.IO) {
             app.repository.settings("A-07", "Alpha Patrol", "http://192.168.1.10:8080", 5, false)
             for ((n, outcome) in listOf("blocked", "applied", "expired", "unknown").withIndex())
