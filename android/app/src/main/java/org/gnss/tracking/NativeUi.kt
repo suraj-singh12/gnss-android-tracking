@@ -11,34 +11,120 @@ import android.graphics.drawable.RippleDrawable
 import android.graphics.drawable.StateListDrawable
 import android.text.Editable
 import android.text.TextWatcher
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.*
 
-/** Native view vocabulary shared by the reference screens. No operational state is owned here. */
+/**
+ * Typography role: one scalable size token, one weight and one semantic ink.
+ * Sizes live in `res/values/dimens.xml`; change a token there to restyle every use.
+ */
+internal enum class TextRole(val size: Int, val weight: Int, val muted: Boolean = false, val mono: Boolean = false) {
+    Display(R.dimen.text_display, TextWeight.BOLD),
+    DialogTitle(R.dimen.text_dialog_title, TextWeight.MEDIUM),
+    AppBarTitle(R.dimen.text_appbar_title, TextWeight.BOLD),
+    AppBarSubtitle(R.dimen.text_micro, TextWeight.REGULAR, muted = true),
+    Hero(R.dimen.text_hero, TextWeight.BOLD),
+    Heading(R.dimen.text_heading, TextWeight.BOLD),
+    Body(R.dimen.text_body, TextWeight.REGULAR),
+    Button(R.dimen.text_button, TextWeight.MEDIUM),
+    RowTitle(R.dimen.text_row_title, TextWeight.BOLD),
+    Value(R.dimen.text_value, TextWeight.REGULAR),
+    Label(R.dimen.text_label, TextWeight.BOLD),
+    Caption(R.dimen.text_caption, TextWeight.REGULAR, muted = true),
+    FieldLabel(R.dimen.text_small, TextWeight.BOLD),
+    Meta(R.dimen.text_meta, TextWeight.REGULAR, muted = true),
+    Pill(R.dimen.text_meta, TextWeight.BOLD),
+    Section(R.dimen.text_meta, TextWeight.BOLD, muted = true),
+    Micro(R.dimen.text_micro, TextWeight.REGULAR, muted = true),
+    Metric(R.dimen.text_metric, TextWeight.BOLD),
+    Mono(R.dimen.text_mono, TextWeight.REGULAR, mono = true),
+}
+
+/** TextView that measures to zero height while it has no text. */
+internal class CollapsingTextView(context: Context) : TextView(context) {
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        if (text.isNullOrEmpty()) setMeasuredDimension(View.MeasureSpec.getSize(widthMeasureSpec), 0)
+        else super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+    }
+}
+
+internal object TextWeight {
+    const val REGULAR = 0
+    const val MEDIUM = 1
+    const val BOLD = 2
+}
+
+/**
+ * The Android design system: shared tokens and native view vocabulary for every screen.
+ * No operational state is owned here. See android/UI-DEVELOPMENT.md.
+ */
 internal class NativeUi(private val context: Context) {
     fun dp(value: Int) = (value * context.resources.displayMetrics.density).toInt()
 
+    /** Pixel value of a dimension token. */
+    fun px(token: Int) = context.resources.getDimensionPixelSize(token)
+
     fun color(id: Int) = context.getColor(id)
 
+    /** Shared rounded surface. [radius] is in dp; prefer [shape] with a radius token. */
     fun surface(tone: Int = R.color.surface, radius: Int = 16) =
         GradientDrawable().apply {
             setColor(color(tone))
             cornerRadius = dp(radius).toFloat()
-            setStroke(dp(1), color(R.color.line))
+            setStroke(px(R.dimen.stroke), color(R.color.line))
+        }
+
+    /** Token-based surface: fill, radius token and optional semantic stroke (null = borderless). */
+    fun shape(tone: Int, radius: Int = R.dimen.radius_card, stroke: Int? = R.color.line) =
+        GradientDrawable().apply {
+            setColor(color(tone))
+            cornerRadius = px(radius).toFloat()
+            stroke?.let { setStroke(px(R.dimen.stroke), color(it)) }
         }
 
     fun column() = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
 
-    fun label(value: String, size: Float = 13f, muted: Boolean = false, bold: Boolean = false) =
+    fun text(view: TextView, role: TextRole, tone: Int? = null) {
+        view.setTextSize(TypedValue.COMPLEX_UNIT_PX, context.resources.getDimension(role.size))
+        view.typeface = when {
+            role.mono -> Typeface.MONOSPACE
+            role.weight == TextWeight.BOLD -> Typeface.DEFAULT_BOLD
+            role.weight == TextWeight.MEDIUM -> Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            else -> Typeface.DEFAULT
+        }
+        view.setTextColor(color(tone ?: if (role.muted) R.color.muted else R.color.ink))
+    }
+
+    fun label(value: String, role: TextRole, tone: Int? = null) =
         TextView(context).apply {
             text = value
-            textSize = size
-            setTextColor(color(if (muted) R.color.muted else R.color.ink))
-            if (bold) setTypeface(null, Typeface.BOLD)
+            text(this, role, tone)
             includeFontPadding = false
             setPadding(0, 0, 0, 0)
+        }
+
+    /** Legacy size-based call sites snap to the nearest V4.6 type token. Prefer [TextRole]. */
+    fun label(value: String, size: Float = 13f, muted: Boolean = false, bold: Boolean = false) =
+        label(value, legacyRole(size, muted, bold))
+
+    private fun legacyRole(size: Float, muted: Boolean, bold: Boolean): TextRole =
+        when {
+            size >= 21f -> TextRole.Display
+            size >= 16f -> if (bold) TextRole.AppBarTitle else TextRole.Body
+            size >= 15f -> if (bold) TextRole.Hero else TextRole.Body
+            size >= 13.5f -> if (bold) TextRole.Heading else TextRole.Body
+            size >= 12.25f -> if (bold) TextRole.RowTitle else if (muted) TextRole.Caption else TextRole.Value
+            size >= 11.75f -> if (bold) TextRole.Label else if (muted) TextRole.Caption else TextRole.Value
+            size >= 11.25f -> if (bold) TextRole.Label else TextRole.Caption
+            size >= 10.75f -> if (bold) (if (muted) TextRole.Section else TextRole.FieldLabel) else TextRole.Caption
+            size >= 10.25f -> if (bold) TextRole.Pill else TextRole.Meta
+            else -> TextRole.Micro
+        }.let { role ->
+            // Preserve an explicit muted/ink request where the role's default differs.
+            if (muted && !role.muted && role == TextRole.Label) TextRole.Section else role
         }
 
     fun add(parent: LinearLayout, view: View, gap: Int = 0) {
@@ -48,9 +134,22 @@ internal class NativeUi(private val context: Context) {
 
     fun card(parent: LinearLayout, gap: Int = 12, tone: Int = R.color.surface) =
         column().apply {
-            background = surface(tone)
-            setPadding(dp(14), dp(12), dp(14), dp(12))
+            background = shape(tone)
+            val pad = px(R.dimen.card_padding)
+            setPadding(pad, pad, pad, pad)
             add(parent, this, gap)
+        }
+
+    /** Uppercase section heading above a group of peer cards or rows. */
+    fun section(parent: LinearLayout, title: String) =
+        label(title.uppercase(), TextRole.Section).apply {
+            letterSpacing = 0.06f
+            if (android.os.Build.VERSION.SDK_INT >= 28) isAccessibilityHeading = true
+            parent.addView(this, LinearLayout.LayoutParams(-1, -2).apply {
+                topMargin = px(R.dimen.section_top)
+                bottomMargin = px(R.dimen.section_bottom) - dp(1)
+                marginStart = dp(2)
+            })
         }
 
     fun button(value: String, action: () -> Unit) =
@@ -60,66 +159,108 @@ internal class NativeUi(private val context: Context) {
             setOnClickListener { action() }
         }
 
-    fun style(button: Button, primary: Boolean = false, danger: Boolean = false) {
+    private fun buttonBase(button: Button) {
         button.isAllCaps = false
-        button.textSize = 12f
-        button.minHeight = dp(48)
+        text(button, TextRole.Button)
+        button.minHeight = px(R.dimen.control_height)
+        button.minimumHeight = px(R.dimen.control_height)
         button.minimumWidth = 0
         button.minWidth = 0
         button.includeFontPadding = false
-        button.setPadding(dp(12), dp(8), dp(12), dp(8))
+        button.stateListAnimator = null
+        button.elevation = 0f
+        button.setPadding(px(R.dimen.button_padding_h), px(R.dimen.button_padding_v), px(R.dimen.button_padding_h), px(R.dimen.button_padding_v))
+        button.gravity = Gravity.CENTER
+        button.backgroundTintList = null
+    }
+
+    private fun inks(enabled: Int) = ColorStateList(
+        arrayOf(intArrayOf(android.R.attr.state_enabled), intArrayOf()),
+        intArrayOf(color(enabled), color(R.color.disabled_ink)),
+    )
+
+    /** Shared action variants: secondary (default), primary (filled) and danger (caution). */
+    fun style(button: Button, primary: Boolean = false, danger: Boolean = false) {
+        buttonBase(button)
         val fill =
             if (primary) R.color.action
             else if (danger) R.color.emergency_surface else R.color.secondary_surface
         val ink =
             if (primary) android.R.color.white
             else if (danger) R.color.danger else R.color.secondary
-        button.setTextColor(
-            ColorStateList(
-                arrayOf(intArrayOf(android.R.attr.state_enabled), intArrayOf()),
-                intArrayOf(color(ink), color(R.color.muted)),
-            )
-        )
-        button.backgroundTintList = null
+        button.setTextColor(inks(ink))
         button.background = StateListDrawable().apply {
             addState(intArrayOf(android.R.attr.state_enabled),
-                RippleDrawable(ColorStateList.valueOf(color(R.color.ripple)), surface(fill, 12), null))
-            addState(intArrayOf(), surface(R.color.background, 12))
+                RippleDrawable(ColorStateList.valueOf(color(R.color.ripple)),
+                    shape(fill, R.dimen.radius_button, if (primary) R.color.action else R.color.line), null))
+            addState(intArrayOf(), shape(R.color.disabled_surface, R.dimen.radius_button, R.color.disabled_line))
         }
-        button.gravity = Gravity.CENTER
     }
 
+    /** Approved pale-red Stop Tracking treatment, identical in Day and Night. */
     fun stopStyle(button: Button) {
-        style(button)
-        button.setTextColor(android.graphics.Color.parseColor("#8C3449"))
+        buttonBase(button)
+        button.setTextColor(inks(R.color.stop_ink))
         button.background =
             RippleDrawable(
                 ColorStateList.valueOf(color(R.color.ripple)),
-                GradientDrawable().apply {
-                    setColor(android.graphics.Color.parseColor("#F9E9ED"))
-                    setStroke(dp(1), android.graphics.Color.parseColor("#E9BEC8"))
-                    cornerRadius = dp(11).toFloat()
-                },
+                shape(R.color.stop_surface, R.dimen.radius_button, R.color.stop_line),
                 null,
             )
     }
 
+    /** Text action without a container: Cancel, Close and inline secondary links. */
+    fun quiet(button: Button) {
+        buttonBase(button)
+        button.setTextColor(inks(R.color.secondary))
+        button.setPadding(px(R.dimen.space_md), button.paddingTop, px(R.dimen.space_md), button.paddingBottom)
+        button.background = RippleDrawable(ColorStateList.valueOf(color(R.color.ripple)),
+            null, shape(R.color.surface, R.dimen.radius_button, null))
+    }
+
+    /** Borderless 48dp icon action used by the app bar. */
+    fun iconButton(button: Button, resource: Int, description: String) {
+        buttonBase(button)
+        button.text = ""
+        button.contentDescription = description
+        button.setPadding(0, 0, 0, 0)
+        button.setCompoundDrawables(icon(resource, 24, R.color.ink), null, null, null)
+        button.background = RippleDrawable(ColorStateList.valueOf(color(R.color.ripple)),
+            null, shape(R.color.surface, R.dimen.radius_button, null))
+        val target = px(R.dimen.control_height)
+        button.minWidth = target
+        button.minimumWidth = target
+        // Centre the single compound drawable inside the fixed square target.
+        button.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+            val b = v as Button
+            val inset = ((b.width - (b.compoundDrawables[0]?.bounds?.width() ?: 0)) / 2).coerceAtLeast(0)
+            if (b.paddingLeft != inset) b.setPadding(inset, 0, 0, 0)
+        }
+    }
+
+    /** Peer actions in one horizontal row share the tallest action's height (large text wraps). */
+    fun equalHeights(row: LinearLayout) {
+        row.gravity = Gravity.CENTER_VERTICAL
+        for (i in 0 until row.childCount) row.getChildAt(i).layoutParams.height = ViewGroup.LayoutParams.MATCH_PARENT
+    }
+
+    /** One navigation row: title, optional subtitle and a trailing right chevron. */
     fun menu(parent: LinearLayout, title: String, subtitle: String, action: () -> Unit) =
         LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(16), dp(14), dp(14), dp(14))
-            minimumHeight = dp(60)
+            setPadding(px(R.dimen.list_row_padding_h), px(R.dimen.list_row_padding_v), px(R.dimen.list_row_padding_h), px(R.dimen.list_row_padding_v))
+            minimumHeight = px(R.dimen.list_row_min_height)
             background =
-                RippleDrawable(ColorStateList.valueOf(color(R.color.ripple)), surface(), null)
+                RippleDrawable(ColorStateList.valueOf(color(R.color.ripple)), shape(R.color.surface), null)
             isClickable = true
             isFocusable = true
             contentDescription = "$title. $subtitle. Open"
             if (android.os.Build.VERSION.SDK_INT >= 28) isScreenReaderFocusable = true
             addView(
                 column().apply {
-                    addView(label(title, 12.5f, bold = true))
-                    if (subtitle.isNotEmpty()) addView(label(subtitle, 10.5f, muted = true))
+                    addView(label(title, TextRole.RowTitle))
+                    if (subtitle.isNotEmpty()) add(this, label(subtitle, TextRole.Meta).apply { setLineSpacing(dp(1).toFloat(), 1f) }, 3)
                     importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
                 },
                 LinearLayout.LayoutParams(0, -2, 1f),
@@ -128,41 +269,60 @@ internal class NativeUi(private val context: Context) {
                 ImageView(context).apply {
                     setImageDrawable(icon(R.drawable.ic_chevron_right, 20))
                     importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-                }, LinearLayout.LayoutParams(dp(22), dp(22)).apply { leftMargin = dp(8) }
+                }, LinearLayout.LayoutParams(px(R.dimen.icon_md), px(R.dimen.icon_md)).apply { leftMargin = px(R.dimen.space_sm) }
             )
             setOnClickListener { action() }
             add(parent, this, 1)
         }
 
-    fun input(editor: EditText) {
-        editor.textSize = 14f
-        editor.minHeight = dp(48)
-        editor.setPadding(dp(11), dp(10), dp(11), dp(10))
-        editor.setTextColor(color(R.color.ink))
-        editor.setHintTextColor(color(R.color.muted))
-        editor.background =
-            GradientDrawable().apply {
-                setColor(color(R.color.surface))
-                cornerRadius = dp(10).toFloat()
-                setStroke(dp(1), color(R.color.control_line))
-            }
+    /** Binary setting: label at the start, native Switch at the end, 48dp row. */
+    fun switchRow(control: Switch) {
+        text(control, TextRole.RowTitle)
+        control.includeFontPadding = false
+        control.minHeight = px(R.dimen.control_height)
+        control.minimumHeight = px(R.dimen.control_height)
+        control.setPadding(0, 0, 0, 0)
+        control.switchPadding = px(R.dimen.space_md)
     }
 
+    /** Shared outlined input with focused, error-free and disabled states. */
+    fun input(editor: EditText) {
+        text(editor, TextRole.Body)
+        // Password input types otherwise switch the hint and value to monospace.
+        editor.typeface = Typeface.DEFAULT
+        editor.minHeight = px(R.dimen.control_height)
+        editor.minimumHeight = px(R.dimen.control_height)
+        editor.includeFontPadding = false
+        editor.setPadding(px(R.dimen.input_padding_h), px(R.dimen.input_padding_v), px(R.dimen.input_padding_h), px(R.dimen.input_padding_v))
+        editor.setTextColor(inks(R.color.ink))
+        editor.setHintTextColor(color(R.color.muted))
+        editor.backgroundTintList = null
+        editor.background = StateListDrawable().apply {
+            addState(intArrayOf(-android.R.attr.state_enabled), shape(R.color.disabled_surface, R.dimen.radius_input, R.color.disabled_line))
+            addState(intArrayOf(android.R.attr.state_focused), shape(R.color.surface, R.dimen.radius_input, R.color.accent).apply {
+                setStroke(dp(2), color(R.color.accent))
+            })
+            addState(intArrayOf(), shape(R.color.surface, R.dimen.radius_input, R.color.control_line))
+        }
+    }
+
+    /** Read-only label/value row. The value is selectable evidence. */
     fun fact(parent: LinearLayout, caption: String, value: String): TextView {
         val row = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL }
-        row.addView(label(caption, 12f, bold = true), LinearLayout.LayoutParams(0, -2, 1f))
-        val result = label(value, 12.5f).apply { gravity = Gravity.END; setTextIsSelectable(true) }
-        row.addView(result, LinearLayout.LayoutParams(0, -2, 1f))
-        add(parent, row, 4)
+        row.addView(label(caption, TextRole.Label), LinearLayout.LayoutParams(0, -2, 1f))
+        val result = label(value, TextRole.Value).apply { gravity = Gravity.END; setTextIsSelectable(true) }
+        row.addView(result, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = px(R.dimen.space_sm) })
+        add(parent, row, if (parent.childCount == 0) 0 else 6)
         return result
     }
 
+    /** Borderless status pill; teal for positive, amber for degraded/unknown. */
     fun pill(view: TextView, positive: Boolean = false) {
-        view.textSize = 12f
-        view.setPadding(dp(10), dp(6), dp(10), dp(6))
-        view.setTextColor(color(if (positive) R.color.accent else R.color.warning))
+        text(view, TextRole.Pill, if (positive) R.color.accent else R.color.warning)
+        view.includeFontPadding = false
+        view.setPadding(px(R.dimen.pill_padding_h), px(R.dimen.pill_padding_v), px(R.dimen.pill_padding_h), px(R.dimen.pill_padding_v))
         view.background =
-            surface(if (positive) R.color.positive_surface else R.color.warning_surface, 14)
+            shape(if (positive) R.color.positive_surface else R.color.warning_surface, R.dimen.radius_pill, null)
     }
 
     fun icon(resource: Int, size: Int = 22, tint: Int = R.color.muted): Drawable =
@@ -174,13 +334,13 @@ internal class NativeUi(private val context: Context) {
     /** Inline artwork is measured with the label, so a full-width action stays optically centred. */
     fun centeredActionIcon(button: Button, resource: Int) {
         button.setCompoundDrawables(icon(resource, 20).apply { setTint(button.currentTextColor) }, null, null, null)
-        button.compoundDrawablePadding = dp(6)
+        button.compoundDrawablePadding = px(R.dimen.icon_gap)
         fun centre() {
             val artwork = button.compoundDrawables[0] ?: return
             val group = artwork.bounds.width() + button.compoundDrawablePadding + button.paint.measureText(button.text.toString())
-            val inset = maxOf(dp(12), ((button.width - group) / 2).toInt())
+            val inset = maxOf(px(R.dimen.space_md), ((button.width - group) / 2).toInt())
             if (button.paddingLeft != inset || button.paddingRight != inset)
-                button.setPadding(inset, dp(8), inset, dp(8))
+                button.setPadding(inset, px(R.dimen.button_padding_v), inset, px(R.dimen.button_padding_v))
         }
         if (button.getTag(R.id.centered_action_icon) == null) {
             button.setTag(R.id.centered_action_icon, true)
@@ -189,66 +349,123 @@ internal class NativeUi(private val context: Context) {
         centre()
     }
 
+    /** Native Spinner as an outlined selector with one down-chevron at a fixed end inset. */
     fun selector(view: Spinner) {
-        view.minimumHeight = dp(48)
-        view.setPadding(dp(10), dp(4), dp(38), dp(4))
+        view.minimumHeight = px(R.dimen.control_height)
+        view.setPadding(dp(2), 0, px(R.dimen.selector_end_padding), 0)
         view.backgroundTintList = null
-        view.background = LayerDrawable(arrayOf(surface(radius = 10), icon(R.drawable.ic_chevron_down, 20))).apply {
-            setLayerSize(1, dp(20), dp(20))
-            setLayerGravity(1, Gravity.END or Gravity.CENTER_VERTICAL)
-            setLayerInset(1, 0, 0, dp(12), 0)
+        val outline = StateListDrawable().apply {
+            addState(intArrayOf(-android.R.attr.state_enabled), shape(R.color.disabled_surface, R.dimen.radius_input, R.color.disabled_line))
+            addState(intArrayOf(), shape(R.color.surface, R.dimen.radius_input, R.color.control_line))
         }
-        view.setPopupBackgroundDrawable(surface(radius = 10))
+        view.background = LayerDrawable(arrayOf(outline, icon(R.drawable.ic_chevron_down, 20))).apply {
+            setLayerSize(1, px(R.dimen.icon_sm), px(R.dimen.icon_sm))
+            setLayerGravity(1, Gravity.END or Gravity.CENTER_VERTICAL)
+            setLayerInset(1, 0, 0, px(R.dimen.selector_chevron_inset), 0)
+        }
+        view.setPopupBackgroundDrawable(shape(R.color.surface, R.dimen.radius_input))
+    }
+
+    /** Text adapter for selectors: Body type at the input inset in both the field and popup. */
+    fun <T> selectorAdapter(items: List<T>): ArrayAdapter<T> =
+        object : ArrayAdapter<T>(context, android.R.layout.simple_spinner_item, items) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup) =
+                selectorItem(super.getView(position, convertView, parent), false)
+            override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup) =
+                selectorItem(super.getDropDownView(position, convertView, parent), true)
+        }
+
+    /** Choice list for an app-owned dialog: Body type, dialog inset, 48dp rows. */
+    fun dialogListAdapter(items: List<String>): ArrayAdapter<String> =
+        object : ArrayAdapter<String>(context, android.R.layout.simple_list_item_1, items) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup) =
+                super.getView(position, convertView, parent).apply {
+                    (this as TextView).let {
+                        text(it, TextRole.Body)
+                        it.minHeight = px(R.dimen.control_height)
+                        it.gravity = Gravity.CENTER_VERTICAL
+                        it.setPadding(px(R.dimen.dialog_padding), 0, px(R.dimen.dialog_padding), 0)
+                    }
+                }
+        }
+
+    /** Shared selector row typography for the closed field and its popup choices. */
+    fun selectorItem(view: View, popup: Boolean): View = view.apply {
+        (this as? TextView)?.let {
+            text(it, TextRole.Body)
+            it.includeFontPadding = false
+            it.minHeight = px(R.dimen.control_height)
+            it.gravity = Gravity.CENTER_VERTICAL
+            it.setPadding(px(R.dimen.input_padding_h) - if (popup) 0 else dp(2), 0, px(R.dimen.input_padding_h), 0)
+            it.maxLines = 1
+            it.ellipsize = android.text.TextUtils.TruncateAt.END
+        }
     }
 
     fun metric(parent: LinearLayout, value: TextView, caption: String) {
         (value.parent as? ViewGroup)?.removeView(value)
         value.gravity = Gravity.START
-        value.setTextColor(color(R.color.ink))
-        value.setTypeface(null, Typeface.BOLD)
+        text(value, TextRole.Metric)
+        value.background = null
+        value.setPadding(0, 0, 0, 0)
         value.includeFontPadding = false
-        value.textSize = 26f
         value.maxLines = 1
-        value.setAutoSizeTextTypeUniformWithConfiguration(14, 26, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+        value.setAutoSizeTextTypeUniformWithConfiguration(14, 26, 1, TypedValue.COMPLEX_UNIT_SP)
         val column = column()
         // Reparenting a value from fact() must discard its old zero-width weighted params.
         column.addView(value, LinearLayout.LayoutParams(-1, -2))
-        add(column, label(caption, 10.5f, muted = true), 4)
+        add(column, label(caption, TextRole.Meta), 4)
         parent.addView(column, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = dp(6) })
     }
 
     fun feedback(view: TextView) {
-        view.textSize = 11.5f
+        text(view, TextRole.Caption)
         view.includeFontPadding = false
         view.setPadding(dp(2), dp(6), dp(2), dp(4))
-        view.setTextColor(color(R.color.muted))
         view.accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
     }
 
-    fun quiet(button: Button) {
-        style(button)
-        button.background = RippleDrawable(ColorStateList.valueOf(color(R.color.ripple)),
-            android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT), null)
-    }
+    /**
+     * Status/error text that occupies no height while empty, so an idle message slot never
+     * opens a blank gap. Its padding provides the gap once text appears. Text is unchanged.
+     */
+    fun collapsingLabel(role: TextRole, tone: Int? = null, gap: Int = 6): TextView =
+        CollapsingTextView(context).apply {
+            text(this, role, tone)
+            includeFontPadding = false
+            setPadding(0, dp(gap), 0, 0)
+            accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+        }
 
     /** Native actions retain their handlers and IDs; only typography/emphasis is shared. */
     fun dialog(dialog: AlertDialog) {
-        dialog.window?.setBackgroundDrawable(android.graphics.drawable.InsetDrawable(surface(), dp(16)))
+        dialog.window?.setBackgroundDrawable(android.graphics.drawable.InsetDrawable(
+            shape(R.color.surface, R.dimen.radius_dialog), px(R.dimen.dialog_inset)))
         val titleId = context.resources.getIdentifier("alertTitle", "id", "android")
-        dialog.findViewById<TextView>(titleId)?.apply {
-            textSize = 18f
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            setTextColor(color(R.color.ink))
+        dialog.findViewById<TextView>(titleId)?.let { text(it, TextRole.DialogTitle) }
+        dialog.findViewById<TextView>(android.R.id.message)?.apply {
+            text(this, TextRole.Body)
+            setLineSpacing(dp(3).toFloat(), 1f)
         }
+        var panel: ViewGroup? = null
         for (id in listOf(AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_NEUTRAL, AlertDialog.BUTTON_POSITIVE)) {
             val button = dialog.getButton(id) ?: continue
             if (id == AlertDialog.BUTTON_POSITIVE && dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.visibility == View.VISIBLE) {
-                val caution = button.text.toString() in listOf("Disable", "Stop Tracking", "Stop", "Retry")
-                style(button, primary = !caution, danger = caution)
+                val caution = button.text.toString() in CAUTION_ACTIONS
+                // The confirmation repeats the approved Stop Tracking treatment in both themes.
+                if (button.text.toString() == "Stop Tracking") stopStyle(button)
+                else style(button, primary = !caution, danger = caution)
             } else quiet(button)
-            button.textSize = 13f
-            button.isAllCaps = false
+            button.minWidth = dp(64)
+            button.minimumWidth = dp(64)
+            (button.layoutParams as? ViewGroup.MarginLayoutParams)?.let {
+                it.marginStart = px(R.dimen.space_xs)
+                button.layoutParams = it
+            }
+            panel = button.parent as? ViewGroup
         }
+        // The framework bar ends flush with the window; keep filled actions off the edge.
+        panel?.let { it.setPadding(it.paddingLeft, it.paddingTop, it.paddingRight, maxOf(it.paddingBottom, px(R.dimen.space_md))) }
         dialog.listView?.setPadding(0, 0, 0, 0)
     }
 
@@ -299,14 +516,15 @@ internal class NativeUi(private val context: Context) {
                     else sharedPanel!!
                 for ((n, line) in group.lines().filter(String::isNotBlank).withIndex()) {
                     val key = signatures[index++]
-                    if (key.isNotEmpty()) add(panel, label(key, 11f, muted = true, bold = true), if (n == 0 && index == 1) 0 else 10)
+                    // The first caption of every panel starts at the card padding edge.
+                    if (key.isNotEmpty()) add(panel, label(key, TextRole.Section), if (panel.childCount == 0) 0 else 10)
                     val value = if (key.isEmpty()) line else line.substring(key.length).removePrefix(":").removePrefix(" · ").trim()
-                    val view = label(value, 12.5f).apply {
+                    val view = label(value, TextRole.Value).apply {
                         setTextIsSelectable(true)
                         setLineSpacing(dp(2).toFloat(), 1f)
                         visibility = if (value.isEmpty()) View.GONE else View.VISIBLE
                     }
-                    add(panel, view, if (key.isEmpty() && n > 0) 7 else 3)
+                    add(panel, view, if (panel.childCount == 0) 0 else if (key.isEmpty() && n > 0) 7 else 3)
                     cells.add(view to key)
                 }
             }
@@ -322,5 +540,10 @@ internal class NativeUi(private val context: Context) {
         })
         render()
         return host
+    }
+
+    companion object {
+        /** Confirmations whose affirmative action stops, disables, retries or discards. */
+        val CAUTION_ACTIONS = setOf("Disable", "Stop Tracking", "Stop", "Retry", "Discard edits")
     }
 }

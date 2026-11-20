@@ -17,4 +17,11 @@
     <color name="secondary_surface">#F7FAF9</color>
     <color name="positive_surface">#E5F3ED</color>
     <color name="warning_surface">#FDF0DC</color>
+    <!-- Semantic aliases; each resolves through the active Day/Night palette. -->
+    <color name="disabled_surface">@color/background</color>
+    <color name="disabled_line">@color/line</color>
+    <!-- Operator-approved pale caution Stop Tracking (correction 43/44): identical in Day and Night. -->
+    <color name="stop_surface">#F9E9ED</color>
+    <color name="stop_line">#E9BEC8</color>
+    <color name="stop_ink">#8C3449</color>
 </resources>

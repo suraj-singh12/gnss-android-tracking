@@ -4,4 +4,5 @@
     <item name="appearance" type="id" />
     <item name="tracking_appearance" type="id" />
     <item name="centered_action_icon" type="id" />
+    <item name="appbar_back" type="id" />
 </resources>

@@ -158,43 +158,15 @@ class MainActivity : Activity() {
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
-    private fun styleSecondary(button: Button) {
-        button.textSize = 14f
-        button.setPadding(dp(12), dp(8), dp(12), dp(8))
-        button.setTextColor(
-            android.content.res.ColorStateList(
-                arrayOf(intArrayOf(android.R.attr.state_enabled), intArrayOf()),
-                intArrayOf(getColor(R.color.ink), getColor(R.color.disabled_ink)),
-            )
-        )
-        val surface =
-            android.graphics.drawable.GradientDrawable().apply {
-                setColor(getColor(R.color.surface))
-                cornerRadius = dp(8).toFloat()
-                setStroke(dp(1), getColor(R.color.control_line))
-            }
-        button.background =
-            android.graphics.drawable.RippleDrawable(
-                android.content.res.ColorStateList.valueOf(getColor(R.color.ripple)),
-                surface,
-                null,
-            )
-    }
+    /** Legacy call sites share the design-system secondary action. */
+    private fun styleSecondary(button: Button) = NativeUi(this).style(button)
 
     private fun AlertDialog.Builder.showRefined(): AlertDialog = show().also { NativeUi(this@MainActivity).dialog(it) }
 
+    /** Legacy start-aligned text action, rendered with the shared quiet action style. */
     private fun styleQuiet(button: Button) {
-        button.isAllCaps = false
-        button.textSize = 14f
+        NativeUi(this).quiet(button)
         button.gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
-        button.setPadding(dp(4), dp(10), dp(4), dp(10))
-        button.setTextColor(getColor(R.color.accent))
-        button.background =
-            android.graphics.drawable.RippleDrawable(
-                android.content.res.ColorStateList.valueOf(getColor(R.color.ripple)),
-                null,
-                null,
-            )
     }
 
     override fun attachBaseContext(newBase: android.content.Context) {
@@ -684,7 +656,8 @@ class MainActivity : Activity() {
             LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 visibility = View.GONE
-                setPadding(dp(10), dp(2), dp(10), dp(2))
+                val pad = NativeUi(this@MainActivity).px(R.dimen.space_md)
+                setPadding(pad, pad, pad, pad)
                 background = NativeUi(this@MainActivity).surface(R.color.emergency_surface)
             }
         trackingAlerts = phoneAlertActions
@@ -715,9 +688,10 @@ class MainActivity : Activity() {
                         phoneAlertActions,
                         alertUi.label(
                             "$heading$state · ${spec?.message.orEmpty()}",
-                            13f,
-                            bold = true,
+                            TextRole.RowTitle,
+                            R.color.danger,
                         ),
+                        if (phoneAlertActions.childCount == 0) 0 else 12,
                     )
                     alertUi.add(
                         phoneAlertActions,
@@ -726,12 +700,16 @@ class MainActivity : Activity() {
                                 app.workScope.launch { app.acknowledgePhoneAlert(row.id) }
                             }
                             .apply {
-                                backgroundTintList =
-                                    android.content.res.ColorStateList.valueOf(
-                                        getColor(R.color.emergency_action)
+                                // Filled emergency action: same burgundy fill/radius as other actions.
+                                background =
+                                    android.graphics.drawable.RippleDrawable(
+                                        android.content.res.ColorStateList.valueOf(getColor(R.color.ripple)),
+                                        alertUi.shape(R.color.emergency_action, R.dimen.radius_button, null),
+                                        null,
                                     )
                                 setTextColor(android.graphics.Color.WHITE)
                             },
+                        8,
                     )
                 }
                 refreshTrackingBanners()
@@ -1167,21 +1145,29 @@ class MainActivity : Activity() {
                                 return view
                             }
 
+                            private val shared = NativeUi(this@MainActivity)
+
                             override fun getView(
                                 position: Int,
                                 convertView: View?,
                                 parent: ViewGroup,
                             ): View =
-                                display(position, super.getView(position, convertView, parent))
+                                shared.selectorItem(
+                                    display(position, super.getView(position, convertView, parent)),
+                                    false,
+                                )
 
                             override fun getDropDownView(
                                 position: Int,
                                 convertView: View?,
                                 parent: ViewGroup,
                             ): View =
-                                display(
-                                    position,
-                                    super.getDropDownView(position, convertView, parent),
+                                shared.selectorItem(
+                                    display(
+                                        position,
+                                        super.getDropDownView(position, convertView, parent),
+                                    ),
+                                    true,
                                 )
                         }
                     setSelection((savedInstanceState?.getInt(label) ?: 0).coerceIn(options.indices))
@@ -1258,21 +1244,46 @@ class MainActivity : Activity() {
             renderedSelection = selection
             commandRows.removeAllViews()
             for (row in window) {
+                val rowUi = NativeUi(this@MainActivity)
                 val title =
                     Button(this).apply {
                         isAllCaps = false
-                        minHeight = dp(48)
                         styleQuiet(this)
-                        setTextColor(getColor(R.color.ink))
+                        // Shared navigation-row grammar: two-line title/time, trailing chevron.
                         text =
-                            "${commandTypeLabel(row.operation)} · ${commandStateLabel(row.state)}   ›\n${shortCommandTime(row.received)}"
-                        textSize = 14f
-                        setPadding(dp(14), dp(14), dp(14), dp(14))
-                        background = NativeUi(this@MainActivity).surface()
+                            android.text.SpannableStringBuilder()
+                                .append(
+                                    "${commandTypeLabel(row.operation)} · ${commandStateLabel(row.state)}",
+                                    android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
+                                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                                )
+                                .append("\n")
+                                .append(
+                                    shortCommandTime(row.received),
+                                    android.text.style.ForegroundColorSpan(getColor(R.color.muted)),
+                                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                                )
+                        rowUi.text(this, TextRole.Value)
+                        setLineSpacing(dp(3).toFloat(), 1f)
+                        minHeight = rowUi.px(R.dimen.list_row_min_height)
+                        setPadding(
+                            rowUi.px(R.dimen.list_row_padding_h),
+                            rowUi.px(R.dimen.list_row_padding_v),
+                            rowUi.px(R.dimen.list_row_padding_h),
+                            rowUi.px(R.dimen.list_row_padding_v),
+                        )
+                        setCompoundDrawables(null, null, rowUi.icon(R.drawable.ic_chevron_right, 20), null)
+                        compoundDrawablePadding = rowUi.px(R.dimen.space_sm)
+                        background =
+                            android.graphics.drawable.RippleDrawable(
+                                android.content.res.ColorStateList.valueOf(getColor(R.color.ripple)),
+                                rowUi.shape(R.color.surface),
+                                null,
+                            )
                     }
                 commandRows.addView(
                     title,
-                    LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) },
+                    LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) },
                 )
                 title.contentDescription = "${title.text}. Open instruction details"
                 title.setOnClickListener { showInstruction(row) }
@@ -1284,14 +1295,12 @@ class MainActivity : Activity() {
                     commandRows.addView(
                         Button(this).apply {
                             text = "Acknowledge / Stop Alert"
-                            minHeight = dp(48)
-                            isAllCaps = false
-                            styleSecondary(this)
-                            setTextColor(getColor(R.color.danger))
+                            rowUi.style(this, danger = true)
                             setOnClickListener {
                                 app.workScope.launch { app.acknowledgePhoneAlert(row.id) }
                             }
-                        }
+                        },
+                        LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) },
                     )
                 }
             }
@@ -1302,8 +1311,7 @@ class MainActivity : Activity() {
                             text = label
                             minHeight = dp(48)
                             isEnabled = enabled
-                            isAllCaps = false
-                            styleSecondary(this)
+                            NativeUi(this@MainActivity).style(this)
                             setOnClickListener {
                                 instructionPage += delta
                                 renderCommands()
@@ -1632,7 +1640,8 @@ class MainActivity : Activity() {
                                 op.tracking -> "Tracking on"
                                 else -> "Tracking off"
                             }
-                        NativeUi(this@MainActivity).pill(trackingSummary, op.tracking)
+                        // V4.6 presents this owner as the hero title (see installV46Screens).
+                        if (!v46Layout) NativeUi(this@MainActivity).pill(trackingSummary, op.tracking)
                         trackingError.text = op.error ?: state.operationalError ?: ""
                         trackingError.visibility =
                             if (trackingError.text.isEmpty()) View.GONE else View.VISIBLE
@@ -2028,14 +2037,17 @@ class MainActivity : Activity() {
             val pages = maxOf(1, (rows.size + 19) / 20)
             sosPage = sosPage.coerceIn(0, pages - 1)
             if (rows.isEmpty())
-                ui.add(sosHistoryPage, ui.label("No SOS events saved", 14f, muted = true), 18)
-            for (row in rows.drop(sosPage * 20).take(20)) {
+                ui.add(sosHistoryPage, ui.label("No SOS events saved", TextRole.RowTitle, R.color.muted), if (v46Layout) 4 else 18)
+            for ((n, row) in rows.drop(sosPage * 20).take(20).withIndex()) {
                 ui.menu(
                     sosHistoryPage,
                     if (row.deliveredAt != null) "Command received" else "Delivery pending",
                     "${shortCommandTime(row.capturedMillis)} · ${sosReference(row.messageId)}",
                 ) {
                     showSos(row)
+                }.also {
+                    // Separate bordered rows keep a card gap rather than a 1dp double border.
+                    if (v46Layout) (it.layoutParams as LinearLayout.LayoutParams).topMargin = dp(if (n == 0) 0 else 8)
                 }
             }
             if (pages > 1) {
@@ -2075,24 +2087,29 @@ class MainActivity : Activity() {
         selectedSos = row.messageId
         val ui = NativeUi(this)
         sosDetailPage.removeAllViews()
-        ui.add(
-            sosDetailPage,
-            ui.button("‹ SOS event history") { navigateTo?.invoke("SOS event history") }
-                .apply { styleQuiet(this) },
-        )
-        ui.add(sosDetailPage, ui.label("SOS details", 22f, bold = true), 8)
+        // V4.6: the shared app bar owns Back and the title; no duplicate in-page header.
+        if (!v46Layout) {
+            ui.add(
+                sosDetailPage,
+                ui.button("‹ SOS event history") { navigateTo?.invoke("SOS event history") }
+                    .apply { styleQuiet(this) },
+            )
+            ui.add(sosDetailPage, ui.label("SOS details", 22f, bold = true), 8)
+        }
         val message = Protocol.decodeMessage(row.json)
-        val card = ui.card(sosDetailPage, 18, R.color.emergency_surface)
+        val card = ui.card(sosDetailPage, if (v46Layout) 0 else 18, R.color.emergency_surface)
         ui.add(
             card,
             ui.label(
                 if (row.deliveredAt == null) "SOS saved on phone" else "SOS received by Command",
-                18f,
-                bold = true,
+                TextRole.Hero,
+                R.color.danger,
             ),
         )
-        ui.add(card, ui.label(row.messageId, 12f, muted = true).apply { setTextIsSelectable(true) })
-        ui.fact(card, "Created", shortCommandTime(row.capturedMillis))
+        ui.add(card, ui.label(row.messageId, TextRole.Mono, R.color.muted).apply { setTextIsSelectable(true) }, 4)
+        ui.fact(card, "Created", shortCommandTime(row.capturedMillis)).also {
+            ((it.parent as View).layoutParams as LinearLayout.LayoutParams).topMargin = dp(10)
+        }
         val facts = ui.card(sosDetailPage)
         ui.fact(
             facts,
@@ -2121,10 +2138,9 @@ class MainActivity : Activity() {
                     app.operational.value.health.wifi_connected,
                     app.activityVisible || app.operational.value.tracking,
                 ),
-                12f,
-                muted = true,
+                TextRole.Caption,
             ),
-            8,
+            10,
         )
         ui.add(sosDetailPage, ui.button("Export evidence") { exportEvidence?.invoke() }, 12)
         if (navigate) navigateTo?.invoke("SOS details")
@@ -2142,24 +2158,27 @@ class MainActivity : Activity() {
             renderedInstruction = row
             val ui = NativeUi(this)
             instructionDetailsPage.removeAllViews()
-            ui.add(
-                instructionDetailsPage,
-                ui.button("‹ Command Instructions") { navigateTo?.invoke("Command Instructions") }
-                    .apply {
-                        styleQuiet(this)
-                        setTextColor(getColor(R.color.secondary))
-                    },
-            )
-            ui.add(instructionDetailsPage, ui.label("Instruction details", 22f, bold = true), 12)
-            ui.add(
-                instructionDetailsPage,
+            // V4.6: the shared app bar owns Back and the title; no duplicate in-page header.
+            if (!v46Layout) {
+                ui.add(
+                    instructionDetailsPage,
+                    ui.button("‹ Command Instructions") { navigateTo?.invoke("Command Instructions") }
+                        .apply {
+                            styleQuiet(this)
+                            setTextColor(getColor(R.color.secondary))
+                        },
+                )
+                ui.add(instructionDetailsPage, ui.label("Instruction details", 22f, bold = true), 12)
+            }
+            // A status pill hugs its text instead of stretching across the page.
+            instructionDetailsPage.addView(
                 ui.label(commandStateLabel(row.state)).apply {
-                    ui.pill(this, row.state == "applied")
+                    ui.pill(this, instructionOutcomeGroup(row) == "applied")
                 },
-                12,
+                LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(if (v46Layout) 0 else 12) },
             )
             val summary = ui.card(instructionDetailsPage)
-            ui.add(summary, ui.label(row.id, 12f, muted = true).apply { setTextIsSelectable(true) })
+            ui.add(summary, ui.label(row.id, TextRole.Mono, R.color.muted).apply { setTextIsSelectable(true) })
             ui.fact(summary, "Type", commandTypeLabel(row.operation))
             ui.fact(summary, "Received", shortCommandTime(row.received))
             ui.fact(summary, "Verification", if (row.trusted) "Authenticated" else "Unverified")
@@ -2167,11 +2186,11 @@ class MainActivity : Activity() {
             ui.fact(summary, "Result ACK", if (row.confirmed) "Confirmed" else "Pending")
             ui.add(
                 summary,
-                ui.label(row.authority, 12f, muted = true).apply { setTextIsSelectable(true) },
-                8,
+                ui.label(row.authority, TextRole.Mono, R.color.muted).apply { setTextIsSelectable(true) },
+                10,
             )
             val stages = ui.card(instructionDetailsPage)
-            ui.add(stages, ui.label("STAGES", 11f, muted = true, bold = true))
+            ui.add(stages, ui.label("STAGES", TextRole.Section))
             ui.fact(stages, "Received", shortCommandTime(row.received))
             ui.fact(
                 stages,
@@ -2188,14 +2207,14 @@ class MainActivity : Activity() {
                 "Custody",
                 row.confirmedAt.takeIf { it > 0 }?.let(::shortCommandTime) ?: "Unconfirmed",
             )
-            ui.add(stages, ui.label(row.reason, 13f, bold = true), 8)
+            ui.add(stages, ui.label(row.reason, TextRole.RowTitle), 12)
             ui.add(
                 stages,
                 ui.label(
                     commandReasonExplanation(row.reason) ?: commandOutcomeExplanation(row.state),
-                    12f,
-                    muted = true,
+                    TextRole.Caption,
                 ),
+                3,
             )
             ui.add(
                 instructionDetailsPage,
@@ -3211,8 +3230,15 @@ class MainActivity : Activity() {
         }
         fun add(p: LinearLayout, v: View, gap: Int = 0) = ui.add(p, v, gap)
         fun section(p: LinearLayout, title: String) {
-            add(p, ui.label(title.uppercase(), 10.5f, true, true), 17)
+            ui.section(p, title)
         }
+        fun pagePadding(p: View) =
+            p.setPadding(
+                ui.px(R.dimen.page_margin),
+                ui.px(R.dimen.page_top),
+                ui.px(R.dimen.page_margin),
+                ui.px(R.dimen.page_bottom),
+            )
         fun page(name: String, parent: String): LinearLayout {
             val p =
                 routes[name]
@@ -3221,7 +3247,7 @@ class MainActivity : Activity() {
                         container.addView(it)
                     }
             p.removeAllViews()
-            p.setPadding(dp(17), dp(11), dp(17), dp(17))
+            pagePadding(p)
             routeParents[name] = parent
             return p
         }
@@ -3240,7 +3266,7 @@ class MainActivity : Activity() {
                         tag = "v46-menu-list"
                         background =
                             if (p.background == null && p.tag != "v46-records")
-                                ui.surface(radius = 14)
+                                ui.shape(R.color.surface)
                             else null
                         clipToOutline = true
                         add(p, this, 1)
@@ -3251,7 +3277,8 @@ class MainActivity : Activity() {
                 }
             return ui.menu(group, title, subtitle) { navigate(route) }
                 .apply {
-                    setPadding(dp(14), dp(11), dp(14), dp(11))
+                    // Rows already inside a padded card align with that card's content edge.
+                    if (group.background == null) setPadding(0, paddingTop, 0, paddingBottom)
                     background =
                         android.graphics.drawable.RippleDrawable(
                             android.content.res.ColorStateList.valueOf(getColor(R.color.ripple)),
@@ -3263,8 +3290,8 @@ class MainActivity : Activity() {
                 }
         }
         fun field(p: LinearLayout, title: String, v: EditText) {
-            add(p, ui.label(title, 11f, bold = true).apply { labelFor = v.id }, 12)
-            add(p, v)
+            add(p, ui.label(title, TextRole.FieldLabel).apply { labelFor = v.id }, if (p.childCount == 0) 0 else 14)
+            add(p, v, 6)
             ui.input(v)
         }
         fun action(
@@ -3278,12 +3305,12 @@ class MainActivity : Activity() {
                 add(p, it, 12)
             }
         fun note(p: LinearLayout, title: String) {
-            add(p, ui.label(title, 11.5f, true), 12)
+            add(p, ui.label(title, TextRole.Caption).apply { setLineSpacing(dp(2).toFloat(), 1f) }, 12)
         }
         fun export(p: LinearLayout, title: String) {
             val button = action(p, title) { exportButton.performClick() }
             val feedback =
-                ui.label("", 10.5f, true).apply {
+                ui.label("", TextRole.Meta).apply {
                     accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
                 }
             add(p, feedback, 4)
@@ -3295,39 +3322,56 @@ class MainActivity : Activity() {
                 }
             }
         }
-        fun peerRow(p: LinearLayout, title: String, value: TextView) {
+        /** Label/value row. A card heading uses [TextRole.Heading]; ordinary facts use Label. */
+        fun peerRow(p: LinearLayout, title: String, value: TextView, heading: Boolean = false) {
             val row = LinearLayout(this).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
-            row.addView(ui.label(title, 12f, bold = true), LinearLayout.LayoutParams(0, -2, 1f))
+            row.addView(ui.label(title, if (heading) TextRole.Heading else TextRole.Label), LinearLayout.LayoutParams(0, -2, 1f))
             detach(value)
             value.maxWidth = (resources.displayMetrics.widthPixels * .46).toInt()
-            row.addView(value, LinearLayout.LayoutParams(-2, -2))
-            add(p, row, 9)
+            value.gravity = android.view.Gravity.END or android.view.Gravity.CENTER_VERTICAL
+            row.addView(value, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8) })
+            add(p, row, if (p.childCount == 0) 0 else 9)
+        }
+        /** Plain read-only value presented with the shared fact typography. */
+        fun value(v: TextView): TextView = v.also {
+            ui.text(it, TextRole.Value)
+            it.background = null
+            it.setPadding(0, 0, 0, 0)
+            it.includeFontPadding = false
         }
         v46Layout = true
         val appbar = root.getChildAt(0) as LinearLayout
         appbar.removeAllViews()
-        appbar.setPadding(dp(12), dp(4), dp(17), dp(4))
+        appbar.minimumHeight = dp(56)
+        appbar.setPadding(ui.px(R.dimen.appbar_padding_start), dp(4), ui.px(R.dimen.appbar_padding_end), dp(4))
+        // V4.6 `.iconbtn.flat`: Back is a borderless icon target, not a bordered card.
         val back =
-            ui.button("‹") { routeParents[route]?.let(navigate) }
+            ui.button("") { routeParents[route]?.let(navigate) }
                 .apply {
-                    contentDescription = "Back"
-                    minWidth = dp(48)
-                    layoutParams = LinearLayout.LayoutParams(dp(48), dp(48))
+                    id = R.id.appbar_back
+                    ui.iconButton(this, R.drawable.ic_back, "Back")
                 }
-        back.text = ""
-        back.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_back, 0, 0, 0)
         val brand =
-            ui.label("G", 17f, bold = true).apply {
+            ui.label("G", TextRole.AppBarTitle, R.color.accent).apply {
                 gravity = android.view.Gravity.CENTER
-                background = ui.surface(R.color.positive_surface, 9)
-                setTextColor(getColor(R.color.accent))
+                background = ui.shape(R.color.positive_surface, R.dimen.radius_brand, null)
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }
-        val heading = ui.label("GNSS Tracker", 16f, bold = true)
-        val subtitle = ui.label("Operator device", 10f, true)
-        appbar.addView(back)
+        val heading = ui.label("GNSS Tracker", TextRole.AppBarTitle).apply {
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        }
+        val subtitle = ui.label("Operator device", TextRole.AppBarSubtitle).apply {
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        }
+        appbar.addView(back, LinearLayout.LayoutParams(ui.px(R.dimen.control_height), ui.px(R.dimen.control_height)).apply { rightMargin = dp(4) })
         appbar.addView(
             brand,
-            LinearLayout.LayoutParams(dp(34), dp(34)).apply { rightMargin = dp(10) },
+            LinearLayout.LayoutParams(ui.px(R.dimen.brand_size), ui.px(R.dimen.brand_size)).apply {
+                leftMargin = ui.px(R.dimen.page_margin) - ui.px(R.dimen.appbar_padding_start)
+                rightMargin = dp(10)
+            },
         )
         appbar.addView(
             ui.column().apply {
@@ -3357,21 +3401,26 @@ class MainActivity : Activity() {
         }
         fun rootTitle(p: LinearLayout, title: String, lead: String) {
             p.removeAllViews()
-            p.setPadding(dp(17), dp(11), dp(17), dp(17))
-            add(p, ui.label(title, 23f, bold = true))
-            add(p, ui.label(lead, 11.5f, true), 4)
+            pagePadding(p)
+            add(p, ui.label(title, TextRole.Display).apply {
+                if (Build.VERSION.SDK_INT >= 28) isAccessibilityHeading = true
+            })
+            add(p, ui.label(lead, TextRole.Caption), 4)
         }
         val tracking = routes.getValue("Tracking")
         rootTitle(tracking, "Tracking", "Your phone's collection and delivery status.")
         val hero = ui.card(tracking, 15)
-        val trackingBadge = ui.label("…", 10.5f, bold = true)
+        val trackingBadge = ui.label("…", TextRole.Pill)
         val heroTop = LinearLayout(this).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
         detach(trackingSummary)
+        // The legacy owner carried text()/pill padding; the hero title aligns with the card edge.
+        trackingSummary.setPadding(0, 0, 0, 0)
+        trackingSummary.includeFontPadding = false
         heroTop.addView(trackingSummary, LinearLayout.LayoutParams(0, -2, 1f))
-        heroTop.addView(trackingBadge)
+        heroTop.addView(trackingBadge, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8) })
         add(hero, heroTop)
         val trackingCopy =
-            ui.label("Reading collection state", 11.5f, true).apply {
+            ui.label("Reading collection state", TextRole.Caption).apply {
                 minLines = if (resources.configuration.fontScale > 1.25f) 2 else 1
             }
         add(hero, trackingCopy, 4)
@@ -3379,14 +3428,14 @@ class MainActivity : Activity() {
         add(hero, startButton, 12)
         add(tracking, cancelStartButton)
         val fix = ui.card(tracking)
-        peerRow(fix, "GNSS position", gnssSummary)
+        peerRow(fix, "GNSS position", gnssSummary, heading = true)
         val fixValues = LinearLayout(this)
         for ((view, caption) in listOf(fixAccuracy to "Accuracy", fixAge to "Fix age")) {
             ui.metric(fixValues, view, caption)
         }
         add(fix, fixValues, 10)
         val delivery = ui.card(tracking)
-        peerRow(delivery, "Delivery to Command", commandSummary)
+        peerRow(delivery, "Delivery to Command", commandSummary, heading = true)
         val countValues = LinearLayout(this)
         for ((view, caption) in listOf(pendingMetric to "Pending locally", deliveredMetric to "Durably ACKed")) {
             ui.metric(countValues, view, caption)
@@ -3395,7 +3444,7 @@ class MainActivity : Activity() {
         val deliveryFoot =
             LinearLayout(this).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
         val retentionCaption =
-            ui.label("Reading retained observations…", 11f, true).apply {
+            ui.label("Reading retained observations…", TextRole.Caption).apply {
                 minLines = 2
                 gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
             }
@@ -3403,22 +3452,29 @@ class MainActivity : Activity() {
         detach(syncNowButton)
         ui.style(syncNowButton, primary = true)
         deliveryFoot.addView(syncNowButton, LinearLayout.LayoutParams(-2, -2))
-        deliveryFoot.setPadding(dp(14), dp(10), dp(14), dp(10))
+        // Stop one stroke short of the card edge so the band never paints over its border.
+        val cardPad = ui.px(R.dimen.card_padding) - ui.px(R.dimen.stroke)
+        deliveryFoot.setPadding(cardPad, dp(10), cardPad, dp(10))
         deliveryFoot.setBackgroundColor(getColor(R.color.secondary_surface))
         delivery.clipToOutline = true
         add(delivery, deliveryFoot, 13)
         (deliveryFoot.layoutParams as LinearLayout.LayoutParams).apply {
-            leftMargin = -dp(14)
-            rightMargin = -dp(14)
-            bottomMargin = -dp(12)
+            leftMargin = -cardPad
+            rightMargin = -cardPad
+            bottomMargin = -cardPad
         }
+        (syncNowButton.layoutParams as LinearLayout.LayoutParams).marginStart = dp(10)
         note(
             tracking,
             "Phone tracking, Command contact and SOS confirmation are separate. Configuration and technical tools live in their own destinations.",
         )
-        add(tracking, trackingContext)
-        add(tracking, trackingError)
-        add(tracking, trackingAlerts)
+        add(tracking, trackingContext, 12)
+        add(tracking, trackingError, 12)
+        add(tracking, trackingAlerts, 12)
+        for (banner in listOf(trackingContext, trackingError)) {
+            ui.text(banner, TextRole.Value, if (banner === trackingError) R.color.danger else R.color.ink)
+            banner.setPadding(ui.px(R.dimen.space_md), dp(10), ui.px(R.dimen.space_md), dp(10))
+        }
         val settings = routes.getValue("Settings")
         rootTitle(settings, "Settings", "Set up the device, reporting and operational readiness.")
         section(settings, "Device & Command")
@@ -3494,32 +3550,29 @@ class MainActivity : Activity() {
                 .apply { ui.style(this, primary = true) },
             LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(8) },
         )
-        add(form, partyActions, 13)
+        ui.equalHeights(partyActions)
+        add(form, partyActions, 16)
         add(party, settingsFeedback)
         val policy = page("Tracking policy", "Settings")
         val policyCard = ui.card(policy, 0)
-        add(policyCard, ui.label("Reporting interval", 11f, bold = true))
+        add(policyCard, ui.label("Reporting interval", TextRole.FieldLabel))
         val choices = listOf("5 seconds", "10 seconds", "30 seconds", "60 seconds", "Custom…")
         val picker =
             Spinner(this).apply {
                 id = View.generateViewId()
                 contentDescription = "Reporting interval"
-                adapter =
-                    ArrayAdapter(
-                        this@MainActivity,
-                        android.R.layout.simple_spinner_dropdown_item,
-                        choices,
-                    )
+                adapter = ui.selectorAdapter(choices)
             }
         v46IntervalPicker = picker
         ui.selector(picker)
-        add(policyCard, picker)
-        val customLabel = ui.label("Custom interval · seconds", 11f, bold = true)
-        add(policyCard, customLabel, 10)
-        add(policyCard, interval)
+        add(policyCard, picker, 6)
+        val customLabel = ui.label("Custom interval · seconds", TextRole.FieldLabel)
+        add(policyCard, customLabel, 14)
+        add(policyCard, interval, 6)
+        ui.input(interval)
         interval.contentDescription = "Custom interval · seconds"
-        val customHint = ui.label("5–86,400 seconds · multiples of 5", 10.5f, true)
-        add(policyCard, customHint)
+        val customHint = ui.label("5–86,400 seconds · multiples of 5", TextRole.Meta)
+        add(policyCard, customHint, 5)
         var pickerPosition = -1
         var customSelected = restoredCustomInterval
         fun renderPicker() {
@@ -3551,7 +3604,7 @@ class MainActivity : Activity() {
         watch(interval) { renderPicker() }
         renderPicker()
         val policyFeedback =
-            ui.label("", 11f, true).apply {
+            ui.collapsingLabel(TextRole.Caption).apply {
                 accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
             }
         add(policyCard, policyFeedback)
@@ -3571,12 +3624,12 @@ class MainActivity : Activity() {
                 override fun afterTextChanged(s: android.text.Editable?) {}
             }
         )
-        adaptive.textSize = 13f
-        adaptive.setTypeface(null, android.graphics.Typeface.BOLD)
-        policyStatus.textSize = 11f
-        policyStatus.setTextColor(getColor(R.color.muted))
-        add(policyCard, adaptive, 8)
-        add(policyCard, policyStatus, 4)
+        ui.switchRow(adaptive)
+        ui.text(policyStatus, TextRole.Meta)
+        policyStatus.setPadding(0, 0, 0, 0)
+        policyStatus.includeFontPadding = false
+        add(policyCard, adaptive, 12)
+        add(policyCard, policyStatus, 2)
         note(
             policyCard,
             "OFF by default. Only original future callbacks are selected; previous evidence stays unchanged.",
@@ -3589,21 +3642,23 @@ class MainActivity : Activity() {
         menu(policy, "Policy details", "Phone setting, requested/effective interval and revision")
         val ready = page("Field readiness", "Settings")
         val readinessCard = ui.card(ready, 0)
-        peerRow(readinessCard, "Precise location", locationReadiness)
-        peerRow(readinessCard, "Notifications", notificationReadiness)
-        peerRow(readinessCard, "Battery restrictions", batteryReadiness)
+        peerRow(readinessCard, "Precise location", value(locationReadiness))
+        peerRow(readinessCard, "Notifications", value(notificationReadiness))
+        peerRow(readinessCard, "Battery restrictions", value(batteryReadiness))
         action(readinessCard, "Open permission guidance") {
             val operations =
                 listOf(locationAction, gpsAction, notificationAction, saverAction, backgroundAction)
             AlertDialog.Builder(this)
                 .setTitle("Field readiness")
-                .setItems(
-                    arrayOf(
-                        "Precise location",
-                        "GPS provider",
-                        "Notifications",
-                        "Battery saver",
-                        "Background battery restrictions",
+                .setAdapter(
+                    ui.dialogListAdapter(
+                        listOf(
+                            "Precise location",
+                            "GPS provider",
+                            "Notifications",
+                            "Battery saver",
+                            "Background battery restrictions",
+                        )
                     )
                 ) { _, which ->
                     operations[which].performClick()
@@ -3614,30 +3669,31 @@ class MainActivity : Activity() {
         add(routes.getValue("Policy details"), serviceReadiness)
         val emergency = page("Emergency controls", "Settings")
         val safety = ui.card(emergency, 0)
-        peerRow(safety, "Protected SOS hold", ui.label("Always on", 11f, bold = true))
+        peerRow(safety, "Protected SOS hold", ui.label("Always on", TextRole.Value))
         note(safety, "Hold continuously for 1.2 seconds. Release early to cancel.")
         keyOption.visibility = View.GONE
         val shortcut =
             Switch(this).apply {
                 text = "Volume-up SOS shortcut"
-                minHeight = dp(48)
                 isChecked = keyOption.isChecked
                 setOnCheckedChangeListener { _, on -> keyOption.isChecked = on }
             }
-        add(safety, shortcut, 18)
-        note(safety, "Optional · 3 Volume + presses within 1.5 seconds · app open and unlocked")
+        ui.switchRow(shortcut)
+        add(safety, shortcut, 12)
+        add(safety, ui.label("Optional · 3 Volume + presses within 1.5 seconds · app open and unlocked", TextRole.Meta), 2)
         val access = page("Command access", "Settings")
         val accessCard = ui.card(access, 0)
-        val enrollmentState = ui.label("Loading…", 11f, bold = true)
+        val enrollmentState = ui.label("Loading…", TextRole.Value)
         peerRow(accessCard, "Command enrollment", enrollmentState)
-        val phone = ui.label("", 11f).apply { setTextIsSelectable(true) }
-        val authority = ui.label("", 11f).apply { setTextIsSelectable(true) }
-        add(accessCard, ui.label("This phone UUID", 11f, true, true), 12)
+        val phone = ui.label("", TextRole.Mono).apply { setTextIsSelectable(true) }
+        val authority = ui.label("", TextRole.Mono).apply { setTextIsSelectable(true) }
+        add(accessCard, ui.label("This phone UUID", TextRole.Section), 14)
         add(accessCard, phone, 4)
-        add(accessCard, ui.label("Command authority UUID", 11f, true, true), 12)
+        add(accessCard, ui.label("Command authority UUID", TextRole.Section), 12)
         add(accessCard, authority, 4)
-        val contact = ui.label("Not verified", 10.5f, bold = true)
+        val contact = ui.label("Not verified", TextRole.Value)
         peerRow(accessCard, "Authenticated contact", contact)
+        (contact.parent as View).let { (it.layoutParams as LinearLayout.LayoutParams).topMargin = dp(14) }
         val secret =
             EditText(this).apply {
                 id = View.generateViewId()
@@ -3652,17 +3708,17 @@ class MainActivity : Activity() {
         ui.input(secret)
         enrollmentInput = secret
         val secretLabel =
-            ui.label("Private enrollment credential", 11f, bold = true).apply {
+            ui.label("Private enrollment credential", TextRole.FieldLabel).apply {
                 labelFor = secret.id
             }
         add(accessCard, secretLabel, 16)
-        add(accessCard, secret)
+        add(accessCard, secret, 6)
         val secretHint =
-            ui.label("Private credential issued by Command; never exported.", 10.5f, true)
+            ui.label("Private credential issued by Command; never exported.", TextRole.Meta)
         add(accessCard, secretHint, 5)
-        val accessError = ui.label("", 11f).apply { setTextColor(getColor(R.color.danger)) }
+        val accessError = ui.collapsingLabel(TextRole.Caption, R.color.danger)
         add(accessCard, accessError)
-        val accessActions = LinearLayout(this)
+        val accessActions = LinearLayout(this).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
         var checking = false
         val authorize =
             ui.button("Authorize") {
@@ -3740,12 +3796,10 @@ class MainActivity : Activity() {
                         .setPositiveButton("Done", null)
                         .showRefined()
                 }
-                .apply {
-                    styleQuiet(this)
-                    textSize = 11.5f
-                    minHeight = dp(48)
-                }
+                .apply { ui.quiet(this) },
+            LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8) },
         )
+        ui.equalHeights(accessActions)
         add(accessCard, accessActions, 12)
         section(access, "Advanced")
         menu(
@@ -3755,7 +3809,7 @@ class MainActivity : Activity() {
             "Manage Command access",
         )
         val manage = page("Manage Command access", "Command access")
-        val managementError = ui.label("", 11f).apply { setTextColor(getColor(R.color.danger)) }
+        val managementError = ui.collapsingLabel(TextRole.Caption, R.color.danger, gap = 0)
         add(manage, managementError)
         fun manageOperation(operation: suspend () -> Unit) {
             app.workScope.launch {
@@ -3830,12 +3884,16 @@ class MainActivity : Activity() {
         healthPanel.removeAllViews()
         overviewRows.forEach { healthPanel.addView(it) }
         section(diagnostics, "Current device health")
-        add(diagnostics, healthPanel, 6)
+        add(diagnostics, healthPanel, 1)
+        // Same bordered list surface as every other grouped list; dividers only between peers.
+        healthPanel.background = ui.shape(R.color.surface)
+        healthPanel.setPadding(dp(4), 0, dp(4), 0)
         healthPanel.showDividers = LinearLayout.SHOW_DIVIDER_MIDDLE
+        healthPanel.dividerPadding = dp(10)
         healthPanel.dividerDrawable =
             android.graphics.drawable.GradientDrawable().apply {
                 setColor(getColor(R.color.line))
-                setSize(1, dp(1))
+                setSize(1, ui.px(R.dimen.stroke))
             }
         section(diagnostics, "Operational records")
         menu(diagnostics, "Command Instructions", "Requested, applied and unknown outcomes")
@@ -3843,14 +3901,20 @@ class MainActivity : Activity() {
         menu(diagnostics, "Saved data & sync", "Backlog, retry and receipts")
         menu(diagnostics, "SOS history", "Local, Command and human ACKs", "SOS event history")
         routeParents["SOS event history"] = "Diagnostics"
+        // The reference layer's in-page "‹ parent" link and title duplicate the app bar (and
+        // named the superseded parent). Keep the two indexed header slots, but hide them.
+        for (i in 0 until minOf(2, sosHistoryPage.childCount)) sosHistoryPage.getChildAt(i).visibility = View.GONE
+        listOf(sosHistoryPage, sosDetailPage, instructionDetailsPage).forEach { pagePadding(it) }
+        // Re-present rows already rendered by the reference layer with the V4.6 spacing.
+        while (sosHistoryPage.childCount > 2) sosHistoryPage.removeViewAt(2)
+        renderSosHistory(sosRows)
         section(diagnostics, "Troubleshooting")
         menu(diagnostics, "GNSS details", "Accuracy and observation inspection")
         menu(diagnostics, "Command contact", "Network, receipt and authority")
         menu(diagnostics, "Diagnostic tools", "Physical-key test and diagnostic export")
         val gnssPage = page("GNSS details", "Diagnostics")
         val gc = ui.card(gnssPage, 0)
-        val gnssState = ui.label("Unknown", 11f, bold = true)
-        peerRow(gc, "Latest original location", gnssState)
+        val gnssState = ui.fact(gc, "Latest original location", "Unknown")
         val gnssAccuracy = ui.fact(gc, "Accuracy", "Unavailable")
         val gnssAge = ui.fact(gc, "Fix age", "Unavailable")
         val connectionPage = page("Command contact", "Diagnostics")
@@ -3870,9 +3934,12 @@ class MainActivity : Activity() {
         add(storageEvidence, unresolvedDetail, 5)
         add(storageEvidence, ui.label("Last durable message ACK", 12f, bold = true), 12)
         add(storageEvidence, ackDetail, 5)
-        historySummary.textSize = 13f
-        historySummary.setTypeface(null, android.graphics.Typeface.BOLD)
-        historyProgressLabel.textSize = 11.5f
+        ui.text(historySummary, TextRole.RowTitle)
+        ui.text(historyProgressLabel, TextRole.Caption)
+        for (v in listOf(historySummary, historyProgressLabel)) {
+            v.setPadding(0, 0, 0, 0)
+            v.includeFontPadding = false
+        }
         val savedSync = action(savedCard, "Sync All Now", true) { syncNowButton.performClick() }
         export(savedCard, "Export transfer evidence")
         // Recovery has one secondary owner. Retain the existing confirmed retry operation.
@@ -3884,23 +3951,28 @@ class MainActivity : Activity() {
         section(saved, "Advanced")
         menu(saved, "Transfer recovery", "Retry saved messages and inspect retained evidence")
         val recovery = page("Transfer recovery", "Saved data & sync")
-        val recoveryCount = ui.label("Loading pending observations…", 12f, bold = true)
-        add(recovery, recoveryCount)
-        add(recovery, ui.label("Retained until matching durable Command receipt", 11.5f, true))
-        add(recovery, retryButton, 12)
+        // Same card grammar as the parent Saved data page.
+        val recoveryCard = ui.card(recovery, 0)
+        val recoveryCount = ui.label("Loading pending observations…", TextRole.Heading)
+        add(recoveryCard, recoveryCount)
+        add(recoveryCard, ui.label("Retained until matching durable Command receipt", TextRole.Caption), 4)
+        add(recoveryCard, retryButton, 12)
         val recoveryFailure =
-            ui.label("", 11f).apply {
-                setTextColor(getColor(R.color.danger))
+            ui.label("", TextRole.Caption, R.color.danger).apply {
                 accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
             }
-        add(recovery, recoveryFailure, 6)
+        add(recoveryCard, recoveryFailure, 6)
         menu(recovery, "Storage health", "Unresolved rows, persistence and delivery evidence")
+        (recovery.getChildAt(recovery.childCount - 1).layoutParams as LinearLayout.LayoutParams).topMargin =
+            ui.px(R.dimen.card_gap)
         routeParents["Storage health"] = "Transfer recovery"
         val tools = routes.getValue("Diagnostic tools")
         tools.removeAllViews()
-        tools.setPadding(dp(17), dp(11), dp(17), dp(17))
+        pagePadding(tools)
         val physicalCard = ui.card(tools, 0)
-        add(physicalCard, ui.label("Physical button test", 14f, bold = true))
+        add(physicalCard, ui.label("Physical button test", TextRole.Heading))
+        ui.text(physicalButtonStatus, TextRole.Value)
+        physicalButtonStatus.setPadding(0, 0, 0, 0)
         add(physicalCard, physicalButtonStatus, 10)
         note(
             physicalCard,
@@ -3917,7 +3989,8 @@ class MainActivity : Activity() {
                 },
             )
         }
-        add(physicalCard, testActions, 11)
+        ui.equalHeights(testActions)
+        add(physicalCard, testActions, 12)
         val observed = LinearLayout(this).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
         observed.addView(
             ui.label("Observed events", 12f, bold = true),
@@ -3928,8 +4001,14 @@ class MainActivity : Activity() {
         observed.addView(physicalButtonClear, LinearLayout.LayoutParams(-2, -2))
         add(physicalCard, observed, 17)
         add(physicalCard, physicalButtonSummary, 7)
-        physicalButtonSummary.textSize = 10.5f
+        ui.text(physicalButtonSummary, TextRole.Meta)
+        physicalButtonSummary.setPadding(0, 0, 0, 0)
         add(physicalCard, physicalButtonPanel, 7)
+        // Bounded technical log: same wash surface/radius/mono type as other technical evidence.
+        physicalButtonPanel.background = ui.shape(R.color.secondary_surface, R.dimen.radius_input)
+        physicalButtonPanel.setPadding(dp(12), dp(10), dp(12), dp(10))
+        ui.text(physicalButtonEvents, TextRole.Mono)
+        physicalButtonEvents.setLineSpacing(dp(2).toFloat(), 1f)
         section(tools, "Maintenance")
         add(tools, exportButton)
         add(tools, exportStatus, 4)
@@ -3945,7 +4024,7 @@ class MainActivity : Activity() {
         routes["Command Instructions"] = ui.column().also { container.addView(it) }
         routeParents["History search & filters"] = "Command Instructions"
         val recentPage = routes.getValue("Command Instructions")
-        recentPage.setPadding(dp(17), dp(11), dp(17), dp(17))
+        pagePadding(recentPage)
         val recentCard = ui.card(recentPage, 0)
         val recent = ui.column().apply { tag = "v46-records" }
         add(recentCard, recent)
@@ -3981,7 +4060,8 @@ class MainActivity : Activity() {
                 .filter { it.text == "Filters" }
         existingFilters.forEach { console.removeView(it) }
         action(console, "Filter history") {
-            val body = ui.column().apply { setPadding(dp(24), dp(4), dp(24), dp(8)) }
+            val inset = ui.px(R.dimen.dialog_padding)
+            val body = ui.column().apply { setPadding(inset, dp(4), inset, dp(8)) }
             val switches = linkedMapOf<String, Switch>()
             for ((key, label) in
                 listOf(
@@ -3992,10 +4072,9 @@ class MainActivity : Activity() {
                 val choice =
                     Switch(this).apply {
                         text = label
-                        textSize = 13f
                         isChecked = key in v46Outcomes
-                        minHeight = dp(48)
                     }
+                ui.switchRow(choice)
                 switches[key] = choice
                 body.addView(choice)
             }
@@ -4003,7 +4082,12 @@ class MainActivity : Activity() {
             add(body, ui.button("Canonical categories") {
                 filterDialog.dismiss()
                 navigate("Instruction filters")
-            }.apply { ui.quiet(this); gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL }, 4)
+            }.apply {
+                ui.quiet(this)
+                // A start-aligned text link shares the switch labels' leading edge.
+                gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+                setPadding(0, paddingTop, 0, paddingBottom)
+            }, 4)
             filterDialog = AlertDialog.Builder(this)
                 .setTitle("Instruction filter")
                 .setView(ui.dialogContent(body))
@@ -4017,21 +4101,32 @@ class MainActivity : Activity() {
         }
         ui.input(instructionFilter)
         consoleFilters.values.forEach { ui.selector(it) }
+        // Canonical selector captions use the shared form-field label grammar.
+        consoleFilters.values.forEach { spinner ->
+            val host = spinner.parent as? ViewGroup ?: return@forEach
+            (0 until host.childCount).map { host.getChildAt(it) }
+                .filterIsInstance<TextView>()
+                .filter { it.labelFor == spinner.id }
+                .forEach { caption ->
+                    ui.text(caption, TextRole.FieldLabel)
+                    caption.includeFontPadding = false
+                    caption.setPadding(0, if (host.indexOfChild(caption) == 0) 0 else dp(14), 0, dp(6))
+                }
+        }
         routeParents["Instruction filters"] = "History search & filters"
         val alertsPage = page("Phone Alerts", "Diagnostics")
         val alertCard = ui.card(alertsPage, 0)
-        val alertTitle = ui.label("Phone alert", 12f, bold = true)
-        val alertBadge = ui.label("Unknown", 10.5f, bold = true)
+        val alertTitle = ui.label("Phone alert", TextRole.Heading)
+        val alertBadge = ui.label("Unknown", TextRole.Pill)
         val alertHeading =
             LinearLayout(this).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
         alertHeading.addView(alertTitle, LinearLayout.LayoutParams(0, -2, 1f))
         alertHeading.addView(alertBadge)
         add(alertCard, alertHeading)
-        val alertSummary = ui.label("Reading alert history", 10.5f, true)
+        val alertSummary = ui.label("Reading alert history", TextRole.Caption)
         add(alertCard, alertSummary, 4)
         val alertFailure =
-            ui.label("", 11f).apply {
-                setTextColor(getColor(R.color.danger))
+            ui.label("", TextRole.Caption, R.color.danger).apply {
                 accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
             }
         add(alertCard, alertFailure, 6)
@@ -4078,7 +4173,7 @@ class MainActivity : Activity() {
             if (v46Records == rows && recent.childCount > 0) return
             v46Records = rows
             recent.removeAllViews()
-            if (rows.isEmpty()) add(recent, ui.label("No received instructions", 12.5f, bold = true))
+            if (rows.isEmpty()) add(recent, ui.label("No received instructions", TextRole.RowTitle, R.color.muted))
             rows.take(20).forEach { row ->
                 menu(
                         recent,
@@ -4133,11 +4228,11 @@ class MainActivity : Activity() {
                 .catch { alertSummary.text = "Alert history unavailable" }
                 .collect { records(it) }
         }
-        for (name in listOf("Policy details", "Storage health", "Identity & verification details", "Advanced logs")) {
+        for (name in listOf("Policy details", "Storage health", "Identity & verification details", "Advanced logs", "Instruction filters")) {
             val destination = routes.getValue(name)
             (destination.getChildAt(0) as? Button)?.takeIf { it.text.startsWith("‹") }?.let { destination.removeView(it) }
             (destination.getChildAt(0) as? TextView)?.takeIf { it.text == name }?.let { destination.removeView(it) }
-            destination.setPadding(dp(17), dp(11), dp(17), dp(17))
+            pagePadding(destination)
             (destination.getChildAt(0)?.layoutParams as? LinearLayout.LayoutParams)?.topMargin = 0
         }
         fun structured(view: TextView) {
@@ -4168,8 +4263,7 @@ class MainActivity : Activity() {
             val index = parent.indexOfChild(view)
             val params = view.layoutParams
             parent.removeView(view)
-            view.typeface = android.graphics.Typeface.MONOSPACE
-            view.textSize = 12f
+            ui.text(view, TextRole.Mono)
             view.setTextIsSelectable(true)
             view.setPadding(dp(12), dp(12), dp(12), dp(12))
             val scroller = ui.dialogContent(ui.column().apply { addView(view, LinearLayout.LayoutParams(-1, -2)) }, 232)
@@ -4219,10 +4313,10 @@ class MainActivity : Activity() {
                     else -> "OFF"
                 }
             ui.pill(trackingBadge, op.tracking)
+            // The legacy refresh re-applies its pill to this owner; V4.6 shows a plain hero title.
             trackingSummary.background = null
-            trackingSummary.setTextColor(getColor(R.color.ink))
-            trackingSummary.setTypeface(null, android.graphics.Typeface.BOLD)
-            trackingSummary.textSize = 15f
+            trackingSummary.setPadding(0, 0, 0, 0)
+            ui.text(trackingSummary, TextRole.Hero)
             trackingSummary.text =
                 when {
                     op.starting -> "Starting tracking"
@@ -4323,31 +4417,81 @@ class MainActivity : Activity() {
             emergencyDock.removeAllViews()
             emergencyDock.setPadding(dp(12), dp(8), dp(12), dp(4))
             val dock = ui.card(emergencyDock, 0, R.color.emergency_surface)
+            // V4.6 `.sosbox`: borderless burgundy wash, 12dp radius, compact caption row.
+            dock.background = ui.shape(R.color.emergency_surface, R.dimen.radius_dock, null)
             dock.setPadding(dp(9), dp(7), dp(9), dp(7))
             sosStatus.minHeight = 0
             sosStatus.minLines = 1
             sosStatus.maxLines = 1
-            sosStatus.textSize = 10f
+            ui.text(sosStatus, TextRole.Micro, R.color.danger)
+            sosStatus.setPadding(0, 0, 0, 0)
             sosStatus.ellipsize = android.text.TextUtils.TruncateAt.END
             peerRow(dock, "Emergency SOS", sosStatus)
             (dock.getChildAt(0).layoutParams as LinearLayout.LayoutParams).topMargin = 0
-            ((dock.getChildAt(0) as LinearLayout).getChildAt(0) as TextView).textSize = 10f
+            ((dock.getChildAt(0) as LinearLayout).getChildAt(0) as TextView).let {
+                ui.text(it, TextRole.Micro, R.color.danger)
+                it.typeface = android.graphics.Typeface.DEFAULT_BOLD
+            }
             ui.style(sosButton)
-            sosButton.textSize = 12f
-            sosButton.setTypeface(null, android.graphics.Typeface.BOLD)
-            sosButton.setTextColor(android.graphics.Color.WHITE)
-            sosButton.background = ui.surface(R.color.emergency_action, 9)
+            ui.text(sosButton, TextRole.Button, android.R.color.white)
+            sosButton.typeface = android.graphics.Typeface.DEFAULT_BOLD
+            sosButton.background = ui.shape(R.color.emergency_action, R.dimen.radius_sos, null)
             add(dock, sosButton, 6)
             progress?.let {
                 add(dock, it)
                 it.layoutParams.height = dp(3)
             }
+            if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
+                navigation.setPadding(dp(12), dp(2), dp(12), dp(2))
+                emergencyDock.setPadding(dp(12), dp(4), dp(12), dp(2))
+                // Documented compact landscape footer: caption beside the same protected
+                // button, so the short viewport keeps room for content. Same views/gesture.
+                val caption = dock.getChildAt(0) as LinearLayout
+                listOfNotNull(caption, sosButton, progress).forEach(::detach)
+                caption.orientation = LinearLayout.VERTICAL
+                caption.gravity = android.view.Gravity.CENTER_VERTICAL
+                (0 until caption.childCount).map { caption.getChildAt(it) }.forEach {
+                    it.layoutParams = LinearLayout.LayoutParams(-1, -2)
+                    (it as? TextView)?.gravity = android.view.Gravity.START
+                }
+                dock.orientation = LinearLayout.HORIZONTAL
+                dock.gravity = android.view.Gravity.CENTER_VERTICAL
+                dock.addView(caption, LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = dp(10) })
+                dock.addView(
+                    ui.column().apply {
+                        ui.add(this, sosButton)
+                        progress?.let { ui.add(this, it); it.layoutParams.height = dp(3) }
+                    },
+                    LinearLayout.LayoutParams(0, -2, 1.4f),
+                )
+            }
         }
         tabs.forEach { (name, tab) ->
             tab.text = name
-            tab.textSize = 10f
-            tab.minHeight = dp(49)
+            tab.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, resources.getDimension(R.dimen.text_micro))
+            tab.minHeight = ui.px(R.dimen.nav_height)
             tab.setPadding(dp(4), dp(5), dp(4), dp(5))
+            tab.stateListAnimator = null
+            // V4.6 `.navbutton.current`: borderless teal wash; unselected tabs are transparent.
+            tab.background =
+                android.graphics.drawable.StateListDrawable().apply {
+                    addState(
+                        intArrayOf(android.R.attr.state_selected),
+                        android.graphics.drawable.RippleDrawable(
+                            android.content.res.ColorStateList.valueOf(getColor(R.color.ripple)),
+                            ui.shape(R.color.positive_surface, R.dimen.radius_nav, null),
+                            null,
+                        ),
+                    )
+                    addState(
+                        intArrayOf(),
+                        android.graphics.drawable.RippleDrawable(
+                            android.content.res.ColorStateList.valueOf(getColor(R.color.ripple)),
+                            null,
+                            ui.shape(R.color.surface, R.dimen.radius_nav, null),
+                        ),
+                    )
+                }
             tab.setCompoundDrawablesWithIntrinsicBounds(
                 0,
                 when (name) {

@@ -15,8 +15,8 @@ internal class HealthRow(
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     private val ui = NativeUi(context)
-    private val state = ui.label("Checking", 10.5f, bold = true)
-    private val metadata = ui.label("", 10.5f, muted = true)
+    private val state = ui.label("Checking", TextRole.Pill)
+    private val metadata = ui.label("", TextRole.Meta)
     private val displayLabel =
         when (label) {
             "Command" -> "Command delivery"
@@ -45,12 +45,12 @@ internal class HealthRow(
         )
         addView(
             ui.column().apply {
-                addView(ui.label(displayLabel, 12f, bold = true))
-                addView(metadata)
+                addView(ui.label(displayLabel, TextRole.Label))
+                ui.add(this, metadata, 2)
             },
             LayoutParams(0, -2, 1f),
         )
-        addView(state, LayoutParams(-2, -2))
+        addView(state, LayoutParams(-2, -2).apply { marginStart = dp(8) })
         // One semantic node avoids reading decorative icons and values twice.
         for (i in 0 until childCount) getChildAt(i).importantForAccessibility =
             View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
@@ -60,7 +60,6 @@ internal class HealthRow(
     fun update(value: String, detail: String = "", tone: Int = R.color.muted) {
         state.text = value
         ui.pill(state, tone == R.color.accent)
-        state.textSize = 10.5f
         metadata.text = detail
         metadata.visibility = if (detail.isEmpty()) View.GONE else View.VISIBLE
         contentDescription =

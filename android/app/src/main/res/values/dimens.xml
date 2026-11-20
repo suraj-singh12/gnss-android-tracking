@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android V4.6 design tokens. This file is the single source for shared dimensions.
+  Programmatic views read these through NativeUi (TextRole, Dimen helpers); do not
+  hard-code a size in a screen when a token below expresses the intent.
+  Values follow the approved V4.6 reference (docs/design-system.md, android/UI-DEVELOPMENT.md).
+-->
+<resources>
+    <!-- Spacing steps in use (4dp base). Add a step here only when a screen needs it. -->
+    <dimen name="space_xs">4dp</dimen>
+    <dimen name="space_sm">8dp</dimen>
+    <dimen name="space_md">12dp</dimen>
+
+    <!-- Layout. -->
+    <dimen name="page_margin">17dp</dimen>
+    <dimen name="page_top">11dp</dimen>
+    <dimen name="page_bottom">17dp</dimen>
+    <dimen name="card_padding">14dp</dimen>
+    <dimen name="card_gap">12dp</dimen>
+    <dimen name="section_top">18dp</dimen>
+    <dimen name="section_bottom">8dp</dimen>
+    <dimen name="list_row_padding_h">14dp</dimen>
+    <dimen name="list_row_padding_v">11dp</dimen>
+    <dimen name="list_row_min_height">60dp</dimen>
+    <dimen name="appbar_padding_start">8dp</dimen>
+    <dimen name="appbar_padding_end">12dp</dimen>
+    <dimen name="brand_size">34dp</dimen>
+    <dimen name="dialog_inset">16dp</dimen>
+    <dimen name="dialog_padding">24dp</dimen>
+
+    <!-- Shape. -->
+    <dimen name="stroke">1dp</dimen>
+    <dimen name="radius_card">16dp</dimen>
+    <dimen name="radius_dialog">18dp</dimen>
+    <dimen name="radius_button">12dp</dimen>
+    <dimen name="radius_input">10dp</dimen>
+    <dimen name="radius_dock">12dp</dimen>
+    <dimen name="radius_sos">9dp</dimen>
+    <dimen name="radius_nav">10dp</dimen>
+    <dimen name="radius_brand">9dp</dimen>
+    <dimen name="radius_pill">999dp</dimen>
+
+    <!-- Controls and touch targets. -->
+    <dimen name="control_height">48dp</dimen>
+    <dimen name="nav_height">49dp</dimen>
+    <dimen name="button_padding_h">16dp</dimen>
+    <dimen name="button_padding_v">8dp</dimen>
+    <dimen name="input_padding_h">12dp</dimen>
+    <dimen name="input_padding_v">10dp</dimen>
+    <dimen name="selector_end_padding">40dp</dimen>
+    <dimen name="selector_chevron_inset">12dp</dimen>
+    <dimen name="pill_padding_h">10dp</dimen>
+    <dimen name="pill_padding_v">5dp</dimen>
+
+    <!-- Icons. -->
+    <dimen name="icon_sm">20dp</dimen>
+    <dimen name="icon_md">22dp</dimen>
+    <dimen name="icon_gap">6dp</dimen>
+
+    <!-- Type scale (scalable sp). Roles are defined in NativeUi.TextRole. -->
+    <dimen name="text_display">23sp</dimen>
+    <dimen name="text_dialog_title">18sp</dimen>
+    <dimen name="text_appbar_title">16sp</dimen>
+    <dimen name="text_hero">15sp</dimen>
+    <dimen name="text_heading">14sp</dimen>
+    <dimen name="text_body">14sp</dimen>
+    <dimen name="text_button">13sp</dimen>
+    <dimen name="text_row_title">12.5sp</dimen>
+    <dimen name="text_value">12.5sp</dimen>
+    <dimen name="text_label">12sp</dimen>
+    <dimen name="text_mono">12sp</dimen>
+    <dimen name="text_caption">11.5sp</dimen>
+    <dimen name="text_small">11sp</dimen>
+    <dimen name="text_meta">10.5sp</dimen>
+    <dimen name="text_micro">10sp</dimen>
+    <dimen name="text_metric">26sp</dimen>
+</resources>

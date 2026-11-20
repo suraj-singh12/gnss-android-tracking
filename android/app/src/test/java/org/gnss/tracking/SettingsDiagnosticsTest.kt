@@ -62,6 +62,13 @@ class SettingsDiagnosticsTest {
             assertEquals("Unfinished field edit", field("Party name").text.toString())
             controller.recreate()
             until { field("Party name").text.toString() == "Unfinished field edit" }
+            // The restored draft is synchronous, but the recreated Activity's Room-backed saved
+            // state arrives asynchronously. Let it settle as initial setup does, so Cancel below
+            // exercises restore-from-saved rather than racing the first emission.
+            repeat(30) {
+                shadowOf(Looper.getMainLooper()).idle()
+                delay(10)
+            }
             assertTrue(field("Party name").hasFocus())
             assertEquals(6, field("Party name").selectionStart)
             assertEquals("35", field("Reporting interval · seconds").text.toString())
