@@ -1,0 +1,3856 @@
+{
+ "tracking-stopped": {
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   151,
+   766,
+   128
+  ],
+  "Button:Start Tracking#1": [
+   31,
+   216,
+   738,
+   48
+  ],
+  "Surface#2": [
+   17,
+   290,
+   766,
+   107
+  ],
+  "Surface#3": [
+   17,
+   409,
+   766,
+   175
+  ],
+  "Button:Sync Now#1": [
+   680,
+   524,
+   90,
+   48
+  ],
+  "Surface#4": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "tracking-active": {
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   151,
+   766,
+   128
+  ],
+  "Button:Stop Tracking#1": [
+   31,
+   216,
+   738,
+   48
+  ],
+  "Surface#2": [
+   17,
+   290,
+   766,
+   107
+  ],
+  "Surface#3": [
+   17,
+   409,
+   766,
+   175
+  ],
+  "Button:Sync Now#1": [
+   680,
+   524,
+   90,
+   48
+  ],
+  "Surface#4": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "tracking-offline": {
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   151,
+   766,
+   128
+  ],
+  "Button:Stop Tracking#1": [
+   31,
+   216,
+   738,
+   48
+  ],
+  "Surface#2": [
+   17,
+   290,
+   766,
+   107
+  ],
+  "Surface#3": [
+   17,
+   409,
+   766,
+   175
+  ],
+  "Button:Sync Now#1": [
+   680,
+   524,
+   90,
+   48
+  ],
+  "Surface#4": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "tracking-error": {
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   151,
+   766,
+   128
+  ],
+  "Button:Stop Tracking#1": [
+   31,
+   216,
+   738,
+   48
+  ],
+  "Surface#2": [
+   17,
+   290,
+   766,
+   107
+  ],
+  "Surface#3": [
+   17,
+   409,
+   766,
+   175
+  ],
+  "Button:Sync Now#1": [
+   680,
+   524,
+   90,
+   48
+  ],
+  "Surface#4": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "tracking-sos-pending": {
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   151,
+   766,
+   128
+  ],
+  "Button:Start Tracking#1": [
+   31,
+   216,
+   738,
+   48
+  ],
+  "Surface#2": [
+   17,
+   290,
+   766,
+   107
+  ],
+  "Surface#3": [
+   17,
+   409,
+   766,
+   175
+  ],
+  "Button:Sync Now#1": [
+   680,
+   524,
+   90,
+   48
+  ],
+  "Surface#4": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "tracking-urgent-alert": {
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   151,
+   766,
+   128
+  ],
+  "Button:Start Tracking#1": [
+   31,
+   216,
+   738,
+   48
+  ],
+  "Surface#2": [
+   17,
+   290,
+   766,
+   107
+  ],
+  "Surface#3": [
+   17,
+   409,
+   766,
+   175
+  ],
+  "Button:Sync Now#1": [
+   680,
+   524,
+   90,
+   48
+  ],
+  "Surface#4": [
+   17,
+   621,
+   766,
+   95
+  ],
+  "Button:Acknowledge \/ Stop Alert#1": [
+   29,
+   655,
+   742,
+   48
+  ],
+  "Surface#5": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "tracking-urgent-alert-bottom": {
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   -369,
+   766,
+   128
+  ],
+  "Button:Start Tracking#1": [
+   31,
+   -304,
+   738,
+   48
+  ],
+  "Surface#2": [
+   17,
+   -230,
+   766,
+   107
+  ],
+  "Surface#3": [
+   17,
+   -111,
+   766,
+   175
+  ],
+  "Button:Sync Now#1": [
+   680,
+   4,
+   90,
+   48
+  ],
+  "Surface#4": [
+   17,
+   101,
+   766,
+   95
+  ],
+  "Button:Acknowledge \/ Stop Alert#1": [
+   29,
+   135,
+   742,
+   48
+  ],
+  "Surface#5": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "settings": {
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   174,
+   766,
+   247
+  ],
+  "Icon#1": [
+   747,
+   194,
+   22,
+   22
+  ],
+  "Icon#2": [
+   747,
+   256,
+   22,
+   22
+  ],
+  "Icon#3": [
+   747,
+   318,
+   22,
+   22
+  ],
+  "Icon#4": [
+   747,
+   380,
+   22,
+   22
+  ],
+  "Surface#2": [
+   17,
+   459,
+   766,
+   61
+  ],
+  "Icon#5": [
+   747,
+   479,
+   22,
+   22
+  ],
+  "Surface#3": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "settings-bottom": {
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   -151,
+   766,
+   247
+  ],
+  "Icon#1": [
+   747,
+   -131,
+   22,
+   22
+  ],
+  "Icon#2": [
+   747,
+   -69,
+   22,
+   22
+  ],
+  "Icon#3": [
+   747,
+   -7,
+   22,
+   22
+  ],
+  "Icon#4": [
+   747,
+   55,
+   22,
+   22
+  ],
+  "Surface#2": [
+   17,
+   134,
+   766,
+   61
+  ],
+  "Icon#5": [
+   747,
+   154,
+   22,
+   22
+  ],
+  "Surface#3": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "party-command": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   766,
+   400
+  ],
+  "EditText:141#1": [
+   31,
+   124,
+   738,
+   48
+  ],
+  "EditText:143#1": [
+   31,
+   204,
+   738,
+   48
+  ],
+  "EditText:http:\/\/192.168.1.10:8080#1": [
+   31,
+   285,
+   738,
+   48
+  ],
+  "EditText:164#1": [
+   31,
+   365,
+   738,
+   48
+  ],
+  "Button:Cancel#1": [
+   31,
+   429,
+   365,
+   48
+  ],
+  "Button:Save settings#1": [
+   404,
+   429,
+   365,
+   48
+  ],
+  "Surface#2": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "party-command-bottom": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   -228,
+   766,
+   400
+  ],
+  "EditText:141#1": [
+   31,
+   -196,
+   738,
+   48
+  ],
+  "EditText:143#1": [
+   31,
+   -115,
+   738,
+   48
+  ],
+  "EditText:http:\/\/192.168.1.10:8080#1": [
+   31,
+   -35,
+   738,
+   48
+  ],
+  "EditText:164#1": [
+   31,
+   46,
+   738,
+   48
+  ],
+  "Button:Cancel#1": [
+   31,
+   110,
+   365,
+   48
+  ],
+  "Button:Save settings#1": [
+   404,
+   110,
+   365,
+   48
+  ],
+  "Surface#2": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "command-access": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   766,
+   317
+  ],
+  "EditText:Paste Command credential#1": [
+   31,
+   269,
+   738,
+   48
+  ],
+  "Button:Authorize#1": [
+   31,
+   346,
+   88,
+   48
+  ],
+  "Button:Enrollment steps ›#1": [
+   127,
+   346,
+   130,
+   48
+  ],
+  "Surface#2": [
+   17,
+   446,
+   766,
+   61
+  ],
+  "Icon#1": [
+   747,
+   466,
+   22,
+   22
+  ],
+  "Surface#3": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "command-access-bottom": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   -220,
+   766,
+   317
+  ],
+  "EditText:Paste Command credential#1": [
+   31,
+   -43,
+   738,
+   48
+  ],
+  "Button:Authorize#1": [
+   31,
+   34,
+   88,
+   48
+  ],
+  "Button:Enrollment steps ›#1": [
+   127,
+   34,
+   130,
+   48
+  ],
+  "Surface#2": [
+   17,
+   134,
+   766,
+   61
+  ],
+  "Icon#1": [
+   747,
+   154,
+   22,
+   22
+  ],
+  "Surface#3": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "manage-command-access": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   92,
+   766,
+   61
+  ],
+  "Icon#1": [
+   747,
+   112,
+   22,
+   22
+  ],
+  "Button:Disable remote control#1": [
+   17,
+   165,
+   766,
+   48
+  ],
+  "Button:Re-enroll Command#1": [
+   17,
+   225,
+   766,
+   48
+  ],
+  "Surface#2": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "manage-command-access-bottom": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   14,
+   766,
+   61
+  ],
+  "Icon#1": [
+   747,
+   34,
+   22,
+   22
+  ],
+  "Button:Disable remote control#1": [
+   17,
+   87,
+   766,
+   48
+  ],
+  "Button:Re-enroll Command#1": [
+   17,
+   147,
+   766,
+   48
+  ],
+  "Surface#2": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "identity-verification-details": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   766,
+   149
+  ],
+  "Button:Copy Command ID#1": [
+   17,
+   248,
+   766,
+   48
+  ],
+  "Button:Copy phone ID#1": [
+   17,
+   304,
+   766,
+   48
+  ],
+  "Surface#2": [
+   17,
+   364,
+   766,
+   135
+  ],
+  "Button:More evidence & rejection re#1": [
+   17,
+   507,
+   766,
+   48
+  ],
+  "Surface#3": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "identity-verification-details-bottom": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   -268,
+   766,
+   149
+  ],
+  "Button:Copy Command ID#1": [
+   17,
+   -112,
+   766,
+   48
+  ],
+  "Button:Copy phone ID#1": [
+   17,
+   -56,
+   766,
+   48
+  ],
+  "Surface#2": [
+   17,
+   4,
+   766,
+   135
+  ],
+  "Button:More evidence & rejection re#1": [
+   17,
+   147,
+   766,
+   48
+  ],
+  "Surface#3": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "field-readiness": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   766,
+   150
+  ],
+  "Button:Open permission guidance#1": [
+   31,
+   179,
+   738,
+   48
+  ],
+  "Surface#2": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "field-readiness-bottom": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   46,
+   766,
+   150
+  ],
+  "Button:Open permission guidance#1": [
+   31,
+   133,
+   738,
+   48
+  ],
+  "Surface#2": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "tracking-policy": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   766,
+   280
+  ],
+  "Spinner:Reporting interval#1": [
+   31,
+   124,
+   738,
+   48
+  ],
+  "Switch:Adaptive storage#1": [
+   31,
+   184,
+   738,
+   48
+  ],
+  "Button:Save policy#1": [
+   31,
+   309,
+   738,
+   48
+  ],
+  "Surface#2": [
+   17,
+   372,
+   766,
+   61
+  ],
+  "Icon#1": [
+   747,
+   392,
+   22,
+   22
+  ],
+  "Surface#3": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "tracking-policy-bottom": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   -146,
+   766,
+   280
+  ],
+  "Spinner:Reporting interval#1": [
+   31,
+   -114,
+   738,
+   48
+  ],
+  "Switch:Adaptive storage#1": [
+   31,
+   -54,
+   738,
+   48
+  ],
+  "Button:Save policy#1": [
+   31,
+   71,
+   738,
+   48
+  ],
+  "Surface#2": [
+   17,
+   134,
+   766,
+   61
+  ],
+  "Icon#1": [
+   747,
+   154,
+   22,
+   22
+  ],
+  "Surface#3": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "policy-details": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   766,
+   259
+  ],
+  "Surface#2": [
+   17,
+   362,
+   766,
+   97
+  ],
+  "Surface#3": [
+   17,
+   471,
+   766,
+   58
+  ],
+  "Surface#4": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "policy-details-bottom": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   -242,
+   766,
+   259
+  ],
+  "Surface#2": [
+   17,
+   29,
+   766,
+   97
+  ],
+  "Surface#3": [
+   17,
+   138,
+   766,
+   58
+  ],
+  "Surface#4": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "emergency-controls": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   766,
+   142
+  ],
+  "Switch:Volume-up SOS shortcut#1": [
+   31,
+   157,
+   738,
+   48
+  ],
+  "Surface#2": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "emergency-controls-bottom": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   53,
+   766,
+   142
+  ],
+  "Switch:Volume-up SOS shortcut#1": [
+   31,
+   119,
+   738,
+   48
+  ],
+  "Surface#2": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "diagnostics": {
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   174,
+   766,
+   219
+  ],
+  "Icon#1": [
+   31,
+   189,
+   29,
+   24
+  ],
+  "Icon#2": [
+   31,
+   244,
+   29,
+   24
+  ],
+  "Icon#3": [
+   31,
+   299,
+   29,
+   24
+  ],
+  "Icon#4": [
+   31,
+   354,
+   29,
+   24
+  ],
+  "Surface#2": [
+   17,
+   431,
+   766,
+   247
+  ],
+  "Icon#5": [
+   747,
+   451,
+   22,
+   22
+  ],
+  "Icon#6": [
+   747,
+   513,
+   22,
+   22
+  ],
+  "Icon#7": [
+   747,
+   575,
+   22,
+   22
+  ],
+  "Icon#8": [
+   747,
+   637,
+   22,
+   22
+  ],
+  "Surface#3": [
+   17,
+   716,
+   766,
+   185
+  ],
+  "Icon#9": [
+   747,
+   736,
+   22,
+   22
+  ],
+  "Icon#10": [
+   747,
+   798,
+   22,
+   22
+  ],
+  "Icon#11": [
+   747,
+   860,
+   22,
+   22
+  ],
+  "Surface#4": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "diagnostics-bottom": {
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   -532,
+   766,
+   219
+  ],
+  "Icon#1": [
+   31,
+   -517,
+   29,
+   24
+  ],
+  "Icon#2": [
+   31,
+   -462,
+   29,
+   24
+  ],
+  "Icon#3": [
+   31,
+   -407,
+   29,
+   24
+  ],
+  "Icon#4": [
+   31,
+   -352,
+   29,
+   24
+  ],
+  "Surface#2": [
+   17,
+   -275,
+   766,
+   247
+  ],
+  "Icon#5": [
+   747,
+   -255,
+   22,
+   22
+  ],
+  "Icon#6": [
+   747,
+   -193,
+   22,
+   22
+  ],
+  "Icon#7": [
+   747,
+   -131,
+   22,
+   22
+  ],
+  "Icon#8": [
+   747,
+   -69,
+   22,
+   22
+  ],
+  "Surface#3": [
+   17,
+   10,
+   766,
+   185
+  ],
+  "Icon#9": [
+   747,
+   30,
+   22,
+   22
+  ],
+  "Icon#10": [
+   747,
+   92,
+   22,
+   22
+  ],
+  "Icon#11": [
+   747,
+   154,
+   22,
+   22
+  ],
+  "Surface#4": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "command-instructions": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   766,
+   398
+  ],
+  "Icon#1": [
+   747,
+   126,
+   22,
+   22
+  ],
+  "Icon#2": [
+   747,
+   188,
+   22,
+   22
+  ],
+  "Icon#3": [
+   747,
+   250,
+   22,
+   22
+  ],
+  "Icon#4": [
+   747,
+   312,
+   22,
+   22
+  ],
+  "Icon#5": [
+   747,
+   374,
+   22,
+   22
+  ],
+  "Button:Export sanitized journal#1": [
+   31,
+   427,
+   738,
+   48
+  ],
+  "Surface#2": [
+   17,
+   527,
+   766,
+   61
+  ],
+  "Icon#6": [
+   747,
+   547,
+   22,
+   22
+  ],
+  "Surface#3": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "command-instructions-bottom": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   -302,
+   766,
+   398
+  ],
+  "Icon#1": [
+   747,
+   -267,
+   22,
+   22
+  ],
+  "Icon#2": [
+   747,
+   -205,
+   22,
+   22
+  ],
+  "Icon#3": [
+   747,
+   -143,
+   22,
+   22
+  ],
+  "Icon#4": [
+   747,
+   -81,
+   22,
+   22
+  ],
+  "Icon#5": [
+   747,
+   -19,
+   22,
+   22
+  ],
+  "Button:Export sanitized journal#1": [
+   31,
+   34,
+   738,
+   48
+  ],
+  "Surface#2": [
+   17,
+   134,
+   766,
+   61
+  ],
+  "Icon#6": [
+   747,
+   154,
+   22,
+   22
+  ],
+  "Surface#3": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "instruction-details": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   125,
+   766,
+   169
+  ],
+  "Surface#2": [
+   17,
+   306,
+   766,
+   165
+  ],
+  "Button:Copy instruction ID#1": [
+   17,
+   483,
+   766,
+   48
+  ],
+  "Button:Export evidence#1": [
+   17,
+   539,
+   766,
+   48
+  ],
+  "Button:Full record#1": [
+   17,
+   599,
+   766,
+   48
+  ],
+  "Surface#3": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "history-search-filters": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "EditText:Search instructions#1": [
+   20,
+   84,
+   760,
+   48
+  ],
+  "Button:Phone alert · Unknown#1": [
+   20,
+   182,
+   760,
+   60
+  ],
+  "Button:Acknowledge \/ Stop Alert#1": [
+   20,
+   248,
+   760,
+   48
+  ],
+  "Button:Reporting interval · Applied#1": [
+   20,
+   304,
+   760,
+   60
+  ],
+  "Button:Reporting interval · Unknown#1": [
+   20,
+   372,
+   760,
+   60
+  ],
+  "Button:Filter history#1": [
+   20,
+   444,
+   760,
+   48
+  ],
+  "Surface#1": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "history-search-filters-bottom": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "EditText:Search instructions#1": [
+   20,
+   -220,
+   760,
+   48
+  ],
+  "Button:Phone alert · Unknown#1": [
+   20,
+   -122,
+   760,
+   60
+  ],
+  "Button:Acknowledge \/ Stop Alert#1": [
+   20,
+   -56,
+   760,
+   48
+  ],
+  "Button:Reporting interval · Applied#1": [
+   20,
+   0,
+   760,
+   60
+  ],
+  "Button:Reporting interval · Unknown#1": [
+   20,
+   68,
+   760,
+   60
+  ],
+  "Button:Filter history#1": [
+   20,
+   140,
+   760,
+   48
+  ],
+  "Surface#1": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "instruction-filters": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Spinner:Command type#1": [
+   17,
+   128,
+   766,
+   48
+  ],
+  "Spinner:Command outcome#1": [
+   17,
+   216,
+   766,
+   48
+  ],
+  "Spinner:Received time#1": [
+   17,
+   305,
+   766,
+   48
+  ],
+  "Surface#1": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "instruction-filters-bottom": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Spinner:Command type#1": [
+   17,
+   -30,
+   766,
+   48
+  ],
+  "Spinner:Command outcome#1": [
+   17,
+   59,
+   766,
+   48
+  ],
+  "Spinner:Received time#1": [
+   17,
+   147,
+   766,
+   48
+  ],
+  "Surface#1": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "phone-alerts": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   766,
+   188
+  ],
+  "Button:View alert & acknowledge#1": [
+   31,
+   157,
+   738,
+   48
+  ],
+  "Button:Export alert journal#1": [
+   31,
+   217,
+   738,
+   48
+  ],
+  "Surface#2": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "phone-alerts-bottom": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   8,
+   766,
+   188
+  ],
+  "Button:View alert & acknowledge#1": [
+   31,
+   73,
+   738,
+   48
+  ],
+  "Button:Export alert journal#1": [
+   31,
+   133,
+   738,
+   48
+  ],
+  "Surface#2": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "saved-data-sync": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   766,
+   195
+  ],
+  "Button:Sync All Now#1": [
+   31,
+   164,
+   738,
+   48
+  ],
+  "Button:Export transfer evidence#1": [
+   31,
+   224,
+   738,
+   48
+  ],
+  "Surface#2": [
+   17,
+   324,
+   766,
+   61
+  ],
+  "Icon#1": [
+   747,
+   344,
+   22,
+   22
+  ],
+  "Surface#3": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "saved-data-sync-bottom": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   -98,
+   766,
+   195
+  ],
+  "Button:Sync All Now#1": [
+   31,
+   -26,
+   738,
+   48
+  ],
+  "Button:Export transfer evidence#1": [
+   31,
+   34,
+   738,
+   48
+  ],
+  "Surface#2": [
+   17,
+   134,
+   766,
+   61
+  ],
+  "Icon#1": [
+   747,
+   154,
+   22,
+   22
+  ],
+  "Surface#3": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "transfer-recovery": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   766,
+   122
+  ],
+  "Button:Retry saved messages#1": [
+   31,
+   151,
+   738,
+   48
+  ],
+  "Surface#2": [
+   17,
+   225,
+   766,
+   61
+  ],
+  "Icon#1": [
+   747,
+   245,
+   22,
+   22
+  ],
+  "Surface#3": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "transfer-recovery-bottom": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   0,
+   766,
+   122
+  ],
+  "Button:Retry saved messages#1": [
+   31,
+   60,
+   738,
+   48
+  ],
+  "Surface#2": [
+   17,
+   134,
+   766,
+   61
+  ],
+  "Icon#1": [
+   747,
+   154,
+   22,
+   22
+  ],
+  "Surface#3": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "storage-health": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   766,
+   58
+  ],
+  "Surface#2": [
+   17,
+   161,
+   766,
+   176
+  ],
+  "Surface#3": [
+   17,
+   349,
+   766,
+   97
+  ],
+  "Surface#4": [
+   17,
+   458,
+   766,
+   97
+  ],
+  "Surface#5": [
+   17,
+   567,
+   766,
+   119
+  ],
+  "Surface#6": [
+   17,
+   697,
+   766,
+   97
+  ],
+  "Surface#7": [
+   17,
+   806,
+   766,
+   58
+  ],
+  "Icon#1": [
+   27,
+   907,
+   29,
+   24
+  ],
+  "Icon#2": [
+   27,
+   961,
+   29,
+   24
+  ],
+  "Icon#3": [
+   27,
+   1015,
+   29,
+   24
+  ],
+  "Surface#8": [
+   17,
+   1066,
+   766,
+   109
+  ],
+  "Surface#9": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "storage-health-bottom": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   -888,
+   766,
+   58
+  ],
+  "Surface#2": [
+   17,
+   -819,
+   766,
+   176
+  ],
+  "Surface#3": [
+   17,
+   -631,
+   766,
+   97
+  ],
+  "Surface#4": [
+   17,
+   -522,
+   766,
+   97
+  ],
+  "Surface#5": [
+   17,
+   -413,
+   766,
+   119
+  ],
+  "Surface#6": [
+   17,
+   -282,
+   766,
+   97
+  ],
+  "Surface#7": [
+   17,
+   -173,
+   766,
+   58
+  ],
+  "Icon#1": [
+   27,
+   -73,
+   29,
+   24
+  ],
+  "Icon#2": [
+   27,
+   -19,
+   29,
+   24
+  ],
+  "Icon#3": [
+   27,
+   35,
+   29,
+   24
+  ],
+  "Surface#8": [
+   17,
+   86,
+   766,
+   109
+  ],
+  "Surface#9": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "sos-event-history": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   766,
+   60
+  ],
+  "Icon#1": [
+   747,
+   110,
+   22,
+   22
+  ],
+  "Surface#2": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "sos-details": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   766,
+   88
+  ],
+  "Surface#2": [
+   17,
+   191,
+   766,
+   148
+  ],
+  "Button:Export evidence#1": [
+   17,
+   351,
+   766,
+   48
+  ],
+  "Surface#3": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "sos-details-bottom": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   -113,
+   766,
+   88
+  ],
+  "Surface#2": [
+   17,
+   -13,
+   766,
+   148
+  ],
+  "Button:Export evidence#1": [
+   17,
+   147,
+   766,
+   48
+  ],
+  "Surface#3": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "gnss-details": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   766,
+   84
+  ],
+  "Surface#2": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "command-contact": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   766,
+   84
+  ],
+  "Surface#2": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "diagnostic-tools": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   766,
+   347
+  ],
+  "Button:Start Test#1": [
+   31,
+   186,
+   365,
+   48
+  ],
+  "Button:Stop Test#1": [
+   404,
+   186,
+   365,
+   48
+  ],
+  "Button:Clear results#1": [
+   664,
+   251,
+   105,
+   48
+  ],
+  "Surface#2": [
+   31,
+   340,
+   738,
+   84
+  ],
+  "Button:Export diagnostic ZIP#1": [
+   17,
+   475,
+   766,
+   48
+  ],
+  "Surface#3": [
+   17,
+   588,
+   766,
+   61
+  ],
+  "Icon#1": [
+   747,
+   608,
+   22,
+   22
+  ],
+  "Surface#4": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "diagnostic-tools-bottom": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   -363,
+   766,
+   347
+  ],
+  "Button:Start Test#1": [
+   31,
+   -268,
+   365,
+   48
+  ],
+  "Button:Stop Test#1": [
+   404,
+   -268,
+   365,
+   48
+  ],
+  "Button:Clear results#1": [
+   664,
+   -203,
+   105,
+   48
+  ],
+  "Surface#2": [
+   31,
+   -114,
+   738,
+   84
+  ],
+  "Button:Export diagnostic ZIP#1": [
+   17,
+   21,
+   766,
+   48
+  ],
+  "Surface#3": [
+   17,
+   134,
+   766,
+   61
+  ],
+  "Icon#1": [
+   747,
+   154,
+   22,
+   22
+  ],
+  "Surface#4": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "advanced-logs": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "advanced-logs-bottom": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ },
+ "physical-button-listening": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Day mode#1": [
+   740,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   -363,
+   766,
+   347
+  ],
+  "Button:Start Test#1": [
+   31,
+   -268,
+   365,
+   48
+  ],
+  "Button:Stop Test#1": [
+   404,
+   -268,
+   365,
+   48
+  ],
+  "Button:Clear results#1": [
+   664,
+   -203,
+   105,
+   48
+  ],
+  "Surface#2": [
+   31,
+   -114,
+   738,
+   84
+  ],
+  "Button:Export diagnostic ZIP#1": [
+   17,
+   21,
+   766,
+   48
+  ],
+  "Surface#3": [
+   17,
+   134,
+   766,
+   61
+  ],
+  "Icon#1": [
+   747,
+   154,
+   22,
+   22
+  ],
+  "Surface#4": [
+   12,
+   216,
+   776,
+   65
+  ],
+  "Button:Hold to activate SOS#1": [
+   343,
+   223,
+   436,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   285,
+   259,
+   49
+  ],
+  "Button:Settings#1": [
+   271,
+   285,
+   259,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   529,
+   285,
+   259,
+   49
+  ]
+ }
+}
