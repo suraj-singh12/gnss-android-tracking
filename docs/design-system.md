@@ -33,6 +33,50 @@ and `values-night/colors.xml`, plus the shared `NativeUi` vocabulary.
 [The acceptance ledger](ui-acceptance.md) retains the original 41-finding dispositions,
 source-matched comparisons and executed evidence. Short screens need no filler.
 
+Native implementation (20 November 2026 production polish): all Android styling comes
+from semantic colours, `res/values/dimens.xml` tokens and the shared `NativeUi`
+components and `TextRole` type roles. Following V4.6 CSS, status pills, the SOS dock,
+the SOS button, the selected navigation tab and the app-bar Back target are borderless;
+filled primary actions have no contrasting outline. Every change is checked by the
+`VisualRegressionTest` layout audit and approved geometry baseline. Token tables,
+component ownership, live inspection and the mandatory self-review are in
+[android/UI-DEVELOPMENT.md](../android/UI-DEVELOPMENT.md).
+
+## Operator UI/UX quality gate — 15 reusable rules
+
+Preserved verbatim from draft [PR #64](https://github.com/suraj-singh12/gnss-android-tracking/pull/64)
+(`376687fec8f593ce7cb12ae191887fc47f277f5c`), which also lists 52 concrete historical
+failure checks. These operator-established, cross-screen rules come from approved/refined
+Command V5.4–V5.14 and Android V4-series design reviews. Apply them to every future
+proposed UI-affecting change **before** requesting operator design approval. They
+supplement, not override, a pinned approved screen-specific design.
+
+1. **One function, one clear interface:** no duplicate screens, competing buttons or unnecessary navigation.
+2. **Match control to intent:** switches for binary state, exclusive selection controls for modes, buttons for actions, chevrons for navigation.
+3. **Put controls at point of use:** do not create extra pages for a setting already owned by the current task screen.
+4. **Keep geometry stable:** opening pickers, switching tabs, status/telemetry refresh cannot unexpectedly reflow the workspace.
+5. **Contain transient UI:** popovers and calendars remain within their parent dialog/workspace and never block required actions.
+6. **Remove clutter:** redundant prose, grey explanation cards, repeated titles and excess controls need justification.
+7. **Place separators only between peer rows:** not directly above/below a note, button, single content block or unrelated section.
+8. **Use measured hierarchy:** compact, consistent typography, rows, space and alignment; avoid empty oversized containers.
+9. **Make actions semantically distinct:** normal, affirmative and destructive actions follow consistent emphasis and confirmation.
+10. **Preserve intent and drafts:** Cancel cancels, unsaved edits are protected, and switch/filter selections persist as intended.
+11. **Do not reset active interactions:** refreshing live data preserves open menus, tabs, filters, focus, scroll and in-progress edits.
+12. **Write precise labels:** clear task-oriented verbs/nouns; avoid ambiguous labels and gratuitous trailing ellipses.
+13. **Tell the operational truth:** queued ≠ delivered, received ≠ applied, SOS transport ACK ≠ human ACK, output attempt ≠ audible sound.
+14. **Test real workflows:** navigation, cancellation, failure, night/day, compact screens, overlays and state transitions—not only first screenshots.
+15. **Preserve useful capability when simplifying:** remove duplicate presentation, never working security/recovery/evidence functionality.
+
+**Android implementation of the rules.** Rules 2, 7 and 8 are enforced through the
+shared `NativeUi` components (`switchRow`, `selector`, `menu` dividers, `TextRole`).
+Rules 4, 6, 8 and 14 are checked automatically by `VisualRegressionTest`
+(geometry baseline, `duplicate-header`, `empty-gap`, type/radius tokens, clipping,
+overlap, Night, large text, short, landscape, keyboard and dialog states). Rule 9 maps
+to `NativeUi.style` variants and `CAUTION_ACTIONS`. The rendered self-review in
+[android/UI-DEVELOPMENT.md](../android/UI-DEVELOPMENT.md) §5 is mandatory before any
+Android UI delivery. Distinguish Robolectric renders, emulator captures and
+physical-device acceptance.
+
 ## Foundations
 
 Neutral surfaces `#F3F5F4`, white cards, ink `#24343B`, secondary ink `#607077`,

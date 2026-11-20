@@ -611,6 +611,9 @@ and remaining timeout without replaying sound. Android owns notification geometr
 OS/OEM settings can restrict background operation, notifications and alert output.
 
 Run `./gradlew testDebugUnitTest lintDebug assembleDebug --console=plain`.
+UI work follows [UI-DEVELOPMENT.md](UI-DEVELOPMENT.md): design tokens and shared
+components, live emulator inspection, the `VisualRegressionTest` audit/geometry suite
+and the mandatory rendered self-review before delivery.
 `GNSS_SCREENSHOT_DIR` collects native Activity, dialog and notification-content PNGs.
 The screenshot fixtures are test-only Room/operational data. Software renders do not
 establish real GNSS, audibility, OEM/Doze behavior, physical TalkBack or native desktop
