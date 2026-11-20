@@ -69,7 +69,11 @@ Rejected/unchanged: the dock's progress track under the SOS button (protected ho
 feedback), two filled teal actions on stopped Tracking (approved V4.6 hierarchy), the
 Night disabled-surface tone (readable 6:1), the appearance control.
 
-### Verification at `1fcd145e2a946bb515f49584c02e771bcf99b4ff`
+### Verification at `0f62ee1a11e6c3b6f00049e057466c1ce892579a`
+
+The same command also passed at the first push, `1fcd145`; its CI run then found
+P-29, which this source fixes. Results below are from the final local run on the
+`0f62ee1` source tree.
 
 From `android/` with Temurin 17.0.21.1, SDK 35, Build Tools 35.0.0, Gradle 8.11.1:
 `./gradlew testDebugUnitTest lintDebug assembleDebug --continue --console=plain` —
@@ -79,9 +83,11 @@ skips** (skips are not passes). The run includes `VisualRegressionTest` in compa
 reproduced: 278 captures) and `VisualAuditSelfTest`. Lint: **0 errors, 130 warnings**
 versus 127 at `8c5fb38`: +4 `GradleDependency` (newer Room/test-core releases are now
 published; no dependency changed) and −1 `SetTextI18n`. No warning is introduced by
-this work. Debug APK 3,714,945 bytes, SHA-256
-`b895dce2405874a32f53dda6f577d6d38c9c9a24815be0109ec44e4b54d3aac9` (debug-signed,
-source revision `1fcd145…` embedded; not a release).
+this work. Debug APK built from exactly `0f62ee1`: 3,714,955 bytes, SHA-256
+`1f067d0f6f219e6f7bf2c5976ea98fe18994decbea00f8030eaf8b5db2ac9183`, APK Signature
+Scheme v2 debug signature verified with `apksigner`, source revision found in DEX. The
+CI `GNSS-Tracker-Android-debug` artifact for the PR head is the downloadable copy; a
+debug build is not a release.
 
 Test change: `SettingsDiagnosticsTest` now lets the recreated Activity's asynchronous
 Room state settle before pressing Cancel (it previously relied on that emission
@@ -92,8 +98,10 @@ hold/engine, CommandControl, alerts and notifications are unchanged by this work
 
 ### Remaining limitations and unverified items
 
-- Renders are Robolectric native View/Skia, not physical devices. The emulator job
-  provides real-runtime captures in CI; neither replaces DEVICE-ACCEPTANCE.md.
+- Renders are Robolectric native View/Skia, not physical devices. The CI emulator job
+  (API 34 `sdk_gphone64_x86_64`, 1080×2400 at 420 dpi) captured 68 real-runtime
+  screens at `1fcd145` in Day/Night × 1.0/1.5 and they were inspected; Command access
+  captures are blank by design (`FLAG_SECURE`). Neither replaces DEVICE-ACCEPTANCE.md.
 - Landscape and keyboard-open layouts on short phones keep a small content viewport
   because the SOS dock and navigation stay visible by design. Changing that structure
   needs an operator decision.
