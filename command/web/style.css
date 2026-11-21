@@ -3168,3 +3168,5 @@ body[data-history-mode="travel"] #playback-status { top:94px; }
 @media (max-width: 1190px) {
   #command #sos-toast { top: auto; bottom: calc(100dvh - var(--command-dock-top, 100dvh) + 12px); left: auto; right: 12px; }
 }
+/* Danger colour only while an SOS still needs acknowledgement. */
+#command #sos-summary.clear { color: var(--muted); }

@@ -264,6 +264,7 @@ function renderSOS() {
   const summary = `${pending} unacknowledged · ${alerts.length - pending} acknowledged.`;
   if ($("sos-summary").textContent !== summary)
     $("sos-summary").textContent = summary;
+  $("sos-summary").classList.toggle("clear", !pending);
   // Reuse event-specific nodes so polling never removes keyboard focus or changes
   // the identity captured by a pending acknowledgement request.
   const root = $("sos-alerts");
@@ -3985,6 +3986,9 @@ function updateCompactLayout() {
   const main = document.querySelector("main");
   if (detailsDrawer() && previous[1] !== "true") main.classList.add("details-closed");
   if (partiesDrawer() && previous[2] !== "true") main.classList.add("parties-closed");
+  // Leaving drawer layout restores the desktop columns that drawer mode closed.
+  if (!detailsDrawer() && previous[1] === "true") main.classList.remove("details-closed");
+  if (!partiesDrawer() && previous[2] === "true") main.classList.remove("parties-closed");
   $("toggle-parties").setAttribute("aria-expanded", String(!main.classList.contains("parties-closed")));
   $("collapse-parties").setAttribute("aria-expanded", String(!main.classList.contains("parties-closed")));
   for (const id of ["close-details", "toggle-details"])

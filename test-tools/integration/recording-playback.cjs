@@ -183,6 +183,7 @@ async function wait(fn) {
     await headerAction("appearance");
   }
   await page.setViewportSize({width:1440,height:900});
+  await page.waitForFunction(() => document.querySelector(".party-overview").getBoundingClientRect().width > 0);
   if (await page.locator("#toggle-parties").getAttribute("aria-expanded") === "false") await page.locator("#toggle-parties").click();
   await menuAction(page, "mode-recording");
   await page

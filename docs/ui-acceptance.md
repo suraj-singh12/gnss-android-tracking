@@ -1,5 +1,40 @@
 # UI acceptance evidence
 
+## Issue #66 — Command V5.14 production workspace (22 November 2026)
+
+Design authority: `docs/design/approved/command-v5.14-interactive.html` (SHA-256 `5594847d65a10dabd066941930fae5fbe01aa007a71407b0f1d2127298faec81`). The production UI follows its geometry, tokens and interaction semantics. Every control drives existing Command state. `docs/ui-preservation-matrix.md` maps each control to its owner.
+
+### Findings fixed during review
+
+| Finding | Fix |
+|---|---|
+| The playback context block sat over the wrapped map toolbar at narrow widths and blocked zoom | The block starts below the measured toolbar height. It ignores pointer events except on its children. |
+| The SOS toast covered the panel toggles and the first rows of a drawer | The toast sits below the map tools on desktop. With drawers (≤1190 px) it sits just above the bottom rail. |
+| `--command-dock-top` was 0 while the rail was hidden, so anchored elements were placed off-screen | A hidden dock falls back to the viewport height. |
+| The playback More menu overflowed the timeline by 2 px at 430 px | Timeline children can shrink. Gap and padding are reduced at ≤520 px. |
+| Follow Original overlapped the recording name at 1280 px (legacy absolute centring) | Follow Original stays in flex flow. The name is ellipsised and hidden at ≤600 px. |
+| Both panels stayed closed after resizing from drawer layout back to desktop | Leaving drawer mode restores the columns that drawer mode closed. |
+| The SOS summary was red when nothing was pending | Danger colour applies only while acknowledgement is pending. |
+| The amber “last fix” chip failed AA contrast (axe) | The chip uses `--amber-text` (`#7a5216` Day). |
+| The prototype Day secondary text `#6d7d80` (and `#61747A`) fails 4.5:1 on the washes | Day keeps Command's existing `#596970`. |
+
+### Verification (local, Linux)
+
+- `command`: `go test -race ./...` and `go vet ./...` pass. `test-tools`: `go test -race ./...` and `go vet ./...` pass.
+- Browser suites pass against a real Command binary and SQLite: `command-v514-workspace` (new), `ui-dashboard`, `sos-dashboard`, `recording-foundation`, `recording-playback`, `travel-back`, `playback-clips`, `control-ui`, `history-dashboard`, `map-download-ui`, `map-radius-ui`, `map-acquisition-deterministic`, `windows-stability`, `sync-capacity`, `map-test`, `sos-alarm-test`, `terrain-test` and `issue59-layout`.
+- The new suite covers:
+  - geometry (58 px header, 242/270 px columns), the mode menu, keyboard navigation and focus
+  - an open menu staying open during live refresh, party search and filters, and Details updates
+  - panel collapse and restore, and Day/Night persistence
+  - seven viewports in Day and Night, with menu bounds, control reachability and no document overflow
+  - the recording lifecycle (start/cancel, start, pause, resume, stop) and keeping unsaved stopped evidence
+  - provider failure, the SOS sound switch, and axe WCAG 2.1 AA with zero violations
+
+### Not verified
+
+- `dem-offline-acceptance` needs a live terrain provider and operator transfer approval. It was not run locally.
+- Native macOS and Windows runtime behaviour is not proven by Linux browser runs or cross-builds.
+
 ## Issue #39 — operator-approved focused polish (21 November 2026, P2-series)
 
 Continues draft PR #65 from verified head `2a2be2efc01215e92b5570b310e1730fccbd4d55`.

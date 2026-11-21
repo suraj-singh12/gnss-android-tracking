@@ -174,6 +174,9 @@ async function wait(check, message = "Timed out waiting for real state") {
     }
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.waitForTimeout(250);
+    // Returning from drawer layout restores both desktop columns.
+    assert(await page.locator(".party-overview").isVisible(), "Parties column restored at 1440");
+    assert(await page.locator(".party-detail").isVisible(), "Details column restored at 1440");
   }
   await page.evaluate(() => { localStorage.setItem("gnss-appearance", "day"); applyAppearance(); });
   await page.evaluate(() => document.querySelector("main").classList.remove("details-closed", "parties-closed"));

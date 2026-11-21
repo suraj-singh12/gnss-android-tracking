@@ -311,6 +311,8 @@ async function wait(check) {
     });
   }
   await page.setViewportSize({ width: 1440, height: 900 });
+  // Leaving drawer layout restores the desktop columns on the resize handler.
+  await page.waitForFunction(() => document.querySelector(".party-overview").getBoundingClientRect().width > 0);
   if (
     (await page.locator("#toggle-parties").getAttribute("aria-expanded")) ===
     "false"
