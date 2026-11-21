@@ -1,4 +1,5 @@
 /* Production Command/SQLite/Chromium regression for capture-time reconstruction. */
+const { menuAction } = require("./menu-actions.cjs");
 const { chromium } = require(
   process.env.GNSS_PLAYWRIGHT_MODULE || "playwright",
 );
@@ -108,7 +109,7 @@ const report = { physical_acceptance: false };
   });
   assert.match(unverified, /Stop or discard/);
 
-  await page.locator("#mode-travel").click();
+  await menuAction(page, "mode-travel");
   await page.waitForFunction(() => window.HistoricalPlayback.active);
   assert(!(await page.locator("#follow-label").isVisible()));
   assert.match(
@@ -165,7 +166,7 @@ const report = { physical_acceptance: false };
     false,
   );
   // Starting a new recording while temporarily in LIVE also locks Go Back.
-  await page.locator("#start").click();
+  await menuAction(page, "mode-recording");
   await page.locator("#confirm-recording").click();
   await page.waitForFunction(
     () => window.recordingLiveState().recording?.active,
@@ -220,12 +221,12 @@ const report = { physical_acceptance: false };
       });
     }
   }
-  await page.locator("#mode-live").click();
+  await menuAction(page, "mode-live");
   assert.equal(
     await page.evaluate(() => window.HistoricalPlayback.active),
     false,
   );
-  await page.locator("#mode-recording").click();
+  await menuAction(page, "mode-recording");
   await page.locator("#confirm-recording").click();
   await page.waitForFunction(
     () => window.recordingLiveState().recording?.active,
@@ -250,12 +251,12 @@ const report = { physical_acceptance: false };
   const recordingId = await page.evaluate(
     () => window.recordingLiveState().recording.recording_id,
   );
-  await page.locator("#mode-live").click();
+  await menuAction(page, "mode-live");
   assert.equal(
     await page.evaluate(() => window.recordingLiveState().recording.active),
     true,
   );
-  await page.locator("#mode-recording").click();
+  await menuAction(page, "mode-recording");
   assert.equal(
     await page.evaluate(
       () => window.recordingLiveState().recording.recording_id,

@@ -25,11 +25,12 @@ let viewport, offlineMap, inspectedPoint, locatedSOS, terrain, activeMapID;
 function applyAppearance() {
   const night = localStorage.getItem("gnss-appearance") === "night";
   document.documentElement.dataset.appearance = night ? "night" : "day";
-  $("appearance").textContent = night ? "Day" : "Night";
+  $("appearance").firstElementChild.textContent = night ? "☀" : "☾";
   $("appearance").setAttribute(
     "aria-label",
     `Switch to ${night ? "Day" : "Night"} appearance`,
   );
+  $("appearance").title = $("appearance").getAttribute("aria-label");
   if (terrain) {
     terrain.image = undefined;
     for (const g of terrain.grids || []) g.image = undefined;
@@ -179,6 +180,7 @@ async function sosSound(test = false) {
       );
       if (audio.state !== "running") {
         $("sos-audio").textContent = "SOS alarm: blocked";
+        $("sos-audio").setAttribute("aria-checked", "false");
         $("sos-audio-status").textContent =
           "Audio suspended / blocked. Enable sound; visual SOS stays active.";
       }
@@ -189,10 +191,12 @@ async function sosSound(test = false) {
     alarm.update(pending, true);
     if (test && !pending) beep();
     $("sos-audio").textContent = "SOS alarm: ready";
+    $("sos-audio").setAttribute("aria-checked", "true");
     $("sos-audio-status").textContent =
       "Sound enabled · one shared beep every second until every SOS is acknowledged. Check speaker volume.";
   } catch (e) {
     $("sos-audio").textContent = (window.AudioContext || window.webkitAudioContext) ? "SOS alarm: blocked" : "SOS alarm: error";
+    $("sos-audio").setAttribute("aria-checked", "false");
     $("sos-audio-status").textContent =
       "Audible alert blocked / unavailable. Enable audio and check speaker volume; visible SOS remains active.";
     alarm.update(alarm.pending, false);
@@ -204,21 +208,28 @@ $("open-sos").onclick = $("sos-toast-view").onclick = () =>
 $("sos-toast-dismiss").onclick = () => {
   $("sos-toast").hidden = true;
 };
+// V5.14 breakpoints: header utility menu ≤1250, Details drawer ≤1190, Parties drawer ≤800.
+const compactHeader = () => innerWidth <= 1250,
+  detailsDrawer = () => innerWidth <= 1190,
+  partiesDrawer = () => innerWidth <= 800;
 function detailsOpen(open) {
-  if (open && innerWidth <= 1100) {
+  if (open && partiesDrawer()) {
     document.querySelector("main").classList.add("parties-closed");
     $("toggle-parties").setAttribute("aria-expanded", "false");
   }
   document.querySelector("main").classList.toggle("details-closed", !open);
   $("close-details").setAttribute("aria-expanded", String(open));
+  $("toggle-details").setAttribute("aria-expanded", String(open));
 }
 $("close-details").onclick = () => { detailsOpen(false); $("tracks").focus(); };
+$("toggle-details").onclick = () =>
+  detailsOpen(document.querySelector("main").classList.contains("details-closed"));
 $("toggle-parties").onclick = $("collapse-parties").onclick = () => {
   const closed = document
     .querySelector("main")
     .classList.toggle("parties-closed");
   $("toggle-parties").setAttribute("aria-expanded", String(!closed));
-  if (!closed && innerWidth <= 1100) detailsOpen(false);
+  if (!closed && partiesDrawer()) detailsOpen(false);
 };
 function renderSOS() {
   const alerts = [...(state.sos_alerts || [])].sort(
@@ -621,6 +632,22 @@ function renderDashboard() {
         undefined,
         "device" + (selectedParty === d.device_id ? " selected" : ""),
       );
+      const sosPending = state.sos_alerts?.some(
+        (a) => a.device_id === d.device_id && !a.operator_acknowledged_at,
+      );
+      overview.dataset.contact = d.contact_condition;
+      overview.dataset.attention = String(
+        !!sosPending ||
+          d.contact_condition !== "healthy" ||
+          d.gnss_condition !== "fresh",
+      );
+      overview.dataset.search = [
+        d.snapshot.party.id,
+        d.snapshot.party.name,
+        d.device_id,
+      ]
+        .join(" ")
+        .toLowerCase();
       const select = el("button", d.snapshot.party.id, "party-select");
       select.setAttribute(
         "aria-pressed",
@@ -651,52 +678,94 @@ function renderDashboard() {
         overview.append(el("strong", "SOS Received · needs acknowledgement"));
       if (!preserveDevices) $("devices").append(overview);
       if (selectedParty === d.device_id && !preserveDetail) {
-        card.className = "selected-content";
-        title.replaceChildren(swatch, el("h2", d.snapshot.party.id));
+        // V5.14 inspector: actionable contact/GNSS facts first, evidence in one disclosure.
         const f = d.location?.fix;
-        if (f)
-          card.insertBefore(
-            el(
-              "div",
-              `${f.latitude.toFixed(6)}, ${f.longitude.toFixed(6)} · observed ${time(f.observed_at)}`,
-              "detail-block",
-            ),
-            status,
-          );
-        const summary = el("div", undefined, "status detail-block");
-        summary.append(
+        const inspector = el("section", undefined, "selected-content inspector-person");
+        const head = el("div", undefined, "inspector-person-header");
+        const name = el("h2", undefined, "detail-name");
+        name.append(swatch, el("span", d.snapshot.party.id));
+        head.append(
+          name,
           el(
-            "div",
-            gnssLabel(d) +
-              " · accuracy " +
-              (f?.horizontal_accuracy_m == null
-                ? "unknown"
-                : "±" + f.horizontal_accuracy_m + " m"),
+            "span",
+            gnssLabel(d),
+            "inspector-fix" + (d.current_position ? " positive" : ""),
           ),
-          el("div", "Last Command contact: " + time(d.last_contact)),
+        );
+        const critical = el("div", undefined, "inspector-critical");
+        const contact = el("div", undefined, "inspector-contact");
+        contact.append(
+          el("span", "Command contact", "inspector-kicker"),
           el(
-            "div",
-            "Battery: " +
-              (d.snapshot.health.battery_percent == null
-                ? "Unavailable"
-                : d.snapshot.health.battery_percent + "%"),
+            "strong",
+            { healthy: "Connected", delayed: "Contact delayed", contact_lost: "Offline · contact lost" }[d.contact_condition],
+            d.contact_condition,
           ),
-          el("div", historyLabel(d)),
+        );
+        const metrics = el("div", undefined, "inspector-metric-pair");
+        for (const [label, value] of [
+          [
+            "Observation age",
+            d.location_age_s == null
+              ? "Unavailable"
+              : Math.max(0, d.location_age_s).toFixed(0) + " s",
+          ],
+          [
+            "Battery",
+            d.snapshot.health.battery_percent == null
+              ? "Unavailable"
+              : d.snapshot.health.battery_percent + "%",
+          ],
+        ]) {
+          const metric = el("div");
+          metric.append(el("span", label, "inspector-kicker"), el("strong", value));
+          metrics.append(metric);
+        }
+        critical.append(contact, metrics);
+        const facts = el("div", undefined, "inspector-facts");
+        for (const [label, value] of [
+          ["Team", d.snapshot.party.name],
+          [
+            "Accuracy",
+            f?.horizontal_accuracy_m == null
+              ? "Unknown"
+              : "±" + f.horizontal_accuracy_m + " m",
+          ],
+          ["Last fix", f ? time(f.observed_at) : "No fix received"],
+          ["Last Command contact", time(d.last_contact)],
+          ["Qualified distance", distance(d.total_m)],
+          [
+            "Coordinates",
+            f
+              ? `${f.latitude.toFixed(6)}, ${f.longitude.toFixed(6)}`
+              : "Unavailable",
+          ],
+          ["Recording", historyLabel(d)],
+        ]) {
+          const row = el("div", undefined, "fact");
+          row.append(el("span", label), el("span", value));
+          facts.append(row);
+        }
+        const reporting = el("div", undefined, "inspector-reporting");
+        reporting.append(
+          el("span", "Reporting interval override · seconds", "inspector-kicker"),
+          form,
           el(
             "small",
-            d.location_age_s == null
-              ? "Observation age unavailable"
-              : "Observation age: " +
-                  Math.max(0, d.location_age_s).toFixed(0) +
-                  " s",
+            "Remote override " +
+              (d.desired_config.reporting_interval_override_s ?? "cleared") +
+              " · legacy v1 setting; authenticated controls are in Phone controls",
           ),
         );
-        card.insertBefore(summary, form);
-        const diagnostics = el("details");
-        diagnostics.append(
-          el("summary", "Diagnostics & significant events"),
-          status,
+        const diagnostics = el("details", undefined, "inspector-evidence");
+        const evidenceSummary = el("summary"),
+          evidenceCopy = el("span", undefined, "evidence-copy");
+        evidenceCopy.append(
+          el("strong", "Observation evidence & quality"),
+          el("small", "Original fixes, qualification, gaps and significant events"),
         );
+        evidenceSummary.append(evidenceCopy, el("span", "Expand", "evidence-disclosure"));
+        diagnostics.append(evidenceSummary, status);
         for (const event of state.sos_alerts ?? []) {
           if (event.device_id !== d.device_id) continue;
           diagnostics.append(
@@ -706,8 +775,11 @@ function renderDashboard() {
             ),
           );
         }
-        card.append(diagnostics);
-        $("selected-detail").append(card);
+        const actions = el("div", undefined, "inspector-actions");
+        remote.className = "primary";
+        actions.append(remote);
+        inspector.append(head, critical, facts, reporting, diagnostics, actions);
+        $("selected-detail").append(inspector);
       }
     }
   }
@@ -725,6 +797,7 @@ function renderDashboard() {
       enabled.name = "enabled_" + key;
       enabled.checked = state.policy.enabled?.[key] !== false;
       enabled.setAttribute("aria-label", "Enable " + label);
+      enabled.setAttribute("role", "switch");
       row.append(enabled);
       input.name = key;
       input.setAttribute("aria-label", label);
@@ -3874,12 +3947,14 @@ window.PinnedTerrainRenderer = {hillshade:appendPinnedHillshade,contours:appendP
 document.addEventListener("click", (event) => {
   const menu = event.target.closest(".menu");
   if (menu && event.target.closest("button, a")) {
-    for (let current = menu; current; current = current.parentElement?.closest(".menu")) if (!current.classList.contains("header-menu-root") || innerWidth <= 1100) current.open = false;
-  } else if (!menu) document.querySelectorAll(".menu[open]").forEach((item) => { if (!item.classList.contains("header-menu-root") || innerWidth <= 1100) item.open = false; });
+    for (let current = menu; current; current = current.parentElement?.closest(".menu")) if (!current.classList.contains("header-menu-root") || compactHeader()) current.open = false;
+  } else if (!menu) document.querySelectorAll(".menu[open]").forEach((item) => { if (!item.classList.contains("header-menu-root") || compactHeader()) item.open = false; });
 });
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
-  const menu = event.target.closest(".menu[open]");
+  let menu = event.target.closest(".menu[open]");
+  // At wide widths the header groups are always visible; never collapse their root.
+  if (menu?.classList.contains("header-menu-root") && !compactHeader()) menu = undefined;
   if (menu) { event.preventDefault(); menu.open = false; menu.querySelector("summary")?.focus(); }
 });
 const captureHealth = $("capture-health");
@@ -3902,16 +3977,18 @@ window.addEventListener("resize", updateConnectionLabel);
 const headerMenuRoot = document.querySelector(".header-menu-root");
 let compactLayout;
 function updateCompactLayout() {
-  const compact = innerWidth <= 1100;
-  if (compact === compactLayout) return;
-  compactLayout = compact;
-  headerMenuRoot.open = !compact;
-  if (compact) {
-    const main = document.querySelector("main");
-    main.classList.add("details-closed");
-    $("toggle-parties").setAttribute("aria-expanded", String(!main.classList.contains("parties-closed")));
-    $("close-details").setAttribute("aria-expanded", "false");
-  }
+  const layout = [compactHeader(), detailsDrawer(), partiesDrawer()].join();
+  if (layout === compactLayout) return;
+  const previous = compactLayout?.split(",") || [];
+  compactLayout = layout;
+  headerMenuRoot.open = !compactHeader();
+  const main = document.querySelector("main");
+  if (detailsDrawer() && previous[1] !== "true") main.classList.add("details-closed");
+  if (partiesDrawer() && previous[2] !== "true") main.classList.add("parties-closed");
+  $("toggle-parties").setAttribute("aria-expanded", String(!main.classList.contains("parties-closed")));
+  $("collapse-parties").setAttribute("aria-expanded", String(!main.classList.contains("parties-closed")));
+  for (const id of ["close-details", "toggle-details"])
+    $(id).setAttribute("aria-expanded", String(!main.classList.contains("details-closed")));
 }
 window.addEventListener("resize", updateCompactLayout);
 updateCompactLayout();
@@ -3927,23 +4004,25 @@ playbackMore.append(playbackMoreSummary, playbackMoreContent);
 $("playback-timeline").append(playbackMore);
 // Restore focus for non-modal narrow drawers, including historical inspection.
 document.addEventListener("click", event => {
-  if (innerWidth > 1100) return;
+  if (!detailsDrawer()) return;
   const id = event.target.closest("button")?.id;
   if (!["toggle-parties", "collapse-parties", "toggle-details", "close-details"].includes(id)) return;
   queueMicrotask(() => {
     const left = id.includes("parties"), main = document.querySelector("main");
+    if (left && !partiesDrawer()) return;
     const closed = main.classList.contains(left ? "parties-closed" : "details-closed");
-    if (closed) $(left ? "toggle-parties" : "tracks").focus();
+    if (closed) $(left ? "toggle-parties" : "toggle-details").focus();
     else $(left ? "collapse-parties" : "close-details").focus();
   });
 }, true);
 document.addEventListener("keydown", event => {
-  if (event.key !== "Escape" || innerWidth > 1100 || event.target.closest("dialog, .menu")) return;
+  if (event.key !== "Escape" || !detailsDrawer() || event.target.closest("dialog, .menu")) return;
   const aside = event.target.closest(".party-overview, .party-detail");
   if (!aside) return;
   const left = aside.classList.contains("party-overview");
+  if (left && !partiesDrawer()) return;
   document.querySelector("main").classList.add(left ? "parties-closed" : "details-closed");
-  const toggle = $(left ? "toggle-parties" : "tracks");
+  const toggle = $(left ? "toggle-parties" : "toggle-details");
   toggle.setAttribute("aria-expanded", "false");
   toggle.focus();
   event.preventDefault();
@@ -3963,7 +4042,7 @@ document.addEventListener("keydown", event => {
 });
 // The recording controls belong to the live map cell so side panels never
 // consume the dock's width. Existing nodes and handlers are retained.
-document.querySelector(".canvas").append(document.querySelector(".recording-bar"));
+document.querySelector(".canvas").after(document.querySelector(".recording-bar"));
 for (const group of document.querySelectorAll(".menu-groups > .menu")) {
   group.addEventListener("toggle", () => {
     if (group.open) for (const sibling of group.parentElement.children) if (sibling !== group) sibling.open = false;
@@ -3976,7 +4055,7 @@ document.addEventListener("click", event => {
   if (!button) return;
   const menu = button.closest(".menu");
   const root = button.closest(".header-menu-root");
-  const trigger = root && innerWidth <= 1100 ? root.querySelector(":scope > summary") : menu.querySelector(":scope > summary");
+  const trigger = root && compactHeader() ? root.querySelector(":scope > summary") : menu.querySelector(":scope > summary");
   const previouslyOpen = new Set(document.querySelectorAll("dialog[open]"));
   queueMicrotask(() => {
     for (const dialog of document.querySelectorAll("dialog[open]")) {

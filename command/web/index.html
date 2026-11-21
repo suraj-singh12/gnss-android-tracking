@@ -13,14 +13,15 @@
     <script src="/playback.js" defer></script>
     <script src="/library.js" defer></script>
     <script src="/control.js" defer></script>
+    <script src="/workspace.js" defer></script>
   </head>
-  <body>
-    <header>
-      <div class="brand">
-        <span class="brand-mark">G</span>
+  <body id="command">
+    <header class="header">
+      <div class="identity brand">
+        <span class="brand-mark logo" aria-hidden="true">G</span>
         <div>
-          <span class="brand-name">GNSS Command Centre</span>
-          <div class="command-summary">
+          <span class="brand-name identity-name">GNSS Command</span>
+          <div class="command-summary identity-caption">
             <span
               id="connection"
               role="status"
@@ -34,17 +35,27 @@
           </div>
         </div>
       </div>
-      <div class="header-tools">
-        <details class="header-menu-root menu" open><summary>Menu</summary>
+      <details class="menu mode-picker" id="mode-picker">
+        <summary id="mode-button" class="mode-chooser" aria-label="Operational mode: LIVE"><span id="mode-label">LIVE</span><svg class="arrow" viewBox="0 0 20 12" aria-hidden="true"><path d="m4 3 6 6 6-6"/></svg></summary>
+        <div class="menu-content mode-dropdown">
+          <nav id="mode-navigation" aria-label="Operational mode">
+            <button id="mode-live" class="mode-menu-item"><span><strong>Live</strong><small>Current locations and SOS</small></span><span class="menu-check" aria-hidden="true"></span></button>
+            <button id="mode-recording" class="mode-menu-item"><span><strong>Record</strong><small>Record the operator presentation</small></span><span class="menu-check" aria-hidden="true"></span></button>
+            <button id="mode-library" class="mode-menu-item"><span><strong>View Recording</strong><small>Frozen saved evidence</small></span><span class="menu-check" aria-hidden="true"></span></button>
+            <button id="mode-travel" class="mode-menu-item"><span><strong>Travel Back</strong><small>Original GNSS capture history</small></span><span class="menu-check" aria-hidden="true"></span></button>
+          </nav>
+        </div>
+      </details>
+      <div class="header-tools header-right">
+        <details class="header-menu-root menu" open><summary class="utility-trigger" aria-label="Open navigation and tools"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></summary>
           <div class="menu-groups">
-            <details class="menu"><summary>Workspace</summary><div class="menu-content"><button id="open-map">Map &amp; layers</button><button id="open-control">Phone controls</button></div></details>
-            <details class="menu"><summary>Records</summary><div class="menu-content"><button id="open-travel">Travel Back</button><button id="open-library">Saved recordings</button><button id="open-history" aria-label="Events history">Events</button></div></details>
-            <details class="menu"><summary>Tools</summary><div class="menu-content"><button id="open-quality">Quality settings</button><a href="/local/field-report">Export diagnostics</a><button id="open-about">About</button></div></details>
-            <details class="menu"><summary>View</summary><div class="menu-content"><button id="appearance" aria-label="Switch to Night appearance">Night</button></div></details>
+            <button id="open-map" class="header-link">Maps</button>
+            <details class="menu"><summary>Records</summary><div class="menu-content"><button id="open-library">Saved recordings</button><button id="open-travel">Travel Back</button><button id="open-history" aria-label="Events history">Event history</button></div></details>
+            <details class="menu"><summary>Tools</summary><div class="menu-content"><button id="open-quality">Quality rules</button><button id="open-control">Phone controls</button><a href="/local/field-report">Export diagnostics</a><button id="open-sos-sound">SOS sound</button><button id="open-about">About Command</button></div></details>
           </div>
         </details>
-        <button id="sos-audio">SOS alarm: enable</button>
-        <button id="open-sos" class="emergency" aria-label="Open SOS emergencies">SOS <span id="sos-count">0</span></button>
+        <button id="appearance" class="theme-toggle" aria-label="Switch to Night appearance" title="Switch to Night appearance"><span aria-hidden="true">☾</span></button>
+        <button id="open-sos" class="emergency" aria-label="Open SOS emergencies"><svg class="small-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 21h20L12 3ZM12 9v5M12 18h.01"/></svg><span class="label-text">SOS</span> <span id="sos-count">0</span></button>
       </div>
     </header>
     <dialog id="phone-control" aria-labelledby="phone-control-title">
@@ -150,18 +161,8 @@
       <h2>Per-phone command history</h2>
       <div id="control-history"></div>
     </dialog>
-    <nav id="mode-navigation" aria-label="Operational mode"><button id="mode-live">LIVE</button><button id="mode-recording">RECORDING LIVE</button><button id="mode-library">VIEWING RECORDING</button><button id="mode-travel">TRAVEL BACK</button><section id="playback-rail" hidden aria-label="Historical playback">
-      <div>
-        <strong id="historical-mode">● VIEWING RECORDING</strong> <span id="playback-name"></span>
-      </div>
-      <label id="follow-label"
-        >Follow Original
-        <input id="follow-original" type="checkbox" role="switch" checked /><span id="follow-state">ON</span></label>
-      <span id="historical-authority">Read-only evidence</span
-      ><button id="exit-playback">Exit playback</button>
-    </section>
-    </nav><output id="operational-mode" aria-live="polite">LIVE</output><div id="error" role="alert" hidden></div>
-    <button id="historical-return" hidden>Go Back</button><section class="recording-bar" aria-label="Recording controls">
+<div id="error" role="alert" hidden></div>
+    <section class="recording-bar" aria-label="Recording controls">
       <span id="recording" role="status">Connecting…</span>
       <details class="capture-disclosure"><summary id="capture-summary">Presentation status</summary><div class="capture-detail"><strong id="capture-heading" hidden>Presentation unverified at this time</strong><span id="capture-health" role="status">Awaiting browser ownership</span></div></details>
       <div class="controls">
@@ -302,10 +303,13 @@
         </button>
       </div>
       <p id="sos-summary" role="status" aria-live="polite"></p>
-      <span id="sos-audio-status" role="status"
-        >Audible alert blocked until enabled. Visible alerts remain
-        active.</span
-      >
+      <div class="audio-setting-row switchline">
+        <span><b>Audible SOS alarm</b><small id="sos-audio-status" role="status"
+          >Audible alert blocked until enabled. Visible alerts remain
+          active.</small
+        ></span>
+        <button id="sos-audio" type="button" role="switch" aria-checked="false" aria-label="Audible SOS alarm">SOS alarm: enable</button>
+      </div>
       <div id="sos-alerts"></div>
     </dialog>
     <dialog id="event-history" class="drawer" aria-labelledby="history-heading">
@@ -399,16 +403,19 @@
         <button type="submit">Save metadata</button>
       </form>
     </dialog>
-    <main class="details-closed">
+    <main>
       <aside class="party-overview">
-        <div class="aside-title">
-          <h1>Parties</h1>
-          <span id="count">0</span>
-          <button id="collapse-parties" aria-label="Collapse party sidebar">
-            ‹
+        <div class="aside-title side-heading">
+          <div><h1>Parties</h1><small><span id="count">0</span> parties · searchable</small></div>
+          <button id="collapse-parties" aria-label="Close Parties">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg>
           </button>
         </div>
-        <p class="muted">Contact and GNSS are independent.</p>
+        <div class="party-tools">
+          <input id="party-search" class="panel-search" type="search" placeholder="Find party or ID" aria-label="Search parties" autocomplete="off" />
+          <div class="panel-filters" role="group" aria-label="Party filter"><button type="button" data-party-filter="all" aria-pressed="true">All</button><button type="button" data-party-filter="online" aria-pressed="false">Online</button><button type="button" data-party-filter="attention" aria-pressed="false">Attention</button></div>
+          <p id="party-filter-status" class="caption" role="status">Contact and GNSS are independent.</p>
+        </div>
         <div id="devices"></div>
         <p id="no-parties">
           Waiting for party leaders.<small
@@ -417,18 +424,82 @@
           >
         </p>
       </aside>
-      <section class="canvas" aria-label="Geographic workspace"><button id="toggle-parties" aria-label="Restore Parties sidebar" aria-expanded="true">›</button>
-        <div class="canvas-toolbar">
-          <span>N ↑ <span id="map-mode-label">Blank canvas</span></span>
+      <div class="center">
+      <div class="context">
+        <div class="context-copy"><div class="context-title" id="context-title">Live operations</div><div class="context-detail" id="context-detail">Contact and GNSS freshness stay separate</div></div>
+        <div class="context-right" id="context-actions"><output id="operational-mode" aria-live="polite">LIVE</output><button id="historical-return" hidden>Go Back</button>
+        <section id="playback-rail" hidden aria-label="Historical playback">
+      <div>
+        <strong id="historical-mode">● VIEWING RECORDING</strong> <span id="playback-name"></span>
+      </div>
+      <label id="follow-label"
+        >Follow Original
+        <input id="follow-original" type="checkbox" role="switch" checked /><span id="follow-state">ON</span></label>
+      <span id="historical-authority">Read-only evidence</span
+      ><button id="exit-playback">Exit playback</button>
+    </section>
+        </div>
+      </div>
+      <section class="canvas" aria-label="Geographic workspace">
+        <div class="map-tag"><strong>N ↑ <span id="map-mode-label">Blank canvas</span></strong><small id="map-tag-detail"><span id="scale-label"></span></small></div>
+        <div class="canvas-toolbar map-actions" role="toolbar" aria-label="Map controls">
           <div>
-            <button id="zoom-in" aria-label="Zoom in">+</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="fit">Fit parties</button><button id="focus-party">Focus selected</button><button id="inspect-history">Inspect history</button><button id="open-layers" title="Show or hide locally prepared terrain layers" aria-label="Map Layers" aria-expanded="false">Layers</button>
+            <button id="zoom-in" aria-label="Zoom in" title="Zoom in"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M4 12h16"/></svg></button><button id="zoom-out" aria-label="Zoom out" title="Zoom out"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h16"/></svg></button><button id="fit" title="Fit all parties into view">Fit parties</button><button id="focus-party" title="Focus on selected party">Focus selected</button><button id="inspect-history" title="Inspect original history of the selected party">Inspect history</button><button id="open-layers" title="Show or hide locally prepared terrain layers" aria-label="Map Layers" aria-expanded="false">Layers <svg class="small-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5"/></svg></button><button id="toggle-parties" class="panel-toggle" aria-label="Show Parties" aria-expanded="true">Parties</button><button id="toggle-details" class="panel-toggle" aria-label="Show selected party details" aria-expanded="false">Details</button>
           </div>
         </div>
         <div class="playback-context"><div id="playback-status" role="status" hidden></div>
         <details id="playback-evidence" hidden><summary>Presentation unverified at this time</summary><p id="playback-evidence-detail"></p></details></div>
         <div id="playback-notice" role="status" hidden></div>
         <div id="playback-sos" hidden></div>
-        <details id="travel-settings" hidden><summary>Capture range & diagnostics</summary><label>Start <input id="travel-start" step="1" type="datetime-local"></label><label>End <input id="travel-end" step="1" type="datetime-local"></label><button id="travel-refresh">Refresh View</button><span id="travel-pending" role="status"></span><p>Retained original GNSS only · unknown gaps remain unknown. Quality uses the current policy without editing it.</p><label><input id="travel-offline" type="checkbox">Exclude offline at snapshot (contact, not GNSS quality)</label><label><input id="travel-raw" type="checkbox">Use All Observations (diagnostic dots, no qualified distance)</label><pre id="travel-diagnostics"></pre></details><section id="playback-timeline" hidden aria-label="Recording timeline">
+        <details id="travel-settings" hidden><summary>Capture range & diagnostics</summary><label>Start <input id="travel-start" step="1" type="datetime-local"></label><label>End <input id="travel-end" step="1" type="datetime-local"></label><button id="travel-refresh">Refresh View</button><span id="travel-pending" role="status"></span><p>Retained original GNSS only · unknown gaps remain unknown. Quality uses the current policy without editing it.</p><label><input id="travel-offline" type="checkbox">Exclude offline at snapshot (contact, not GNSS quality)</label><label><input id="travel-raw" type="checkbox">Use All Observations (diagnostic dots, no qualified distance)</label><pre id="travel-diagnostics"></pre></details>
+        <div id="projection-status" role="status"></div>
+        <div id="label-density" role="status" hidden></div>
+        <div id="map-detail-status" role="status"></div>
+
+        <dialog
+          id="history-inspection"
+          aria-labelledby="history-inspection-title"
+        >
+          <form method="dialog">
+            <button aria-label="Close history inspection">Close</button>
+          </form>
+          <h2 id="history-inspection-title">Original history inspection</h2>
+          <label
+            >Layer
+            <select id="inspection-layer">
+              <option value="qualified">
+                Full qualified geometry and decisions
+              </option>
+              <option value="raw">Original observations</option>
+            </select></label
+          >
+          <p id="inspection-status" role="status"></p>
+          <button id="inspection-restart">First page</button
+          ><button id="inspection-next">Next page</button>
+          <pre id="inspection-data"></pre>
+        </dialog>
+        <svg
+          id="tracks"
+          tabindex="0"
+          role="group"
+          aria-label="Geographic tracks. Arrow keys pan; plus and minus zoom; F fits visible parties."
+        ></svg>
+        <div id="empty">
+          No locations to display<small
+            >Live positions appear independently of Recording and historical
+            recovery.</small
+          >
+        </div>
+        <div id="hover" role="status">
+          Select a location point to inspect coordinates, time and accuracy.
+        </div>
+        <div class="canvas-legend">
+          <span>● Live GNSS</span
+          ><span id="track-layer-label">— Qualified history</span
+          ><span>Gaps split route sections</span>
+        </div>
+      </section>
+        <section id="playback-timeline" hidden aria-label="Recording timeline">
           <div class="playback-time">
             <strong id="presentation-time"></strong
             ><small id="timeline-authority">Presentation time</small>
@@ -479,58 +550,12 @@
             ⋮
           </button>
         </section>
-        <div id="projection-status" role="status"></div>
-        <div id="label-density" role="status" hidden></div>
-        <div id="map-detail-status" role="status"></div>
-
-        <dialog
-          id="history-inspection"
-          aria-labelledby="history-inspection-title"
-        >
-          <form method="dialog">
-            <button aria-label="Close history inspection">Close</button>
-          </form>
-          <h2 id="history-inspection-title">Original history inspection</h2>
-          <label
-            >Layer
-            <select id="inspection-layer">
-              <option value="qualified">
-                Full qualified geometry and decisions
-              </option>
-              <option value="raw">Original observations</option>
-            </select></label
-          >
-          <p id="inspection-status" role="status"></p>
-          <button id="inspection-restart">First page</button
-          ><button id="inspection-next">Next page</button>
-          <pre id="inspection-data"></pre>
-        </dialog>
-        <svg
-          id="tracks"
-          tabindex="0"
-          role="group"
-          aria-label="Geographic tracks. Arrow keys pan; plus and minus zoom; F fits visible parties."
-        ></svg>
-        <div id="empty">
-          No locations to display<small
-            >Live positions appear independently of Recording and historical
-            recovery.</small
-          >
-        </div>
-        <div id="hover" role="status">
-          Select a location point to inspect coordinates, time and accuracy.
-        </div>
-        <div class="canvas-legend">
-          <span>● Live GNSS</span
-          ><span id="track-layer-label">— Qualified history</span
-          ><span>Gaps split route sections</span><span id="scale-label"></span>
-        </div>
-      </section>
+      </div>
       <aside class="party-detail" aria-label="Selected party details">
-        <div class="aside-title">
-          <h1>Selected party</h1>
-          <button id="close-details" aria-label="Close selected party details">
-            ×
+        <div class="aside-title side-heading">
+          <div><h1>Selected party</h1><small>Contextual evidence</small></div>
+          <button id="close-details" aria-label="Close Details">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg>
           </button>
         </div>
         <div id="selected-detail">

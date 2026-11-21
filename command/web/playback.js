@@ -4,6 +4,7 @@
     ns = "http://www.w3.org/2000/svg";
   let travelRequest = 0,
     recordingContext = true,
+    recordIntent = false,
     recordingIdentity;
   window.OperationalModes = {
     update: updateMode,
@@ -385,7 +386,7 @@
   function responsivePanels() {
     const main = document.querySelector("main");
     if (
-      innerWidth <= 1100 &&
+      innerWidth <= 800 &&
       !main.classList.contains("parties-closed") &&
       !main.classList.contains("details-closed")
     )
@@ -977,7 +978,7 @@
         menu;
         menu = menu.parentElement?.closest(".menu")
       ) {
-        if (!menu.classList.contains("header-menu-root") || innerWidth <= 1100)
+        if (!menu.classList.contains("header-menu-root") || innerWidth <= 1250)
           menu.open = false;
       }
       if (
@@ -993,7 +994,7 @@
           key = left ? "parties-closed" : "details-closed";
         if (id === "close-details") main.classList.add(key);
         else main.classList.toggle(key);
-        if (innerWidth <= 1100 && !main.classList.contains(key))
+        if (innerWidth <= 800 && !main.classList.contains(key))
           main.classList.add(left ? "details-closed" : "parties-closed");
         repaint();
       } else if (id === "open-quality") showQuality();
@@ -1409,7 +1410,7 @@
       ? travel
         ? "TRAVEL BACK"
         : "VIEWING RECORDING"
-      : recordingInProgress() && recordingContext
+      : (recordingInProgress() && recordingContext) || recordIntent
         ? "RECORDING LIVE"
         : "LIVE";
     const current = $("operational-mode").textContent;
@@ -1434,22 +1435,28 @@
   setInterval(updateMode, 500);
   $("mode-live").onclick = () => {
     recordingContext = false;
+    recordIntent = false;
     updateMode();
     if (active) exit();
     else window.restoreLiveDashboard();
   };
   $("mode-recording").onclick = () => {
     recordingContext = true;
+    recordIntent = true;
     updateMode();
     if (active) exit();
     else window.restoreLiveDashboard();
     if (!locked()) $("start").click();
   };
   $("mode-library").onclick = () => {
-    if (!locked()) $("open-library").click();
+    if (locked()) return;
+    recordIntent = false;
+    $("open-library").click();
   };
   $("mode-travel").onclick = () => {
-    if (!locked()) $("open-travel").click();
+    if (locked()) return;
+    recordIntent = false;
+    $("open-travel").click();
   };
   $("historical-return").onclick = () => {
     if (!suspended || locked()) return;

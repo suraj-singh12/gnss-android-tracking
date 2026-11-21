@@ -166,7 +166,7 @@ async function captureCount() {
       original((t) => setTimeout(() => fn(t), 250));
   });
   const startAt = Date.now();
-  await page.locator("#start").click();
+  await menuAction(page, "mode-recording");
   await page.locator("#confirm-recording").click();
   await wait(async () => (await state()).recording?.active);
   assert.equal(

@@ -105,7 +105,8 @@ async function wait(check) {
     fullPage: true,
   });
   assert.equal(await page.locator("#start").isEnabled(), true);
-  await page.locator("#start").click();
+  // V5.14: Start Recording lives in the Record mode rail.
+  await menuAction(page, "mode-recording");
   assert.equal(
     (await state()).recording,
     null,
@@ -270,7 +271,7 @@ async function wait(check) {
             .querySelector(".recording-bar .controls")
             .getBoundingClientRect();
           const rail=document.querySelector(".recording-bar").getBoundingClientRect();
-          return box.right <= innerWidth && box.x > innerWidth / 2 && rail.height <= 48;
+          return box.right <= innerWidth && box.x > innerWidth / 2 && rail.height <= 61;
         }),
         "Approved compact recording rail fits and aligns controls on the right",
       );
@@ -954,7 +955,9 @@ async function wait(check) {
       return original.call(this);
     };
   });
+  await page.locator("#open-sos").click();
   await page.locator("#sos-audio").click();
+  await page.locator('[data-close="sos-panel"]').click();
   await send(sos);
   await page.waitForSelector("#sos-toast:not([hidden])");
   await page.locator("#sos-toast-view").click();

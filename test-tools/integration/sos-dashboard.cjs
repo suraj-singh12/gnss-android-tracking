@@ -102,7 +102,8 @@ async function stop() {
   fs.mkdirSync(evidence, {recursive:true});
   for (const [width,height] of [[390,844],[960,720],[1280,720],[1440,900],[1920,1080]]) {
     await page.setViewportSize({width,height});
-    assert.equal(await page.locator('#toggle-details, .map-tools').count(),0);
+    assert.equal(await page.locator('.map-tools').count(),0);
+    assert.equal(await page.locator('#toggle-details').count(),1);
     if (!(await page.locator('#collapse-parties').isVisible())) await page.locator('#toggle-parties').click();
     await page.locator('.party-select').first().click();
     const pane = await page.locator('.party-detail').boundingBox();
@@ -183,12 +184,12 @@ async function stop() {
       .evaluate((el) => el.classList.contains("acknowledged")),
     false,
   );
-  await page.locator('[data-close="sos-panel"]').click();
   await page.locator("#sos-audio").click();
   assert.match(
     await page.locator("#sos-audio-status").innerText(),
     /enabled|blocked/i,
   );
+  await page.locator('[data-close="sos-panel"]').click();
   await stop();
   await start();
   await page.reload();

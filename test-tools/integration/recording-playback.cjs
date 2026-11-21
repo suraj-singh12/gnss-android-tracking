@@ -1,5 +1,6 @@
 /* Real persisted #27 browser evidence, SQLite, Command and Chromium. */
 "use strict";
+const { menuAction } = require("./menu-actions.cjs");
 const assert = require("node:assert/strict"),
   fs = require("node:fs"),
   path = require("node:path"),
@@ -181,7 +182,7 @@ async function wait(fn) {
   }
   await page.setViewportSize({width:1440,height:900});
   if (await page.locator("#toggle-parties").getAttribute("aria-expanded") === "false") await page.locator("#toggle-parties").click();
-  await page.locator("#start").click();
+  await menuAction(page, "mode-recording");
   await page
     .locator("#session-mode")
     .check()
@@ -371,10 +372,10 @@ async function wait(fn) {
   );
   assert(await page.locator("#open-travel").isDisabled());
   const ongoing=await page.evaluate(()=>window.recordingLiveState().recording.recording_id);
-  await page.locator('#mode-live').click();
+  await menuAction(page, 'mode-live');
   assert.equal(await page.evaluate(()=>window.OperationalModes.showRecording),false);
   assert.equal(await page.evaluate(()=>window.recordingLiveState().recording.active),true);
-  await page.locator('#mode-recording').click();
+  await menuAction(page, 'mode-recording');
   assert.equal(await page.evaluate(()=>window.recordingLiveState().recording.recording_id),ongoing);
   await page.locator("#pause").click();
   assert(
