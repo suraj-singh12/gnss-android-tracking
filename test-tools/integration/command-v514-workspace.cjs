@@ -227,6 +227,13 @@ async function wait(check, message = "Timed out waiting for real state") {
   await page.locator("#sos-audio").click();
   assert.match(await page.locator("#sos-audio-status").innerText(), /enabled|blocked/i);
   assert.equal(await page.locator("#sos-audio").getAttribute("aria-checked"), (await page.locator("#sos-audio").textContent()).includes("ready") ? "true" : "false");
+  if ((await page.locator("#sos-audio").getAttribute("aria-checked")) === "true") {
+    await page.locator("#sos-audio").click();
+    assert.equal(await page.locator("#sos-audio").getAttribute("aria-checked"), "false", "SOS sound switch turns off");
+    assert.match(await page.locator("#sos-audio-status").innerText(), /turned off/i);
+    await page.locator("#sos-audio").click();
+    assert.equal(await page.locator("#sos-audio").getAttribute("aria-checked"), "true", "SOS sound switch turns back on");
+  }
   const sosAxe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();
   await page.locator('[data-close="sos-panel"]').click();
 

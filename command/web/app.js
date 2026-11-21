@@ -137,7 +137,8 @@ $("dots").onchange = () => {
   }
   poll();
 };
-let audio;
+let audio,
+  sosSoundOff = false;
 let activeTone;
 const seenSOS = new Set();
 function stopTone() {
@@ -176,7 +177,7 @@ async function sosSound(test = false) {
     audio.onstatechange = () => {
       alarm.update(
         state?.sos_alerts?.some((a) => !a.operator_acknowledged_at),
-        audio.state === "running",
+        audio.state === "running" && !sosSoundOff,
       );
       if (audio.state !== "running") {
         $("sos-audio").textContent = "SOS alarm: blocked";
@@ -185,7 +186,10 @@ async function sosSound(test = false) {
           "Audio suspended / blocked. Enable sound; visual SOS stays active.";
       }
     };
-    if (test) await audio.resume();
+    if (test) {
+      sosSoundOff = false;
+      await audio.resume();
+    }
     if (audio.state !== "running") throw Error("Audio blocked or suspended");
     const pending = state?.sos_alerts?.some((a) => !a.operator_acknowledged_at);
     alarm.update(pending, true);
@@ -202,7 +206,17 @@ async function sosSound(test = false) {
     alarm.update(alarm.pending, false);
   }
 }
-$("sos-audio").onclick = () => sosSound(true);
+// The operator can silence the audible alarm; visible SOS state is unaffected.
+function silenceSos() {
+  sosSoundOff = true;
+  alarm.update(alarm.pending, false);
+  $("sos-audio").textContent = "SOS alarm: off";
+  $("sos-audio").setAttribute("aria-checked", "false");
+  $("sos-audio-status").textContent =
+    "Audible SOS alarm turned off by the operator. Visible SOS alerts remain active.";
+}
+$("sos-audio").onclick = () =>
+  $("sos-audio").getAttribute("aria-checked") === "true" ? silenceSos() : sosSound(true);
 $("open-sos").onclick = $("sos-toast-view").onclick = () =>
   $("sos-panel").showModal();
 $("sos-toast-dismiss").onclick = () => {
@@ -367,7 +381,7 @@ function renderSOS() {
       card.remove();
   }
   if (focused && document.activeElement !== focused) focused.focus();
-  alarm.update(pending > 0, audio?.state === "running");
+  alarm.update(pending > 0, audio?.state === "running" && !sosSoundOff);
 }
 function render() {
   const started = performance.now();
