@@ -1,5 +1,31 @@
 # UI acceptance evidence
 
+## Issue #39 — operator-approved focused polish (21 November 2026, P2-series)
+
+Continues draft PR #65 from verified head `2a2be2efc01215e92b5570b310e1730fccbd4d55`.
+Scope approved by the operator task; everything else keeps V4.6. Before/after sheets:
+[polish-2/](evidence/issue-39/v46/polish-2/) (before = `2a2be2e` render, after = this source).
+
+| ID | Surface | Finding | Fix |
+|---|---|---|---|
+| P2-01 | SOS dock (all destinations, both themes, landscape) | The "horizontal line" under the SOS button was the hold-progress `ProgressBar` track (3dp), not a divider or border | Progress owner kept for `SosHoldGesture` but not drawn; progress now fills the button from the start edge (V4.6 `.sos-progress`, `sos_progress` colour). Hold duration, cancellation, accessibility action and engine unchanged; `V46RefinementTest.sosDockHasNoSeparateTrack…` |
+| P2-02 | All inputs and selectors | Fields looked oversized | Shared `NativeUi.input`/`selector`: 44dp visual outline inside the 48dp touch target (`field_outline_inset`), 9dp radius, 14sp `Input` role, 12/8dp padding, 1.5dp focus stroke, 3dp label gap (`formField`); padding re-applied after the background (fixed a text-flush-left defect found during review) |
+| P2-03 | Command access | UUIDs used a monospace code face; caption/label roles mixed | UUIDs/IDs in standard sans (`Value`/`Meta`), selectable and wrapping; read-only captions `Section`, editable credential label `FieldLabel`. Same for Instruction and SOS IDs |
+| P2-04 | Command access | Redundant "Authenticated contact" row | Removed; state stays in CommandControl and on Manage access & trust |
+| P2-05 | Command access | Inert "Disabled" button while remote control is disabled | Hidden; the enrollment status row already says Disabled. Disable/enable and confirmations unchanged |
+| P2-06 | Tracking policy | Duplicate interval editor and Save policy | Screen is Adaptive storage switch (persists immediately via `requestAdaptive`) + Policy details. Interval is edited only in Party & Command; canonical draft and save path unchanged |
+| P2-07 | Command Instructions | Card around a list plus card-like action | One bordered list with status pills (applied teal, rejected amber, unknown neutral), export below, Advanced row; quiet empty state |
+| P2-08 | History search | Separate bordered button rows | Same list/pill grammar; per-row Acknowledge kept inside the list |
+| P2-09 | Instruction details | Floating pill above the card, duplicated Type fact, stacked actions, raw full record | Header (type + pill) inside the summary, Copy/Export paired, Full record as quiet disclosure into a readable card |
+| P2-10 | Phone Alerts | "Retained history" shown amber; one combined sentence | Tones only for meaning (ACK pending/Blocked amber, Acknowledged teal, History/None neutral); separate Output / Recipient ACK / Command custody facts; primary button only while action is needed |
+| P2-11 | Fact rows (all) | Values wrapped early at 50% width | Label wraps content, value takes the rest |
+| P2-12 | Settings copy | Tracking policy subtitles still mentioned reporting | "Adaptive storage and policy details" / "Local adaptive storage" |
+
+Tests changed with the scope: interval workflow tests moved from Tracking policy to Party &
+Command (`V46WorkflowTest`); instruction-row lookups no longer assume `Button`; enrollment
+contact states are checked on Manage access & trust, comparing selectable text by content.
+Baselines re-recorded for P2-01…P2-12; hashes and reason in `visual-baseline/APPROVALS.md`.
+
 ## Issue #39 — operator-approved V4.6 refinement (20 November 2026, R-series)
 
 Continues draft PR #65 from verified head `91ff2ceda2865f26109e6eee9f6f3e9fec2caf60`

@@ -54,7 +54,7 @@ class CommandConsoleUiTest {
             )
             withTimeout(10000) {
                 while (
-                    views(root).filterIsInstance<TextView>().none {
+                    views(root).none {
                         it.contentDescription?.contains("Open instruction details") == true
                     }
                 ) {
@@ -74,8 +74,8 @@ class CommandConsoleUiTest {
             )
             filter.setText("blocked")
             val title =
-                views(root).filterIsInstance<TextView>().first {
-                    it.contentDescription?.toString()?.contains("Open instruction details") == true
+                views(root).first {
+                    it.isShown && it.contentDescription?.toString()?.contains("Open instruction details") == true
                 }
             assertTrue("Command row must be keyboard focusable", title.isFocusable)
             assertTrue(
@@ -132,8 +132,8 @@ class CommandConsoleUiTest {
             )
             openNativeScreen(activity.get(), "Command Instructions")
             val focusedRow =
-                views(root).filterIsInstance<Button>().single {
-                    it.contentDescription?.toString()?.contains("Open instruction details") == true
+                views(root).single {
+                    it.isShown && it.contentDescription?.toString()?.contains("Open instruction details") == true
                 }
             focusedRow.requestFocus()
             app.repository.dao.updateCommand(app.repository.dao.command(id)!!)

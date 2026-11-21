@@ -179,7 +179,7 @@ class SettingsDiagnosticsTest {
             openNativeScreen(controller.get(), "Instruction filters")
             controller.get().onBackPressed()
             fun rows() =
-                all().filterIsInstance<Button>().filter {
+                all().filter {
                     it.isShown && it.contentDescription?.contains("Open instruction details") == true
                 }
             until { rows().size == 20 }

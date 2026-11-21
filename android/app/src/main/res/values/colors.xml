@@ -21,6 +21,8 @@
     <color name="disabled_surface">@color/background</color>
     <color name="disabled_line">@color/line</color>
     <!-- Operator-approved pale caution Stop Tracking (correction 43/44): identical in Day and Night. -->
+    <!-- V4.6 .sos-progress: white 26% over the SOS fill while holding. -->
+    <color name="sos_progress">#42FFFFFF</color>
     <color name="stop_surface">#F9E9ED</color>
     <color name="stop_line">#E9BEC8</color>
     <color name="stop_ink">#8C3449</color>

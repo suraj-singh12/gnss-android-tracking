@@ -69,7 +69,8 @@ To restyle the whole app, change a token or a `NativeUi` component. Examples:
 | `quiet(button)` | Cancel/Close/inline links | Text action with ripple. |
 | `iconButton(button, icon, description)` | App bar actions | Borderless 48dp target, centred 24dp vector. |
 | `equalHeights(row)` | Peer actions in one row | Keeps row actions the same height when large text wraps a label. |
-| `input(editText)` | Text fields | Outlined 10dp, 48dp, Body type, 2dp accent focus stroke, disabled state, sans even for password types. |
+| `input(editText)`, `formField(parent, label, editor)` | Text fields | 48dp target with a 44dp visual outline (`fieldOutline`), 9dp radius, `Input` 14sp, 1.5dp accent focus stroke, disabled state, sans even for password types; `formField` applies label and gap tokens. |
+| `list(parent)`, `menu(…, status)` , `rowRipple()` | Record lists | One bordered list with peer dividers; rows may carry a trailing `statusPill`. Used by Command Instructions and History search. |
 | `selector(spinner)` + `selectorAdapter(items)` / `selectorItem(view)` | Exclusive choices | Outlined field, single down-chevron at a fixed 12dp end inset, Body type in field and popup. |
 | `switchRow(switch)` | Binary settings | Label start, Switch end, 48dp. Use a Switch, never a CheckBox, for a binary setting. |
 | `intervalPicker(card, editor, …)` (in `installV46Screens`) | Reporting interval | One selector + Custom field shared by Party & Command and Tracking policy over the same mirrored draft. |

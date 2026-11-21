@@ -54,6 +54,20 @@ internal class CollapsingTextView(context: Context) : TextView(context) {
 
 internal enum class StatusTone { POSITIVE, WARNING, NEUTRAL }
 
+/**
+ * The SOS hold progress owner. SosHoldGesture writes `progress` exactly as before; V4.6 draws
+ * it as a fill inside the SOS button (V4.6 `.sos-progress`) instead of a separate track.
+ */
+internal class HoldProgressBar(context: Context) :
+    ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal) {
+    var onProgress: ((Int) -> Unit)? = null
+    @Synchronized
+    override fun setProgress(progress: Int) {
+        super.setProgress(progress)
+        onProgress?.invoke(getProgress())
+    }
+}
+
 internal object TextWeight {
     const val REGULAR = 0
     const val MEDIUM = 1
@@ -241,6 +255,21 @@ internal class NativeUi(private val context: Context) {
         }
     }
 
+    /** Pressed-state ripple for a row inside a list surface (bounded by the row). */
+    fun rowRipple() = RippleDrawable(ColorStateList.valueOf(color(R.color.ripple)), null,
+        android.graphics.drawable.ColorDrawable(android.graphics.Color.WHITE))
+
+    /** Bordered list surface; dividers only between peer rows. */
+    fun list(parent: LinearLayout, gap: Int = 0): LinearLayout =
+        column().apply {
+            background = shape(R.color.surface)
+            showDividers = LinearLayout.SHOW_DIVIDER_MIDDLE
+            dividerDrawable = GradientDrawable().apply {
+                setColor(color(R.color.line)); setSize(1, px(R.dimen.stroke))
+            }
+            add(parent, this, gap)
+        }
+
     /** Peer actions in one horizontal row share the tallest action's height (large text wraps). */
     fun equalHeights(row: LinearLayout) {
         row.gravity = Gravity.CENTER_VERTICAL
@@ -248,7 +277,7 @@ internal class NativeUi(private val context: Context) {
     }
 
     /** One navigation row: title, optional subtitle and a trailing right chevron. */
-    fun menu(parent: LinearLayout, title: String, subtitle: String, action: () -> Unit) =
+    fun menu(parent: LinearLayout, title: String, subtitle: String, status: Pair<String, StatusTone>? = null, action: () -> Unit) =
         LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -258,7 +287,7 @@ internal class NativeUi(private val context: Context) {
                 RippleDrawable(ColorStateList.valueOf(color(R.color.ripple)), shape(R.color.surface), null)
             isClickable = true
             isFocusable = true
-            contentDescription = "$title. $subtitle. Open"
+            contentDescription = listOfNotNull(title, subtitle.ifEmpty { null }, status?.first).joinToString(". ") + ". Open"
             if (android.os.Build.VERSION.SDK_INT >= 28) isScreenReaderFocusable = true
             addView(
                 column().apply {
@@ -268,6 +297,12 @@ internal class NativeUi(private val context: Context) {
                 },
                 LinearLayout.LayoutParams(0, -2, 1f),
             )
+            status?.let { (statusText, tone) ->
+                addView(label(statusText, TextRole.Pill).apply {
+                    statusPill(this, tone)
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                }, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = px(R.dimen.space_sm) })
+            }
             addView(
                 ImageView(context).apply {
                     setImageDrawable(icon(R.drawable.ic_chevron_right, 20))
@@ -277,6 +312,25 @@ internal class NativeUi(private val context: Context) {
             setOnClickListener { action() }
             add(parent, this, 1)
         }
+
+    /** Draws a field outline inset vertically so a 48dp target looks like a 44dp field. */
+    fun fieldOutline(d: Drawable): Drawable =
+        android.graphics.drawable.InsetDrawable(d, 0, px(R.dimen.field_outline_inset), 0, px(R.dimen.field_outline_inset))
+
+    /** Gap above [view] in px (for token-based spacing). */
+    fun addPx(parent: LinearLayout, view: View, gapPx: Int) {
+        (view.parent as? ViewGroup)?.removeView(view)
+        parent.addView(view, LinearLayout.LayoutParams(-1, -2).apply { topMargin = gapPx })
+    }
+
+    /** Editable form field: FieldLabel caption, shared input, token spacing. */
+    fun formField(parent: LinearLayout, title: String, editor: View): TextView {
+        val caption = label(title, TextRole.FieldLabel).apply { labelFor = editor.id }
+        addPx(parent, caption, if (parent.childCount == 0) 0 else px(R.dimen.field_gap) + dp(2))
+        addPx(parent, editor, px(R.dimen.field_label_gap))
+        if (editor is EditText) input(editor)
+        return caption
+    }
 
     /** Binary setting: label at the start, native Switch at the end, 48dp row. */
     fun switchRow(control: Switch) {
@@ -293,28 +347,32 @@ internal class NativeUi(private val context: Context) {
         text(editor, TextRole.Input)
         // Password input types otherwise switch the hint and value to monospace.
         editor.typeface = Typeface.DEFAULT
-        editor.minHeight = px(R.dimen.control_height)
-        editor.minimumHeight = px(R.dimen.control_height)
+        editor.minHeight = px(R.dimen.field_height)
+        editor.minimumHeight = px(R.dimen.field_height)
         editor.includeFontPadding = false
+        editor.gravity = Gravity.CENTER_VERTICAL or Gravity.START
         editor.setPadding(px(R.dimen.input_padding_h), px(R.dimen.input_padding_v), px(R.dimen.input_padding_h), px(R.dimen.input_padding_v))
         editor.setTextColor(inks(R.color.ink))
         editor.setHintTextColor(color(R.color.muted))
         editor.backgroundTintList = null
-        editor.background = StateListDrawable().apply {
+        editor.background = fieldOutline(StateListDrawable().apply {
             addState(intArrayOf(-android.R.attr.state_enabled), shape(R.color.disabled_surface, R.dimen.radius_input, R.color.disabled_line))
             addState(intArrayOf(android.R.attr.state_focused), shape(R.color.surface, R.dimen.radius_input, R.color.accent).apply {
-                setStroke(dp(2), color(R.color.accent))
+                setStroke(px(R.dimen.focus_stroke), color(R.color.accent))
             })
             addState(intArrayOf(), shape(R.color.surface, R.dimen.radius_input, R.color.control_line))
-        }
+        })
+        // A background replaces view padding with the drawable's own; set padding last.
+        editor.setPadding(px(R.dimen.input_padding_h), px(R.dimen.input_padding_v), px(R.dimen.input_padding_h), px(R.dimen.input_padding_v))
     }
 
     /** Read-only label/value row. The value is selectable evidence. */
     fun fact(parent: LinearLayout, caption: String, value: String): TextView {
         val row = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL }
-        row.addView(label(caption, TextRole.Label), LinearLayout.LayoutParams(0, -2, 1f))
+        // Short labels keep their width; the value takes the rest and wraps at the end edge.
+        row.addView(label(caption, TextRole.Label), LinearLayout.LayoutParams(-2, -2))
         val result = label(value, TextRole.Value).apply { gravity = Gravity.END; setTextIsSelectable(true) }
-        row.addView(result, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = px(R.dimen.space_sm) })
+        row.addView(result, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = px(R.dimen.space_md) })
         add(parent, row, if (parent.childCount == 0) 0 else 6)
         return result
     }
@@ -382,14 +440,14 @@ internal class NativeUi(private val context: Context) {
 
     /** Native Spinner as an outlined selector with one down-chevron at a fixed end inset. */
     fun selector(view: Spinner) {
-        view.minimumHeight = px(R.dimen.control_height)
+        view.minimumHeight = px(R.dimen.field_height)
         view.setPadding(dp(2), 0, px(R.dimen.selector_end_padding), 0)
         view.backgroundTintList = null
         val outline = StateListDrawable().apply {
             addState(intArrayOf(-android.R.attr.state_enabled), shape(R.color.disabled_surface, R.dimen.radius_input, R.color.disabled_line))
             addState(intArrayOf(), shape(R.color.surface, R.dimen.radius_input, R.color.control_line))
         }
-        view.background = LayerDrawable(arrayOf(outline, icon(R.drawable.ic_chevron_down, 20))).apply {
+        view.background = LayerDrawable(arrayOf(fieldOutline(outline), icon(R.drawable.ic_chevron_down, 20))).apply {
             setLayerSize(1, px(R.dimen.icon_sm), px(R.dimen.icon_sm))
             setLayerGravity(1, Gravity.END or Gravity.CENTER_VERTICAL)
             setLayerInset(1, 0, 0, px(R.dimen.selector_chevron_inset), 0)
@@ -425,7 +483,8 @@ internal class NativeUi(private val context: Context) {
         (this as? TextView)?.let {
             text(it, TextRole.Input)
             it.includeFontPadding = false
-            it.minHeight = px(R.dimen.control_height)
+            // Closed field matches text inputs; popup choices keep full 48dp rows.
+            it.minHeight = px(if (popup) R.dimen.control_height else R.dimen.field_height)
             it.gravity = Gravity.CENTER_VERTICAL
             it.setPadding(px(R.dimen.input_padding_h) - if (popup) 0 else dp(2), 0, px(R.dimen.input_padding_h), 0)
             it.maxLines = 1

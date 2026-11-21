@@ -53,7 +53,8 @@ class V46WorkflowTest {
             await {
                 all().filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled }
             }
-            openNativeScreen(controller.get(), "Tracking policy")
+            // The reporting interval is edited only on Party & Command (20 Nov 2026 operator scope).
+            openNativeScreen(controller.get(), "Party & Command")
             editor().requestFocus()
             editor().setText("5")
             assertTrue("Typing the first digit of 50 must not hide Custom", editor().isShown)
@@ -88,7 +89,7 @@ class V46WorkflowTest {
             await {
                 all().filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled }
             }
-            openNativeScreen(controller.get(), "Tracking policy")
+            openNativeScreen(controller.get(), "Party & Command")
             shadowOf(Looper.getMainLooper()).idle()
             val picker =
                 all().filterIsInstance<Spinner>().single {
@@ -107,33 +108,25 @@ class V46WorkflowTest {
             picker.setSelection(4)
             shadowOf(Looper.getMainLooper()).idle()
             custom.setText("3")
-            click("Save policy")
+            click("Save settings")
             await {
                 all().filterIsInstance<TextView>().any { it.text.startsWith("Settings not saved") }
             }
             assertEquals(35, app.repository.state().localInterval)
             ShadowAlertDialog.getLatestAlertDialog()?.dismiss()
-            openNativeScreen(controller.get(), "Party & Command")
-            val nameLabel =
-                all().filterIsInstance<TextView>().single {
-                    it.text == "Party name" && it.labelFor != android.view.View.NO_ID
-                }
-            controller
-                .get()
-                .findViewById<EditText>(nameLabel.labelFor)
-                .setText("Unsaved party draft")
-            openNativeScreen(controller.get(), "Tracking policy")
             custom.setText("45")
-            click("Save policy")
+            click("Save settings")
             await {
                 all().filterIsInstance<TextView>().any { it.text.startsWith("Settings saved") }
             }
             assertEquals(45, app.repository.state().localInterval)
             assertEquals("Alpha", app.repository.state().partyName)
-            assertEquals(
-                "Unsaved party draft",
-                controller.get().findViewById<EditText>(nameLabel.labelFor).text.toString(),
-            )
+            // Tracking policy no longer carries a second interval editor or a Save button.
+            openNativeScreen(controller.get(), "Tracking policy")
+            shadowOf(Looper.getMainLooper()).idle()
+            assertTrue(all().none { it.isShown && it is Spinner })
+            assertTrue(all().filterIsInstance<Button>().none { it.isShown && it.text == "Save policy" })
+            openNativeScreen(controller.get(), "Party & Command")
             controller.recreate()
             await {
                 all().filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled }
@@ -243,7 +236,7 @@ class V46WorkflowTest {
                 .performClick()
             await {
                 all().filterIsInstance<TextView>().any {
-                    it.isShown && it.text.contains("Local output stopped; recipient ACK pending")
+                    it.isShown && it.text.contains("Stopped locally")
                 }
             }
             assertEquals("unknown", app.repository.dao.command(id)!!.state)
@@ -263,7 +256,7 @@ class V46WorkflowTest {
             assertTrue(history.isEnabled)
             history.performClick()
             await {
-                all().filterIsInstance<Button>().any {
+                all().any {
                     it.isShown &&
                         it.contentDescription?.contains("Open instruction details") == true
                 }

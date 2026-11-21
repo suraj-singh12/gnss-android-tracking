@@ -96,7 +96,8 @@ class CommandEnrollmentUiTest {
                         .performClick()
                 fun visible(label: String) =
                     nativeViews(root).filterIsInstance<TextView>().any {
-                        it.isShown && it.text == label
+                        // Selectable evidence values hold Spannable text; compare content.
+                        it.isShown && it.text.toString() == label
                     }
                 try {
                     settle()
@@ -149,6 +150,9 @@ class CommandEnrollmentUiTest {
                     ShadowAlertDialog.getLatestAlertDialog()
                         .getButton(AlertDialog.BUTTON_POSITIVE)
                         .performClick()
+                    // Contact state is shown on Manage access & trust (removed from Command access).
+                    openNativeScreen(activity, "Manage Command access")
+                    settle()
                     for ((index, label) in
                         listOf(
                                 "Credential enrolled",

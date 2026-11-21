@@ -53,6 +53,12 @@ selector. Field readiness is one status list with an action only where needed. M
 access & trust shows identities and contact evidence directly. Diagnostic tools has one
 Physical-key test card (results only after a real key event) and one Diagnostic export card.
 
+21 November 2026 polish: SOS hold progress fills the SOS button (no track line beneath
+it); fields are 44dp visual outlines in 48dp targets; identifiers use the standard sans
+face; Tracking policy holds only Adaptive storage and Policy details (interval lives in
+Party & Command); Command Instructions, History search and Phone Alerts share one list,
+pill and fact grammar, with colour used only for operational meaning.
+
 ## Operator UI/UX quality gate — 15 reusable rules
 
 Preserved verbatim from draft [PR #64](https://github.com/suraj-singh12/gnss-android-tracking/pull/64)

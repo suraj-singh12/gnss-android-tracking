@@ -581,9 +581,9 @@ and verification. Command V5.14, protocol and approved artifacts are unchanged.
   bypass protection. Enter/Space/DPAD-center use the same full-duration hold. Actual
   TalkBack/Switch Access remains a physical acceptance item.
 - **Settings:** Party & Command, Command access, Field readiness, Tracking policy,
-  Emergency controls. Party and policy share the canonical interval draft; 5/10/30/60
-  and Custom preserve valid existing values. Save policy changes reporting using saved
-  party/endpoint values, without silently saving other form drafts. Save/Cancel retain
+  Emergency controls. Party & Command owns the reporting interval (5/10/30/60 and
+  Custom preserve valid existing values); Tracking policy holds only Adaptive storage
+  and Policy details (no Save policy since 21 Nov 2026). Save/Cancel retain
   existing validation/transactions; failed writes preserve drafts. Adaptive storage
   persists immediately through its existing owner and remains OFF by default.
 - **Access:** read-only phone/authority UUIDs, private credential, public-ID comparison,

@@ -153,6 +153,43 @@ class V46RefinementTest {
     }
 
     @Test
+    fun sosDockHasNoSeparateTrackAndHoldProgressFillsTheButton() = runBlocking {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            val a = controller.get()
+            settle()
+            val button = shown(a).filterIsInstance<Button>().single { it.text == "Hold to activate SOS" }
+            val dock = button.parent as android.view.ViewGroup
+            assertTrue("No visible progress track/divider in the dock",
+                nativeViews(dock).none { it.isShown && it is android.widget.ProgressBar })
+            val fill = (button.background as android.graphics.drawable.LayerDrawable).getDrawable(1)
+            assertEquals(0, fill.level)
+            val bar = nativeViews(dock).filterIsInstance<HoldProgressBar>().single()
+            bar.progress = 50 // the value SosHoldGesture writes while held
+            assertEquals(5000, fill.level)
+            bar.progress = 0
+            assertEquals(0, fill.level)
+            assertEquals("No SOS from a progress write", 0, withContext(Dispatchers.IO) { app.repository.dao.sosHistory().size })
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test
+    fun trackingPolicyHasOnlyAdaptiveStorageAndPolicyDetails() = runBlocking {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            val a = controller.get()
+            settle()
+            openNativeScreen(a, "Tracking policy")
+            settle()
+            val controls = shown(a).filter { it is android.widget.Spinner || it is android.widget.EditText || (it is Button && it !is android.widget.CompoundButton && it.text.isNotEmpty() && it.parent?.parent?.let { p -> p is android.widget.ScrollView || (p as View).id != View.NO_ID } == true) }
+            assertTrue("No interval selector or editor", controls.none { it is android.widget.Spinner || it is android.widget.EditText })
+            assertTrue(shown(a).filterIsInstance<android.widget.Switch>().any { it.text == "Adaptive storage" })
+            assertFalse(shown(a).filterIsInstance<Button>().any { it.text == "Save policy" })
+            assertTrue(shown(a).any { it.contentDescription?.startsWith("Policy details. ") == true })
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test
     fun fieldReadinessOffersTheResolvingActionOnlyWhenNeeded() = runBlocking {
         val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
         try {

@@ -38,13 +38,13 @@
   ],
   "Surface#4": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -66,7 +66,7 @@
    152,
    49
   ],
-  "_pixels": "6748fd62973adff09f47d63ba7bc6229a635d4cba12a2a6cbd183dd368e1a483"
+  "_pixels": "4eea60848add400687dfd6050f00d56af9f7905b75cfe173fbd50b6ed16d5492"
  },
  "tracking-active": {
   "Button:Switch to Night mode#1": [
@@ -107,13 +107,13 @@
   ],
   "Surface#4": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -135,7 +135,7 @@
    152,
    49
   ],
-  "_pixels": "fddcb6292ddcfbed0f36e0cb739aada0eeb21f3cd4f23791948b3edf5dc54f03"
+  "_pixels": "1c48c879e986b90919267eca62c7c6c3354c4672c15d4df8c28421577e79a56d"
  },
  "tracking-offline": {
   "Button:Switch to Night mode#1": [
@@ -176,13 +176,13 @@
   ],
   "Surface#4": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -204,7 +204,7 @@
    152,
    49
   ],
-  "_pixels": "894e8d29284a025b51b0fb265bc9afe25a66d1b774592f9ffc68a727c35d23c7"
+  "_pixels": "dba51da86c66dd8668e8f80e8598b44fb773ea727e932753d6e60301b1121dbf"
  },
  "tracking-error": {
   "Button:Switch to Night mode#1": [
@@ -245,13 +245,13 @@
   ],
   "Surface#4": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -273,7 +273,7 @@
    152,
    49
   ],
-  "_pixels": "43e7c279278a90a598c743e615e37b8d695efc698b5e0c800dd9f7828e7f01d0"
+  "_pixels": "ed539150d50cb245cc251b6aecdc860c0d6bfc91d6bec43cbac79e745aff18ec"
  },
  "tracking-sos-pending": {
   "Button:Switch to Night mode#1": [
@@ -314,13 +314,13 @@
   ],
   "Surface#4": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -342,7 +342,7 @@
    152,
    49
   ],
-  "_pixels": "d5236db61df8f4324fd48670d4cf8c23e816d3bcebff82ac0012750f8202c58b"
+  "_pixels": "c020d0ff2587a64a12ed7d809d90a8501f0b8c62fc53a4d45f09d796f927a084"
  },
  "tracking-urgent-alert": {
   "Button:Switch to Night mode#1": [
@@ -395,13 +395,13 @@
   ],
   "Surface#5": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -423,7 +423,7 @@
    152,
    49
   ],
-  "_pixels": "920dc7f46886347fe6471e98a495e35cbe6f521e8701b4cec80d79e741d11f7d"
+  "_pixels": "bd271ff72539bf2dcad8d39c4f3024fa926b3a805565ce5f328365bda00d2659"
  },
  "settings": {
   "Button:Switch to Night mode#1": [
@@ -476,13 +476,13 @@
   ],
   "Surface#3": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -504,7 +504,7 @@
    152,
    49
   ],
-  "_pixels": "21dfbbc61be895b01cdf4a61b9791a6d5bc1ca5adcc1bda863baaa1cbd708eb7"
+  "_pixels": "1a4699bd6e7a6922b5c54251e52c6bdd7d85230afff2756b04cb380ad486dddd"
  },
  "party-command": {
   "Button:Back#1": [
@@ -523,53 +523,53 @@
    17,
    91,
    446,
-   400
+   392
   ],
-  "EditText:121#1": [
+  "EditText:117#1": [
    31,
-   124,
+   121,
    418,
    48
   ],
-  "EditText:123#1": [
+  "EditText:119#1": [
    31,
-   204,
+   198,
    418,
    48
   ],
   "EditText:http:\/\/192.168.1.10:8080#1": [
    31,
-   285,
+   276,
    418,
    48
   ],
   "Spinner:Reporting interval#1": [
    31,
-   365,
+   353,
    418,
-   48
+   52
   ],
   "Button:Cancel#1": [
    31,
-   429,
+   421,
    205,
    48
   ],
   "Button:Save settings#1": [
    244,
-   429,
+   421,
    205,
    48
   ],
   "Surface#2": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -591,7 +591,7 @@
    152,
    49
   ],
-  "_pixels": "ad3f1342ce75bdfe18d0b1493dda7c11fe49246ac5d062781932cd9002fece56"
+  "_pixels": "6c79e899593b32c5acb010b96168f4c127740b9665cc89be082304e050d29e0c"
  },
  "command-access": {
   "Button:Back#1": [
@@ -610,47 +610,47 @@
    17,
    91,
    446,
-   317
+   282
   ],
   "EditText:Paste Command credential#1": [
    31,
-   269,
+   234,
    418,
    48
   ],
   "Button:Authorize#1": [
    31,
-   346,
+   311,
    88,
    48
   ],
   "Button:Enrollment steps ›#1": [
    127,
-   346,
+   311,
    130,
    48
   ],
   "Surface#2": [
    17,
-   446,
+   411,
    446,
    61
   ],
   "Icon#1": [
    427,
-   466,
+   431,
    22,
    22
   ],
   "Surface#3": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -672,7 +672,7 @@
    152,
    49
   ],
-  "_pixels": "3a6455e7b1d4f0c8ea96de914882a8ba1c280410bbc12ff8a6b40d31a9a90dbd"
+  "_pixels": "69b8248b216e09578824cec5b7f784ec3c4f73dc62f093378a8204d67c3e0aab"
  },
  "manage-command-access": {
   "Button:Back#1": [
@@ -731,13 +731,13 @@
   ],
   "Surface#3": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -759,7 +759,7 @@
    152,
    49
   ],
-  "_pixels": "c0b45de35a34f80543ecf5ebb751edc0677049c40278cc2fdbf31daf438d74e7"
+  "_pixels": "54b34aa9e342d9254c1bf9ff7f33f9ddb0bc34a07dc8b3404ecb94759fc58853"
  },
  "field-readiness": {
   "Button:Back#1": [
@@ -788,13 +788,13 @@
   ],
   "Surface#2": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -816,7 +816,7 @@
    152,
    49
   ],
-  "_pixels": "fec7a2a5b3fd86e1edc7d252f6b54c88229e0e4aa964fac72f635d513bcc2eb8"
+  "_pixels": "4367e9a54da0b17549fd0f64b14874abb21373b3ba5ba8aca5b8d819cd403646"
  },
  "tracking-policy": {
   "Button:Back#1": [
@@ -835,47 +835,35 @@
    17,
    91,
    446,
-   245
-  ],
-  "Spinner:Reporting interval#1": [
-   31,
-   124,
-   418,
-   48
+   103
   ],
   "Switch:Adaptive storage#1": [
    31,
-   184,
-   418,
-   48
-  ],
-  "Button:Save policy#1": [
-   31,
-   274,
+   105,
    418,
    48
   ],
   "Surface#2": [
    17,
-   337,
+   195,
    446,
    61
   ],
   "Icon#1": [
    427,
-   357,
+   215,
    22,
    22
   ],
   "Surface#3": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -897,7 +885,7 @@
    152,
    49
   ],
-  "_pixels": "3075372e887626e0938ea29f6cc780cff848c9fa2de1b3368bce130665023388"
+  "_pixels": "7bff9217da938270e016fb507220c2d4fcd2b31cda350361c321733bbedfeac8"
  },
  "policy-details": {
   "Button:Back#1": [
@@ -932,13 +920,13 @@
   ],
   "Surface#4": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -960,7 +948,7 @@
    152,
    49
   ],
-  "_pixels": "90cdf6cdbc4fecab2a0cd4ccdba2c5f391e83c4b96ac4ad2e9a078bf9cc86e2a"
+  "_pixels": "fbf97b928af1b837aa37b812bf519377b0ac1c0619c61b0ecd0366a98b09729c"
  },
  "emergency-controls": {
   "Button:Back#1": [
@@ -989,13 +977,13 @@
   ],
   "Surface#2": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -1017,7 +1005,7 @@
    152,
    49
   ],
-  "_pixels": "72df08bfbf7be3e8ba4c2b8b51f57970efbd43a8ae03ff68b0975d964739b5bd"
+  "_pixels": "0957681719ed09a67de6da69bee1f15bb6c6bf1c5586da9c60de21006f6690f3"
  },
  "diagnostics": {
   "Button:Switch to Night mode#1": [
@@ -1100,13 +1088,13 @@
   ],
   "Surface#4": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -1128,7 +1116,7 @@
    152,
    49
   ],
-  "_pixels": "3f2272d674004dcf5a021d0dfc3816217304dd6ce19440f4714189e338e3092b"
+  "_pixels": "8bce8b494c81e4b664ef2dc817e0211ee2b6e2e97c274a603a03737ef57ac30b"
  },
  "diagnostics-bottom": {
   "Button:Switch to Night mode#1": [
@@ -1139,85 +1127,85 @@
   ],
   "Surface#1": [
    17,
-   154,
+   157,
    446,
    219
   ],
   "Icon#1": [
    31,
-   169,
+   172,
    29,
    24
   ],
   "Icon#2": [
    31,
-   224,
+   227,
    29,
    24
   ],
   "Icon#3": [
    31,
-   279,
+   282,
    29,
    24
   ],
   "Icon#4": [
    31,
-   334,
+   337,
    29,
    24
   ],
   "Surface#2": [
    17,
-   411,
+   414,
    446,
    247
   ],
   "Icon#5": [
    427,
-   431,
+   434,
    22,
    22
   ],
   "Icon#6": [
    427,
-   493,
+   496,
    22,
    22
   ],
   "Icon#7": [
    427,
-   555,
+   558,
    22,
    22
   ],
   "Icon#8": [
    427,
-   617,
+   620,
    22,
    22
   ],
   "Surface#3": [
    17,
-   696,
+   699,
    446,
    61
   ],
   "Icon#9": [
    427,
-   716,
+   719,
    22,
    22
   ],
   "Surface#4": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -1239,7 +1227,7 @@
    152,
    49
   ],
-  "_pixels": "0709359c4ce0bd3798a13fa2ffe0b476bb156f62e5267c7c0aa2bcd85e4d6bfe"
+  "_pixels": "2aa413948fac4c284115480449c423fa6cec5b22a0a1474b98ab92362adeadf6"
  },
  "command-instructions": {
   "Button:Back#1": [
@@ -1258,65 +1246,65 @@
    17,
    91,
    446,
-   398
+   304
   ],
   "Icon#1": [
    427,
-   126,
+   110,
    22,
    22
   ],
   "Icon#2": [
    427,
-   188,
+   171,
    22,
    22
   ],
   "Icon#3": [
    427,
-   250,
+   232,
    22,
    22
   ],
   "Icon#4": [
    427,
-   312,
+   293,
    22,
    22
   ],
   "Icon#5": [
    427,
-   374,
+   354,
    22,
    22
   ],
   "Button:Export sanitized journal#1": [
-   31,
-   427,
-   418,
+   17,
+   407,
+   446,
    48
   ],
   "Surface#2": [
    17,
-   527,
+   493,
    446,
    61
   ],
   "Icon#6": [
    427,
-   547,
+   513,
    22,
    22
   ],
   "Surface#3": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -1338,7 +1326,7 @@
    152,
    49
   ],
-  "_pixels": "4d56cf490791b07f7b7ea795db55accd9189a00d2e909b8af93755796f621d8b"
+  "_pixels": "0e98d81c6f43241e7c5c0b86c876140145a6c9229a895e0b3f94de51a3b01fa2"
  },
  "instruction-details": {
   "Button:Back#1": [
@@ -1355,43 +1343,43 @@
   ],
   "Surface#1": [
    17,
-   125,
+   91,
    446,
-   169
+   175
   ],
   "Surface#2": [
    17,
-   306,
+   278,
    446,
    165
   ],
   "Button:Copy instruction ID#1": [
    17,
-   483,
-   446,
+   455,
+   219,
    48
   ],
   "Button:Export evidence#1": [
-   17,
-   539,
-   446,
+   244,
+   455,
+   219,
    48
   ],
   "Button:Full record#1": [
    17,
-   599,
-   446,
+   507,
+   86,
    48
   ],
   "Surface#3": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -1413,7 +1401,7 @@
    152,
    49
   ],
-  "_pixels": "7350a4f44d820209cd66a67f420964422c1643bf8b1aab60eba2a0be31c7d21a"
+  "_pixels": "b68c8e620d5bf5c1da9a25db7465f083da120bfad8295edc6335c5509d4aa4f0"
  },
  "history-search-filters": {
   "Button:Back#1": [
@@ -1434,45 +1422,51 @@
    440,
    48
   ],
-  "Button:Phone alert · Unknown#1": [
+  "Surface#1": [
    20,
    182,
    440,
-   60
+   242
+  ],
+  "Icon#1": [
+   424,
+   201,
+   22,
+   22
   ],
   "Button:Acknowledge \/ Stop Alert#1": [
-   20,
-   248,
-   440,
+   34,
+   243,
+   412,
    48
   ],
-  "Button:Reporting interval · Applied#1": [
-   20,
-   304,
-   440,
-   60
+  "Icon#2": [
+   424,
+   322,
+   22,
+   22
   ],
-  "Button:Reporting interval · Unknown#1": [
-   20,
-   372,
-   440,
-   60
+  "Icon#3": [
+   424,
+   383,
+   22,
+   22
   ],
   "Button:Filter history#1": [
    20,
-   444,
+   436,
    440,
    48
   ],
-  "Surface#1": [
+  "Surface#2": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -1494,7 +1488,7 @@
    152,
    49
   ],
-  "_pixels": "8d3ec04c8cf0c7111285a0cfac58b5f4d58654ee8f0814d6c016dc0feda232a2"
+  "_pixels": "6ecd9a07dac580bfb1808b165194b91769aeb2f70196ef362e4e1eac48e27b60"
  },
  "instruction-filters": {
   "Button:Back#1": [
@@ -1513,29 +1507,29 @@
    17,
    128,
    446,
-   48
+   52
   ],
   "Spinner:Command outcome#1": [
    17,
-   216,
+   220,
    446,
-   48
+   52
   ],
   "Spinner:Received time#1": [
    17,
-   305,
+   313,
    446,
-   48
+   52
   ],
   "Surface#1": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -1557,7 +1551,7 @@
    152,
    49
   ],
-  "_pixels": "ff7e6af2fae903ccf9bbf914592e2e12606cd615dd37b76ea946883b61e1c2b1"
+  "_pixels": "dada377081069083dc22c3a9105395cc4e6e0d233ef50872e81f78998ef37352"
  },
  "phone-alerts": {
   "Button:Back#1": [
@@ -1576,29 +1570,29 @@
    17,
    91,
    446,
-   188
+   255
   ],
   "Button:View alert & acknowledge#1": [
    31,
-   157,
+   224,
    418,
    48
   ],
   "Button:Export alert journal#1": [
    31,
-   217,
+   284,
    418,
    48
   ],
   "Surface#2": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -1620,7 +1614,7 @@
    152,
    49
   ],
-  "_pixels": "3fe1b3ebe103699395c1fc356a918e873aecf8cdb882563acf7715f16288dbf4"
+  "_pixels": "887fbebd50d84d6aeaf48e3f34655ec956ca8495e804804554fa2869deb8e8e6"
  },
  "saved-data-sync": {
   "Button:Back#1": [
@@ -1661,13 +1655,13 @@
   ],
   "Surface#2": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -1689,7 +1683,7 @@
    152,
    49
   ],
-  "_pixels": "74aa47733f53d5d5989b600bcd69db73953768add389531dab32410e69e1f766"
+  "_pixels": "83dfdfa8f20b40fc8b033e7bf552f75c217ff434f920b8cc7d74caafb284edee"
  },
  "sos-event-history": {
   "Button:Back#1": [
@@ -1718,13 +1712,13 @@
   ],
   "Surface#2": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -1746,7 +1740,7 @@
    152,
    49
   ],
-  "_pixels": "53b588451eac68d0f72f9f7aa4545add2c0f98d50d9f661349898951cdf49fa5"
+  "_pixels": "a6ec274ec2ce263e052fdcfcbbd010a5130d2d88f73f0128ef0d39de1ce7f538"
  },
  "sos-details": {
   "Button:Back#1": [
@@ -1765,29 +1759,29 @@
    17,
    91,
    446,
-   88
+   86
   ],
   "Surface#2": [
    17,
-   191,
+   189,
    446,
    148
   ],
   "Button:Export evidence#1": [
    17,
-   351,
+   349,
    446,
    48
   ],
   "Surface#3": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -1809,7 +1803,7 @@
    152,
    49
   ],
-  "_pixels": "e9a074c031c5cd011c130c4ea6068ce39a34fae34442dc4946a6895f96ac710e"
+  "_pixels": "3d1cd35b246a76f5f1de9cfb60577d1ee1b15fbd82cbf9cdfd902fccb959a86a"
  },
  "diagnostic-tools": {
   "Button:Back#1": [
@@ -1868,13 +1862,13 @@
   ],
   "Surface#4": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -1896,7 +1890,7 @@
    152,
    49
   ],
-  "_pixels": "610e5d6319227a54aa67a4c99aaa8a23f3fa19b0dc9dac6cd07c7a952f534f1b"
+  "_pixels": "123339bbb9cc9a73c7241915222061f12eef42c9357f18ac49c233947382d4bb"
  },
  "advanced-logs": {
   "Button:Back#1": [
@@ -1913,13 +1907,13 @@
   ],
   "Surface#1": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -1999,13 +1993,13 @@
   ],
   "Surface#4": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],
@@ -2027,7 +2021,7 @@
    152,
    49
   ],
-  "_pixels": "834e37ed3a7d74cf669e31c367d97e98d195b54c4470f458255bf006475c10e0"
+  "_pixels": "66cb3057d682983da4a6d93940d0e0a9be49646fb11e558f9c38e39c686cd574"
  },
  "physical-button-event": {
   "Button:Back#1": [
@@ -2092,13 +2086,13 @@
   ],
   "Surface#4": [
    12,
-   782,
+   785,
    456,
-   85
+   82
   ],
   "Button:Hold to activate SOS#1": [
    21,
-   809,
+   812,
    438,
    48
   ],

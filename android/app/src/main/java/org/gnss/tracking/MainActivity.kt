@@ -505,7 +505,7 @@ class MainActivity : Activity() {
             android.content.res.ColorStateList.valueOf(getColor(R.color.emergency_action))
         sosButton.minHeight = dp(48)
         val holdProgress =
-            ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            HoldProgressBar(this).apply {
                 contentDescription = "SOS hold progress"
                 progressTintList =
                     android.content.res.ColorStateList.valueOf(getColor(R.color.danger))
@@ -1263,56 +1263,33 @@ class MainActivity : Activity() {
             renderedWindow = window
             renderedSelection = selection
             commandRows.removeAllViews()
+            val rowUi = NativeUi(this@MainActivity)
+            // Same list grammar as Command Instructions: one bordered list, status pill per row.
+            val list = if (window.isEmpty()) null else rowUi.list(commandRows, 8)
             for (row in window) {
-                val rowUi = NativeUi(this@MainActivity)
-                val title =
-                    Button(this).apply {
-                        isAllCaps = false
-                        styleQuiet(this)
-                        // Shared navigation-row grammar: two-line title/time, trailing chevron.
-                        text =
-                            android.text.SpannableStringBuilder()
-                                .append(
-                                    "${commandTypeLabel(row.operation)} · ${commandStateLabel(row.state)}",
-                                    android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
-                                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                                )
-                                .append("\n")
-                                .append(
-                                    shortCommandTime(row.received),
-                                    android.text.style.ForegroundColorSpan(getColor(R.color.muted)),
-                                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                                )
-                        rowUi.text(this, TextRole.Value)
-                        setLineSpacing(dp(3).toFloat(), 1f)
-                        minHeight = rowUi.px(R.dimen.list_row_min_height)
-                        setPadding(
-                            rowUi.px(R.dimen.list_row_padding_h),
-                            rowUi.px(R.dimen.list_row_padding_v),
-                            rowUi.px(R.dimen.list_row_padding_h),
-                            rowUi.px(R.dimen.list_row_padding_v),
-                        )
-                        setCompoundDrawables(null, null, rowUi.icon(R.drawable.ic_chevron_right, 20), null)
-                        compoundDrawablePadding = rowUi.px(R.dimen.space_sm)
-                        background =
-                            android.graphics.drawable.RippleDrawable(
-                                android.content.res.ColorStateList.valueOf(getColor(R.color.ripple)),
-                                rowUi.shape(R.color.surface),
-                                null,
-                            )
+                rowUi.menu(
+                        list!!,
+                        commandTypeLabel(row.operation),
+                        shortCommandTime(row.received),
+                        commandStateLabel(row.state) to commandTone(row),
+                    ) { showInstruction(row) }
+                    .apply {
+                        (layoutParams as LinearLayout.LayoutParams).topMargin = 0
+                        background = rowUi.rowRipple()
+                        contentDescription =
+                            "${commandTypeLabel(row.operation)} · ${commandStateLabel(row.state)}. Open instruction details"
                     }
-                commandRows.addView(
-                    title,
-                    LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) },
-                )
-                title.contentDescription = "${title.text}. Open instruction details"
-                title.setOnClickListener { showInstruction(row) }
                 if (
                     row.operation == "alert" &&
                         row.trusted &&
                         row.state in listOf("output_attempted", "alert_blocked", "unknown")
                 ) {
-                    commandRows.addView(
+                    // The row's own recipient action, inside the same list.
+                    val holder = LinearLayout(this).apply {
+                        val h = rowUi.px(R.dimen.list_row_padding_h)
+                        setPadding(h, 0, h, rowUi.px(R.dimen.list_row_padding_v))
+                    }
+                    holder.addView(
                         Button(this).apply {
                             text = "Acknowledge / Stop Alert"
                             rowUi.style(this, danger = true)
@@ -1320,8 +1297,9 @@ class MainActivity : Activity() {
                                 app.workScope.launch { app.acknowledgePhoneAlert(row.id) }
                             }
                         },
-                        LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) },
+                        LinearLayout.LayoutParams(-1, -2),
                     )
+                    list!!.addView(holder, LinearLayout.LayoutParams(-1, -2))
                 }
             }
             if (matching.size > 20) {
@@ -2056,7 +2034,7 @@ class MainActivity : Activity() {
                     "partyName" -> partyName
                     "endpoint" -> endpoint
                     "interval" ->
-                        if (route == "Party & Command") v46PartyInterval ?: interval else interval
+                        v46PartyInterval ?: interval // only Party & Command edits the interval
                     else -> null
                 }
             editor?.let {
@@ -2147,7 +2125,7 @@ class MainActivity : Activity() {
                 R.color.danger,
             ),
         )
-        ui.add(card, ui.label(row.messageId, TextRole.Mono, R.color.muted).apply { setTextIsSelectable(true) }, 4)
+        ui.add(card, ui.label(row.messageId, TextRole.Meta).apply { setTextIsSelectable(true) }, 4)
         ui.fact(card, "Created", shortCommandTime(row.capturedMillis)).also {
             ((it.parent as View).layoutParams as LinearLayout.LayoutParams).topMargin = dp(10)
         }
@@ -2212,24 +2190,23 @@ class MainActivity : Activity() {
                 ui.add(instructionDetailsPage, ui.label("Instruction details", 22f, bold = true), 12)
             }
             // A status pill hugs its text instead of stretching across the page.
-            instructionDetailsPage.addView(
-                ui.label(commandStateLabel(row.state)).apply {
-                    ui.pill(this, instructionOutcomeGroup(row) == "applied")
-                },
-                LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(if (v46Layout) 0 else 12) },
+            // Header inside the summary card: type + outcome pill, then the selectable ID.
+            val summary = ui.card(instructionDetailsPage, if (v46Layout) 0 else 12)
+            val header = LinearLayout(this).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
+            header.addView(ui.label(commandTypeLabel(row.operation), TextRole.Heading), LinearLayout.LayoutParams(0, -2, 1f))
+            header.addView(
+                ui.label(commandStateLabel(row.state), TextRole.Pill).apply { ui.statusPill(this, commandTone(row)) },
+                LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8) },
             )
-            val summary = ui.card(instructionDetailsPage)
-            ui.add(summary, ui.label(row.id, TextRole.Mono, R.color.muted).apply { setTextIsSelectable(true) })
-            ui.fact(summary, "Type", commandTypeLabel(row.operation))
-            ui.fact(summary, "Received", shortCommandTime(row.received))
+            ui.add(summary, header)
+            ui.add(summary, ui.label(row.id, TextRole.Meta).apply { setTextIsSelectable(true) }, 4)
+            ui.fact(summary, "Received", shortCommandTime(row.received)).also {
+                ((it.parent as View).layoutParams as LinearLayout.LayoutParams).topMargin = dp(12)
+            }
             ui.fact(summary, "Verification", if (row.trusted) "Authenticated" else "Unverified")
             ui.fact(summary, "Execution", if (row.attempted) "Attempt recorded" else "Unconfirmed")
             ui.fact(summary, "Result ACK", if (row.confirmed) "Confirmed" else "Pending")
-            ui.add(
-                summary,
-                ui.label(row.authority, TextRole.Mono, R.color.muted).apply { setTextIsSelectable(true) },
-                10,
-            )
+            ui.fact(summary, "Authority", row.authority)
             val stages = ui.card(instructionDetailsPage)
             ui.add(stages, ui.label("STAGES", TextRole.Section))
             ui.fact(stages, "Received", shortCommandTime(row.received))
@@ -2257,8 +2234,8 @@ class MainActivity : Activity() {
                 ),
                 3,
             )
-            ui.add(
-                instructionDetailsPage,
+            val idActions = LinearLayout(this)
+            idActions.addView(
                 ui.button(if (row.trusted) "Copy instruction ID" else "Copy security event ID") {
                     getSystemService(android.content.ClipboardManager::class.java)
                         .setPrimaryClip(
@@ -2269,13 +2246,14 @@ class MainActivity : Activity() {
                         )
                     Toast.makeText(this, "ID copied", Toast.LENGTH_SHORT).show()
                 },
-                12,
+                LinearLayout.LayoutParams(0, -2, 1f),
             )
-            ui.add(
-                instructionDetailsPage,
+            idActions.addView(
                 ui.button("Export evidence") { exportEvidence?.invoke() },
-                8,
+                LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(8) },
             )
+            ui.equalHeights(idActions)
+            ui.add(instructionDetailsPage, idActions, 12)
             if (
                 row.operation == "alert" &&
                     row.trusted &&
@@ -2306,20 +2284,21 @@ class MainActivity : Activity() {
                     },
                     8,
                 )
+            // Full canonical record: a quiet disclosure into a readable, selectable card.
             val full =
-                ui.label(commandInstructionDetails(row), 13f, muted = true).apply {
-                    setTextIsSelectable(true)
+                ui.card(instructionDetailsPage, 8).apply {
+                    ui.add(this, ui.label(commandInstructionDetails(row), TextRole.Caption).apply {
+                        setTextIsSelectable(true)
+                        setLineSpacing(dp(3).toFloat(), 1f)
+                    })
                     visibility = if (instructionFullExpanded) View.VISIBLE else View.GONE
                 }
-            ui.add(
-                instructionDetailsPage,
-                ui.button("Full record") {
-                    instructionFullExpanded = !instructionFullExpanded
-                    full.visibility = if (instructionFullExpanded) View.VISIBLE else View.GONE
-                },
-                12,
-            )
-            ui.add(instructionDetailsPage, full)
+            val toggle = ui.button("Full record") {
+                instructionFullExpanded = !instructionFullExpanded
+                full.visibility = if (instructionFullExpanded) View.VISIBLE else View.GONE
+            }.apply { ui.quiet(this) }
+            instructionDetailsPage.addView(toggle, instructionDetailsPage.indexOfChild(full),
+                LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(4) })
         }
         if (navigate) navigateTo?.invoke("Instruction details")
     }
@@ -3234,6 +3213,13 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun commandTone(row: CommandRecord): StatusTone =
+        when (instructionOutcomeGroup(row)) {
+            "applied" -> StatusTone.POSITIVE
+            "rejected" -> StatusTone.WARNING
+            else -> StatusTone.NEUTRAL
+        }
+
     private fun instructionOutcomeGroup(row: CommandRecord): String =
         when (row.state) {
             "applied",
@@ -3331,9 +3317,7 @@ class MainActivity : Activity() {
                 }
         }
         fun field(p: LinearLayout, title: String, v: EditText) {
-            add(p, ui.label(title, TextRole.FieldLabel).apply { labelFor = v.id }, if (p.childCount == 0) 0 else 14)
-            add(p, v, 6)
-            ui.input(v)
+            ui.formField(p, title, v)
         }
         fun action(
             p: LinearLayout,
@@ -3436,7 +3420,7 @@ class MainActivity : Activity() {
                 when (name) {
                     "Party & Command" -> "Identity, Command address and reporting"
                     "Command access" -> "Enrollment and verified authority"
-                    "Tracking policy" -> "Reporting and local adaptive storage"
+                    "Tracking policy" -> "Local adaptive storage"
                     "Emergency controls" -> "Protected SOS and safety"
                     else ->
                         if (routeParents.containsKey(name)) "${routeParents[name]}"
@@ -3516,7 +3500,7 @@ class MainActivity : Activity() {
         menu(settings, "Party & Command", "Identity, address and reporting interval")
         menu(settings, "Command access", "Enrollment and authenticated contact")
         menu(settings, "Field readiness", "Location, notifications and battery")
-        menu(settings, "Tracking policy", "Reporting and adaptive storage")
+        menu(settings, "Tracking policy", "Adaptive storage and policy details")
         section(settings, "Safety")
         menu(settings, "Emergency controls", "SOS configuration and optional volume-key shortcut")
         val party = page("Party & Command", "Settings")
@@ -3577,7 +3561,6 @@ class MainActivity : Activity() {
          * over the same mirrored interval draft; no second validation or save path.
          */
         fun intervalPicker(card: LinearLayout, editor: EditText, restoredCustom: Boolean): Spinner {
-            add(card, ui.label("Reporting interval", TextRole.FieldLabel), if (card.childCount == 0) 0 else 14)
             val choices = listOf("5 seconds", "10 seconds", "30 seconds", "60 seconds", "Custom…")
             val picker =
                 Spinner(this).apply {
@@ -3586,11 +3569,8 @@ class MainActivity : Activity() {
                     adapter = ui.selectorAdapter(choices)
                 }
             ui.selector(picker)
-            add(card, picker, 6)
-            val customLabel = ui.label("Custom interval · seconds", TextRole.FieldLabel).apply { labelFor = editor.id }
-            add(card, customLabel, 14)
-            add(card, editor, 6)
-            ui.input(editor)
+            ui.formField(card, "Reporting interval", picker)
+            val customLabel = ui.formField(card, "Custom interval · seconds", editor)
             editor.contentDescription = "Custom interval · seconds"
             val customHint = ui.label("5–86,400 seconds · multiples of 5", TextRole.Meta)
             add(card, customHint, 5)
@@ -3644,38 +3624,20 @@ class MainActivity : Activity() {
         add(form, partyActions, 16)
         add(party, settingsFeedback)
         val policy = page("Tracking policy", "Settings")
+        // Tracking policy owns only Adaptive storage; the reporting interval lives in
+        // Party & Command. The Switch applies and persists through its existing owner
+        // (app.requestAdaptive), so there is no Save button. The canonical `interval`
+        // editor stays off-screen as the shared draft mirrored by the Party field.
+        detach(interval)
         val policyCard = ui.card(policy, 0)
-        v46IntervalPicker = intervalPicker(policyCard, interval, restoredCustomInterval)
-        val policyFeedback =
-            ui.collapsingLabel(TextRole.Caption).apply {
-                accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
-            }
-        add(policyCard, policyFeedback)
-        settingsFeedback.addTextChangedListener(
-            object : android.text.TextWatcher {
-                override fun beforeTextChanged(
-                    s: CharSequence?,
-                    start: Int,
-                    count: Int,
-                    after: Int,
-                ) {}
-
-                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                    policyFeedback.text = s
-                }
-
-                override fun afterTextChanged(s: android.text.Editable?) {}
-            }
-        )
         ui.switchRow(adaptive)
         ui.text(policyStatus, TextRole.Meta)
         policyStatus.setPadding(0, 0, 0, 0)
         policyStatus.includeFontPadding = false
-        add(policyCard, adaptive, 12)
-        add(policyCard, policyStatus, 2)
-        // One accurate line: ON keeps fewer future observations; OFF (default) keeps all.
-        add(policyCard, ui.label("ON keeps fewer future observations when steady or stationary.", TextRole.Meta), 4)
-        action(policyCard, "Save policy", true) { save(policyOnly = true) }
+        add(policyCard, adaptive)
+        add(policyCard, policyStatus, 0)
+        add(policyCard, ui.label("ON keeps fewer future observations when steady or stationary.", TextRole.Meta), 3)
+        val policyFeedback = ui.collapsingLabel(TextRole.Caption)
         menu(policy, "Policy details", "Phone setting, requested/effective interval and revision")
         val ready = page("Field readiness", "Settings")
         // One peer list: each requirement shows its actual state; only a requirement that
@@ -3757,15 +3719,16 @@ class MainActivity : Activity() {
         val accessCard = ui.card(access, 0)
         val enrollmentState = ui.label("Loading…", TextRole.Value)
         peerRow(accessCard, "Command enrollment", enrollmentState)
-        val phone = ui.label("", TextRole.Mono).apply { setTextIsSelectable(true) }
-        val authority = ui.label("", TextRole.Mono).apply { setTextIsSelectable(true) }
+        // Read-only identities: muted caption + standard sans value (selectable, wrapping),
+        // the same grammar as Manage access & trust. Editable fields below use FieldLabel.
+        val phone = ui.label("", TextRole.Value).apply { setTextIsSelectable(true); setLineSpacing(dp(2).toFloat(), 1f) }
+        val authority = ui.label("", TextRole.Value).apply { setTextIsSelectable(true); setLineSpacing(dp(2).toFloat(), 1f) }
         add(accessCard, ui.label("This phone UUID", TextRole.Section), 14)
-        add(accessCard, phone, 4)
-        add(accessCard, ui.label("Command authority UUID", TextRole.Section), 12)
-        add(accessCard, authority, 4)
+        add(accessCard, phone, 3)
+        add(accessCard, ui.label("Command authority UUID", TextRole.Section), 10)
+        add(accessCard, authority, 3)
+        // Authenticated contact remains owned by CommandControl and shown on Manage access & trust.
         val contact = ui.label("Not verified", TextRole.Value)
-        peerRow(accessCard, "Authenticated contact", contact)
-        (contact.parent as View).let { (it.layoutParams as LinearLayout.LayoutParams).topMargin = dp(14) }
         val secret =
             EditText(this).apply {
                 id = View.generateViewId()
@@ -3784,7 +3747,7 @@ class MainActivity : Activity() {
                 labelFor = secret.id
             }
         add(accessCard, secretLabel, 16)
-        add(accessCard, secret, 6)
+        ui.addPx(accessCard, secret, ui.px(R.dimen.field_label_gap))
         val secretHint =
             ui.label("Private credential issued by Command; never exported.", TextRole.Meta)
         add(accessCard, secretHint, 5)
@@ -4092,10 +4055,10 @@ class MainActivity : Activity() {
         routeParents["History search & filters"] = "Command Instructions"
         val recentPage = routes.getValue("Command Instructions")
         pagePadding(recentPage)
-        val recentCard = ui.card(recentPage, 0)
+        // One list surface (no card around the list), then the page action, then Advanced.
         val recent = ui.column().apply { tag = "v46-records" }
-        add(recentCard, recent)
-        export(recentCard, "Export sanitized journal")
+        add(recentPage, recent)
+        export(recentPage, "Export sanitized journal")
         section(recentPage, "Advanced")
         menu(
             recentPage,
@@ -4188,10 +4151,17 @@ class MainActivity : Activity() {
         val alertHeading =
             LinearLayout(this).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
         alertHeading.addView(alertTitle, LinearLayout.LayoutParams(0, -2, 1f))
-        alertHeading.addView(alertBadge)
+        alertHeading.addView(alertBadge, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8) })
         add(alertCard, alertHeading)
         val alertSummary = ui.label("Reading alert history", TextRole.Caption)
         add(alertCard, alertSummary, 4)
+        // Four separate facts: output attempt/stop, recipient ACK and Command custody are
+        // independent. An output attempt never claims the alert was heard.
+        val alertFacts = ui.column().apply { visibility = View.GONE }
+        add(alertCard, alertFacts, 12)
+        val alertOutput = ui.fact(alertFacts, "Output", "Unknown")
+        val alertAck = ui.fact(alertFacts, "Recipient ACK", "Pending")
+        val alertCustody = ui.fact(alertFacts, "Command custody", "Unconfirmed")
         val alertFailure =
             ui.label("", TextRole.Caption, R.color.danger).apply {
                 accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
@@ -4240,15 +4210,26 @@ class MainActivity : Activity() {
             if (v46Records == rows && recent.childCount > 0) return
             v46Records = rows
             recent.removeAllViews()
-            if (rows.isEmpty()) add(recent, ui.label("No received instructions", TextRole.RowTitle, R.color.muted))
+            recent.background = null
+            if (rows.isEmpty()) {
+                // Empty state: one quiet card, same surface as a populated list.
+                recent.background = ui.shape(R.color.surface)
+                val pad = ui.px(R.dimen.card_padding)
+                recent.setPadding(pad, pad, pad, pad)
+                add(recent, ui.label("No received instructions", TextRole.RowTitle))
+                add(recent, ui.label("Instructions from Command appear here with their outcome.", TextRole.Meta), 3)
+            } else recent.setPadding(0, 0, 0, 0)
+            val list = if (rows.isEmpty()) null else ui.list(recent)
             rows.take(20).forEach { row ->
-                menu(
-                        recent,
+                ui.menu(
+                        list!!,
                         commandTypeLabel(row.operation),
-                        "${shortCommandTime(row.received)} · ${commandStateLabel(row.state)}",
-                        "Instruction details",
-                    )
+                        shortCommandTime(row.received),
+                        commandStateLabel(row.state) to commandTone(row),
+                    ) { showInstruction(row) }
                     .apply {
+                        (layoutParams as LinearLayout.LayoutParams).topMargin = 0
+                        background = ui.rowRipple()
                         contentDescription =
                             "${commandTypeLabel(row.operation)}. ${commandStateLabel(row.state)}. Open instruction details"
                         setOnClickListener { showInstruction(row) }
@@ -4265,28 +4246,40 @@ class MainActivity : Activity() {
                 latestAlert?.let {
                     runCatching { PhoneAlertSpec.parse(Protocol.parse(it.requested)) }.getOrNull()
                 }
-            alertTitle.text = if (latestSpec?.mode == "urgent") "Urgent alert" else "Phone alert"
-            alertBadge.text =
+            alertTitle.text =
+                if (latestAlert == null) "Phone alerts"
+                else if (latestSpec?.mode == "urgent") "Urgent alert" else "Phone alert"
+            // Semantic tone only: amber = needs the recipient; teal = acknowledged; neutral = none/history.
+            val (badge, tone) =
                 when {
-                    active != null -> "ACK pending"
-                    latestAlert?.state == "recipient_acknowledged" -> "ACKed"
-                    else -> "Retained history"
+                    active?.state == "alert_blocked" -> "Blocked" to StatusTone.WARNING
+                    active != null -> "ACK pending" to StatusTone.WARNING
+                    latestAlert?.state == "recipient_acknowledged" -> "Acknowledged" to StatusTone.POSITIVE
+                    latestAlert != null -> "History" to StatusTone.NEUTRAL
+                    else -> "None" to StatusTone.NEUTRAL
                 }
-            ui.pill(alertBadge, latestAlert?.state == "recipient_acknowledged")
+            alertBadge.text = badge
+            ui.statusPill(alertBadge, tone)
             alertSummary.text =
-                when {
-                    active == null ->
-                        if (latestAlert?.state == "recipient_acknowledged") "Recipient acknowledged"
-                        else if (latestAlert != null)
-                            "${commandStateLabel(latestAlert.state)} / retained alert history"
-                        else "No received phone alerts"
-                    active.localOutputStopRequestedAt > 0 && active.localOutputStoppedAt == 0L ->
-                        "Local stop requested; cancellation unconfirmed; recipient ACK pending"
-                    active.localOutputStoppedAt > 0 -> "Local output stopped; recipient ACK pending"
-                    else -> "${commandStateLabel(active.state)}; hearing/vibration unverified"
-                }
+                latestSpec?.message?.takeIf { it.isNotBlank() }
+                    ?: if (latestAlert == null) "No received phone alerts" else commandStateLabel(latestAlert.state)
+            alertFacts.visibility = if (latestAlert == null) View.GONE else View.VISIBLE
+            latestAlert?.let { row ->
+                alertOutput.text =
+                    when {
+                        row.state == "alert_blocked" -> "Blocked by Android"
+                        row.localOutputStoppedAt > 0 -> "Stopped locally"
+                        row.localOutputStopRequestedAt > 0 -> "Stop requested · unconfirmed"
+                        row.attempted -> "Attempted · audibility unverified"
+                        else -> "Unconfirmed"
+                    }
+                alertAck.text = if (row.state == "recipient_acknowledged") "Acknowledged" else "Pending"
+                alertCustody.text = if (row.confirmed) "Confirmed" else "Unconfirmed"
+            }
             alertAction.text =
                 if (active != null) "View alert & acknowledge" else "View alert history"
+            // Primary only while the recipient has something to do.
+            ui.style(alertAction, primary = active != null)
             alertAction.isEnabled = true
         }
         scope.launch {
@@ -4437,8 +4430,6 @@ class MainActivity : Activity() {
             phone.text = state?.deviceId ?: "Reading identity…"
             authority.text = state?.controlAuthority ?: "Not enrolled"
             // Monospace is for identifiers only; a "Not enrolled" placeholder stays sans.
-            phone.typeface = if (state != null) android.graphics.Typeface.MONOSPACE else android.graphics.Typeface.DEFAULT
-            authority.typeface = if (state?.controlAuthority != null) android.graphics.Typeface.MONOSPACE else android.graphics.Typeface.DEFAULT
             enrollmentState.text =
                 when {
                     state == null -> "Loading"
@@ -4461,6 +4452,8 @@ class MainActivity : Activity() {
                     else -> "Authorize"
                 }
             authorize.isEnabled = state != null && !state.controlDisabled && !checking
+            // Disabled is already stated by the enrollment status; no inert "Disabled" button.
+            authorize.visibility = if (state?.controlDisabled == true) View.GONE else View.VISIBLE
             syncNowButton.isEnabled =
                 initialized && (currentQueueCounts?.gnss ?: 0) > 0 && !op.drainStarting
             retentionCaption.text =
@@ -4511,11 +4504,27 @@ class MainActivity : Activity() {
             ui.style(sosButton)
             ui.text(sosButton, TextRole.Button, android.R.color.white)
             sosButton.typeface = android.graphics.Typeface.DEFAULT_BOLD
-            sosButton.background = ui.shape(R.color.emergency_action, R.dimen.radius_sos, null)
+            // V4.6 `.sos-progress`: hold progress fills the button from the start edge; the
+            // separate 3dp track under the button is removed (operator correction).
+            val holdFill = android.graphics.drawable.ClipDrawable(
+                ui.shape(R.color.sos_progress, R.dimen.radius_sos, null),
+                android.view.Gravity.START, android.graphics.drawable.ClipDrawable.HORIZONTAL,
+            )
+            sosButton.background = android.graphics.drawable.LayerDrawable(
+                arrayOf(ui.shape(R.color.emergency_action, R.dimen.radius_sos, null), holdFill)
+            )
+            (progress as? HoldProgressBar)?.onProgress = { value ->
+                // Resolve the layer from the current background (state refreshes may rebuild it).
+                ((sosButton.background as? android.graphics.drawable.LayerDrawable)
+                    ?.takeIf { it.numberOfLayers > 1 }?.getDrawable(1) ?: holdFill)
+                    .level = value.coerceIn(0, 100) * 100
+                sosButton.invalidate()
+            }
             add(dock, sosButton, 6)
             progress?.let {
                 add(dock, it)
-                it.layoutParams.height = dp(3)
+                // Progress owner stays in the hierarchy for SosHoldGesture; it is not drawn.
+                it.visibility = View.GONE
             }
             if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
                 navigation.setPadding(dp(12), dp(2), dp(12), dp(2))
@@ -4536,7 +4545,7 @@ class MainActivity : Activity() {
                 dock.addView(
                     ui.column().apply {
                         ui.add(this, sosButton)
-                        progress?.let { ui.add(this, it); it.layoutParams.height = dp(3) }
+                        progress?.let { ui.add(this, it); it.visibility = View.GONE }
                     },
                     LinearLayout.LayoutParams(0, -2, 1.4f),
                 )
