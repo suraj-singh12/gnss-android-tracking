@@ -247,6 +247,7 @@ jobs:
           export GNSS_AXE_MODULE="$RUNNER_TEMP/gnss-browser/node_modules/@axe-core/playwright"
           export GNSS_SCREENSHOT_DIR="$RUNNER_TEMP/gnss-assets/visual-evidence"
           mkdir -p "$RUNNER_TEMP/gnss-test-reports/browser"
+          set -o pipefail
           node test-tools/integration/command-v514-workspace.cjs 2>&1 | tee "$RUNNER_TEMP/gnss-test-reports/browser/command-v514-workspace.log"
           node test-tools/integration/sos-dashboard.cjs
           node test-tools/integration/ui-dashboard.cjs
