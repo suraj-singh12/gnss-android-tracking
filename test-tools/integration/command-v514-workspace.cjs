@@ -59,7 +59,8 @@ async function wait(check, message = "Timed out waiting for real state") {
   // Alpha and Bravo are fresh; Charlie is in contact but its GNSS fix is stale.
   await report(parties[0]); await report(parties[1]); await report(parties[2], 3600000);
   browser = await chromium.launch({ executablePath: process.env.GNSS_CHROMIUM || undefined, headless: true, args: ["--no-sandbox", "--autoplay-policy=user-gesture-required"] });
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } }), errors = [];
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage(), errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(local);
   await page.waitForFunction(() => document.querySelectorAll("#devices .party-select").length === 3);

@@ -11,7 +11,7 @@ const {chromium} = require(process.env.GNSS_PLAYWRIGHT_MODULE || "playwright");
       await page.goto(process.env.GNSS_COMMAND_URL || "http://127.0.0.1:8081");
       for (const theme of ["day","night"]) {
         await page.evaluate(t => localStorage.setItem("gnss-appearance",t), theme); await page.reload();
-        await page.waitForSelector("#collapse-parties");
+        await page.waitForSelector("#collapse-parties", {state: "attached"});
         const geometry = await page.evaluate(() => {
           const rect = selector => { const r=document.querySelector(selector).getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height,right:r.right,bottom:r.bottom}; };
           return {header:rect("header"),rail:rect(".recording-bar"),map:rect(".canvas"),sos:rect("#open-sos"), connection:rect("#connection"), menu:rect(".header-menu-root > summary")};
@@ -20,6 +20,8 @@ const {chromium} = require(process.env.GNSS_PLAYWRIGHT_MODULE || "playwright");
         assert(geometry.sos.right <= width);
         if (width <= 600) assert(geometry.connection.right <= geometry.menu.x, JSON.stringify(geometry));
         assert(geometry.map.width >= width * .6, JSON.stringify(geometry));
+        // V5.14 starts the Parties drawer closed at 800 px and below.
+        if (width <= 800 && !(await page.locator('#collapse-parties').isVisible())) await page.locator('#toggle-parties').click();
         assert(await page.locator('#collapse-parties').isVisible());
         await page.locator('#collapse-parties').click();
         assert(await page.locator('#toggle-parties').isVisible());

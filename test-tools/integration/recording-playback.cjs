@@ -56,9 +56,9 @@ async function inspectPanel(selector, mode, width, theme) {
       const name=document.querySelector('#playback-name'),follow=document.querySelector('#follow-label');
       if(getComputedStyle(name).display==='none') return false;
       const a=name.getBoundingClientRect(),b=follow.getBoundingClientRect();
-      return a.width>0 && a.left<b.right && a.right>b.left && a.top<b.bottom && a.bottom>b.top;
+      return a.width>0 && a.left<b.right && a.right>b.left && a.top<b.bottom && a.bottom>b.top && JSON.stringify({name:a,follow:b,parent:name.parentElement.getBoundingClientRect(),w:innerWidth});
     });
-    assert(!overlaps,'recording name must not overlap Follow Original');
+    assert(!overlaps,'recording name must not overlap Follow Original '+overlaps);
   }
   await page.waitForTimeout(120);
   const facts = await page.locator(selector).evaluate(panel => {
@@ -647,7 +647,7 @@ async function wait(fn) {
     await seek(timeline.duration);
     // Follow Original first restores recorded state; inspect through the sidebar afterwards.
     await openDetails();
-    if (width > 1100) await page.evaluate(() => document.querySelector("main").classList.remove("details-closed", "parties-closed"));
+    if (width > 1190) await page.evaluate(() => document.querySelector("main").classList.remove("details-closed", "parties-closed"));
     await page.waitForTimeout(100);
     const boxes = await page.evaluate(() => {
       const b = (s) => {
@@ -664,8 +664,11 @@ async function wait(fn) {
     assert(boxes.timeline.x >= boxes.map.x);
     assert(boxes.timeline.right <= boxes.map.right);
     const overlap = (a,b) => a.x < b.right && a.right > b.x && a.y < b.bottom && a.bottom > b.y;
-    assert(!overlap(boxes.timeline, boxes.left));
-    assert(!overlap(boxes.timeline, boxes.right));
+    // At 1190 px and below the panels are V5.14 overlay drawers, so they may cover the rail.
+    if (width > 1190) {
+      assert(!overlap(boxes.timeline, boxes.left));
+      assert(!overlap(boxes.timeline, boxes.right));
+    }
     async function assertPlaybackLayout() {
       const problems = await page.evaluate(() => {
         const map = document.querySelector('.canvas').getBoundingClientRect();
@@ -681,7 +684,9 @@ async function wait(fn) {
         }
         const layers=document.querySelector('#open-layers').getBoundingClientRect();
         const tools=toolbar.getBoundingClientRect();
-        if (Math.abs(layers.right-tools.right)>2 || Math.abs(layers.top-tools.top)>2) errors.push('Layers not top-right');
+        // V5.14: Layers ends the top row of map tools; only the panel toggles may follow it.
+        const mapTools=['zoom-in','zoom-out','fit','focus-party','inspect-history'].map(id=>document.getElementById(id).getBoundingClientRect());
+        if (Math.abs(layers.top-tools.top)>2 || mapTools.some(r=>Math.abs(r.top-layers.top)<=2 && r.left>layers.left)) errors.push('Layers not top-right '+JSON.stringify({layers,tools,w:innerWidth}));
         const status=document.querySelector('#playback-status').getBoundingClientRect();
         const evidence=document.querySelector('#playback-evidence');
         if (!evidence.hidden && evidence.getBoundingClientRect().top < status.bottom) errors.push('evidence overlaps status');
@@ -691,11 +696,13 @@ async function wait(fn) {
         });
         for (const e of document.querySelectorAll('#playback-timeline > *')) {
           const r = e.getBoundingClientRect();
-          if (r.width && (r.left < timeline.left - 1 || r.right > timeline.right + 1 || r.bottom > timeline.bottom + 1)) errors.push('timeline child outside');
+          if (r.width && (r.left < timeline.left - 1 || r.right > timeline.right + 1 || r.bottom > timeline.bottom + 1)) errors.push('timeline child outside '+JSON.stringify({id:e.id||e.className,r,timeline,w:innerWidth,h:innerHeight}));
         }
         const sos = document.querySelector('#playback-sos');
         if (!sos.hidden && overlap(sos.getBoundingClientRect(), timeline)) errors.push('SOS overlaps timeline');
-        if (timeline.left < map.left - 1 || timeline.right > map.right + 1 || timeline.bottom > map.bottom + 1) errors.push('timeline outside map');
+        // V5.14 docks the rail below the map inside the same workspace column.
+        const column = document.querySelector('.canvas').parentElement.getBoundingClientRect();
+        if (timeline.left < map.left - 1 || timeline.right > map.right + 1 || timeline.top < map.bottom - 1 || timeline.bottom > column.bottom + 1) errors.push('timeline outside map column');
         return errors;
       });
       assert.deepEqual(problems, []);
@@ -756,6 +763,8 @@ async function wait(fn) {
     }
     await page.evaluate(() => document.querySelector("main").classList.remove("details-closed", "parties-closed"));
   }
+  // V5.14 drawers cover the workspace at narrow widths; close them before using map controls.
+  await page.evaluate(() => { if (innerWidth <= 1190) document.querySelector("main").classList.add("details-closed", "parties-closed"); });
   await page.locator("#follow-original").uncheck();
   await mapAction("zoom-in");
   await mapAction("open-layers");

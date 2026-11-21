@@ -2642,6 +2642,7 @@ body[data-history-mode="travel"] #playback-status { top:94px; }
   --greenwash: #e6f1eb;
   --amber: #9b681d;
   --amberwash: #faf1df;
+  --amber-text: #7a5216;
   --red: #963f4b;
   --redwash: #f9eaec;
   --blue: #44788d;
@@ -2664,6 +2665,7 @@ body[data-history-mode="travel"] #playback-status { top:94px; }
   --greenwash: #253e34;
   --amber: #efd09c;
   --amberwash: #393020;
+  --amber-text: var(--amber);
   --red: #efb0ba;
   --redwash: #3f2b31;
   --blue: #97c6da;
@@ -3036,7 +3038,7 @@ body[data-history-mode="travel"] #playback-status { top:94px; }
 #command #open-layers { position: static; }
 #command .party-overview .device > small:nth-child(5) { display: none; }
 #command #projection-status, #command #map-detail-status, #command #label-density,
-#command:not(.playback) #projection-status, #command.playback #playback-status {
+#command:not(.playback) #projection-status {
   position: absolute; top: 72px; left: 14px; right: auto; z-index: 4; max-width: calc(100% - 28px);
   margin: 0; font-size: 10.5px;
 }
@@ -3048,7 +3050,7 @@ body[data-history-mode="travel"] #playback-status { top:94px; }
 #command .inspector-person-header .detail-name { display: flex; align-items: center; gap: 7px; min-width: 0; margin: 0; font-size: 18px; font-weight: 760; letter-spacing: -.25px; line-height: 1.25; }
 #command .inspector-person-header .detail-name > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #command .inspector-person-header .swatch { width: 9px; height: 9px; flex: none; border-radius: 50%; }
-#command .inspector-fix { flex: none; padding: 4px 7px; border-radius: 99px; background: var(--amberwash); color: var(--amber); font-size: 10px; font-weight: 760; white-space: nowrap; }
+#command .inspector-fix { flex: none; padding: 4px 7px; border-radius: 99px; background: var(--amberwash); color: var(--amber-text); font-size: 10px; font-weight: 760; white-space: nowrap; }
 #command .inspector-fix.positive { background: var(--greenwash); color: var(--green); }
 #command .inspector-critical { padding: 14px 0 16px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 #command .inspector-kicker { display: block; margin-bottom: 7px; color: var(--muted); font-size: 10.5px; font-weight: 610; line-height: 1.3; }
@@ -3085,7 +3087,7 @@ body[data-history-mode="travel"] #playback-status { top:94px; }
 #command #toggle-parties, #command #toggle-details { position: static; inset: auto; width: auto; height: auto; transform: none; }
 @media (max-width: 1190px) {
   #command .map-tag { top: var(--command-tools-height, 59px); }
-  #command #projection-status, #command:not(.playback) #projection-status, #command.playback #playback-status { top: calc(var(--command-tools-height, 59px) + 58px); }
+  #command #projection-status, #command:not(.playback) #projection-status, #command .playback-context { top: calc(var(--command-tools-height, 59px) + 58px); }
   #command #map-detail-status { top: calc(var(--command-tools-height, 59px) + 84px); }
 }
 @media (max-width: 520px) {
@@ -3146,3 +3148,15 @@ body[data-history-mode="travel"] #playback-status { top:94px; }
 #command #follow-label, #command #historical-authority, #command #exit-playback { flex: none; }
 @media (max-width: 1190px) { #command #historical-authority { display: none; } }
 @media (max-width: 600px) { #command #playback-name { display: none; } }
+#command #follow-label { position: static; transform: none; }
+/* Playback status and evidence stay in the context block's flow so they cannot overlap. */
+#command .playback-context { top: max(72px, var(--command-tools-height, 72px)); left: 14px; right: 14px; font-size: 10.5px; pointer-events: none; }
+#command .playback-context > * { pointer-events: auto; }
+#command.playback #playback-status { position: static; max-width: none; margin: 0; font-size: 10.5px; }
+/* When the map is narrow, wrapped tools move below so Layers stays top-right. */
+#command .canvas-toolbar > div, #command.playback .canvas-toolbar > div { flex-wrap: wrap-reverse; }
+#command #playback-timeline:not([hidden]) { box-sizing: border-box; max-width: 100%; min-width: 0; }
+#command #playback-timeline > * { min-width: 0; max-width: 100%; }
+@media (max-width: 520px) {
+  #command #playback-timeline:not([hidden]) { gap: 6px; padding: 8px; }
+}
