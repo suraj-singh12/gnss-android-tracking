@@ -152,7 +152,7 @@ PY
       tap "$row"; shot "${p}settings-$(echo "$row" | tr 'A-Z &' 'a-z--' | tr -s '-')"
       case "$row" in
         "Command access") tap "Manage access & trust"; shot "${p}settings-manage-access"; "$0" back ;;
-        "Tracking policy") tap "Reporting interval"; shot "${p}settings-interval-selector-open"; "$0" back ;;
+        "Party & Command") tap "Reporting interval"; shot "${p}settings-interval-selector-open"; "$0" back ;;
       esac
       "$0" back
     done
