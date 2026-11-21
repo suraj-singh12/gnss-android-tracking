@@ -459,8 +459,10 @@
         repaint();
       };
       row.append(check);
-      // Workspace search/filters: Online = qualified position at this playhead.
-      const located = p.visible && !(travel && !p.device?.location?.fix);
+      // Workspace search/filters: Online = a qualified position in this view
+      // (Travel Back: at the playhead; saved recording: in the frozen state).
+      const located =
+        p.visible && !!(travel ? p.device?.location?.fix : p.device?.current_position);
       card.dataset.search = `${identity(p, id)} ${p.device?.snapshot?.party?.name || ""} ${id}`.toLowerCase();
       card.dataset.contact = located ? "healthy" : "historical";
       card.dataset.attention = String(p.visible && !located);
