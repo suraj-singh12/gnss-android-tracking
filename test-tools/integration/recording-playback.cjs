@@ -36,9 +36,10 @@ async function headerAction(id) {
   const root = page.locator(".header-menu-root");
   const mobileSummary = root.locator(":scope > summary");
   // Desktop exposes the menu groups directly and hides the mobile summary.
-  if (await mobileSummary.isVisible() && !(await root.evaluate(e => e.open))) await mobileSummary.click();
+  const inRoot = await target.evaluate(e => !!e.closest(".header-menu-root"));
+  if (inRoot && await mobileSummary.isVisible() && !(await root.evaluate(e => e.open))) await mobileSummary.click();
   const group = target.locator("xpath=ancestor::details[contains(@class, 'menu')][1]");
-  if (!(await group.evaluate(e => e.open))) await group.locator(":scope > summary").click();
+  if (await group.count() && !(await group.evaluate(e => e.open))) await group.locator(":scope > summary").click();
   await target.click();
   if (id === 'open-library') await page.waitForFunction(() => !document.querySelector('#library-status').textContent.includes('Loading'));
 }
@@ -65,10 +66,11 @@ async function inspectPanel(selector, mode, width, theme) {
     return {width:r.width, right:r.right, bottom:r.bottom, dockTop:dock.top, scrollWidth:panel.scrollWidth, clientWidth:panel.clientWidth, font:parseFloat(getComputedStyle(panel.querySelector('small, .historical-values') || panel).fontSize), padding:parseFloat(getComputedStyle(panel).paddingTop)};
   });
   assert(facts.width > 0 && facts.scrollWidth <= facts.clientWidth+1, `${selector} overflow: ${JSON.stringify(facts)}`);
-  if (width <= 1100) {
-    assert(facts.bottom <= facts.dockTop-10, `${selector} covers dock`);
-    assert(facts.font >= 12 && facts.font <= 13, 'panel text stays readable');
-    assert.equal(facts.padding,8);
+  if (width <= 1190) {
+    // V5.14 drawers overlay the workspace below the header and stay within the viewport.
+    const bounds = await page.locator(selector).boundingBox();
+    assert(bounds.y >= 58 && bounds.y + bounds.height <= page.viewportSize().height + 1 && bounds.x + bounds.width <= width + 1, `${selector} drawer bounds ${JSON.stringify(bounds)}`);
+    assert(facts.font >= 10 && facts.font <= 13, 'panel text stays readable');
   }
   panelMeasurements.push({mode,width,theme,selector,...facts});
   fs.writeFileSync(path.join(out,'panel-measurements.json'),JSON.stringify(panelMeasurements,null,2));

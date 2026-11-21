@@ -639,7 +639,7 @@ function renderDashboard() {
       overview.dataset.attention = String(
         !!sosPending ||
           d.contact_condition !== "healthy" ||
-          d.gnss_condition !== "fresh",
+          !d.current_position,
       );
       overview.dataset.search = [
         d.snapshot.party.id,

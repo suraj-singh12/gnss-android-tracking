@@ -235,7 +235,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/gnss-assets"
           CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -buildvcs=true -o "$RUNNER_TEMP/gnss-assets/GNSS-Command-macos-arm64" ./cmd/party-tracker
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -buildvcs=true -o "$RUNNER_TEMP/gnss-assets/GNSS-Command-windows-x64.exe" ./cmd/party-tracker
-          go build -o "$RUNNER_TEMP/gnss-command-linux" ./cmd/party-tracker
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -buildvcs=true -o "$RUNNER_TEMP/gnss-assets/GNSS-Command-linux-x64" ./cmd/party-tracker
+          # Browser suites run the exact Linux asset that is published below.
+          cp "$RUNNER_TEMP/gnss-assets/GNSS-Command-linux-x64" "$RUNNER_TEMP/gnss-command-linux"
       - name: Browser verification including SOS and offline maps
         run: |
           npm install --prefix "$RUNNER_TEMP/gnss-browser" playwright @axe-core/playwright
@@ -244,6 +246,8 @@ jobs:
           export GNSS_PLAYWRIGHT_MODULE="$RUNNER_TEMP/gnss-browser/node_modules/playwright"
           export GNSS_AXE_MODULE="$RUNNER_TEMP/gnss-browser/node_modules/@axe-core/playwright"
           export GNSS_SCREENSHOT_DIR="$RUNNER_TEMP/gnss-assets/visual-evidence"
+          mkdir -p "$RUNNER_TEMP/gnss-test-reports/browser"
+          node test-tools/integration/command-v514-workspace.cjs 2>&1 | tee "$RUNNER_TEMP/gnss-test-reports/browser/command-v514-workspace.log"
           node test-tools/integration/sos-dashboard.cjs
           node test-tools/integration/ui-dashboard.cjs
           node test-tools/integration/recording-foundation.cjs
@@ -264,7 +268,7 @@ jobs:
           ASSET_DIR: ${{ runner.temp }}/gnss-assets
         run: |
           test -z "$(git status --porcelain)"
-          for binary in "$ASSET_DIR/GNSS-Command-macos-arm64" "$ASSET_DIR/GNSS-Command-windows-x64.exe"; do
+          for binary in "$ASSET_DIR/GNSS-Command-macos-arm64" "$ASSET_DIR/GNSS-Command-windows-x64.exe" "$ASSET_DIR/GNSS-Command-linux-x64"; do
             go version -m "$binary" | tee "$binary.build-info.txt"
             go version -m "$binary" | grep -F "vcs.revision=$SOURCE_REVISION"
             go version -m "$binary" | grep -F 'vcs.modified=false'
@@ -274,14 +278,35 @@ jobs:
           grep -F "package: name='org.gnss.tracking'" "$ASSET_DIR/android-package.txt"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$ASSET_DIR/GNSS-Tracker-debug.apk" | tee "$ASSET_DIR/android-signing.txt"
           cp docs/ui-acceptance.md "$ASSET_DIR/SETUP.md"
+          cat > "$ASSET_DIR/INSTALL.md" <<EOF
+          # GNSS acceptance assets for $SOURCE_REVISION
+
+          Every application below is built from the same source revision \`$SOURCE_REVISION\`.
+          Verify downloads against SHA256SUMS before use.
+
+          - GNSS-Tracker-debug.apk: Android debug build. Install with \`adb install -r GNSS-Tracker-debug.apk\`.
+          - GNSS-Command-macos-arm64: macOS Apple Silicon. Run \`chmod +x GNSS-Command-macos-arm64 && ./GNSS-Command-macos-arm64\`.
+          - GNSS-Command-windows-x64.exe: Windows x64. Run it from a terminal or by double-clicking it.
+          - GNSS-Command-linux-x64: Linux x64. Run \`chmod +x GNSS-Command-linux-x64 && ./GNSS-Command-linux-x64\`.
+
+          Command prints its local dashboard URL. Open it in a browser on the same computer.
+          Then configure the phones with the address shown under Tools → Phone controls.
+          The macOS and Windows binaries are Linux cross-builds and have not been executed natively in CI.
+          EOF
+          sed -i 's/^          //' "$ASSET_DIR/INSTALL.md"
           python3 - <<'PY'
           import hashlib,json,os,pathlib,zipfile
           root=pathlib.Path(os.environ['ASSET_DIR']); sha=os.environ['SOURCE_REVISION']
-          names=['GNSS-Tracker-debug.apk','GNSS-Command-macos-arm64','GNSS-Command-windows-x64.exe']
+          names=['GNSS-Tracker-debug.apk','GNSS-Command-macos-arm64','GNSS-Command-windows-x64.exe','GNSS-Command-linux-x64']
           with zipfile.ZipFile(root/names[0]) as z:
               assert any(sha.encode() in z.read(n) for n in z.namelist() if n.endswith('.dex'))
           assets={n:{'sha256':hashlib.sha256((root/n).read_bytes()).hexdigest(),'bytes':(root/n).stat().st_size} for n in names}
-          manifest={'source_revision':sha,'android_version':'0.1','command_protocol':1,'android_min_sdk':26,'android_target_sdk':35,'assets':assets}
+          import platform,subprocess
+          build={'go':subprocess.run(['go','version'],capture_output=True,text=True).stdout.strip(),'runner_os':platform.platform(),
+                 'workflow_run':f"{os.environ.get('GITHUB_SERVER_URL')}/{os.environ.get('GITHUB_REPOSITORY')}/actions/runs/{os.environ.get('GITHUB_RUN_ID')}",
+                 'event':os.environ.get('GITHUB_EVENT_NAME'),'ref':os.environ.get('GITHUB_REF'),
+                 'native_runtime_verified':{'linux-x64':'browser suites executed this binary','macos-arm64':False,'windows-x64':False}}
+          manifest={'source_revision':sha,'android_version':'0.1','command_protocol':1,'android_min_sdk':26,'android_target_sdk':35,'build':build,'assets':assets}
           (root/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
           (root/'SHA256SUMS').write_text(''.join(f"{a['sha256']}  {n}\n" for n,a in assets.items()))
           print(json.dumps(manifest,indent=2))
@@ -307,6 +332,12 @@ jobs:
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
+          name: GNSS-Command-Linux-x64
+          path: ${{ runner.temp }}/gnss-assets/GNSS-Command-linux-x64
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
           name: GNSS-Acceptance-Evidence-${{ env.SOURCE_REVISION }}
           path: |
             ${{ runner.temp }}/gnss-assets/*.txt
@@ -319,7 +350,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: gnss-issue6-test-reports-${{ env.SOURCE_REVISION }}
+          name: GNSS-Test-Reports-${{ env.SOURCE_REVISION }}
           path: |
             ${{ runner.temp }}/gnss-test-reports
             android/app/build/reports

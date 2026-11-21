@@ -199,7 +199,8 @@ const report = { physical_acceptance: false };
     "Play",
   );
   await page.locator("#travel-settings > summary").click();
-  await page.locator("#sos-toast-dismiss").click();
+  // The shared menu helper may already have dismissed the notification (never the SOS).
+  if (await page.locator("#sos-toast-dismiss").isVisible()) await page.locator("#sos-toast-dismiss").click();
   await page.locator(".historical-party-name").first().click();
   assert(
     (await page.locator("[data-historical-party] circle").count()) > 0,

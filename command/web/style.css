@@ -2614,40 +2614,8 @@ body.playback #playback-status { position:static; max-width:none; margin:0; font
 body.playback #playback-timeline { padding:6px 8px; gap:8px; }
 body.playback #playback-play { min-width:44px; font-size:20px; }
 body.playback #playback-speed { width:64px; }
-#operational-mode { position:fixed; bottom:2px; right:8px; z-index:9; font-size:11px; padding:2px 6px; background:var(--surface); border-radius:4px; }
-#mode-navigation { display:flex; justify-content:center; gap:3px; padding:4px; background:var(--surface); border-bottom:1px solid var(--line); }
-#mode-navigation button { font-size:12px; min-height:32px; }
-@media(max-width:600px) { #mode-navigation button { font-size:10px; padding:4px; min-width:0; } }
-body, body:not(.playback) { grid-template-rows:60px 40px 0 minmax(0,1fr) 26px; }
-body.playback { grid-template-rows:60px 40px 48px minmax(0,1fr) 26px; }
-#mode-navigation { grid-row:2; z-index:9; }
-#playback-rail { grid-row:3; }
-body > main { grid-row:4; }
-body > footer { grid-row:5; }
-@media(max-width:600px) {
- body,body:not(.playback) { grid-template-rows:60px 40px 0 minmax(0,1fr) 22px; }
- body.playback { grid-template-rows:60px 40px 48px minmax(0,1fr) 22px; }
-}
-#historical-return { position:fixed; top:108px; right:12px; z-index:20; }
-#mode-navigation button[aria-pressed="true"] { color:var(--accent); background:var(--selected); border-color:var(--accent); }
-/* Mode and historical context form one compact shared strip. */
-body,body:not(.playback),body.playback { grid-template-rows:60px auto 0 minmax(0,1fr) 26px; }
-#mode-navigation { min-height:40px; flex-wrap:wrap; align-items:center; }
-#mode-navigation #playback-rail { border:0; padding:0 6px; gap:8px; min-width:0; }
-@media(max-width:600px) {
- body,body:not(.playback),body.playback { grid-template-rows:60px auto 0 minmax(0,1fr) 22px; }
- #mode-navigation #playback-rail { flex-basis:100%; justify-content:center; }
-}
-@media(max-width:600px) {
- #playback-rail > div #historical-mode { font-size:11px; }
- #playback-rail > div #historical-mode::after { content:none; }
- #playback-name { display:none; }
-}
 #sos-toast { z-index:40; }
-body.historical-suspended #mode-navigation > button { visibility:hidden; }
-#historical-return { top:64px; left:50%; right:auto; transform:translateX(-50%); z-index:41; }
 body[data-history-mode="travel"] #playback-status { top:94px; }
-#mode-navigation #follow-label { position:static; transform:none; flex:none; }
 
 /* ==========================================================================
    Approved Command V5.14 production workspace (Issue #66).
@@ -2659,7 +2627,7 @@ body[data-history-mode="travel"] #playback-status { top:94px; }
 :root {
   font: 13px/1.42 -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
   --ink: #24343a;
-  --muted: #61747a;
+  --muted: #596970;
   --line: #dce5e1;
   --accent: #216f56;
   --background: #eef2f0;
@@ -3161,3 +3129,20 @@ body[data-history-mode="travel"] #playback-status { top:94px; }
   :root { --command-detail-width: min(280px, 86vw); }
   #command > main:not(.details-closed) .party-detail { width: var(--command-detail-width); }
 }
+#command #historical-return:not([hidden]) { position: static; inset: auto; transform: none; z-index: auto; }
+#command #layers { inset: var(--command-tools-bottom, 140px) 16px auto auto; max-height: calc(100dvh - var(--command-tools-bottom, 140px) - 16px); overflow-y: auto; }
+#command .party-overview .device { padding: 2px 10px 9px; }
+#command .party-overview .device-title { min-height: 40px; }
+#command .party-overview .party-select { align-self: stretch; min-height: 40px; }
+#command dialog .controls { display: flex; flex-wrap: wrap; gap: 7px; justify-content: flex-end; }
+#command dialog .controls > button { min-width: 0; }
+#command .recording-bar, #command:not(.playback) .recording-bar { height: 61px; min-height: 0; }
+@media (max-width: 800px) { #command .recording-bar, #command:not(.playback) .recording-bar { height: auto; min-height: 61px; } }
+#command .context-copy { flex: 1 1 auto; }
+#command .context-right { flex: 0 1 auto; min-width: 0; overflow: hidden; }
+#command #playback-rail:not([hidden]) { min-width: 0; max-width: 100%; }
+#command #playback-rail > div { flex: 0 1 auto; min-width: 0; overflow: hidden; }
+#command #playback-name { display: block; min-width: 0; max-width: 220px; }
+#command #follow-label, #command #historical-authority, #command #exit-playback { flex: none; }
+@media (max-width: 1190px) { #command #historical-authority { display: none; } }
+@media (max-width: 600px) { #command #playback-name { display: none; } }

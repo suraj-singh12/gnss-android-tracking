@@ -273,7 +273,8 @@ async function wait(check) {
           const rail=document.querySelector(".recording-bar").getBoundingClientRect();
           return box.right <= innerWidth && box.x > innerWidth / 2 && rail.height <= 61;
         }),
-        "Approved compact recording rail fits and aligns controls on the right",
+        "Approved compact recording rail fits and aligns controls on the right: " +
+          JSON.stringify(await page.evaluate(() => [".recording-bar", ".recording-bar .controls"].map((s) => document.querySelector(s).getBoundingClientRect()))),
       );
     assert.equal(
       await page.evaluate(
@@ -929,7 +930,7 @@ async function wait(check) {
   page.on("dialog", (d) => d.accept());
   await page.locator("#discard-recording").click();
   await wait(async () => !(await state()).recording);
-  await page.locator("#start").click();
+  await menuAction(page, "mode-recording");
   assert.equal(await page.locator("#current-mode").isChecked(), true);
   await page.locator("#confirm-recording").click();
   await wait(async () => (await state()).recording?.mode === "from_now");
