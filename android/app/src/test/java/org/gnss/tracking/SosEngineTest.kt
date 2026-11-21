@@ -80,7 +80,10 @@ class SosEngineTest {
                 .activate(SosTrigger.SCREEN)
         assertNull(Protocol.decodeMessage(saved.row.json).health.wifi_connected)
         assertFalse(events.any { it.event == DiagnosticEvent.SOS_NETWORK_UNAVAILABLE })
-        assertTrue(saved.row.sosDescription(null, true).contains("status unavailable"))
+        // Unknown health is neither shown as a Wi-Fi fact nor as delivery; only receipt pending.
+        val description = saved.row.sosDescription(null, true)
+        assertFalse(description.contains("Wi-Fi"))
+        assertTrue(description.contains("awaiting Command receipt"))
     }
 
     @Test

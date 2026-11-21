@@ -42,6 +42,17 @@ filled primary actions have no contrasting outline. Every change is checked by t
 component ownership, live inspection and the mandatory self-review are in
 [android/UI-DEVELOPMENT.md](../android/UI-DEVELOPMENT.md).
 
+Operator-approved refinement (20 November 2026): Tracking shows a persistent
+**Command online / Command offline** pill (server icon; teal online, amber offline) in
+the Delivery card, driven only by a real Command response (`Sender.commandReachable`);
+Wi-Fi state never sets it. The offline sentence, the retention sentence and the
+explanatory Tracking note are removed. A retryable delivery attempt (for example while a
+saved SOS awaits Command) is no longer shown as a red error; paused receivers and
+rejected rows still are. Party & Command and Tracking policy share one reporting-interval
+selector. Field readiness is one status list with an action only where needed. Manage
+access & trust shows identities and contact evidence directly. Diagnostic tools has one
+Physical-key test card (results only after a real key event) and one Diagnostic export card.
+
 ## Operator UI/UX quality gate — 15 reusable rules
 
 Preserved verbatim from draft [PR #64](https://github.com/suraj-singh12/gnss-android-tracking/pull/64)
@@ -313,8 +324,10 @@ refresh does not overwrite edits. Caret restoration follows framework hierarchy
 restoration. Adaptive storage is the real #24 ON/OFF Switch, OFF by default, with one
 future-observations caption. Revision/request evidence is secondary.
 
-Diagnostics separates seven independent health facts from four destinations:
-Instructions, Phone Alerts, Saved data & sync and Diagnostic tools. Instructions use
+Diagnostics separates four independent health facts from five destinations:
+Instructions, Phone Alerts, Saved data & sync, SOS history and Diagnostic tools
+(20 Nov 2026: GNSS details, Command contact, Transfer recovery and Storage health
+retired; Saved data & sync owns counts, sync progress, Retry and export). Instructions use
 compact outcome filters and chronological, bounded pages; dedicated details show
 verification, attempts, stages and result custody. Full canonical evidence is optional.
 Phone alerts and SOS history use actual persisted records; output attempts never

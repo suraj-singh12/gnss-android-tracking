@@ -16,7 +16,6 @@
     <dimen name="page_top">11dp</dimen>
     <dimen name="page_bottom">17dp</dimen>
     <dimen name="card_padding">14dp</dimen>
-    <dimen name="card_gap">12dp</dimen>
     <dimen name="section_top">18dp</dimen>
     <dimen name="section_bottom">8dp</dimen>
     <dimen name="list_row_padding_h">14dp</dimen>
@@ -56,6 +55,7 @@
     <dimen name="icon_sm">20dp</dimen>
     <dimen name="icon_md">22dp</dimen>
     <dimen name="icon_gap">6dp</dimen>
+    <dimen name="icon_pill">14dp</dimen>
 
     <!-- Type scale (scalable sp). Roles are defined in NativeUi.TextRole. -->
     <dimen name="text_display">23sp</dimen>
@@ -65,6 +65,7 @@
     <dimen name="text_heading">14sp</dimen>
     <dimen name="text_body">14sp</dimen>
     <dimen name="text_button">13sp</dimen>
+    <dimen name="text_input">13.5sp</dimen>
     <dimen name="text_row_title">12.5sp</dimen>
     <dimen name="text_value">12.5sp</dimen>
     <dimen name="text_label">12sp</dimen>

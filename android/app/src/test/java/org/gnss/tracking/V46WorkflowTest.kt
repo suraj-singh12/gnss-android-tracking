@@ -43,11 +43,11 @@ class V46WorkflowTest {
         fun all() = nativeViews(controller.get().findViewById(android.R.id.content))
         fun editor() =
             all().filterIsInstance<EditText>().single {
-                it.contentDescription == "Custom interval · seconds"
+                it.contentDescription == "Custom interval · seconds" && (it.parent as android.view.View).isShown
             }
         fun picker() =
             all().filterIsInstance<Spinner>().single {
-                it.contentDescription == "Reporting interval"
+                it.contentDescription == "Reporting interval" && (it.parent as android.view.View).isShown
             }
         try {
             await {
@@ -92,11 +92,11 @@ class V46WorkflowTest {
             shadowOf(Looper.getMainLooper()).idle()
             val picker =
                 all().filterIsInstance<Spinner>().single {
-                    it.contentDescription == "Reporting interval"
+                    it.contentDescription == "Reporting interval" && (it.parent as android.view.View).isShown
                 }
             val custom =
                 all().filterIsInstance<EditText>().single {
-                    it.contentDescription == "Custom interval · seconds"
+                    it.contentDescription == "Custom interval · seconds" && (it.parent as android.view.View).isShown
                 }
             assertEquals(4, picker.selectedItemPosition)
             assertEquals("35", custom.text.toString())
@@ -141,7 +141,7 @@ class V46WorkflowTest {
             assertTrue(
                 all()
                     .filterIsInstance<EditText>()
-                    .single { it.contentDescription == "Custom interval · seconds" }
+                    .single { it.contentDescription == "Custom interval · seconds" && (it.parent as android.view.View).isShown }
                     .isShown
             )
             val state = app.repository.state()
@@ -310,7 +310,6 @@ class V46WorkflowTest {
                     "Party & Command",
                     "Command access",
                     "Manage Command access",
-                    "Identity & verification details",
                     "Field readiness",
                     "Tracking policy",
                     "Policy details",
@@ -321,12 +320,8 @@ class V46WorkflowTest {
                     "Instruction filters",
                     "Phone Alerts",
                     "Saved data & sync",
-                    "Transfer recovery",
-                    "Storage health",
                     "Diagnostic tools",
                     "Advanced logs",
-                    "GNSS details",
-                    "Command contact",
                     "SOS event history",
                 )) {
                 openNativeScreen(controller.get(), name)

@@ -144,15 +144,14 @@ class VisualRegressionTest(private val profile: Profile) {
             fun check(name: String, screen: String) {
                 layout()
                 findings += audit.audit(content, screen, screen in roots, ::allow)
-                geometry.put(name, audit.geometry(content))
-                capture.write(name, content)
+                val pixels = capture.write(name, content)
+                geometry.put(name, audit.geometry(content).apply {
+                    if (name !in VisualBaseline.hostDependent) put(VisualBaseline.PIXELS, pixels)
+                })
                 // System bars/navigation insets: app bar below status bar, SOS + nav above nav bar.
                 val sos = nativeViews(root).filterIsInstance<Button>().singleOrNull { it.text == "Hold to activate SOS" }
-                if (sos != null && sos.isShown) {
-                    val b = audit.bounds(content, sos)
-                    if (b.top < px(24) || b.bottom > root.height - root.paddingBottom + 1)
-                        findings += VisualFinding("insets", name, "SOS $b outside safe area")
-                }
+                if (sos != null && sos.isShown)
+                    audit.safeArea(content, sos, name, px(24), root.height - root.paddingBottom)?.let { findings += it }
             }
             suspend fun scrollBottom(): Boolean {
                 val scroll = nativeViews(root).filterIsInstance<ScrollView>().first()
@@ -193,11 +192,11 @@ class VisualRegressionTest(private val profile: Profile) {
             if (scrollBottom()) check("tracking-urgent-alert-bottom", "Tracking")
             // Every destination, top and scrolled end.
             for (screen in listOf(
-                "Settings", "Party & Command", "Command access", "Manage Command access", "Identity & verification details",
+                "Settings", "Party & Command", "Command access", "Manage Command access",
                 "Field readiness", "Tracking policy", "Policy details", "Emergency controls",
                 "Diagnostics", "Command Instructions", "History search & filters", "Instruction filters", "Phone Alerts",
-                "Saved data & sync", "Transfer recovery", "Storage health", "SOS event history", "SOS details",
-                "GNSS details", "Command contact", "Diagnostic tools", "Advanced logs",
+                "Saved data & sync", "SOS event history", "SOS details",
+                "Diagnostic tools", "Advanced logs",
             )) {
                 openNativeScreen(a, screen)
                 settle()
@@ -216,8 +215,12 @@ class VisualRegressionTest(private val profile: Profile) {
             nativeViews(root).filterIsInstance<Button>().single { it.text == "Start Test" }.performClick()
             settle()
             check("physical-button-listening", "Diagnostic tools")
+            // A real Activity key event is the only source of a displayed result.
+            a.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_VOLUME_UP))
+            settle()
             nativeViews(root).filterIsInstance<Button>().single { it.text == "Stop Test" }.performClick()
             settle()
+            check("physical-button-event", "Diagnostic tools")
             if (profile.keyboard) {
                 openNativeScreen(a, "Party & Command")
                 settle()
@@ -242,8 +245,8 @@ class VisualRegressionTest(private val profile: Profile) {
                     decor.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h - px(48), View.MeasureSpec.AT_MOST))
                     decor.layout(0, 0, decor.measuredWidth, decor.measuredHeight)
                     findings += audit.audit(decor, "dialog:$name", true, ::allow)
-                    geometry.put("dialog-$name", audit.geometry(decor))
-                    capture.write("dialog-$name", decor)
+                    val pixels = capture.write("dialog-$name", decor)
+                    geometry.put("dialog-$name", audit.geometry(decor).apply { put(VisualBaseline.PIXELS, pixels) })
                     val negative = d.getButton(AlertDialog.BUTTON_NEGATIVE)
                     if (negative != null && negative.isShown) negative.performClick() else d.dismiss()
                     idle()
@@ -256,13 +259,12 @@ class VisualRegressionTest(private val profile: Profile) {
                 dialog("enrollment-steps") { openNativeScreen(a, "Command access"); settle(); click("Enrollment steps ›") }
                 dialog("disable-remote-control") { openNativeScreen(a, "Manage Command access"); settle(); click("Disable remote control") }
                 dialog("re-enroll") { openNativeScreen(a, "Manage Command access"); settle(); click("Re-enroll Command") }
-                dialog("field-readiness") { openNativeScreen(a, "Field readiness"); settle(); click("Open permission guidance") }
                 dialog("instruction-filter") { openNativeScreen(a, "History search & filters"); settle(); click("Filter history") }
-                dialog("retry") { openNativeScreen(a, "Transfer recovery"); settle(); click("Retry saved messages") }
+                dialog("retry") { openNativeScreen(a, "Saved data & sync"); settle(); click("Retry saved messages") }
                 dialog("phone-alert") { openNativeScreen(a, "Phone Alerts"); settle(); click("View alert & acknowledge") }
                 dialog("invalid-interval") {
                     openNativeScreen(a, "Party & Command"); settle()
-                    val label = nativeViews(root).filterIsInstance<android.widget.TextView>().single { it.text == "Reporting interval · seconds" && it.labelFor != View.NO_ID }
+                    val label = nativeViews(root).filterIsInstance<android.widget.TextView>().single { it.text == "Custom interval · seconds" && it.labelFor != View.NO_ID && (it.parent as View).isShown }
                     a.findViewById<EditText>(label.labelFor).setText("3")
                     click("Save settings")
                 }

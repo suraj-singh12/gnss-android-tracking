@@ -41,7 +41,9 @@ class SettingsDiagnosticsTest {
         fun field(label: String): EditText {
             val heading =
                 all().filterIsInstance<TextView>().single {
-                    it.text == label && it.labelFor != View.NO_ID
+                    it.text == label && it.labelFor != View.NO_ID &&
+                        // Party and Tracking policy share the interval control; pick the visible page's.
+                        (label != "Custom interval · seconds" || (it.parent as View).isShown)
                 }
             return controller.get().findViewById(heading.labelFor)
         }
@@ -56,7 +58,7 @@ class SettingsDiagnosticsTest {
                 setSelection(6)
             }
             field("Command address").setText("http://192.168.12.3:8080")
-            field("Reporting interval · seconds").setText("35")
+            field("Custom interval · seconds").setText("35")
             app.operational.value = Operational(health = Health(wifi_connected = true))
             shadowOf(Looper.getMainLooper()).idle()
             assertEquals("Unfinished field edit", field("Party name").text.toString())
@@ -71,7 +73,7 @@ class SettingsDiagnosticsTest {
             }
             assertTrue(field("Party name").hasFocus())
             assertEquals(6, field("Party name").selectionStart)
-            assertEquals("35", field("Reporting interval · seconds").text.toString())
+            assertEquals("35", field("Custom interval · seconds").text.toString())
             assertEquals(original.partyName, app.repository.state().partyName)
             @Suppress("DEPRECATION") controller.get().onBackPressed()
             assertFalse(controller.get().isFinishing)
@@ -80,14 +82,14 @@ class SettingsDiagnosticsTest {
             button("Cancel").performClick()
             assertEquals(original.partyName, field("Party name").text.toString())
             openNativeScreen(controller.get(), "Party & Command")
-            field("Reporting interval · seconds").setText("3")
+            field("Custom interval · seconds").setText("3")
             button("Save settings").performClick()
             until {
                 all().filterIsInstance<TextView>().any { it.text.startsWith("Settings not saved") }
             }
             assertEquals(original.localInterval, app.repository.state().localInterval)
             org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()?.dismiss()
-            field("Reporting interval · seconds").setText("35")
+            field("Custom interval · seconds").setText("35")
             button("Save settings").performClick()
             until {
                 all().filterIsInstance<TextView>().any { it.text.startsWith("Settings saved") }

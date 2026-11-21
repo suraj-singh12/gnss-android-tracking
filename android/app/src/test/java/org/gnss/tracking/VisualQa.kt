@@ -111,7 +111,9 @@ internal class VisualAudit(private val density: Float, private val fontScale: Fl
                 if (tokens.textSizes.none { kotlin.math.abs(it - sp) < 0.06f } && !(v is EditText))
                     report("type-token", "${name(v)} ${"%.2f".format(sp)}sp is not a type token")
             }
-            radius(v.background)?.let { radius ->
+            // Every rounded layer of the real background: ripple content/mask, every
+            // state of a state list, inset and layer wrappers.
+            for (radius in radii(v.background).distinct()) {
                 val d = radius / density
                 if (d > 0.5f && tokens.radii.none { kotlin.math.abs(it - d) < 0.6f } && d < 400f)
                     report("radius-token", "${name(v)} ${"%.1f".format(d)}dp radius is not a shape token")
@@ -153,13 +155,24 @@ internal class VisualAudit(private val density: Float, private val fontScale: Fl
         return false
     }
 
-    private fun radius(d: Drawable?): Float? = when (d) {
-        null -> null
-        is GradientDrawable -> d.cornerRadius
-        is StateListDrawable -> radius(d.current)
-        is InsetDrawable -> radius(d.drawable)
-        is LayerDrawable -> if (d.numberOfLayers > 0) radius(d.getDrawable(0)) else null
-        else -> null
+    /** Corner radii of every GradientDrawable reachable from [d] (wrapped drawables included). */
+    fun radii(d: Drawable?): List<Float> = when (d) {
+        null -> emptyList()
+        is GradientDrawable -> listOf(d.cornerRadius)
+        is StateListDrawable -> (0 until d.stateCount).flatMap { radii(d.getStateDrawable(it)) }
+        is InsetDrawable -> radii(d.drawable)
+        is LayerDrawable -> (0 until d.numberOfLayers).flatMap { radii(d.getDrawable(it)) }
+        else -> emptyList()
+    }
+
+    private fun radius(d: Drawable?): Float? = radii(d).firstOrNull()
+
+    /** Rule `insets`: a view must lie wholly inside the safe area between system bars/IME. */
+    fun safeArea(root: View, v: View, screen: String, top: Int, bottom: Int): VisualFinding? {
+        val b = bounds(root, v)
+        return if (b.top < top || b.bottom > bottom + 1)
+            VisualFinding("insets", screen, "${name(v)} ${b} outside safe area ${top}..${bottom}px")
+        else null
     }
 
     /** Stable geometry of controls and surfaces for regression comparison (dp, rounded). */
@@ -192,7 +205,7 @@ internal class VisualTokens(context: android.content.Context) {
     private fun dp(id: Int) = res.getDimension(id) / dm.density
     val textSizes = listOf(
         R.dimen.text_display, R.dimen.text_dialog_title, R.dimen.text_appbar_title, R.dimen.text_hero,
-        R.dimen.text_heading, R.dimen.text_body, R.dimen.text_button, R.dimen.text_row_title, R.dimen.text_value,
+        R.dimen.text_heading, R.dimen.text_body, R.dimen.text_input, R.dimen.text_button, R.dimen.text_row_title, R.dimen.text_value,
         R.dimen.text_label, R.dimen.text_mono, R.dimen.text_caption, R.dimen.text_small, R.dimen.text_meta,
         R.dimen.text_micro, R.dimen.text_metric,
     ).map(::sp)
@@ -204,7 +217,36 @@ internal class VisualTokens(context: android.content.Context) {
 
 /** Geometry baseline store under app/src/test/resources/visual-baseline. */
 internal object VisualBaseline {
-    private val dir = File("src/test/resources/visual-baseline")
+    const val PIXELS = "_pixels"
+    val dir = File("src/test/resources/visual-baseline")
+
+    /**
+     * Captures whose content depends on the host (device storage, manufacturer, build) or the
+     * wall clock (physical-key event time) are covered by geometry and audit only; every
+     * other capture also locks its exact pixels.
+     */
+    val hostDependent = setOf("advanced-logs", "advanced-logs-bottom", "physical-button-event")
+
+    fun sha256(file: File) = java.security.MessageDigest.getInstance("SHA-256").digest(file.readBytes())
+        .joinToString("") { "%02x".format(it) }
+
+    /**
+     * `APPROVALS.md` must list the SHA-256 of every baseline file with a reason. A re-recorded
+     * baseline therefore fails until a reviewer records why it changed (see UI-DEVELOPMENT.md).
+     */
+    fun approvalProblems(): List<String> {
+        val approvals = File(dir, "APPROVALS.md").takeIf { it.exists() }?.readText()
+            ?: return listOf("${dir.path}/APPROVALS.md is missing")
+        return dir.listFiles { f -> f.name.endsWith(".json") }!!.sortedBy { it.name }.mapNotNull { f ->
+            val hash = sha256(f)
+            val line = approvals.lines().firstOrNull { it.contains(f.name) && it.contains(hash) }
+            when {
+                line == null -> "${f.name} sha256 $hash has no approval line in APPROVALS.md"
+                line.substringAfter(hash).trim().trim('|').trim().length < 12 -> "${f.name} approval needs a reason"
+                else -> null
+            }
+        }
+    }
     val recording get() = System.getenv("GNSS_VISUAL_BASELINE") == "record"
 
     fun compare(profile: String, actual: JSONObject, tolerance: Int = 2): List<String> {
@@ -220,6 +262,10 @@ internal object VisualBaseline {
             if (e == null || a == null) { diffs += "$screen: screen ${if (e == null) "added" else "missing"}"; continue }
             for (key in (e.keys().asSequence() + a.keys().asSequence()).toSortedSet()) {
                 val ev = e.optJSONArray(key); val av = a.optJSONArray(key)
+                if (key == PIXELS) {
+                    if (e.optString(key) != a.optString(key)) diffs += "$screen: rendered pixels changed (${e.optString(key).take(12)} -> ${a.optString(key).take(12)})"
+                    continue
+                }
                 if (ev == null || av == null) { diffs += "$screen/$key: ${if (ev == null) "added" else "removed"}"; continue }
                 if ((0 until 4).any { kotlin.math.abs(ev.getInt(it) - av.getInt(it)) > tolerance })
                     diffs += "$screen/$key: $ev -> $av"
@@ -232,12 +278,17 @@ internal object VisualBaseline {
 internal class VisualCapture(private val profile: String) {
     val dir: File = (System.getenv("GNSS_SCREENSHOT_DIR")?.let { File(it, "visual-qa") } ?: File("build/visual-qa")).let { File(it, profile) }.apply { mkdirs() }
     val names = mutableListOf<String>()
-    fun write(name: String, view: View) {
+    /** Writes the PNG and returns the SHA-256 of its raw ARGB pixels. */
+    fun write(name: String, view: View): String {
         val image = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
         view.draw(Canvas(image))
         File(dir, "$name.png").outputStream().use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        val buffer = java.nio.ByteBuffer.allocate(image.byteCount)
+        image.copyPixelsToBuffer(buffer)
         image.recycle()
         names += name
+        return java.security.MessageDigest.getInstance("SHA-256").digest(buffer.array())
+            .joinToString("") { "%02x".format(it) }
     }
     fun report(findings: List<VisualFinding>, geometryDiffs: List<String>) {
         File(dir, "report.json").writeText(JSONObject().apply {

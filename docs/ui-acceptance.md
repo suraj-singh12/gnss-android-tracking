@@ -1,5 +1,67 @@
 # UI acceptance evidence
 
+## Issue #39 — operator-approved V4.6 refinement (20 November 2026, R-series)
+
+Continues draft PR #65 from verified head `91ff2ceda2865f26109e6eee9f6f3e9fec2caf60`
+(base `integration/combined-upgrades` `9547985e…`). The operator's task explicitly approved
+the changes below; everything else keeps the approved V4.6 design. Before/after sheets:
+[refinement/](evidence/issue-39/v46/refinement/) (before = CI render of `91ff2ce`, after =
+this source; same deterministic fixtures).
+
+### SOS "Wi-Fi unavailable" — root cause
+
+Flow: hold gesture → `SosEngine.activate` saves the SOS row in Room (`SOS saved on phone`)
+→ `Sender` sends it first. When no Wi-Fi network is available the transport throws
+`WifiUnavailable("Wi-Fi unavailable")`; `nativeFailure` → `Repository.fail` schedules a
+retry for the same row and writes the message to `Installation.operationalError`. Tracking
+showed `operationalError` as a red error banner, so a **durably saved, retrying** SOS looked
+like a failure. The message describes a Wi-Fi network check, not Command reachability.
+
+Fix (presentation only; engine, Room, sender retry and ACK semantics unchanged): in V4.6 a
+retryable `operationalError` is not shown on Tracking unless the receiver is paused or rows
+are quarantined (real problems still show). The dock keeps "SOS pending · N awaiting
+receipt" and the original event ID; the Command pill shows offline. `sosDescription` no
+longer presents unknown health as a Wi-Fi fact. "SOS NOT SAVED" for persistence failure
+is unchanged. Covered by `V46RefinementTest.savedSosWithFailedDeliveryStaysPending…`.
+
+### Changes ledger
+
+| ID | Surface | Change |
+|---|---|---|
+| R-01 | Tracking | Removed "Observations retained until received", the offline sentence and the explanatory note. |
+| R-02 | Tracking | Persistent Command online/offline icon pill (`ic_command`, teal/amber) driven only by `Sender.commandReachable == true`; Wi-Fi never sets it. Diagnostics Command row uses the same words. |
+| R-03 | Tracking / SOS | Retryable delivery errors no longer shown as red failure (root cause above). |
+| R-04 | Party & Command | Uses the shared `intervalPicker` (same selector as Tracking policy); shared `Input` type role (13.5sp) for all fields and selectors. |
+| R-05 | Command access | Placeholder identities no longer monospace; tokens/roles throughout. |
+| R-06 | Manage access & trust | Identity & verification details inlined (same bound sources, paired copy actions, one More-evidence disclosure); separate route retired; app-bar title matches its entry row; shorter contact copy. `FLAG_SECURE` unchanged. |
+| R-07 | Field readiness | One status list (Precise location, GPS, Notifications, Battery Saver, Background activity); a resolving action only where a requirement needs one; one short OEM note. Permission dialog list removed; same OS actions. |
+| R-08 | Tracking policy | Two adaptive notes replaced by one line. Switch and owner unchanged. |
+| R-09 | Saved data & sync | Single recovery destination: counts, unresolved, last message ACK, saved-GNSS sync progress, Sync All Now, confirmed Retry, export. Transfer recovery and Storage health retired. |
+| R-10 | Diagnostics | GNSS details and Command contact retired; retired routes restored from old state map to their owners. |
+| R-11 | Diagnostic tools | Physical-key test card with status pill; results appear only after a real Activity key event; Diagnostic export card with one action and coloured success/failure feedback. |
+| R-12 | Visual QA | Self-test per audit rule; radius checks traverse ripple/state-list/inset/layer drawables; `safeArea` rule; exact pixel digests per capture; `APPROVALS.md` + `VisualBaselineApprovalTest`; emulator tour waits for settled, non-loading content and verifies stability across capture. |
+
+Baseline change reason: all six profiles re-recorded for R-01…R-11 (approved scope) and
+the new pixel digests; hashes recorded in `visual-baseline/APPROVALS.md`.
+
+### Verification (local)
+
+- Full `testDebugUnitTest`: **326 tests, 0 failures, 0 errors, 36 skipped** (bridge
+  methods skipped in the ordinary run). Visual suite: 6 profiles, 242 captures, 0 audit
+  findings, 0 geometry/pixel differences.
+- Real Android→Command bridge (`test-tools/integration/run.sh`): **36/36 passed, 0 skips**.
+- Lint: 0 errors, 130 warnings, identical to the `91ff2ce` baseline (the 4 `GradleDependency`
+  notices are newly published versions; no dependency changed).
+- Two earlier full runs aborted with a JVM SIGSEGV inside Robolectric's native
+  `ImageDecoder` while `NotificationVisualTest` decoded an icon (`hs_err` frame
+  `__memmove_avx512_unaligned_erms`). It did not reproduce in isolated reruns or the final
+  full run. It is a test-runtime crash, not an app failure; reported here rather than hidden.
+
+### Not verified
+
+Physical device: real Wi-Fi loss/recovery with a live Command, OEM battery screens,
+TalkBack/Switch Access, real IME, physical volume keys, notification and audio behaviour.
+
 ## Issue #39 — Android UI process and production polish (20 November 2026)
 
 Continues draft [PR #65](https://github.com/suraj-singh12/gnss-android-tracking/pull/65) on

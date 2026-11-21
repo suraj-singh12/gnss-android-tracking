@@ -57,7 +57,7 @@ class V46PolishTest {
             assertTrue(values.any { it.text.toString() == "2026-11-09T10:20:30Z" })
             source.text = source.text.toString().replace("Unverified", "Unavailable")
             assertTrue(nativeViews(host).filterIsInstance<TextView>().any { it.text.toString() == "Unavailable" })
-            openNativeScreen(a, "Identity & verification details")
+            openNativeScreen(a, "Manage Command access")
             settle()
             val disclosure = nativeViews(root).filterIsInstance<Button>().single { it.isShown && it.text == "More evidence & rejection reasons" }
             val page = disclosure.parent as LinearLayout
@@ -98,7 +98,7 @@ class V46PolishTest {
                 assertTrue(sos.height >= px(48))
             }
             root.dispatchApplyWindowInsets(WindowInsets.Builder().setInsets(WindowInsets.Type.systemBars(), Insets.of(0,px(24),0,px(24))).build())
-            for (name in listOf("Tracking", "Diagnostics", "Identity & verification details", "Policy details", "Storage health", "Advanced logs")) {
+            for (name in listOf("Tracking", "Diagnostics", "Manage Command access", "Policy details", "Saved data & sync", "Advanced logs")) {
                 openNativeScreen(a,name)
                 settle()
                 layout(360,800)

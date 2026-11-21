@@ -60,8 +60,10 @@ class DialogVisualTest {
                         .performClick()
                 }
                 suspend fun settle() {
+                    // Advance looper time too: the physical-key journal refresh is a scheduled
+                    // poll, and results are shown only once real history is read back.
                     repeat(20) {
-                        shadowOf(Looper.getMainLooper()).idle()
+                        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(50))
                         delay(10)
                     }
                 }
@@ -99,7 +101,7 @@ class DialogVisualTest {
                 openNativeScreen(a, "Command access")
                 click("Enrollment steps ›")
                 capture("enrollment-steps")
-                openNativeScreen(a, "Transfer recovery")
+                openNativeScreen(a, "Saved data & sync")
                 click("Retry saved messages")
                 capture("retry")
                 openNativeScreen(a, "Manage Command access")
@@ -134,11 +136,11 @@ class DialogVisualTest {
                 openNativeScreen(a, "Party & Command")
                 val field =
                     all().filterIsInstance<EditText>().single {
-                        it.contentDescription == "Custom interval · seconds"
+                        it.contentDescription == "Custom interval · seconds" && (it.parent as android.view.View).isShown
                     }
                 val intervalLabel =
                     all().filterIsInstance<android.widget.TextView>().single {
-                        it.text == "Reporting interval · seconds" && it.labelFor != View.NO_ID
+                        it.text == "Custom interval · seconds" && it.labelFor != View.NO_ID && (it.parent as View).isShown
                     }
                 a.findViewById<EditText>(intervalLabel.labelFor).setText("3")
                 click("Save settings")

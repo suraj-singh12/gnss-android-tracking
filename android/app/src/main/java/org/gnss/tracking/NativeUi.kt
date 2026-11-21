@@ -29,6 +29,7 @@ internal enum class TextRole(val size: Int, val weight: Int, val muted: Boolean 
     Hero(R.dimen.text_hero, TextWeight.BOLD),
     Heading(R.dimen.text_heading, TextWeight.BOLD),
     Body(R.dimen.text_body, TextWeight.REGULAR),
+    Input(R.dimen.text_input, TextWeight.REGULAR),
     Button(R.dimen.text_button, TextWeight.MEDIUM),
     RowTitle(R.dimen.text_row_title, TextWeight.BOLD),
     Value(R.dimen.text_value, TextWeight.REGULAR),
@@ -50,6 +51,8 @@ internal class CollapsingTextView(context: Context) : TextView(context) {
         else super.onMeasure(widthMeasureSpec, heightMeasureSpec)
     }
 }
+
+internal enum class StatusTone { POSITIVE, WARNING, NEUTRAL }
 
 internal object TextWeight {
     const val REGULAR = 0
@@ -287,7 +290,7 @@ internal class NativeUi(private val context: Context) {
 
     /** Shared outlined input with focused, error-free and disabled states. */
     fun input(editor: EditText) {
-        text(editor, TextRole.Body)
+        text(editor, TextRole.Input)
         // Password input types otherwise switch the hint and value to monospace.
         editor.typeface = Typeface.DEFAULT
         editor.minHeight = px(R.dimen.control_height)
@@ -323,6 +326,34 @@ internal class NativeUi(private val context: Context) {
         view.setPadding(px(R.dimen.pill_padding_h), px(R.dimen.pill_padding_v), px(R.dimen.pill_padding_h), px(R.dimen.pill_padding_v))
         view.background =
             shape(if (positive) R.color.positive_surface else R.color.warning_surface, R.dimen.radius_pill, null)
+    }
+
+    /** Status pill with a leading icon tinted like its label (e.g. Command online/offline). */
+    fun iconPill(view: TextView, resource: Int, positive: Boolean) {
+        pill(view, positive)
+        val size = px(R.dimen.icon_pill)
+        view.setCompoundDrawablesRelative(
+            context.getDrawable(resource)!!.mutate().apply {
+                setTint(color(if (positive) R.color.accent else R.color.warning))
+                setBounds(0, 0, size, size)
+            },
+            null, null, null,
+        )
+        view.compoundDrawablePadding = dp(4)
+        view.gravity = Gravity.CENTER_VERTICAL
+    }
+
+    /** Status pill with an explicit tone; NEUTRAL is a quiet informational state. */
+    fun statusPill(view: TextView, tone: StatusTone) {
+        when (tone) {
+            StatusTone.POSITIVE -> pill(view, true)
+            StatusTone.WARNING -> pill(view, false)
+            StatusTone.NEUTRAL -> {
+                pill(view, false)
+                view.setTextColor(color(R.color.muted))
+                view.background = shape(R.color.background, R.dimen.radius_pill, null)
+            }
+        }
     }
 
     fun icon(resource: Int, size: Int = 22, tint: Int = R.color.muted): Drawable =
@@ -392,7 +423,7 @@ internal class NativeUi(private val context: Context) {
     /** Shared selector row typography for the closed field and its popup choices. */
     fun selectorItem(view: View, popup: Boolean): View = view.apply {
         (this as? TextView)?.let {
-            text(it, TextRole.Body)
+            text(it, TextRole.Input)
             it.includeFontPadding = false
             it.minHeight = px(R.dimen.control_height)
             it.gravity = Gravity.CENTER_VERTICAL

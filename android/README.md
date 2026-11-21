@@ -60,7 +60,7 @@ and GPS enabled and Battery Saver off; notification refusal needs Settings befor
 that preserved Start intent can continue. Android itself allows an FGS without
 notification permission, but that is not healthy field setup.
 Start Tracking is a visible user action. Stop Tracking requires confirmation and
-stops collection. Saved messages automatically synchronize while the app is visible, without restarting GNSS. Storage health's retained Saved GNSS sync bar uses current Room queue counts: acknowledgements since the view/manual-drain baseline divided by those acknowledgements plus **all currently pending GNSS**. If more observations are recorded while sending, the total increases and the percentage can fall; unresolved saved GNSS remains pending. The percentage refers to Android-local durable delivery, **not** Command's completed history reconstruction or any offline phone inventory. No estimated finish time is asserted. **Sync Now** preserves learned capacity and accelerates the payload ramp using the same Sender; The internal pause mechanism remains for OS/lifecycle budgets; user-facing pause controls are removed. An in-flight request may still finish. SOS and live tracking remain independently eligible. Reopening
+stops collection. Saved messages automatically synchronize while the app is visible, without restarting GNSS. Saved data & sync's Saved GNSS sync bar uses current Room queue counts: acknowledgements since the view/manual-drain baseline divided by those acknowledgements plus **all currently pending GNSS**. If more observations are recorded while sending, the total increases and the percentage can fall; unresolved saved GNSS remains pending. The percentage refers to Android-local durable delivery, **not** Command's completed history reconstruction or any offline phone inventory. No estimated finish time is asserted. **Sync Now** preserves learned capacity and accelerates the payload ramp using the same Sender; The internal pause mechanism remains for OS/lifecycle budgets; user-facing pause controls are removed. An in-flight request may still finish. SOS and live tracking remain independently eligible. Reopening
 the Activity does not restart or stop tracking. Reboot and force-stop require
 another explicit Start Tracking. Sticky service recreation can recover tracking
 and outbox after process death when Android permits it; it is not a bypass of
@@ -272,8 +272,12 @@ invokes the existing durable SOS engine once; its three-second debounce is uncha
 The adapter does not create a second sender, service or event store. Device-specific
 touch/haptic reliability still requires physical acceptance.
 
-“Received by Command” requires a valid matching transport ACK. “Retrying” or
-“waiting for Wi-Fi” is not success. Operator acknowledgement is **Command-only**;
+“Received by Command” requires a valid matching transport ACK. “Retrying”, “awaiting
+Command receipt” or “no Wi-Fi” is not success. A saved SOS whose delivery attempt fails
+(for example the sender's `Wi-Fi unavailable` transport error) stays **SOS pending** in
+the dock with its original event ID while the sender retries; Tracking shows it as
+pending with Command offline, not as a red failure. Only a local persistence failure
+shows **SOS NOT SAVED**. Operator acknowledgement is **Command-only**;
 Protocol v1 has no return channel for it. A received emergency remains on Command
 until the operator acknowledges it, and acknowledgement retains the event.
 Activate again after three seconds for a distinct deliberate event; rapid duplicate
@@ -634,8 +638,8 @@ UUID as read-only values. Generate the per-phone private credential on Command, 
 it, choose **Authorize**, compare both public UUIDs in the review dialog, then confirm.
 **Enrollment steps** explains private transfer; it performs no automatic pairing.
 **Recheck** requests one opportunity through the existing authenticated control owner.
-Manage access → Identity & verification details retains public copy actions and proof
-history. A LAN address, ordinary GNSS ACK or enrollment does not establish current trust.
+Manage access & trust shows the public identities, copy actions and proof history
+directly. A LAN address, ordinary GNSS ACK or enrollment does not establish current trust.
 Never share credentials in screenshots, logs or diagnostic ZIPs.
 
 **Credential enrolled** means local authorization only. **Contact verified** requires an

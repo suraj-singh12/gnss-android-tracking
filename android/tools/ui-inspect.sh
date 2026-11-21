@@ -29,7 +29,25 @@ mkdir -p "$OUT"
 
 adb_() { if [[ -n "${SERIAL:-}" ]]; then "$ADB_BIN" -s "$SERIAL" "$@"; else "$ADB_BIN" "$@"; fi; }
 
-settle() { sleep "${SETTLE:-1.2}"; }
+settle() { sleep "${SETTLE:-0.4}"; }
+
+# Placeholder copy the app shows while real state is still loading.
+LOADING_RE='Loading settings|Loading…|Reading |Checking…|Checking phone'
+
+# Wait until the UI hierarchy shows no loading placeholder and is identical in two
+# consecutive dumps (no animation, refresh or async content still arriving).
+wait_ready() {
+  local deadline=$((SECONDS + ${READY_TIMEOUT:-20})) prev="" cur
+  while (( SECONDS < deadline )); do
+    dump "$OUT/.ready.xml"
+    cur="$(sed -E 's/ (focused|selected)="[a-z]+"//g' "$OUT/.ready.xml" | md5sum | cut -d' ' -f1)"
+    if ! grep -Eq "$LOADING_RE" "$OUT/.ready.xml" && [[ "$cur" == "$prev" ]]; then return 0; fi
+    prev="$cur"
+    sleep 0.5
+  done
+  echo "screen not settled within ${READY_TIMEOUT:-20}s" >&2
+  return 1
+}
 
 dump() { # $1 = output xml path
   adb_ shell uiautomator dump /sdcard/gnss-ui.xml >/dev/null
@@ -37,11 +55,18 @@ dump() { # $1 = output xml path
 }
 
 shot() {
-  local name="$1"
-  settle
-  adb_ exec-out screencap -p > "$OUT/$name.png"
-  dump "$OUT/$name.xml"
-  echo "captured $OUT/$name.png"
+  local name="$1" try
+  for try in 1 2 3; do
+    wait_ready || true
+    cp "$OUT/.ready.xml" "$OUT/$name.xml"
+    adb_ exec-out screencap -p > "$OUT/$name.png"
+    # The hierarchy must be unchanged after the capture, otherwise it was mid-update.
+    dump "$OUT/.after.xml"
+    if cmp -s <(sed -E 's/ (focused|selected)="[a-z]+"//g' "$OUT/$name.xml") <(sed -E 's/ (focused|selected)="[a-z]+"//g' "$OUT/.after.xml"); then
+      echo "captured $OUT/$name.png"; return 0
+    fi
+  done
+  echo "captured $OUT/$name.png (content still changing)" >&2
 }
 
 node_center() { # $1 = xml, $2 = label prefix
@@ -124,10 +149,15 @@ PY
     shot "${p}tracking"; "$0" scroll; shot "${p}tracking-bottom"
     tap Settings; shot "${p}settings"
     for row in "Party & Command" "Command access" "Field readiness" "Tracking policy" "Emergency controls"; do
-      tap "$row"; shot "${p}settings-$(echo "$row" | tr 'A-Z &' 'a-z--' | tr -s '-')"; "$0" back
+      tap "$row"; shot "${p}settings-$(echo "$row" | tr 'A-Z &' 'a-z--' | tr -s '-')"
+      case "$row" in
+        "Command access") tap "Manage access & trust"; shot "${p}settings-manage-access"; "$0" back ;;
+        "Tracking policy") tap "Reporting interval"; shot "${p}settings-interval-selector-open"; "$0" back ;;
+      esac
+      "$0" back
     done
     tap Diagnostics; shot "${p}diagnostics"; "$0" scroll; shot "${p}diagnostics-bottom"
-    for row in "Command Instructions" "Phone alerts" "Saved data & sync" "SOS history" "GNSS details" "Command contact" "Diagnostic tools"; do
+    for row in "Command Instructions" "Phone alerts" "Saved data & sync" "SOS history" "Diagnostic tools"; do
       tap "Tracking"; tap "Diagnostics"   # fresh root at its top scroll position
       tap "$row"; shot "${p}diagnostics-$(echo "$row" | tr 'A-Z &' 'a-z--' | tr -s '-')"; "$0" back
     done

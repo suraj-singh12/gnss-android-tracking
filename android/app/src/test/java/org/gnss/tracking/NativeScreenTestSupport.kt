@@ -43,20 +43,15 @@ internal fun openNativeScreen(activity: MainActivity, name: String) {
             "Field readiness" to "Settings",
             "Emergency controls" to "Settings",
             "Manage Command access" to "Command access",
-            "Identity & verification details" to "Manage Command access",
             "Policy details" to "Tracking policy",
             "Command Instructions" to "Diagnostics",
             "History search & filters" to "Command Instructions",
             "Instruction filters" to "History search & filters",
             "Phone Alerts" to "Diagnostics",
             "Saved data & sync" to "Diagnostics",
-            "Transfer recovery" to "Saved data & sync",
-            "Storage health" to "Transfer recovery",
             "Diagnostic tools" to "Diagnostics",
             "Advanced logs" to "Diagnostic tools",
             "SOS event history" to "Diagnostics",
-            "GNSS details" to "Diagnostics",
-            "Command contact" to "Diagnostics",
         )
     parents[name]?.let { openNativeScreen(activity, it) }
     val label =

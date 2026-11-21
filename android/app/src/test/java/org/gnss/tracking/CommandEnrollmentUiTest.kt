@@ -214,7 +214,7 @@ class CommandEnrollmentUiTest {
                             assertTrue(visible("Contact unavailable"))
                         }
                     }
-                    openNativeScreen(activity, "Identity & verification details")
+                    openNativeScreen(activity, "Manage Command access")
                     settle()
                     click("Copy Command ID")
                     assertEquals(

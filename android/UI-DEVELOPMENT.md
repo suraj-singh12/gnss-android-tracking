@@ -40,7 +40,7 @@ padding.
 |---|---|---|
 | Colour roles | `app/src/main/res/values/colors.xml`, `values-night/colors.xml` | Semantic Day/Night palette: `background`, `surface`, `ink`, `muted`, `line`, `control_line`, `accent`, `action`, `secondary`, `secondary_surface`, `positive_surface`, `warning`/`warning_surface`, `danger`, `emergency_action`/`emergency_surface`, `disabled_ink`, `disabled_surface`, `disabled_line`, approved `stop_surface`/`stop_line`/`stop_ink` (identical in both themes), `ripple`. |
 | Dimension tokens | `app/src/main/res/values/dimens.xml` | Spacing steps, page/card/list insets, section rhythm, radii, stroke, control heights, button/input/pill padding, icon sizes and the type scale (sp). |
-| Typography roles | `NativeUi.kt` → `TextRole` | Each role = one size token + weight + ink: `Display`, `DialogTitle`, `AppBarTitle`, `AppBarSubtitle`, `Hero`, `Heading`, `Body`, `Button`, `RowTitle`, `Value`, `Label`, `Caption`, `FieldLabel`, `Meta`, `Pill`, `Section`, `Micro`, `Metric`, `Mono`. |
+| Typography roles | `NativeUi.kt` → `TextRole` | Each role = one size token + weight + ink: `Display`, `DialogTitle`, `AppBarTitle`, `AppBarSubtitle`, `Hero`, `Heading`, `Body`, `Input` (fields and selectors), `Button`, `RowTitle`, `Value`, `Label`, `Caption`, `FieldLabel`, `Meta`, `Pill`, `Section`, `Micro`, `Metric`, `Mono`. |
 | Components | `NativeUi.kt` → `NativeUi` | Shared View vocabulary (table below). |
 | Theme | `res/values/styles.xml`, `values-v27/styles.xml` | Framework `Theme.Material` Day/Night, system bar colours (navigation bar = `surface` from API 27; API 26 Day keeps a dark bar because it cannot draw dark icons), sans font family. |
 
@@ -62,6 +62,8 @@ To restyle the whole app, change a token or a `NativeUi` component. Examples:
 | `menu(parent, title, subtitle, action)` | Navigation rows | Title + muted subtitle + right chevron; 60dp minimum. Grouped rows share one bordered list with dividers only between peers. |
 | `fact(parent, label, value)` | Read-only label/value | Selectable value, end-aligned. |
 | `pill(view, positive)` | Status | Borderless full pill; teal positive, amber degraded/unknown. |
+| `statusPill(view, StatusTone)` | Status with a neutral option | `POSITIVE`, `WARNING`, `NEUTRAL` (quiet informational, e.g. "Test inactive"). |
+| `iconPill(view, icon, positive)` | Status with an icon | Tracking's Command online/offline indicator (`ic_command`). |
 | `style(button, primary, danger)` | Actions | Secondary (wash + border), primary (filled `action`), danger (caution wash). Disabled uses `disabled_*` with readable `disabled_ink`. |
 | `stopStyle(button)` | Stop Tracking (hero and its confirmation) | Approved pale-red treatment in both themes. Do not replace. |
 | `quiet(button)` | Cancel/Close/inline links | Text action with ripple. |
@@ -70,6 +72,7 @@ To restyle the whole app, change a token or a `NativeUi` component. Examples:
 | `input(editText)` | Text fields | Outlined 10dp, 48dp, Body type, 2dp accent focus stroke, disabled state, sans even for password types. |
 | `selector(spinner)` + `selectorAdapter(items)` / `selectorItem(view)` | Exclusive choices | Outlined field, single down-chevron at a fixed 12dp end inset, Body type in field and popup. |
 | `switchRow(switch)` | Binary settings | Label start, Switch end, 48dp. Use a Switch, never a CheckBox, for a binary setting. |
+| `intervalPicker(card, editor, …)` (in `installV46Screens`) | Reporting interval | One selector + Custom field shared by Party & Command and Tracking policy over the same mirrored draft. |
 | `metric(parent, value, caption)` | Large counts | 26sp autosizing value with caption. |
 | `feedback(view)`, `collapsingLabel(role)` | Status/error text | A collapsing label measures 0 height while empty, so an idle slot leaves no gap. |
 | `dialog(alertDialog)`, `dialogContent`, `dialogListAdapter` | App-owned dialogs | 18dp radius, 18sp title, 14sp body, quiet negative, primary or caution positive (`CAUTION_ACTIONS`), 12dp bottom inset, 64dp minimum action width. |
@@ -133,6 +136,12 @@ Command access and its credential/review states set `FLAG_SECURE`, so `screencap
 returns an empty image there by design (the UI Automator dump still works). Use the
 Robolectric captures or Layout Inspector for those screens.
 
+Captures wait for real readiness, not a fixed delay: `shot` dumps the hierarchy until no
+loading placeholder (`Loading settings`, `Loading…`, `Reading …`, `Checking…`) remains
+and two consecutive dumps are identical, captures, then verifies the hierarchy did not
+change during the capture (up to three attempts; `READY_TIMEOUT`, default 20 s). The
+tour also opens the reporting-interval selector and Manage access & trust.
+
 ### CI emulator capture
 
 The `android-emulator-ui` job in `.github/workflows/issue-6-matched-assets.yml` boots an
@@ -159,8 +168,8 @@ fixtures at a fixed instant (`FIXTURE_TIME`, UTC), a fixed test-only phone UUID
 
 Each profile visits four Tracking states, SOS pending, an urgent alert (top and
 scrolled), every Settings and Diagnostics destination (top and scrolled end),
-instruction details, the physical-button listening state, the keyboard state (300dp IME
-inset) and, where marked, ten app-owned dialogs. Synthetic 24dp status and navigation
+instruction details, the physical-key listening and real key-event result states, the
+keyboard state (300dp IME inset) and, where marked, nine app-owned dialogs. Synthetic 24dp status and navigation
 bar insets are applied throughout.
 
 For every capture it does three things:
@@ -172,12 +181,20 @@ For every capture it does three things:
    `radius-token` (corner radius not a shape token), `empty-gap` (empty text taking
    space), `duplicate-header` (in-page "‹" back link or title repeating the app bar),
    `row-mismatch` (peer actions of different heights) and `insets` (SOS outside the
-   safe area). `VisualAuditSelfTest` proves each rule fires on a deliberately broken
-   layout.
+   safe area, `VisualAudit.safeArea`). Radius checks inspect every rounded layer of the
+   real background: ripple content and mask, every state-list state, inset and layer
+   wrappers. `VisualAuditSelfTest` has one test per rule proving it fires on a
+   deliberately broken layout, plus checks that a declared bounded line, content
+   scrolled out of its viewport and a layout built from shared components produce no
+   finding.
 2. **Geometry comparison** against the approved baseline in
    `app/src/test/resources/visual-baseline/<profile>.json`: the dp bounds of every
    visible button, input, selector, switch, icon and rounded surface per screen.
-   Movement or resizing beyond 2dp fails the test with a per-component diff.
+   Movement or resizing beyond 2dp fails the test with a per-component diff. Each screen
+   entry also stores `_pixels`, the SHA-256 of the exact rendered ARGB pixels; any pixel
+   change fails ("rendered pixels changed"). Host- or clock-dependent captures
+   (`VisualBaseline.hostDependent`: Advanced logs, the physical-key event time) keep
+   geometry and audit only.
 3. **Capture output**: `app/build/visual-qa/<profile>/*.png`, `index.html` (contact
    sheet with findings) and `report.json`. With `GNSS_SCREENSHOT_DIR` set they go to
    `$GNSS_SCREENSHOT_DIR/visual-qa/` (CI uploads them in the acceptance evidence).
@@ -190,14 +207,30 @@ cd android
 
 ### Changing the approved baseline
 
-A geometry failure means the layout moved. Do **not** re-record just to make it pass.
+A geometry or pixel failure means the rendering changed. Do **not** re-record just to
+make it pass.
 
-1. Open the failing profile's `index.html` and compare against the V4.6 reference.
-2. If the movement is a defect, fix the code.
-3. If it is an intended, approved change, re-record and justify it:
+1. Open the failing profile's `index.html` and compare against the V4.6 reference and
+   the previous accepted captures (CI artifact of the approved commit).
+2. If the change is a defect, fix the code.
+3. If it is an intended, approved change, re-record:
    `GNSS_VISUAL_BASELINE=record ./gradlew testDebugUnitTest --tests '*VisualRegressionTest'`.
-   Commit the JSON diff with the reason (issue, approval, screens affected) and add a
-   row to the findings ledger in `docs/ui-acceptance.md`.
+4. `VisualBaselineApprovalTest` now fails: every baseline file must match an approval
+   line (file, SHA-256, reason) in `visual-baseline/APPROVALS.md`. Get the hashes with
+   `sha256sum app/src/test/resources/visual-baseline/*.json`, replace the affected
+   lines with a specific reason, and add the change to the ledger in
+   `docs/ui-acceptance.md`. Reviewers see the JSON diff, the hash change and the reason
+   together in the PR.
+
+### Pixel comparison: evaluation
+
+The same commit rendered on the local sandbox and on a GitHub runner produced 268 of
+278 pixel-identical captures; the 10 differences were confined to host data (device
+storage free space) on Storage health and Advanced logs. Robolectric's native renderer
+is therefore deterministic for fixed fixtures, so exact pixel digests are enforced for
+every other capture. Golden PNGs are not committed (about 17 MB per profile set);
+digests detect a change and the CI capture artifact shows it. A Robolectric, JDK or
+font upgrade can change every digest; treat that as a reviewed re-record.
 
 To accept a layout-audit finding as intentional, add a `(Regex, reason)` entry to
 `allowed` in `VisualRegressionTest`. The list is empty today; every entry needs a reason.
@@ -240,15 +273,20 @@ and visual inspection complement each other; neither replaces the other.
 |---|---|---|---|---|---|---|
 | Tracking: stopped / active / offline / error | ● | ● | ● | ● | ● | ● |
 | Tracking: SOS pending, urgent alert (+ scrolled) | ● | ● | ● | ● | ● | ● |
-| Settings and its 8 nested pages | ● | ● | ● | ● | ● | ● |
-| Diagnostics and its 13 nested pages, instruction details | ● | ● | ● | ● | ● | ● |
-| Physical button listening | ● | ● | ● | ● | ● | ● |
+| Settings and its 7 nested pages | ● | ● | ● | ● | ● | ● |
+| Diagnostics and its 9 nested pages, instruction details | ● | ● | ● | ● | ● | ● |
+| Physical-key listening and real key-event result | ● | ● | ● | ● | ● | ● |
 | Party & Command with keyboard | K | | K | K | | |
-| Dialogs: stop tracking, enrollment steps, disable, re-enroll, field readiness, instruction filter, retry, phone alert, invalid interval, unsaved edits | D | D | D | | | |
+| Dialogs: stop tracking, enrollment steps, disable, re-enroll, instruction filter, retry, phone alert, invalid interval, unsaved edits | D | D | D | | | |
 | Notifications (OS-owned content) | `NotificationVisualTest` | | | | | |
 
-Not covered by automation: open Spinner popups, real IME windows, OS permission and
-document-picker screens, toasts, TalkBack/Switch Access, OEM rendering.
+Retired on 20 Nov 2026 and no longer reachable: Identity & verification details,
+Transfer recovery, Storage health, GNSS details, Command contact (old restored routes
+map to their owners; `V46RefinementTest`).
+
+Robolectric does not cover open Spinner popups (the emulator tour captures one), real IME
+windows, OS permission and document-picker screens, toasts, TalkBack/Switch Access or
+OEM rendering.
 
 ## 7. Known limitations
 

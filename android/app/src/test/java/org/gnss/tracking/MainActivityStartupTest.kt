@@ -165,8 +165,9 @@ class MainActivityStartupTest {
                 nativeViews(activity.get().findViewById(android.R.id.content))
                     .filterIsInstance<TextView>()
                     .single {
-                        it.text == "Reporting interval · seconds" &&
-                            it.labelFor != android.view.View.NO_ID
+                        it.text == "Custom interval · seconds" &&
+                            it.labelFor != android.view.View.NO_ID &&
+                            (it.parent as android.view.View).isShown
                     }
             val intervalEditor =
                 activity.get().findViewById<android.widget.EditText>(label.labelFor)

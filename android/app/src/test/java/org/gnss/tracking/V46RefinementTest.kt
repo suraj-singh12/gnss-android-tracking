@@ -1,0 +1,168 @@
+package org.gnss.tracking
+
+import android.Manifest
+import android.os.Looper
+import android.view.KeyEvent
+import android.view.View
+import android.widget.Button
+import android.widget.TextView
+import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.*
+import org.junit.After
+import org.junit.Assert.*
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.Robolectric
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
+
+/** 20 Nov 2026 refinement: real-state presentation, retired routes and consolidated screens. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35], application = TrackingApp::class)
+class V46RefinementTest {
+    private val app get() = ApplicationProvider.getApplicationContext<TrackingApp>()
+
+    private suspend fun settle() = repeat(25) { shadowOf(Looper.getMainLooper()).idle(); delay(10) }
+
+    private suspend fun until(check: () -> Boolean) = withTimeout(15000) {
+        // The physical-test journal refresh is a scheduled poll; advance looper time too.
+        while (!check()) { shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(50)); delay(10) }
+    }
+
+    private fun shown(a: MainActivity) =
+        nativeViews(a.findViewById(android.R.id.content)).filter { it.isShown }
+
+    private fun texts(a: MainActivity) = shown(a).filterIsInstance<TextView>().map { it.text.toString() }
+
+    private fun field(a: MainActivity, name: String) =
+        MainActivity::class.java.getDeclaredField(name).apply { isAccessible = true }.get(a)
+
+    private fun setReachable(value: Boolean?) =
+        Sender::class.java.getDeclaredField("commandReachable").apply { isAccessible = true }.set(app.sender, value)
+
+    @After fun finish() = runBlocking { app.finishForTests() }
+
+    @Test
+    fun savedSosWithFailedDeliveryStaysPendingWithoutARedFailureAndKeepsItsIdentity() = runBlocking {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            val a = controller.get()
+            until { shown(a).filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled } }
+            val saved = withContext(Dispatchers.IO) {
+                app.repository.saveSos(Protocol.newId(), System.currentTimeMillis(), System.currentTimeMillis(), null, Health()).row
+            }
+            // The sender's real retryable failure path: the exception message reaches Room.
+            withContext(Dispatchers.IO) {
+                app.repository.fail(saved, WifiUnavailable().message!!, System.currentTimeMillis() + 60_000, false,
+                    app.repository.state().endpointGeneration)
+            }
+            setReachable(false)
+            app.operational.value = Operational(health = Health(wifi_connected = false))
+            until { (field(a, "sosStatus") as TextView).text.startsWith("SOS pending") }
+            settle()
+            val row = withContext(Dispatchers.IO) { app.repository.dao.latestSos() }!!
+            assertEquals("Original event identity retained", saved.messageId, row.messageId)
+            assertNull("No Command receipt is implied", row.deliveredAt)
+            assertEquals("Wi-Fi unavailable", withContext(Dispatchers.IO) { app.repository.state().operationalError })
+            assertFalse("A retryable attempt is not shown as a Tracking failure", texts(a).any { it.contains("Wi-Fi unavailable") })
+            assertTrue(texts(a).contains("Command offline"))
+            assertFalse(texts(a).any { it.contains("Received") })
+            // A paused receiver is a genuine problem and stays visible.
+            withContext(Dispatchers.IO) { app.repository.pauseReceiver("Receiver rejected configuration", app.repository.state().endpointGeneration) }
+            until { texts(a).contains("Receiver rejected configuration") }
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test
+    fun commandIndicatorFollowsActualCommandResponsesNotWifi() = runBlocking {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            val a = controller.get()
+            until { shown(a).filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled } }
+            setReachable(null)
+            app.operational.value = Operational(health = Health(wifi_connected = true))
+            until { texts(a).contains("Command offline") }
+            assertFalse("Wi-Fi alone is not Command contact", texts(a).contains("Command online"))
+            setReachable(true)
+            app.operational.value = Operational(health = Health(wifi_connected = true), link = "changed")
+            until { texts(a).contains("Command online") }
+            setReachable(false)
+            app.operational.value = Operational(health = Health(wifi_connected = true))
+            until { texts(a).contains("Command offline") }
+            assertFalse(texts(a).any { it.contains("Saved data will retry") || it.contains("Observations retained until received") })
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test
+    fun retiredDestinationsHaveNoEntriesAndRestoredRoutesLandOnTheirOwners() = runBlocking {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            val a = controller.get()
+            settle()
+            val retired = listOf("GNSS details", "Command contact", "Transfer recovery", "Storage health", "Identity & verification details")
+            for (screen in listOf("Diagnostics", "Saved data & sync", "Manage Command access")) {
+                openNativeScreen(a, screen)
+                settle()
+                val labels = texts(a) + shown(a).mapNotNull { it.contentDescription?.toString() }
+                for (name in retired) assertFalse("$name entry on $screen", labels.any { it.startsWith(name) })
+            }
+            @Suppress("UNCHECKED_CAST") val navigate = field(a, "navigateTo") as (String) -> Unit
+            for ((old, owner) in listOf("Storage health" to "Saved data & sync", "Transfer recovery" to "Saved data & sync",
+                "GNSS details" to "Diagnostics", "Command contact" to "Diagnostics",
+                "Identity & verification details" to "Manage access & trust")) {
+                navigate(old)
+                settle()
+                assertTrue("$old → $owner", texts(a).contains(owner))
+            }
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test
+    fun manageAccessShowsIdentityEvidenceDirectlyAndDiagnosticToolsShowOnlyRealResults() = runBlocking {
+        shadowOf(app).grantPermissions(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.POST_NOTIFICATIONS)
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            val a = controller.get()
+            settle()
+            openNativeScreen(a, "Manage Command access")
+            settle()
+            val buttons = shown(a).filterIsInstance<Button>().map { it.text.toString() }
+            assertTrue(buttons.containsAll(listOf("Copy Command ID", "Copy phone ID", "More evidence & rejection reasons", "Disable remote control", "Re-enroll Command")))
+            assertTrue(texts(a).containsAll(listOf("This phone ID", "Saved Command address")))
+            assertEquals("Read-only identities, not editable fields", 0, shown(a).count { it is android.widget.EditText })
+
+            openNativeScreen(a, "Diagnostic tools")
+            settle()
+            assertFalse("No result before a real key event", texts(a).contains("Detected key events"))
+            assertEquals(1, shown(a).filterIsInstance<Button>().count { it.text.contains("Export") })
+            shown(a).filterIsInstance<Button>().single { it.text == "Start Test" }.performClick()
+            settle()
+            assertFalse(texts(a).contains("Detected key events"))
+            a.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_UP))
+            settle()
+            until { texts(a).contains("Detected key events") }
+            shown(a).filterIsInstance<Button>().single { it.text == "Stop Test" }.performClick()
+            settle()
+
+            openNativeScreen(a, "Field readiness")
+            settle()
+            assertFalse("Granted permission offers no fix action", shown(a).filterIsInstance<Button>().any { it.text == "Allow precise location" })
+            assertTrue(texts(a).contains("Precise location"))
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test
+    fun fieldReadinessOffersTheResolvingActionOnlyWhenNeeded() = runBlocking {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            val a = controller.get()
+            settle()
+            openNativeScreen(a, "Field readiness")
+            settle()
+            val allow = shown(a).filterIsInstance<Button>().single { it.text == "Allow precise location" }
+            assertEquals(View.VISIBLE, allow.visibility)
+            assertTrue(texts(a).contains("Required"))
+        } finally { controller.pause().stop().destroy() }
+    }
+}
