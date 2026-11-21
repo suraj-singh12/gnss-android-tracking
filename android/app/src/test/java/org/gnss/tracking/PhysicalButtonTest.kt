@@ -199,10 +199,11 @@ class PhysicalButtonActivityTest {
         val activity = activityController.get()
         try {
             val views = descendants(activity.findViewById(android.R.id.content))
-            views.filterIsInstance<CheckBox>().single { it.text == "Enable volume-up SOS" }.isChecked = true
+            openNativeScreen(activity,"Emergency controls")
+            nativeViews(activity.findViewById(android.R.id.content)).filterIsInstance<android.widget.Switch>().single {it.text=="Volume-up SOS shortcut"}.isChecked=true
             views.filterIsInstance<Button>().single { it.text == "Diagnostics" }.performClick()
             openNativeScreen(activity, "Diagnostic tools")
-            openNativeScreen(activity, "Physical Button Test")
+
             views.filterIsInstance<Button>().single { it.text == "Start Test" }.performClick()
             repeat(3) { press ->
                 val at = (press + 1) * 100L

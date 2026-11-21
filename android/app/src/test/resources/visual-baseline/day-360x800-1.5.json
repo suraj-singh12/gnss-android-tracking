@@ -1,0 +1,2894 @@
+{
+ "tracking-stopped": {
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   162,
+   326,
+   161
+  ],
+  "Button:Start Tracking#1": [
+   31,
+   261,
+   298,
+   48
+  ],
+  "Surface#2": [
+   17,
+   335,
+   326,
+   122
+  ],
+  "Surface#3": [
+   17,
+   469,
+   326,
+   206
+  ],
+  "Button:Sync Now#1": [
+   209,
+   612,
+   121,
+   48
+  ],
+  "Surface#4": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "ff50b800ad54f624919694a1a438494b6705a157011e5c00f8500acd3dc4afc3"
+ },
+ "tracking-active": {
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   162,
+   326,
+   161
+  ],
+  "Button:Stop Tracking#1": [
+   31,
+   261,
+   298,
+   48
+  ],
+  "Surface#2": [
+   17,
+   335,
+   326,
+   122
+  ],
+  "Surface#3": [
+   17,
+   469,
+   326,
+   206
+  ],
+  "Button:Sync Now#1": [
+   209,
+   612,
+   121,
+   48
+  ],
+  "Surface#4": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "2de87feb2307cf69152994f9b72426f8f469db9012287905de481eede9cd695f"
+ },
+ "tracking-offline": {
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   162,
+   326,
+   161
+  ],
+  "Button:Stop Tracking#1": [
+   31,
+   261,
+   298,
+   48
+  ],
+  "Surface#2": [
+   17,
+   335,
+   326,
+   122
+  ],
+  "Surface#3": [
+   17,
+   469,
+   326,
+   206
+  ],
+  "Button:Sync Now#1": [
+   209,
+   612,
+   121,
+   48
+  ],
+  "Surface#4": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "dab9bcfc6fef5782fb441a686275be464368874901a29d000e9cb158ae57927f"
+ },
+ "tracking-error": {
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   162,
+   326,
+   161
+  ],
+  "Button:Stop Tracking#1": [
+   31,
+   261,
+   298,
+   48
+  ],
+  "Surface#2": [
+   17,
+   335,
+   326,
+   122
+  ],
+  "Surface#3": [
+   17,
+   469,
+   326,
+   206
+  ],
+  "Button:Sync Now#1": [
+   209,
+   612,
+   121,
+   48
+  ],
+  "Surface#4": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "ad104aabe4cd22454149606bb3c3c90bda8d27737183d1ebe34be3078cebf905"
+ },
+ "tracking-sos-pending": {
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   162,
+   326,
+   161
+  ],
+  "Button:Start Tracking#1": [
+   31,
+   261,
+   298,
+   48
+  ],
+  "Surface#2": [
+   17,
+   335,
+   326,
+   122
+  ],
+  "Surface#3": [
+   17,
+   469,
+   326,
+   206
+  ],
+  "Button:Sync Now#1": [
+   209,
+   612,
+   121,
+   48
+  ],
+  "Surface#4": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "4bce1c38a5244e67dda049a32e7e81425e9be705538a9ccbfea464784a660d2a"
+ },
+ "tracking-urgent-alert": {
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   162,
+   326,
+   161
+  ],
+  "Button:Start Tracking#1": [
+   31,
+   261,
+   298,
+   48
+  ],
+  "Surface#2": [
+   17,
+   335,
+   326,
+   122
+  ],
+  "Surface#3": [
+   17,
+   469,
+   326,
+   206
+  ],
+  "Button:Sync Now#1": [
+   209,
+   612,
+   121,
+   48
+  ],
+  "Surface#4": [
+   17,
+   686,
+   326,
+   124
+  ],
+  "Button:Acknowledge \/ Stop Alert#1": [
+   29,
+   750,
+   302,
+   48
+  ],
+  "Surface#5": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "f4aba315561696050cd074bc606b5379172795b8ccbf192a85a7de19f3eefff3"
+ },
+ "tracking-urgent-alert-bottom": {
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   -57,
+   326,
+   161
+  ],
+  "Button:Start Tracking#1": [
+   31,
+   42,
+   298,
+   48
+  ],
+  "Surface#2": [
+   17,
+   116,
+   326,
+   122
+  ],
+  "Surface#3": [
+   17,
+   250,
+   326,
+   206
+  ],
+  "Button:Sync Now#1": [
+   209,
+   393,
+   121,
+   48
+  ],
+  "Surface#4": [
+   17,
+   467,
+   326,
+   124
+  ],
+  "Button:Acknowledge \/ Stop Alert#1": [
+   29,
+   531,
+   302,
+   48
+  ],
+  "Surface#5": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "ed97a1ab234bf64787ce096b977a7435fd93e2906fad53510f196f1ff0dee00f"
+ },
+ "settings": {
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   212,
+   326,
+   269
+  ],
+  "Icon#1": [
+   307,
+   234,
+   22,
+   22
+  ],
+  "Icon#2": [
+   307,
+   302,
+   22,
+   22
+  ],
+  "Icon#3": [
+   307,
+   369,
+   22,
+   22
+  ],
+  "Icon#4": [
+   307,
+   437,
+   22,
+   22
+  ],
+  "Surface#2": [
+   17,
+   525,
+   326,
+   86
+  ],
+  "Icon#5": [
+   307,
+   558,
+   22,
+   22
+  ],
+  "Surface#3": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "59f6a2e5731dfd159ce9fc70684026e44180d174661d7ac9420a38532d7886fc"
+ },
+ "settings-bottom": {
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   192,
+   326,
+   269
+  ],
+  "Icon#1": [
+   307,
+   214,
+   22,
+   22
+  ],
+  "Icon#2": [
+   307,
+   282,
+   22,
+   22
+  ],
+  "Icon#3": [
+   307,
+   349,
+   22,
+   22
+  ],
+  "Icon#4": [
+   307,
+   417,
+   22,
+   22
+  ],
+  "Surface#2": [
+   17,
+   505,
+   326,
+   86
+  ],
+  "Icon#5": [
+   307,
+   538,
+   22,
+   22
+  ],
+  "Surface#3": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "5071940b036674fd6cd7a901241ebc1cd573ecc262eb811198262a4b5604a32c"
+ },
+ "party-command": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   326,
+   439
+  ],
+  "EditText:59#1": [
+   31,
+   128,
+   298,
+   48
+  ],
+  "EditText:61#1": [
+   31,
+   212,
+   298,
+   48
+  ],
+  "EditText:http:\/\/192.168.1.10:8080#1": [
+   31,
+   297,
+   298,
+   48
+  ],
+  "Spinner:Reporting interval#1": [
+   31,
+   381,
+   298,
+   52
+  ],
+  "Button:Cancel#1": [
+   31,
+   449,
+   145,
+   67
+  ],
+  "Button:Save settings#1": [
+   184,
+   449,
+   145,
+   67
+  ],
+  "Surface#2": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "8e326f3f28ddee3b3b32449a5fb98b4c284cfb18cdc65e3bc4616f4ea6b0f51c"
+ },
+ "command-access": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   326,
+   393
+  ],
+  "EditText:Paste Command credential#1": [
+   31,
+   301,
+   298,
+   48
+  ],
+  "Button:Authorize#1": [
+   31,
+   403,
+   118,
+   67
+  ],
+  "Button:Enrollment steps ›#1": [
+   157,
+   403,
+   172,
+   67
+  ],
+  "Surface#2": [
+   17,
+   528,
+   326,
+   67
+  ],
+  "Icon#1": [
+   307,
+   551,
+   22,
+   22
+  ],
+  "Surface#3": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "29699a95ab69c4e7985f80c165aa9d9b697e1bba2da1c46695fd2d8e5759ae25"
+ },
+ "command-access-bottom": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   88,
+   326,
+   393
+  ],
+  "EditText:Paste Command credential#1": [
+   31,
+   297,
+   298,
+   48
+  ],
+  "Button:Authorize#1": [
+   31,
+   399,
+   118,
+   67
+  ],
+  "Button:Enrollment steps ›#1": [
+   157,
+   399,
+   172,
+   67
+  ],
+  "Surface#2": [
+   17,
+   525,
+   326,
+   67
+  ],
+  "Icon#1": [
+   307,
+   547,
+   22,
+   22
+  ],
+  "Surface#3": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "491cef478982e97f283a4c9e302b6ac46eea4040093f87407d31ae3ce4d2904f"
+ },
+ "manage-command-access": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   326,
+   215
+  ],
+  "Button:Copy Command ID#1": [
+   17,
+   314,
+   159,
+   63
+  ],
+  "Button:Copy phone ID#1": [
+   184,
+   314,
+   159,
+   63
+  ],
+  "Surface#2": [
+   17,
+   389,
+   326,
+   250
+  ],
+  "Button:More evidence & rejection re#1": [
+   17,
+   647,
+   326,
+   63
+  ],
+  "Button:Disable remote control#1": [
+   17,
+   765,
+   326,
+   48
+  ],
+  "Button:Re-enroll Command#1": [
+   17,
+   825,
+   326,
+   48
+  ],
+  "Surface#3": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "cb3eefd56d7a706ce051aff0d0a72dd6ff5640b7ec9055abcafa814752cc8deb"
+ },
+ "manage-command-access-bottom": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   -191,
+   326,
+   215
+  ],
+  "Button:Copy Command ID#1": [
+   17,
+   32,
+   159,
+   63
+  ],
+  "Button:Copy phone ID#1": [
+   184,
+   32,
+   159,
+   63
+  ],
+  "Surface#2": [
+   17,
+   107,
+   326,
+   250
+  ],
+  "Button:More evidence & rejection re#1": [
+   17,
+   365,
+   326,
+   63
+  ],
+  "Button:Disable remote control#1": [
+   17,
+   483,
+   326,
+   48
+  ],
+  "Button:Re-enroll Command#1": [
+   17,
+   543,
+   326,
+   48
+  ],
+  "Surface#3": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "ea274c26b586658d3520536d030002bdbe2bf886954c72647750e1de0509fa6d"
+ },
+ "field-readiness": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   326,
+   348
+  ],
+  "Button:Open battery settings#1": [
+   31,
+   385,
+   168,
+   48
+  ],
+  "Surface#2": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "cb3cf1a136c16bc8a67202e8af10a0caecf1279fabe0637dd682e49226938008"
+ },
+ "tracking-policy": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   326,
+   135
+  ],
+  "Switch:Adaptive storage#1": [
+   31,
+   105,
+   298,
+   48
+  ],
+  "Surface#2": [
+   17,
+   238,
+   326,
+   86
+  ],
+  "Icon#1": [
+   307,
+   270,
+   22,
+   22
+  ],
+  "Surface#3": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "01691585f460a9541b5e0b313c8d9d336940d19789e0cdcdbcb5c47437393d76"
+ },
+ "policy-details": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   326,
+   488
+  ],
+  "Surface#2": [
+   17,
+   591,
+   326,
+   125
+  ],
+  "Surface#3": [
+   17,
+   728,
+   326,
+   72
+  ],
+  "Surface#4": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "606eb99ae91c8ce0ff915313b85b48b7994a3975e1658ab2f6607e4aa7d52d68"
+ },
+ "policy-details-bottom": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   -117,
+   326,
+   488
+  ],
+  "Surface#2": [
+   17,
+   383,
+   326,
+   125
+  ],
+  "Surface#3": [
+   17,
+   520,
+   326,
+   72
+  ],
+  "Surface#4": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "0404be05e3866fd2f86c21f58cd189328b1b7d07ef56c7a1b016572c545b1e65"
+ },
+ "emergency-controls": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   326,
+   203
+  ],
+  "Switch:Volume-up SOS shortcut#1": [
+   31,
+   193,
+   298,
+   48
+  ],
+  "Surface#2": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "5011fced6340ae57f29e54059e93e268a46e8303778d516711941aaf50802466"
+ },
+ "diagnostics": {
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   212,
+   326,
+   225
+  ],
+  "Icon#1": [
+   31,
+   227,
+   29,
+   24
+  ],
+  "Icon#2": [
+   31,
+   284,
+   29,
+   24
+  ],
+  "Icon#3": [
+   31,
+   340,
+   29,
+   24
+  ],
+  "Icon#4": [
+   31,
+   397,
+   29,
+   24
+  ],
+  "Surface#2": [
+   17,
+   481,
+   326,
+   289
+  ],
+  "Icon#5": [
+   307,
+   514,
+   22,
+   22
+  ],
+  "Icon#6": [
+   307,
+   591,
+   22,
+   22
+  ],
+  "Icon#7": [
+   307,
+   658,
+   22,
+   22
+  ],
+  "Icon#8": [
+   307,
+   726,
+   22,
+   22
+  ],
+  "Surface#3": [
+   17,
+   814,
+   326,
+   86
+  ],
+  "Icon#9": [
+   307,
+   847,
+   22,
+   22
+  ],
+  "Surface#4": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "84fdcaa6d34f4200628fd3474dc11c5e19a8adb136c810ff35289768894d0e3a"
+ },
+ "diagnostics-bottom": {
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   -97,
+   326,
+   225
+  ],
+  "Icon#1": [
+   31,
+   -82,
+   29,
+   24
+  ],
+  "Icon#2": [
+   31,
+   -25,
+   29,
+   24
+  ],
+  "Icon#3": [
+   31,
+   31,
+   29,
+   24
+  ],
+  "Icon#4": [
+   31,
+   88,
+   29,
+   24
+  ],
+  "Surface#2": [
+   17,
+   172,
+   326,
+   289
+  ],
+  "Icon#5": [
+   307,
+   205,
+   22,
+   22
+  ],
+  "Icon#6": [
+   307,
+   282,
+   22,
+   22
+  ],
+  "Icon#7": [
+   307,
+   349,
+   22,
+   22
+  ],
+  "Icon#8": [
+   307,
+   417,
+   22,
+   22
+  ],
+  "Surface#3": [
+   17,
+   505,
+   326,
+   86
+  ],
+  "Icon#9": [
+   307,
+   538,
+   22,
+   22
+  ],
+  "Surface#4": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "3ac1dc752d33c87b58757cf2b573ca0c67158a3c8512a47d8dcda72e0a3d5541"
+ },
+ "command-instructions": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   326,
+   332
+  ],
+  "Icon#1": [
+   307,
+   113,
+   22,
+   22
+  ],
+  "Icon#2": [
+   307,
+   179,
+   22,
+   22
+  ],
+  "Icon#3": [
+   307,
+   246,
+   22,
+   22
+  ],
+  "Icon#4": [
+   307,
+   312,
+   22,
+   22
+  ],
+  "Icon#5": [
+   307,
+   379,
+   22,
+   22
+  ],
+  "Button:Export sanitized journal#1": [
+   17,
+   435,
+   326,
+   48
+  ],
+  "Surface#2": [
+   17,
+   527,
+   326,
+   86
+  ],
+  "Icon#6": [
+   307,
+   560,
+   22,
+   22
+  ],
+  "Surface#3": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "e614069f7ebc717b22d4b4bd145ebc18f9e3be904bee4959c1f83729bea028d6"
+ },
+ "command-instructions-bottom": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   69,
+   326,
+   332
+  ],
+  "Icon#1": [
+   307,
+   91,
+   22,
+   22
+  ],
+  "Icon#2": [
+   307,
+   157,
+   22,
+   22
+  ],
+  "Icon#3": [
+   307,
+   224,
+   22,
+   22
+  ],
+  "Icon#4": [
+   307,
+   290,
+   22,
+   22
+  ],
+  "Icon#5": [
+   307,
+   357,
+   22,
+   22
+  ],
+  "Button:Export sanitized journal#1": [
+   17,
+   413,
+   326,
+   48
+  ],
+  "Surface#2": [
+   17,
+   505,
+   326,
+   86
+  ],
+  "Icon#6": [
+   307,
+   538,
+   22,
+   22
+  ],
+  "Surface#3": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "1f1144241b522c910095eb8cb98657f7cddf5691f4bd1016906492abb409281c"
+ },
+ "instruction-details": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   326,
+   225
+  ],
+  "Surface#2": [
+   17,
+   328,
+   326,
+   256
+  ],
+  "Button:Copy instruction ID#1": [
+   17,
+   596,
+   159,
+   63
+  ],
+  "Button:Export evidence#1": [
+   184,
+   596,
+   159,
+   63
+  ],
+  "Button:Full record#1": [
+   17,
+   663,
+   119,
+   48
+  ],
+  "Surface#3": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "560f949b6b6237b9c36b1a5731b4ff36059a0a44ca667c70a29a3a35d1b844d5"
+ },
+ "history-search-filters": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "EditText:Search instructions#1": [
+   20,
+   84,
+   320,
+   48
+  ],
+  "Surface#1": [
+   20,
+   191,
+   320,
+   259
+  ],
+  "Icon#1": [
+   304,
+   213,
+   22,
+   22
+  ],
+  "Button:Acknowledge \/ Stop Alert#1": [
+   34,
+   258,
+   292,
+   48
+  ],
+  "Icon#2": [
+   304,
+   339,
+   22,
+   22
+  ],
+  "Icon#3": [
+   304,
+   406,
+   22,
+   22
+  ],
+  "Button:Filter history#1": [
+   20,
+   462,
+   320,
+   48
+  ],
+  "Surface#2": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "e7a9aace3ed3c1a4078bc9faa0fefc9949cf756cb86773df9c9216b90544c3e8"
+ },
+ "instruction-filters": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Spinner:Command type#1": [
+   17,
+   135,
+   326,
+   52
+  ],
+  "Spinner:Command outcome#1": [
+   17,
+   234,
+   326,
+   52
+  ],
+  "Spinner:Received time#1": [
+   17,
+   334,
+   326,
+   52
+  ],
+  "Surface#1": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "b717828a1226678706a81ee128ae685a14f6f805d6e36954d681ed42f5d942b5"
+ },
+ "phone-alerts": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   326,
+   313
+  ],
+  "Button:View alert & acknowledge#1": [
+   31,
+   282,
+   298,
+   48
+  ],
+  "Button:Export alert journal#1": [
+   31,
+   342,
+   298,
+   48
+  ],
+  "Surface#2": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "5c92379f190f53c1364cb3fe1bb3e88003b7055038848ef59071385f612ce228"
+ },
+ "saved-data-sync": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   326,
+   413
+  ],
+  "Button:Sync All Now#1": [
+   31,
+   326,
+   298,
+   48
+  ],
+  "Button:Retry saved messages#1": [
+   31,
+   382,
+   298,
+   48
+  ],
+  "Button:Export transfer evidence#1": [
+   31,
+   442,
+   298,
+   48
+  ],
+  "Surface#2": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "7f6c509ae52084c3bcdcc1f381d2e2f1d1f2b5996d5e2e3ea8641046517fe53c"
+ },
+ "sos-event-history": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   326,
+   66
+  ],
+  "Icon#1": [
+   307,
+   113,
+   22,
+   22
+  ],
+  "Surface#2": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "6c90f34b86d63696f0e13e54688c14bf5742d675fad9e05be4f5541a18150a24"
+ },
+ "sos-details": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   326,
+   109
+  ],
+  "Surface#2": [
+   17,
+   212,
+   326,
+   212
+  ],
+  "Button:Export evidence#1": [
+   17,
+   436,
+   326,
+   48
+  ],
+  "Surface#3": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "f7b333acdd8652068ef6eb9c9f3b65f70950bf54fe1819d0b8aedff11cc0706b"
+ },
+ "diagnostic-tools": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   326,
+   183
+  ],
+  "Button:Start Test#1": [
+   31,
+   212,
+   145,
+   48
+  ],
+  "Button:Stop Test#1": [
+   184,
+   212,
+   145,
+   48
+  ],
+  "Surface#2": [
+   17,
+   286,
+   326,
+   160
+  ],
+  "Button:Export diagnostic ZIP#1": [
+   31,
+   384,
+   298,
+   48
+  ],
+  "Surface#3": [
+   17,
+   490,
+   326,
+   86
+  ],
+  "Icon#1": [
+   307,
+   523,
+   22,
+   22
+  ],
+  "Surface#4": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "51bcc23ac41e09fdeeee793518aeabc7e8acfe1106e3aa3caee8396d3cd920e9"
+ },
+ "advanced-logs": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ]
+ },
+ "advanced-logs-bottom": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ]
+ },
+ "physical-button-listening": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   326,
+   183
+  ],
+  "Button:Start Test#1": [
+   31,
+   212,
+   145,
+   48
+  ],
+  "Button:Stop Test#1": [
+   184,
+   212,
+   145,
+   48
+  ],
+  "Surface#2": [
+   17,
+   286,
+   326,
+   160
+  ],
+  "Button:Export diagnostic ZIP#1": [
+   31,
+   384,
+   298,
+   48
+  ],
+  "Surface#3": [
+   17,
+   490,
+   326,
+   86
+  ],
+  "Icon#1": [
+   307,
+   523,
+   22,
+   22
+  ],
+  "Surface#4": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ],
+  "_pixels": "e1ea9b0ac203c619fcc01dc19e5651a30ca42f75b3382fed4f732d08b4531cba"
+ },
+ "physical-button-event": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   326,
+   391
+  ],
+  "Button:Start Test#1": [
+   31,
+   212,
+   145,
+   48
+  ],
+  "Button:Stop Test#1": [
+   184,
+   212,
+   145,
+   48
+  ],
+  "Button:Clear results#1": [
+   193,
+   274,
+   137,
+   48
+  ],
+  "Surface#2": [
+   17,
+   494,
+   326,
+   160
+  ],
+  "Button:Export diagnostic ZIP#1": [
+   31,
+   592,
+   298,
+   48
+  ],
+  "Surface#3": [
+   17,
+   699,
+   326,
+   86
+  ],
+  "Icon#1": [
+   307,
+   731,
+   22,
+   22
+  ],
+  "Surface#4": [
+   12,
+   616,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   650,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   717,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   717,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   717,
+   112,
+   52
+  ]
+ },
+ "party-command-keyboard": {
+  "Button:Back#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "Button:Switch to Night mode#1": [
+   300,
+   28,
+   48,
+   48
+  ],
+  "Surface#1": [
+   17,
+   91,
+   326,
+   439
+  ],
+  "EditText:59#1": [
+   31,
+   128,
+   298,
+   48
+  ],
+  "EditText:61#1": [
+   31,
+   212,
+   298,
+   48
+  ],
+  "EditText:http:\/\/192.168.1.10:8080#1": [
+   31,
+   297,
+   298,
+   48
+  ],
+  "Spinner:Reporting interval#1": [
+   31,
+   381,
+   298,
+   52
+  ],
+  "Button:Cancel#1": [
+   31,
+   449,
+   145,
+   67
+  ],
+  "Button:Save settings#1": [
+   184,
+   449,
+   145,
+   67
+  ],
+  "Surface#2": [
+   12,
+   340,
+   336,
+   89
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   374,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   441,
+   112,
+   52
+  ],
+  "Button:Settings#1": [
+   124,
+   441,
+   112,
+   52
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   441,
+   112,
+   52
+  ],
+  "_pixels": "ccb34b5160a97c076cee1b27d817f8b8a7dad8e3e711965ffb22b6f85e70f4ae"
+ },
+ "dialog-stop-tracking": {
+  "Button:Stop Tracking#1": [
+   176,
+   282,
+   156,
+   48
+  ],
+  "Button:Keep tracking#1": [
+   186,
+   330,
+   147,
+   48
+  ],
+  "_pixels": "c05da8f0f7f596700f4e1650e2a15f64024fc5b3f3cb3e8e81b45595ca11705d"
+ },
+ "dialog-enrollment-steps": {
+  "Button:Done#1": [
+   262,
+   311,
+   70,
+   48
+  ],
+  "_pixels": "e6cd7a1e5006c73f769346d93330b2533c25d9a83a379ae98b9027bdb95eff02"
+ },
+ "dialog-disable-remote-control": {
+  "Button:Cancel#1": [
+   145,
+   166,
+   85,
+   48
+  ],
+  "Button:Disable#1": [
+   234,
+   166,
+   99,
+   48
+  ],
+  "_pixels": "694ad71a8d9489fa29e4b8b065da3a1d592fd50546ce3ad71f178f5b86d27976"
+ },
+ "dialog-re-enroll": {
+  "Button:Cancel#1": [
+   132,
+   137,
+   85,
+   48
+  ],
+  "Button:Continue#1": [
+   221,
+   137,
+   112,
+   48
+  ],
+  "_pixels": "f4c97ebc05e6afe499222cea2c4d0894fb62a8b576ff997d3e9a67a14ca6c0e0"
+ },
+ "dialog-instruction-filter": {
+  "Switch:Applied#1": [
+   40,
+   71,
+   280,
+   48
+  ],
+  "Switch:Unknown#1": [
+   40,
+   119,
+   280,
+   48
+  ],
+  "Switch:Rejected \/ blocked#1": [
+   40,
+   167,
+   280,
+   48
+  ],
+  "Button:Canonical categories#1": [
+   40,
+   219,
+   280,
+   48
+  ],
+  "Button:Cancel#1": [
+   104,
+   279,
+   85,
+   48
+  ],
+  "Button:Apply filters#1": [
+   193,
+   279,
+   139,
+   48
+  ],
+  "_pixels": "6035fd487f93c17ec4e01d63bf5f82c31740b9cc5561067e7a614c9b989b53f5"
+ },
+ "dialog-retry": {
+  "Button:Cancel#1": [
+   165,
+   253,
+   85,
+   48
+  ],
+  "Button:Retry#1": [
+   254,
+   253,
+   79,
+   48
+  ],
+  "_pixels": "9304028211d2f7a3f27c4912b3ae122ece8fa530ca895b5e231b0ac04e784f50"
+ },
+ "dialog-phone-alert": {
+  "Button:Acknowledge#1": [
+   179,
+   224,
+   153,
+   48
+  ],
+  "Button:Close#1": [
+   258,
+   272,
+   75,
+   48
+  ],
+  "Button:Stop output#1": [
+   204,
+   320,
+   129,
+   48
+  ],
+  "_pixels": "fb975e5d6ec8cdd2c9285d10e0f31ab326a726593b057d58877397f65afc3149"
+ },
+ "dialog-invalid-interval": {
+  "Button:OK#1": [
+   268,
+   166,
+   64,
+   48
+  ],
+  "_pixels": "b140156eb52d8df7bcd20059bac2ae6b2bbbf3801261d5b4d52a033c6720af29"
+ },
+ "dialog-unsaved-edits": {
+  "Button:Keep editing#1": [
+   44,
+   224,
+   135,
+   48
+  ],
+  "Button:Discard edits#1": [
+   183,
+   224,
+   150,
+   48
+  ],
+  "_pixels": "473264031b07dcdbf15fd57505210ef906fe41b5143d1429f5403435942590d6"
+ }
+}

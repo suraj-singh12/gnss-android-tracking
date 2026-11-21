@@ -42,6 +42,14 @@ class PhoneAlertNotificationTest {
             app.acknowledgePhoneAlert(row.id)
             assertEquals("recipient_acknowledged", app.repository.dao.command(row.id)!!.state)
             assertFalse(app.repository.dao.command(row.id)!!.confirmed)
+            assertNull(app.operational.value.error)
+            app.operational.value =
+                app.operational.value.copy(error = "Alert output stop could not be confirmed")
+            app.acknowledgePhoneAlert(row.id)
+            assertNull(app.operational.value.error)
+            app.operational.value = app.operational.value.copy(error = "Tracking needs attention")
+            app.acknowledgePhoneAlert(row.id)
+            assertEquals("Tracking needs attention", app.operational.value.error)
         } finally {
             app.finishForTests()
         }
@@ -120,7 +128,19 @@ class PhoneAlertNotificationTest {
             assertTrue(restricted.second.contains("output unknown"))
             val notification =
                 manager.activeNotifications.first { it.tag.endsWith(row.id) }.notification
-            assertEquals("Acknowledge / Stop Alert", notification.actions[0].title.toString())
+            assertEquals("ACK alert", notification.actions[0].title.toString())
+            assertEquals("Stop output", notification.actions[1].title.toString())
+            notification.actions[1].actionIntent.send()
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            withTimeout(5000) {
+                while (app.repository.dao.command(row.id)!!.localOutputStoppedAt == 0L) delay(10)
+            }
+            assertEquals("unknown", app.repository.dao.command(row.id)!!.state)
+            val stopped = app.repository.dao.command(row.id)!!
+            assertEquals(row.result(), stopped.result())
+            assertEquals("unknown", app.repository.dao.command(other.id)!!.state)
+            assertEquals(1, manager.activeNotifications.size)
+
             assertTrue(
                 Shadows.shadowOf(notification.actions[0].actionIntent).flags and
                     android.app.PendingIntent.FLAG_IMMUTABLE != 0
@@ -137,7 +157,7 @@ class PhoneAlertNotificationTest {
             notification.actions[0].actionIntent.send()
             Shadows.shadowOf(Looper.getMainLooper()).idle()
             delay(50)
-            assertEquals(2L, app.repository.dao.command(row.id)!!.revision)
+            assertEquals(stopped.revision + 1, app.repository.dao.command(row.id)!!.revision)
             assertFalse(app.repository.dao.command(row.id)!!.confirmed)
             assertEquals(1, manager.activeNotifications.size)
             // Model process loss after ACK commit but before OS cancellation.

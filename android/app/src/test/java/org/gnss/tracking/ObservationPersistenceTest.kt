@@ -20,6 +20,42 @@ class ObservationPersistenceTest {
     private val app
         get() = ApplicationProvider.getApplicationContext<Application>()
 
+    @Test
+    fun stoppedAlertIntentAndCompletionSurviveDiskReopenWithoutBecomingRecipientAck() =
+        runBlocking {
+            val name = "stop-alert-${Protocol.newId()}.db"
+            var db = Room.databaseBuilder(app, TrackingDatabase::class.java, name).build()
+            val row =
+                CommandRecord(
+                    Protocol.newId(),
+                    Protocol.newId(),
+                    Protocol.newId(),
+                    Protocol.newId(),
+                    "alert",
+                    1,
+                    1000,
+                    state = "unknown",
+                    confirmed = true,
+                    localOutputStopRequestedAt = 1100,
+                    localOutputStoppedAt = 1200,
+                )
+            try {
+                db.dao().insertCommand(row)
+                db.close()
+                db = Room.databaseBuilder(app, TrackingDatabase::class.java, name).build()
+                val restored = db.dao().command(row.id)!!
+                assertEquals(1100L, restored.localOutputStopRequestedAt)
+                assertEquals(1200L, restored.localOutputStoppedAt)
+                assertEquals("unknown", restored.state)
+                assertEquals(1, db.dao().unresolvedCommands())
+                db.dao().pruneCommands()
+                assertNotNull(db.dao().command(row.id))
+            } finally {
+                db.close()
+                app.deleteDatabase(name)
+            }
+        }
+
     private val clock = FakeClock(100000)
 
     private fun observation(t: Long) =
@@ -260,6 +296,7 @@ class ObservationPersistenceTest {
                     TrackingDatabase.MIGRATION_4_5,
                     TrackingDatabase.MIGRATION_5_6,
                     TrackingDatabase.MIGRATION_6_7,
+                    TrackingDatabase.MIGRATION_7_8,
                 )
                 .build()
         try {
@@ -417,6 +454,7 @@ class ObservationPersistenceTest {
                     TrackingDatabase.MIGRATION_4_5,
                     TrackingDatabase.MIGRATION_5_6,
                     TrackingDatabase.MIGRATION_6_7,
+                    TrackingDatabase.MIGRATION_7_8,
                 )
                 .build()
         try {
@@ -526,6 +564,7 @@ class ObservationPersistenceTest {
                         TrackingDatabase.MIGRATION_4_5,
                         TrackingDatabase.MIGRATION_5_6,
                         TrackingDatabase.MIGRATION_6_7,
+                        TrackingDatabase.MIGRATION_7_8,
                     )
                     .build()
             repo = Repository(db, clock)

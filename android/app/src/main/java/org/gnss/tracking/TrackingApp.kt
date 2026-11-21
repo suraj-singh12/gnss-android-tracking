@@ -22,6 +22,9 @@ data class Operational(
     val historyPaused: Boolean = false,
     val transferActive: Boolean = false,
     val drainStarting: Boolean = false,
+    val diagnosticExportSelecting: Boolean = false,
+    val diagnosticExporting: Boolean = false,
+    val diagnosticExportStatus: String? = null,
 )
 
 class TrackingApp : Application() {
@@ -173,9 +176,12 @@ class TrackingApp : Application() {
     val adaptiveRequests = MutableStateFlow(0L)
     private var policyWrite: Job? = null
     private var policyRequest = 0L
-    @Volatile var pendingAdaptive: Boolean? = null
+    @Volatile
+    var pendingAdaptive: Boolean? = null
         private set
-    @Volatile var adaptiveSaveFailed = false
+
+    @Volatile
+    var adaptiveSaveFailed = false
         private set
 
     @Synchronized
@@ -185,24 +191,26 @@ class TrackingApp : Application() {
         pendingAdaptive = enabled
         adaptiveSaveFailed = false
         adaptiveRequests.value++
-        return durableWork.launch {
-            previous?.join()
-            val result = runCatching {
-                persistencePolicy.setEnabled(enabled, utc(SystemClock.wallMillis()))
-            }
-            recorder.event(
-                if (result.isSuccess) DiagnosticEvent.PERSISTENCE_POLICY_CHANGED
-                else DiagnosticEvent.PERSISTENCE_POLICY_FAILED,
-                persistencePolicy = persistencePolicy.state,
-            )
-            synchronized(this@TrackingApp) {
-                if (request == policyRequest) {
-                    adaptiveSaveFailed = result.isFailure
-                    pendingAdaptive = null
-                    adaptiveRequests.value++
+        return durableWork
+            .launch {
+                previous?.join()
+                val result = runCatching {
+                    persistencePolicy.setEnabled(enabled, utc(SystemClock.wallMillis()))
+                }
+                recorder.event(
+                    if (result.isSuccess) DiagnosticEvent.PERSISTENCE_POLICY_CHANGED
+                    else DiagnosticEvent.PERSISTENCE_POLICY_FAILED,
+                    persistencePolicy = persistencePolicy.state,
+                )
+                synchronized(this@TrackingApp) {
+                    if (request == policyRequest) {
+                        adaptiveSaveFailed = result.isFailure
+                        pendingAdaptive = null
+                        adaptiveRequests.value++
+                    }
                 }
             }
-        }.also { policyWrite = it }
+            .also { policyWrite = it }
     }
 
     val workScope = durableWork
@@ -229,16 +237,98 @@ class TrackingApp : Application() {
         )
     }
 
-    suspend fun acknowledgePhoneAlert(id: String) {
+    /**
+     * Same recorder/document operation, app-owned so Activity/theme recreation cannot cancel it.
+     */
+    @Synchronized
+    fun exportDiagnostics(uri: android.net.Uri) {
+        if (operational.value.diagnosticExporting) return
+        operational.update {
+            it.copy(
+                diagnosticExportSelecting = false,
+                diagnosticExporting = true,
+                diagnosticExportStatus = getString(R.string.diagnostics_exporting),
+            )
+        }
+        workScope.launch {
+            var temporary: java.io.File? = null
+            try {
+                val file = java.io.File.createTempFile("gnss-export-", ".zip", cacheDir)
+                temporary = file
+                val info = packageManager.getPackageInfo(packageName, 0)
+                val version =
+                    if (android.os.Build.VERSION.SDK_INT >= 28) info.longVersionCode
+                    else {
+                        @Suppress("DEPRECATION") info.versionCode.toLong()
+                    }
+                recorder.export(
+                    file,
+                    DiagnosticBuild(
+                        info.versionName ?: "unknown",
+                        version,
+                        android.os.Build.VERSION.SDK_INT,
+                        BuildConfig.SOURCE_REVISION,
+                    ),
+                    repository.dao.commandHistory(),
+                )
+                contentResolver.openOutputStream(uri, "wt")?.use { out ->
+                    file.inputStream().use { it.copyTo(out) }
+                } ?: error("Cannot open selected document")
+                operational.update {
+                    it.copy(diagnosticExportStatus = getString(R.string.diagnostics_exported))
+                }
+            } catch (e: CancellationException) {
+                operational.update {
+                    it.copy(diagnosticExportStatus = getString(R.string.diagnostics_export_failed))
+                }
+                throw e
+            } catch (_: Exception) {
+                operational.update {
+                    it.copy(diagnosticExportStatus = getString(R.string.diagnostics_export_failed))
+                }
+            } finally {
+                withContext(NonCancellable + Dispatchers.IO) { temporary?.delete() }
+                operational.update { it.copy(diagnosticExporting = false) }
+            }
+        }
+    }
+
+    suspend fun stopPhoneAlertOutput(id: String) {
         try {
-            commandControl.acknowledgeAlert(id)
+            commandControl.stopAlertOutput(id)
+            operational.update {
+                if (it.error?.startsWith("Alert output stop") == true) it.copy(error = null) else it
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
             operational.update {
                 it.copy(
                     error =
-                        "Alert acknowledgement could not be saved or output stopped. Reopen the alert and retry; Command acknowledgement remains unconfirmed."
+                        "Alert output stop could not be confirmed. Retry from alert details; recipient acknowledgement is a separate recorded action."
+                )
+            }
+        }
+    }
+
+    suspend fun acknowledgePhoneAlert(id: String) {
+        try {
+            commandControl.acknowledgeAlert(id)
+            operational.update {
+                if (
+                    it.error?.startsWith("Alert acknowledgement") == true ||
+                        it.error?.startsWith("Alert output stop") == true
+                )
+                    it.copy(error = null)
+                else it
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            operational.update {
+                it.copy(
+                    error =
+                        "Alert acknowledgement could not be saved or output stopped. Reopen the alert and retry; check the retained acknowledgement and delivery status."
                 )
             }
         }

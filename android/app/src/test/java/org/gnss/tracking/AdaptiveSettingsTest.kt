@@ -39,7 +39,7 @@ class AdaptiveSettingsTest {
         suspend fun toggle(): Switch {
             settle()
             val views = descendants(controller.get().findViewById(android.R.id.content))
-            openNativeScreen(controller.get(), "Tracking & GNSS")
+            openNativeScreen(controller.get(), "Tracking policy")
             return views.filterIsInstance<Switch>().single { it.text == "Adaptive storage" }
         }
         val choice = toggle()

@@ -151,8 +151,9 @@ fun Outbound.sosDescription(wifi: Boolean?, active: Boolean): String =
         quarantined ->
             "Saved on phone — delivery rejected; correct the error and Retry saved messages"
         !active -> "Saved on phone — open app or Start Tracking to send"
-        wifi == false -> "Saved on phone — waiting for Wi-Fi"
-        wifi == null -> "Saved on phone — Wi-Fi status unavailable; awaiting Command receipt"
-        attempts > 0 -> "Saved on phone — retrying; Command receipt not confirmed"
+        // Wi-Fi is only one possible cause; the authority is Command receipt. An unknown
+        // health snapshot (null) is not a Wi-Fi fact and is not shown as one.
+        wifi == false -> "Saved on phone — no Wi-Fi; sends when Command is reachable"
+        attempts > 0 -> "Saved on phone — Command not reached yet; retrying"
         else -> "Saved on phone — awaiting Command receipt"
     }

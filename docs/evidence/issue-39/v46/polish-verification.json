@@ -1,0 +1,304 @@
+{
+  "source": "8c5fb38e6fdd004ff21bc202b4b6da17f15a2f9e",
+  "command": "GNSS_SCREENSHOT_DIR=/workspace/scratch/gnss-ui-polish/final-8c5fb38 ./gradlew testDebugUnitTest lintDebug assembleDebug --continue --max-workers=2 --console=plain",
+  "cwd": "android",
+  "toolchains": {
+    "java": "Temurin 17.0.21+9",
+    "gradle": "8.11.1 (unchanged pinned checksum)",
+    "android_platform": 35,
+    "build_tools": "35.0.0",
+    "go": "go1.24.7 linux/amd64 (integration not rerun for this UI-only scope)"
+  },
+  "tests": {
+    "tests": 300,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 36,
+    "passed": 264
+  },
+  "lint": {
+    "Warning": 127
+  },
+  "apk": {
+    "name": "app-debug.apk",
+    "sha256": "1286a3733158068aad48917edd1a14ec3c6ac8e801d1a16a909589cf98af9bb3",
+    "bytes": 3628706,
+    "source_sha_found_in_dex": true
+  },
+  "native_rendering": {
+    "kind": "Robolectric API 35 native Views/Skia; test fixtures, not physical-device acceptance",
+    "generated_count": 1026,
+    "retained_new_count": 14,
+    "retained_historical_count": 5,
+    "profiles": [
+      [
+        360,
+        800,
+        1
+      ],
+      [
+        360,
+        800,
+        1.5
+      ],
+      [
+        390,
+        842,
+        1
+      ],
+      [
+        390,
+        842,
+        1.5
+      ],
+      [
+        480,
+        960,
+        1
+      ],
+      [
+        480,
+        960,
+        1.5
+      ],
+      [
+        800,
+        360,
+        1
+      ],
+      [
+        960,
+        480,
+        1.5
+      ]
+    ],
+    "themes": [
+      "Day",
+      "Night"
+    ],
+    "frames": [
+      {
+        "name": "polish-after-appearance-day.png",
+        "source": "8c5fb38e6fdd004ff21bc202b4b6da17f15a2f9e",
+        "original_name": "android-day-390x842-1.0-tracking-active.png",
+        "sha256": "2e69bdeee0ea0813add2f566ad61f7d3987e31999ef3829551803ff91aa83ede",
+        "size": [
+          390,
+          842
+        ]
+      },
+      {
+        "name": "polish-after-appearance-night.png",
+        "source": "8c5fb38e6fdd004ff21bc202b4b6da17f15a2f9e",
+        "original_name": "android-night-390x842-1.0-tracking-active.png",
+        "sha256": "c1366b8c6940ac77dc7abd90152205fc2644099d2d38f92b0342aeac2b52b4c6",
+        "size": [
+          390,
+          842
+        ]
+      },
+      {
+        "name": "polish-after-saved-data-sync.png",
+        "source": "8c5fb38e6fdd004ff21bc202b4b6da17f15a2f9e",
+        "original_name": "android-day-390x842-1.0-saved-data-sync.png",
+        "sha256": "1328db8b35b278e6e160b2cecb596a1654988cc133e98b670ae26df1becb5f23",
+        "size": [
+          390,
+          842
+        ]
+      },
+      {
+        "name": "polish-after-policy-details.png",
+        "source": "8c5fb38e6fdd004ff21bc202b4b6da17f15a2f9e",
+        "original_name": "android-day-390x842-1.0-policy-details.png",
+        "sha256": "a89d247c350a29dc32f7f1b4dc3b084833c088d1119a6a9136bb2039454f26fc",
+        "size": [
+          390,
+          842
+        ]
+      },
+      {
+        "name": "polish-after-storage-health.png",
+        "source": "8c5fb38e6fdd004ff21bc202b4b6da17f15a2f9e",
+        "original_name": "android-day-390x842-1.0-storage-health.png",
+        "sha256": "501dd066b7983f353987fffb08a277a321039bd0e7cc6e9d0d8e757acb7c5c26",
+        "size": [
+          390,
+          842
+        ]
+      },
+      {
+        "name": "polish-after-identity-verification-details.png",
+        "source": "8c5fb38e6fdd004ff21bc202b4b6da17f15a2f9e",
+        "original_name": "android-day-390x842-1.0-identity-verification-details.png",
+        "sha256": "54818c86c623125e8800176b46c1888f911e8219a8cc0f563de7e1c7a1e0216b",
+        "size": [
+          390,
+          842
+        ]
+      },
+      {
+        "name": "polish-after-advanced-logs.png",
+        "source": "8c5fb38e6fdd004ff21bc202b4b6da17f15a2f9e",
+        "original_name": "android-day-390x842-1.0-advanced-logs.png",
+        "sha256": "7566de181b4fc7b72c14dc1dac05c997d55736f7bcfc160bc08439b5d96b5ae1",
+        "size": [
+          390,
+          842
+        ]
+      },
+      {
+        "name": "polish-after-filter-night-large.png",
+        "source": "8c5fb38e6fdd004ff21bc202b4b6da17f15a2f9e",
+        "original_name": "android-night-dialog-1.5-instruction-filter.png",
+        "sha256": "55dc7326d215cda1b602b3cafadad1e448af9687b1e1e475f02d50971c8d30a1",
+        "size": [
+          328,
+          347
+        ]
+      },
+      {
+        "name": "polish-after-filter-day.png",
+        "source": "8c5fb38e6fdd004ff21bc202b4b6da17f15a2f9e",
+        "original_name": "android-day-dialog-1.0-instruction-filter.png",
+        "sha256": "793193c0f2a9aca6b859cd6366db083c7195c4ca86d1504f2c010e7bea0a3c76",
+        "size": [
+          328,
+          339
+        ]
+      },
+      {
+        "name": "polish-after-policy-night.png",
+        "source": "8c5fb38e6fdd004ff21bc202b4b6da17f15a2f9e",
+        "original_name": "android-night-390x842-1.0-tracking-policy.png",
+        "sha256": "3f3515fea49de47a17ef9161ef4e9253733c5b9b7674b8ae8bbc62945175238f",
+        "size": [
+          390,
+          842
+        ]
+      },
+      {
+        "name": "polish-after-480-night-large.png",
+        "source": "8c5fb38e6fdd004ff21bc202b4b6da17f15a2f9e",
+        "original_name": "android-night-480x960-1.5-diagnostics.png",
+        "sha256": "ec559384d7f78ff6dd68b8faedfdf03abfe74549ac679ca3bc19c51591461372",
+        "size": [
+          480,
+          960
+        ]
+      },
+      {
+        "name": "polish-after-landscape-large.png",
+        "source": "8c5fb38e6fdd004ff21bc202b4b6da17f15a2f9e",
+        "original_name": "android-day-960x480-1.5-history-search-filters.png",
+        "sha256": "b59a06307a48d5a0741b5f38d1965f6e79bc42e5ea23c1937baaa6e5e498fc6b",
+        "size": [
+          960,
+          480
+        ]
+      },
+      {
+        "name": "polish-after-360-large-offline.png",
+        "source": "8c5fb38e6fdd004ff21bc202b4b6da17f15a2f9e",
+        "original_name": "android-day-360x800-1.5-tracking-offline.png",
+        "sha256": "df271948f42f2ce08919b2dc94b9296af1c757f09d703ab988703a663dbc3f16",
+        "size": [
+          360,
+          800
+        ]
+      },
+      {
+        "name": "polish-after-storage-health-bottom.png",
+        "source": "8c5fb38e6fdd004ff21bc202b4b6da17f15a2f9e",
+        "original_name": "android-day-390x842-1.0-storage-health-bottom.png",
+        "sha256": "abcd4377a3581b4a0c84e82e6886dcd4d80843275d5d55b9a0fee6465763bfb0",
+        "size": [
+          390,
+          842
+        ]
+      },
+      {
+        "name": "polish-before-policy-details.png",
+        "source": "e9b7691dab9765dfae0864575b9c45d3c8dbb114",
+        "original_name": "android-day-390x842-1.0-policy-details.png",
+        "sha256": "9b486bfe5a1206d385a067f5862553a41b86bb84226494d854ca0ec0e2aa8d12",
+        "size": [
+          390,
+          842
+        ]
+      },
+      {
+        "name": "polish-before-storage-health.png",
+        "source": "e9b7691dab9765dfae0864575b9c45d3c8dbb114",
+        "original_name": "android-day-390x842-1.0-storage-health.png",
+        "sha256": "4ae85880f282c34ee800a52cde38e1ad30e9ae7acbd2a5e45b06044f7f8b6bcd",
+        "size": [
+          390,
+          842
+        ]
+      },
+      {
+        "name": "polish-before-identity-verification-details.png",
+        "source": "e9b7691dab9765dfae0864575b9c45d3c8dbb114",
+        "original_name": "android-day-390x842-1.0-identity-verification-details.png",
+        "sha256": "354efa8dfa185a114020543e13451f90e44c37aea72ec0b71b6f232a4b4a7d41",
+        "size": [
+          390,
+          842
+        ]
+      },
+      {
+        "name": "polish-before-advanced-logs.png",
+        "source": "e9b7691dab9765dfae0864575b9c45d3c8dbb114",
+        "original_name": "android-day-390x842-1.0-advanced-logs.png",
+        "sha256": "86d9d41c97d44d7eddb8c1e3ad193b0416e9bc8e43074e376f1590c173940dcf",
+        "size": [
+          390,
+          842
+        ]
+      },
+      {
+        "name": "polish-before-night-policy.png",
+        "source": "14c4d69c82cfabe47df5258cc56d27281c759e79",
+        "original_name": "android-night-390x842-1.0-tracking-policy.png",
+        "sha256": "0d4bc42fcfe6ae6b3365383136262a6de5bd33721834f960f93bf6ecc51dfaf0",
+        "size": [
+          390,
+          842
+        ]
+      }
+    ]
+  },
+  "production_trees": {
+    "android": "81350518794b4b10f6fa5e9798774a1b6139827c",
+    "command": "0ce2a387782aea5cc8746b7fea1a8757874e0f72",
+    "protocol": "3ab8f201c1d72bf7141eaf7a629fa7a39f6f3012",
+    "test-tools": "ea3deaf89c9570e8c7f708c3f1002e0a7e452da5"
+  },
+  "physical_device": "not tested; adb devices had no attached device",
+  "historical_runs": [
+    {
+      "source": "0ee75ef8ba21234a50dab0a3f67c1c3e47190f4b",
+      "status": "failed",
+      "tests": 299,
+      "passed": 261,
+      "skipped": 36,
+      "failures": 2,
+      "reasons": [
+        "obsolete moon/sun text assertion, replaced with native-vector/action/bounds contract",
+        "visual test used fixed settle before asynchronous Room alert action; now waits for real action with bounded timeout"
+      ],
+      "log": "polish-0ee-failed.log.gz"
+    },
+    {
+      "source": "14c4d69c82cfabe47df5258cc56d27281c759e79",
+      "status": "passed, then manual native Night review found selector tint regression",
+      "tests": 299,
+      "passed": 263,
+      "skipped": 36,
+      "failures": 0,
+      "lint_warnings": 127,
+      "log": "polish-14c4-android.log.gz"
+    }
+  ]
+}

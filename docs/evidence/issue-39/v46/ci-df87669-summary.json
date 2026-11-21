@@ -1,0 +1,505 @@
+{
+  "source": "df876693ff7fcb06416ee8db3017b3efda672b9a",
+  "run_url": "https://github.com/suraj-singh12/gnss-android-tracking/actions/runs/41965185906",
+  "integrated_conclusion": "success",
+  "android": {
+    "tests": 296,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 36
+  },
+  "bridge": {
+    "tests": "36",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0"
+  },
+  "ordinary_passed": 260,
+  "unique_executed": 296,
+  "jobs": [
+    {
+      "id": 127040445482,
+      "name": "integrated",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 41965185906,
+      "logs_url": null,
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1
+        },
+        {
+          "name": "Define visual evidence directory",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3
+        },
+        {
+          "name": "Run actions/setup-java@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4
+        },
+        {
+          "name": "Run android-actions/setup-android@v3",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5
+        },
+        {
+          "name": "Run sdkmanager 'platforms;android-35' 'build-tools;35.0.0'",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6
+        },
+        {
+          "name": "Run actions/setup-go@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8
+        },
+        {
+          "name": "Validate ancestry and source cleanliness",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9
+        },
+        {
+          "name": "Android tests, lint and debug APK",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10
+        },
+        {
+          "name": "Go tests and protocol checks",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11
+        },
+        {
+          "name": "Measured simultaneous durable synchronization",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12
+        },
+        {
+          "name": "Authenticated controls under saturated history and fresh SOS/LIVE",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13
+        },
+        {
+          "name": "Real Android to Command integration",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14
+        },
+        {
+          "name": "Record cross-language test counts",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15
+        },
+        {
+          "name": "Build matched portable Command applications",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16
+        },
+        {
+          "name": "Browser verification including SOS and offline maps",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17
+        },
+        {
+          "name": "Verify exact revisions and generate checksum manifest",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 18
+        },
+        {
+          "name": "Run actions/upload-artifact@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 19
+        },
+        {
+          "name": "Run actions/upload-artifact@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 20
+        },
+        {
+          "name": "Run actions/upload-artifact@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 21
+        },
+        {
+          "name": "Run actions/upload-artifact@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 22
+        },
+        {
+          "name": "Run actions/upload-artifact@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 23
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 43
+        },
+        {
+          "name": "Post Run actions/setup-go@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 44
+        },
+        {
+          "name": "Post Run actions/setup-java@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 45
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 46
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 47
+        }
+      ]
+    },
+    {
+      "id": 127040445601,
+      "name": "dem-provider",
+      "status": "completed",
+      "conclusion": "failure",
+      "run_id": 41965185906,
+      "logs_url": null,
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3
+        },
+        {
+          "name": "Run actions/setup-go@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4
+        },
+        {
+          "name": "Acquire and decode real public DEM",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5
+        },
+        {
+          "name": "Real automatic DEM acquisition, geographic alignment and offline restart",
+          "status": "completed",
+          "conclusion": "failure",
+          "number": 6
+        },
+        {
+          "name": "Real non-preset radius cases and independent raw HGT samples",
+          "status": "completed",
+          "conclusion": "failure",
+          "number": 7
+        },
+        {
+          "name": "Attempt bounded real online map acceptance and record external result",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8
+        },
+        {
+          "name": "Run actions/upload-artifact@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9
+        },
+        {
+          "name": "Post Run actions/setup-go@v5",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 16
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 17
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 18
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 19
+        }
+      ]
+    },
+    {
+      "id": 127040445645,
+      "name": "map-software-acceptance",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 41965185906,
+      "logs_url": null,
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2
+        },
+        {
+          "name": "Run actions/setup-go@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4
+        },
+        {
+          "name": "Define deterministic acceptance paths",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5
+        },
+        {
+          "name": "Deterministic acquisition and controlled failure/recovery",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6
+        },
+        {
+          "name": "Production pipeline browser approval, real samples and offline restart",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7
+        },
+        {
+          "name": "Run actions/upload-artifact@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14
+        },
+        {
+          "name": "Post Run actions/setup-go@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17
+        }
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "id": 13388777889,
+      "name": "GNSS-Command-macOS-arm64",
+      "size_in_bytes": 11620347,
+      "url": "https://api.github.com/repos/suraj-singh12/gnss-android-tracking/actions/artifacts/13388777889",
+      "archive_download_url": "https://api.github.com/repos/suraj-singh12/gnss-android-tracking/actions/artifacts/13388777889/zip",
+      "expired": false,
+      "created_at": "2026-11-05T04:46:22Z",
+      "expires_at": "2026-12-05T04:46:21Z",
+      "updated_at": "2026-11-05T04:46:22Z",
+      "digest": "sha256:94197460dce280b1ee4f80b7e06fb9f986609e597d87db2b408cd80172e3f3b4",
+      "workflow_run": {
+        "id": 41965185906,
+        "repository_id": 1407508308,
+        "head_repository_id": 1407508308,
+        "head_branch": "devX/issue-39-android-settings-diagnostics",
+        "head_sha": "df876693ff7fcb06416ee8db3017b3efda672b9a"
+      }
+    },
+    {
+      "id": 13388583355,
+      "name": "GNSS-Tracker-Android-debug",
+      "size_in_bytes": 3116049,
+      "url": "https://api.github.com/repos/suraj-singh12/gnss-android-tracking/actions/artifacts/13388583355",
+      "archive_download_url": "https://api.github.com/repos/suraj-singh12/gnss-android-tracking/actions/artifacts/13388583355/zip",
+      "expired": false,
+      "created_at": "2026-11-05T04:46:20Z",
+      "expires_at": "2026-12-05T04:46:20Z",
+      "updated_at": "2026-11-05T04:46:20Z",
+      "digest": "sha256:7fac811543dec714cafb353506e013560963ec6a4bb37472b9bcf4172fbedbe2",
+      "workflow_run": {
+        "id": 41965185906,
+        "repository_id": 1407508308,
+        "head_repository_id": 1407508308,
+        "head_branch": "devX/issue-39-android-settings-diagnostics",
+        "head_sha": "df876693ff7fcb06416ee8db3017b3efda672b9a"
+      }
+    },
+    {
+      "id": 13388388745,
+      "name": "GNSS-Command-Windows-x64",
+      "size_in_bytes": 12528891,
+      "url": "https://api.github.com/repos/suraj-singh12/gnss-android-tracking/actions/artifacts/13388388745",
+      "archive_download_url": "https://api.github.com/repos/suraj-singh12/gnss-android-tracking/actions/artifacts/13388388745/zip",
+      "expired": false,
+      "created_at": "2026-11-05T04:46:24Z",
+      "expires_at": "2026-12-05T04:46:22Z",
+      "updated_at": "2026-11-05T04:46:24Z",
+      "digest": "sha256:122014d5c17f0b4f9a5f24e4d35dce507337af78ca90c93c362782c3533cf7b1",
+      "workflow_run": {
+        "id": 41965185906,
+        "repository_id": 1407508308,
+        "head_repository_id": 1407508308,
+        "head_branch": "devX/issue-39-android-settings-diagnostics",
+        "head_sha": "df876693ff7fcb06416ee8db3017b3efda672b9a"
+      }
+    },
+    {
+      "id": 13388269349,
+      "name": "GNSS-Acceptance-Evidence-df876693ff7fcb06416ee8db3017b3efda672b9a",
+      "size_in_bytes": 104990059,
+      "url": "https://api.github.com/repos/suraj-singh12/gnss-android-tracking/actions/artifacts/13388269349",
+      "archive_download_url": "https://api.github.com/repos/suraj-singh12/gnss-android-tracking/actions/artifacts/13388269349/zip",
+      "expired": false,
+      "created_at": "2026-11-05T04:46:29Z",
+      "expires_at": "2026-12-05T04:46:24Z",
+      "updated_at": "2026-11-05T04:46:29Z",
+      "digest": "sha256:925a4dfbd37887a62421d08d8ba038451f041a5ece4178930ec716e66adc4e68",
+      "workflow_run": {
+        "id": 41965185906,
+        "repository_id": 1407508308,
+        "head_repository_id": 1407508308,
+        "head_branch": "devX/issue-39-android-settings-diagnostics",
+        "head_sha": "df876693ff7fcb06416ee8db3017b3efda672b9a"
+      }
+    },
+    {
+      "id": 13388179399,
+      "name": "gnss-issue6-test-reports-df876693ff7fcb06416ee8db3017b3efda672b9a",
+      "size_in_bytes": 105241778,
+      "url": "https://api.github.com/repos/suraj-singh12/gnss-android-tracking/actions/artifacts/13388179399",
+      "archive_download_url": "https://api.github.com/repos/suraj-singh12/gnss-android-tracking/actions/artifacts/13388179399/zip",
+      "expired": false,
+      "created_at": "2026-11-05T04:46:34Z",
+      "expires_at": "2027-02-03T04:01:32Z",
+      "updated_at": "2026-11-05T04:46:34Z",
+      "digest": "sha256:0bed4a7fbd5a8e99a20cb414002ff08ac9249a0424d5d63689761af9a4b85de7",
+      "workflow_run": {
+        "id": 41965185906,
+        "repository_id": 1407508308,
+        "head_repository_id": 1407508308,
+        "head_branch": "devX/issue-39-android-settings-diagnostics",
+        "head_sha": "df876693ff7fcb06416ee8db3017b3efda672b9a"
+      }
+    },
+    {
+      "id": 13388145767,
+      "name": "DEM-provider-acquisition",
+      "size_in_bytes": 4864361,
+      "url": "https://api.github.com/repos/suraj-singh12/gnss-android-tracking/actions/artifacts/13388145767",
+      "archive_download_url": "https://api.github.com/repos/suraj-singh12/gnss-android-tracking/actions/artifacts/13388145767/zip",
+      "expired": false,
+      "created_at": "2026-11-05T04:14:17Z",
+      "expires_at": "2027-02-03T04:01:32Z",
+      "updated_at": "2026-11-05T04:14:17Z",
+      "digest": "sha256:6055616c337148db09f23a816aaefc7e0fd59db0f24672c9b44af87f3aefd28a",
+      "workflow_run": {
+        "id": 41965185906,
+        "repository_id": 1407508308,
+        "head_repository_id": 1407508308,
+        "head_branch": "devX/issue-39-android-settings-diagnostics",
+        "head_sha": "df876693ff7fcb06416ee8db3017b3efda672b9a"
+      }
+    },
+    {
+      "id": 13387860447,
+      "name": "Map-software-acceptance-df876693ff7fcb06416ee8db3017b3efda672b9a",
+      "size_in_bytes": 1374406,
+      "url": "https://api.github.com/repos/suraj-singh12/gnss-android-tracking/actions/artifacts/13387860447",
+      "archive_download_url": "https://api.github.com/repos/suraj-singh12/gnss-android-tracking/actions/artifacts/13387860447/zip",
+      "expired": false,
+      "created_at": "2026-11-05T04:05:25Z",
+      "expires_at": "2027-02-03T04:01:32Z",
+      "updated_at": "2026-11-05T04:05:25Z",
+      "digest": "sha256:b2f4706ce02f87baa253b7389175f3367c8ea186910fb12a4d5cec0bb9196eb8",
+      "workflow_run": {
+        "id": 41965185906,
+        "repository_id": 1407508308,
+        "head_repository_id": 1407508308,
+        "head_branch": "devX/issue-39-android-settings-diagnostics",
+        "head_sha": "df876693ff7fcb06416ee8db3017b3efda672b9a"
+      }
+    }
+  ],
+  "provider_note": "DEM decode and bounded real online acceptance passed; automatic offline/radius acceptance failed/partial at the unchanged 30000000-byte transfer ceiling; overall workflow is not all green."
+}

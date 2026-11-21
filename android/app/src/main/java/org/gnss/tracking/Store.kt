@@ -139,12 +139,12 @@ interface TrackingDao {
     suspend fun commandWatermark(row: CommandWatermark)
 
     @Query(
-        "DELETE FROM command_journal WHERE id IN (SELECT id FROM command_journal WHERE (confirmed=1 AND state NOT IN ('received','output_attempted','alert_blocked')) OR trusted=0 ORDER BY received DESC LIMIT -1 OFFSET 500)"
+        "DELETE FROM command_journal WHERE id IN (SELECT id FROM command_journal WHERE (confirmed=1 AND state NOT IN ('received','output_attempted','alert_blocked') AND (localOutputStopRequestedAt=0 OR state='recipient_acknowledged')) OR trusted=0 ORDER BY received DESC LIMIT -1 OFFSET 500)"
     )
     suspend fun pruneCommands()
 
     @Query(
-        "SELECT COUNT(*) FROM command_journal WHERE (confirmed=0 OR state IN ('received','output_attempted','alert_blocked')) AND trusted=1"
+        "SELECT COUNT(*) FROM command_journal WHERE (confirmed=0 OR state IN ('received','output_attempted','alert_blocked') OR (localOutputStopRequestedAt>0 AND state!='recipient_acknowledged')) AND trusted=1"
     )
     suspend fun unresolvedCommands(): Int
 
@@ -327,7 +327,7 @@ CASE WHEN EXISTS(SELECT 1 FROM outbox_summary WHERE `key`=1) THEN (SELECT delive
             CommandRecord::class,
             CommandWatermark::class,
         ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 abstract class TrackingDatabase : RoomDatabase() {
@@ -343,6 +343,7 @@ abstract class TrackingDatabase : RoomDatabase() {
                     MIGRATION_4_5,
                     MIGRATION_5_6,
                     MIGRATION_6_7,
+                    MIGRATION_7_8,
                 )
                 .addCallback(SUMMARY_CALLBACK)
                 .build()
@@ -369,6 +370,17 @@ abstract class TrackingDatabase : RoomDatabase() {
             object : Callback() {
                 override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                     initializeSummary(db)
+                }
+            }
+        val MIGRATION_7_8 =
+            object : androidx.room.migration.Migration(7, 8) {
+                override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "ALTER TABLE command_journal ADD COLUMN localOutputStopRequestedAt INTEGER NOT NULL DEFAULT 0"
+                    )
+                    db.execSQL(
+                        "ALTER TABLE command_journal ADD COLUMN localOutputStoppedAt INTEGER NOT NULL DEFAULT 0"
+                    )
                 }
             }
         val MIGRATION_6_7 =

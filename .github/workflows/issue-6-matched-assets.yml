@@ -325,3 +325,49 @@ jobs:
             android/app/build/reports
             android/app/build/test-results
             ${{ runner.temp }}/gnss-assets/visual-evidence
+  android-emulator-ui:
+    # Live rendering of the actual debug APK on an Android emulator (not a physical device).
+    # Captures every destination in Day/Night and at 1.0/1.5 font scale with UI Automator
+    # bounds, using android/tools/ui-inspect.sh. See android/UI-DEVELOPMENT.md.
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REVISION }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+          cache-dependency-path: android/**/*.gradle*
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --console=plain
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Emulator capture tour
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: OUT="$RUNNER_TEMP/emulator-ui" bash android/tools/ci-emulator-tour.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Android-emulator-ui-${{ env.SOURCE_REVISION }}
+          path: ${{ runner.temp }}/emulator-ui
+          if-no-files-found: warn
+          retention-days: 30

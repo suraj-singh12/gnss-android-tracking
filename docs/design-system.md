@@ -5,6 +5,60 @@ Issue #6 builds on combined GNSS + SOS source
 service/backend state. Typography and semantics are shared; Android uses native
 controls and Command uses accessible HTML controls.
 
+## Current Android V4.6 contract — operator refinement, 9 November 2026
+
+Android follows the [immutable V4.6 reference](https://github.com/suraj-singh12/gnss-android-tracking/blob/8d95eafe6fdcd1423027194ea128ae7a8b91236d/docs/design/approved/android-v4.6-interactive.html)
+and current Issue #39 decisions. This Android-specific section supersedes older
+Android palette/prototype descriptions below; Command's approved design is unchanged.
+Use the current semantic resources in `android/app/src/main/res/values/colors.xml`
+and `values-night/colors.xml`, plus the shared `NativeUi` vocabulary.
+
+- Appearance uses **one half-shaded circular native vector in both themes**: 24dp
+  drawable bounds, approximately 21.6dp artwork, existing 48dp touch target. No sun,
+  moon, emoji or font glyph. Accessible action names are “Switch to Night mode” /
+  “Switch to Day mode”; the existing independent preference/lifecycle remains.
+- Stop Tracking keeps **#F9E9ED fill / #E9BEC8 border / #8C3449 ink in both themes**.
+  Centre its icon and label as a group. Do not replace it with solid red.
+- Selectors use down-chevron vectors with a semantic resource stroke (native background tint resets must not turn them black in Night); navigation uses right-chevron vectors.
+  Use shared outlined inputs, readable stateful disabled surfaces and quiet feedback.
+- Read-only facts use shared label/value hierarchy; technical logs use selectable,
+  wrapping monospace content in bounded surfaces. Preserve the original live sources,
+  unknowns and evidence. Detailed trust evidence has one existing More evidence disclosure.
+- The weighted main ScrollView, fixed SOS dock and navigation are separate siblings.
+  Apply system/cutout/IME insets once at their shared root; do not add a footer-height
+  padding workaround to each destination. A partly visible row may be fully accessible
+  by scrolling. Preserve the protected continuous 1.2-second touch hold and approved
+  protected accessibility action.
+
+[The acceptance ledger](ui-acceptance.md) retains the original 41-finding dispositions,
+source-matched comparisons and executed evidence. Short screens need no filler.
+
+Native implementation (20 November 2026 production polish): all Android styling comes
+from semantic colours, `res/values/dimens.xml` tokens and the shared `NativeUi`
+components and `TextRole` type roles. Following V4.6 CSS, status pills, the SOS dock,
+the SOS button, the selected navigation tab and the app-bar Back target are borderless;
+filled primary actions have no contrasting outline. Every change is checked by the
+`VisualRegressionTest` layout audit and approved geometry baseline. Token tables,
+component ownership, live inspection and the mandatory self-review are in
+[android/UI-DEVELOPMENT.md](../android/UI-DEVELOPMENT.md).
+
+Operator-approved refinement (20 November 2026): Tracking shows a persistent
+**Command online / Command offline** pill (server icon; teal online, amber offline) in
+the Delivery card, driven only by a real Command response (`Sender.commandReachable`);
+Wi-Fi state never sets it. The offline sentence, the retention sentence and the
+explanatory Tracking note are removed. A retryable delivery attempt (for example while a
+saved SOS awaits Command) is no longer shown as a red error; paused receivers and
+rejected rows still are. Party & Command and Tracking policy share one reporting-interval
+selector. Field readiness is one status list with an action only where needed. Manage
+access & trust shows identities and contact evidence directly. Diagnostic tools has one
+Physical-key test card (results only after a real key event) and one Diagnostic export card.
+
+21 November 2026 polish: SOS hold progress fills the SOS button (no track line beneath
+it); fields are 44dp visual outlines in 48dp targets; identifiers use the standard sans
+face; Tracking policy holds only Adaptive storage and Policy details (interval lives in
+Party & Command); Command Instructions, History search and Phone Alerts share one list,
+pill and fact grammar, with colour used only for operational meaning.
+
 ## Operator UI/UX quality gate — 15 reusable rules
 
 These operator-established, cross-screen rules come from approved/refined Command V5.4–V5.14 and Android V4-series design reviews. Apply them to every future proposed UI-affecting change **before** requesting operator design approval. They supplement, not override, a pinned approved screen-specific design. Cross-project reference: [Design Quality Rules in Systems Library](https://app.notion.com/p/40e85dbdf080819297d0dcc92f7f0cf0).
@@ -24,6 +78,16 @@ These operator-established, cross-screen rules come from approved/refined Comman
 13. **Tell the operational truth:** queued ≠ delivered, received ≠ applied, SOS transport ACK ≠ human ACK, output attempt ≠ audible sound.
 14. **Test real workflows:** navigation, cancellation, failure, night/day, compact screens, overlays and state transitions—not only first screenshots.
 15. **Preserve useful capability when simplifying:** remove duplicate presentation, never working security/recovery/evidence functionality.
+
+**Android implementation of the rules.** Rules 2, 7 and 8 are enforced through the
+shared `NativeUi` components (`switchRow`, `selector`, `menu` dividers, `TextRole`).
+Rules 4, 6, 8 and 14 are checked automatically by `VisualRegressionTest`
+(geometry baseline, `duplicate-header`, `empty-gap`, type/radius tokens, clipping,
+overlap, Night, large text, short, landscape, keyboard and dialog states). Rule 9 maps
+to `NativeUi.style` variants and `CAUTION_ACTIONS`. The rendered self-review in
+[android/UI-DEVELOPMENT.md](../android/UI-DEVELOPMENT.md) §5 is mandatory before any
+Android UI delivery. Distinguish Robolectric renders, emulator captures and
+physical-device acceptance.
 
 **Mandatory design self-review:** inventory affected screens and existing controls; trace the real source/action for each state; identify redundant competing UI; render and interact with main/nested/dialog states at representative sizes; review contrast/accessibility and platform conventions; reject the proposal if any rule fails. Stop for explicit operator approval before production UI implementation. Physical-device acceptance must be distinguished from simulated browser verification.
 
@@ -337,8 +401,10 @@ refresh does not overwrite edits. Caret restoration follows framework hierarchy
 restoration. Adaptive storage is the real #24 ON/OFF Switch, OFF by default, with one
 future-observations caption. Revision/request evidence is secondary.
 
-Diagnostics separates seven independent health facts from four destinations:
-Instructions, Phone Alerts, Saved data & sync and Diagnostic tools. Instructions use
+Diagnostics separates four independent health facts from five destinations:
+Instructions, Phone Alerts, Saved data & sync, SOS history and Diagnostic tools
+(20 Nov 2026: GNSS details, Command contact, Transfer recovery and Storage health
+retired; Saved data & sync owns counts, sync progress, Retry and export). Instructions use
 compact outcome filters and chronological, bounded pages; dedicated details show
 verification, attempts, stages and result custody. Full canonical evidence is optional.
 Phone alerts and SOS history use actual persisted records; output attempts never

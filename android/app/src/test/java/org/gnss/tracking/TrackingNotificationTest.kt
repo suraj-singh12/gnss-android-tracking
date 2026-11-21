@@ -186,12 +186,18 @@ class TrackingNotificationTest {
                 try {
                     val activity = controller.get()
                     val toggle = activity.findViewById<Button>(R.id.tracking_appearance)
-                    assertEquals(if (night) "☀" else "☾", toggle.text)
+                    assertEquals("Appearance is artwork, not a font glyph", "", toggle.text.toString())
+                    val artwork = toggle.compoundDrawables[0]
+                    assertTrue("Both themes use the approved native vector", artwork is android.graphics.drawable.VectorDrawable)
+                    val ui = NativeUi(activity)
+                    assertEquals(ui.dp(24), artwork.bounds.width())
+                    assertEquals(ui.dp(24), artwork.bounds.height())
+                    assertEquals(ui.dp(48), toggle.layoutParams.width)
                     assertEquals(
                         if (night) "Switch to Day mode" else "Switch to Night mode",
                         toggle.contentDescription,
                     )
-                    assertTrue(toggle.minimumHeight >= 48)
+                    assertTrue(toggle.minimumHeight >= NativeUi(activity).dp(48))
                     assertTrue(
                         contrast(
                             activity.getColor(R.color.danger),

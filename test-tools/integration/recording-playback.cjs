@@ -33,7 +33,9 @@ async function headerAction(id) {
   if(await page.locator("#sos-toast-dismiss").isVisible()) await page.locator("#sos-toast-dismiss").click();
   const target = page.locator(`#${id}`);
   const root = page.locator(".header-menu-root");
-  if (!(await root.evaluate(e => e.open))) await root.locator(":scope > summary").click();
+  const mobileSummary = root.locator(":scope > summary");
+  // Desktop exposes the menu groups directly and hides the mobile summary.
+  if (await mobileSummary.isVisible() && !(await root.evaluate(e => e.open))) await mobileSummary.click();
   const group = target.locator("xpath=ancestor::details[contains(@class, 'menu')][1]");
   if (!(await group.evaluate(e => e.open))) await group.locator(":scope > summary").click();
   await target.click();
