@@ -3160,3 +3160,11 @@ body[data-history-mode="travel"] #playback-status { top:94px; }
 @media (max-width: 520px) {
   #command #playback-timeline:not([hidden]) { gap: 6px; padding: 8px; }
 }
+/* The SOS toast sits below the map tools so it cannot cover the panel toggles or zoom controls. */
+#command #sos-toast { top: var(--command-tools-bottom, 132px); right: 12px; max-width: min(420px, calc(100vw - 24px)); }
+/* The header and its menus stay above the drawers and the SOS toast. */
+#command > header { position: relative; z-index: 50; }
+/* With drawers, the SOS toast moves to just above the bottom rail, so a drawer's header and first rows stay usable. */
+@media (max-width: 1190px) {
+  #command #sos-toast { top: auto; bottom: calc(100dvh - var(--command-dock-top, 100dvh) + 12px); left: auto; right: 12px; }
+}

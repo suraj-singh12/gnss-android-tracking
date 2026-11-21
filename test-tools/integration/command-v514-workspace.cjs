@@ -80,7 +80,8 @@ async function wait(check, message = "Timed out waiting for real state") {
   await page.locator("#mode-button").click();
   assert(await page.locator("#mode-navigation").isVisible());
   assert.equal(await page.locator("#mode-live").getAttribute("aria-pressed"), "true");
-  assert.equal(await page.evaluate(() => document.activeElement.id), "mode-live");
+  // The details toggle event that moves focus fires asynchronously.
+  await page.waitForFunction(() => document.activeElement.id === "mode-live", null, { timeout: 2000 });
   await page.keyboard.press("ArrowDown");
   assert.equal(await page.evaluate(() => document.activeElement.id), "mode-recording");
   const menu = await box("#mode-navigation");

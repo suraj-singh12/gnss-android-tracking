@@ -4074,7 +4074,8 @@ function updateMapChromeBounds() {
   const contextBottom = playback ? context.getBoundingClientRect().bottom : rect.bottom;
   root.setProperty('--command-panel-top', `${Math.max(rect.bottom, contextBottom) + 12}px`);
   const dock = playback ? $('playback-timeline') : document.querySelector('.recording-bar');
-  root.setProperty('--command-dock-top', `${dock.getBoundingClientRect().top}px`);
+  const dockRect = dock.getBoundingClientRect();
+  root.setProperty('--command-dock-top', `${dockRect.height ? dockRect.top : innerHeight}px`);
 }
 const chromeBounds = new ResizeObserver(updateMapChromeBounds);
 for (const element of [mapToolbar, $('playback-timeline'), document.querySelector('.recording-bar'), document.querySelector('.playback-context')]) chromeBounds.observe(element);
