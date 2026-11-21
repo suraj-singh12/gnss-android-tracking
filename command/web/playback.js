@@ -459,6 +459,11 @@
         repaint();
       };
       row.append(check);
+      // Workspace search/filters: Online = qualified position at this playhead.
+      const located = p.visible && !(travel && !p.device?.location?.fix);
+      card.dataset.search = `${identity(p, id)} ${p.device?.snapshot?.party?.name || ""} ${id}`.toLowerCase();
+      card.dataset.contact = located ? "healthy" : "historical";
+      card.dataset.attention = String(p.visible && !located);
       if (id === selected) card.classList.add("historical-selected");
       if (p.device?.track_color)
         card.style.borderLeftColor = p.device.track_color;

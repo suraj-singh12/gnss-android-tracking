@@ -124,6 +124,17 @@ const report = { physical_acceptance: false };
   );
   await page.locator("#playback-last").click();
   assert.equal(await page.locator(".historical-party-name").count(), 20);
+  // Workspace search applies to historical rows as well as live rows.
+  const historicalShown = (q) => page.evaluate((query) => {
+    $("party-search").value = query;
+    $("party-search").dispatchEvent(new Event("input"));
+    return [...document.querySelectorAll("#devices .historical-party")].filter((c) => !c.hidden).length;
+  }, q);
+  const firstName = (await page.locator(".historical-party-name").first().innerText()).trim();
+  const matched = await historicalShown(firstName);
+  assert(matched >= 1 && matched < 20, `historical search matched ${matched}`);
+  assert.equal(await historicalShown("no-such-party-zz"), 0);
+  assert.equal(await historicalShown(""), 20);
   const before = await page.locator("#tracks").innerHTML();
   await ingest(0, 2);
   await ingest(20, 1);
