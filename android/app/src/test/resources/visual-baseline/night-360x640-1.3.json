@@ -1319,13 +1319,13 @@
   ],
   "Surface#2": [
    17,
-   219,
+   230,
    326,
    78
   ],
   "Icon#1": [
    307,
-   248,
+   259,
    22,
    22
   ],
@@ -1359,7 +1359,7 @@
    112,
    49
   ],
-  "_pixels": "13039a9b13a7da20d27aaf9f8a09a58e10a7e1519af9bb9e86af7017619b23ff"
+  "_pixels": "24d381992c5e9c88eb67533c9ebbbe6c7ccbcad40527dc190ecdb9124e7afbb5"
  },
  "policy-details": {
   "Button:Back#1": [

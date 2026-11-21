@@ -845,13 +845,13 @@
   ],
   "Surface#2": [
    17,
-   195,
+   206,
    446,
    61
   ],
   "Icon#1": [
    427,
-   215,
+   226,
    22,
    22
   ],
@@ -885,7 +885,7 @@
    152,
    49
   ],
-  "_pixels": "7bff9217da938270e016fb507220c2d4fcd2b31cda350361c321733bbedfeac8"
+  "_pixels": "81cd3f9db884760e2546a28140d8d441d1e68c1d952eab3a2b17647368888f01"
  },
  "policy-details": {
   "Button:Back#1": [

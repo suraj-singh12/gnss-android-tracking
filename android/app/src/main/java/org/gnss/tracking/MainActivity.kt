@@ -3639,6 +3639,10 @@ class MainActivity : Activity() {
         add(policyCard, ui.label("ON keeps fewer future observations when steady or stationary.", TextRole.Meta), 3)
         val policyFeedback = ui.collapsingLabel(TextRole.Caption)
         menu(policy, "Policy details", "Phone setting, requested/effective interval and revision")
+            .also { row ->
+                // Standard 12dp card gap between the Adaptive storage card and its details row.
+                ((row.parent as View).layoutParams as LinearLayout.LayoutParams).topMargin = ui.px(R.dimen.space_md)
+            }
         val ready = page("Field readiness", "Settings")
         // One peer list: each requirement shows its actual state; only a requirement that
         // needs attention offers the existing OS action that resolves it.
