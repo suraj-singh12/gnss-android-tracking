@@ -102,6 +102,8 @@ async function stop() {
   fs.mkdirSync(evidence, {recursive:true});
   for (const [width,height] of [[390,844],[960,720],[1280,720],[1440,900],[1920,1080]]) {
     await page.setViewportSize({width,height});
+    // Let the resize handler apply drawer/column layout before probing it.
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
     assert.equal(await page.locator('.map-tools').count(),0);
     assert.equal(await page.locator('#toggle-details').count(),1);
     if (!(await page.locator('#collapse-parties').isVisible())) await page.locator('#toggle-parties').click();
