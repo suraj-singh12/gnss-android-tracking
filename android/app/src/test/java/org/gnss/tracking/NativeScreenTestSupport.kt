@@ -35,30 +35,46 @@ internal fun openNativeScreen(activity: MainActivity, name: String) {
             .performClick()
         return
     }
+    // v3 (#68): merged destinations open their owning page; Diagnostics records, saved data
+    // and tools are segments of the Diagnostics page.
+    when (name) {
+        "Manage Command access" -> return openNativeScreen(activity, "Command access")
+        "Policy details" -> return openNativeScreen(activity, "Tracking policy")
+        "Emergency controls" -> return openNativeScreen(activity, "Emergency")
+    }
+    val segment =
+        mapOf(
+            "Saved data & sync" to listOf("Health"),
+            "Diagnostic tools" to listOf("Tools"),
+            "Command Instructions" to listOf("Activity", "Instructions"),
+            "Phone Alerts" to listOf("Activity", "Alerts"),
+            "SOS event history" to listOf("Activity", "SOS"),
+        )[name]
+    if (segment != null) {
+        openNativeScreen(activity, "Diagnostics")
+        for (choice in segment)
+            nativeViews(activity.findViewById(android.R.id.content))
+                .filterIsInstance<Button>()
+                .single { it.isShown && it.text == choice }
+                .performClick()
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        return
+    }
     val parents =
         mapOf(
             "Party & Command" to "Settings",
             "Command access" to "Settings",
             "Tracking policy" to "Settings",
             "Field readiness" to "Settings",
-            "Emergency controls" to "Settings",
-            "Manage Command access" to "Command access",
-            "Policy details" to "Tracking policy",
-            "Command Instructions" to "Diagnostics",
+            "Emergency" to "Settings",
+            "Appearance" to "Settings",
             "History search & filters" to "Command Instructions",
             "Instruction filters" to "History search & filters",
-            "Phone Alerts" to "Diagnostics",
-            "Saved data & sync" to "Diagnostics",
-            "Diagnostic tools" to "Diagnostics",
             "Advanced logs" to "Diagnostic tools",
-            "SOS event history" to "Diagnostics",
         )
     parents[name]?.let { openNativeScreen(activity, it) }
     val label =
         when (name) {
-            "Manage Command access" -> "Manage access & trust"
-            "SOS event history" -> "SOS history"
-            "Phone Alerts" -> "Phone alerts"
             else -> name
         }
     val target =

@@ -160,7 +160,7 @@ class MainActivityStartupTest {
             val button = field<Button>(activity.get(), "startButton")
             assertFalse(button.isEnabled)
             assertEquals("Loading settings…", button.text.toString())
-            openNativeScreen(activity.get(), "Party & Command")
+            openNativeScreen(activity.get(), "Tracking policy")
             val label =
                 nativeViews(activity.get().findViewById(android.R.id.content))
                     .filterIsInstance<TextView>()

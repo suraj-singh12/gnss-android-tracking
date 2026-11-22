@@ -57,8 +57,7 @@ class SettingsDiagnosticsTest {
                 requestFocus()
                 setSelection(6)
             }
-            field("Command address").setText("http://192.168.12.3:8080")
-            field("Custom interval · seconds").setText("35")
+            field("Address").setText("http://192.168.12.3:8080")
             app.operational.value = Operational(health = Health(wifi_connected = true))
             shadowOf(Looper.getMainLooper()).idle()
             assertEquals("Unfinished field edit", field("Party name").text.toString())
@@ -73,7 +72,6 @@ class SettingsDiagnosticsTest {
             }
             assertTrue(field("Party name").hasFocus())
             assertEquals(6, field("Party name").selectionStart)
-            assertEquals("35", field("Custom interval · seconds").text.toString())
             assertEquals(original.partyName, app.repository.state().partyName)
             @Suppress("DEPRECATION") controller.get().onBackPressed()
             assertFalse(controller.get().isFinishing)
@@ -81,16 +79,18 @@ class SettingsDiagnosticsTest {
             openNativeScreen(controller.get(), "Party & Command")
             button("Cancel").performClick()
             assertEquals(original.partyName, field("Party name").text.toString())
-            openNativeScreen(controller.get(), "Party & Command")
+            // v3: the reporting interval is owned by Tracking policy with its own Save bar.
+            openNativeScreen(controller.get(), "Tracking policy")
+            assertTrue(all().filterIsInstance<Button>().none { it.text == "Save" && it.isShown })
             field("Custom interval · seconds").setText("3")
-            button("Save settings").performClick()
+            button("Save").performClick()
             until {
                 all().filterIsInstance<TextView>().any { it.text.startsWith("Settings not saved") }
             }
             assertEquals(original.localInterval, app.repository.state().localInterval)
             org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()?.dismiss()
             field("Custom interval · seconds").setText("35")
-            button("Save settings").performClick()
+            button("Save").performClick()
             until {
                 all().filterIsInstance<TextView>().any { it.text.startsWith("Settings saved") }
             }
@@ -240,7 +240,7 @@ class SettingsDiagnosticsTest {
                 all().filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled }
             }
             all().filterIsInstance<Button>().single { it.text == "Diagnostics" }.performClick()
-            assertEquals(4, all().filterIsInstance<HealthRow>().count { it.isShown })
+            assertEquals(7, all().filterIsInstance<HealthRow>().count { it.isShown })
             assertTrue(all().filterIsInstance<HealthRow>().all { !it.isClickable })
             assertTrue(
                 "V4.6 overview has only health and seven destination summaries: ${visibleText()}",

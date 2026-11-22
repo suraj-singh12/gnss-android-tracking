@@ -66,7 +66,8 @@ class V46RefinementTest {
             assertNull("No Command receipt is implied", row.deliveredAt)
             assertEquals("Wi-Fi unavailable", withContext(Dispatchers.IO) { app.repository.state().operationalError })
             assertFalse("A retryable attempt is not shown as a Tracking failure", texts(a).any { it.contains("Wi-Fi unavailable") })
-            assertTrue(texts(a).contains("Command offline"))
+            assertFalse(texts(a).contains("Command offline"))
+            assertTrue(texts(a).contains("Not set up") || texts(a).contains("Unreachable"))
             assertFalse(texts(a).any { it.contains("Received") })
             // A paused receiver is a genuine problem and stays visible.
             withContext(Dispatchers.IO) { app.repository.pauseReceiver("Receiver rejected configuration", app.repository.state().endpointGeneration) }
@@ -80,16 +81,18 @@ class V46RefinementTest {
         try {
             val a = controller.get()
             until { shown(a).filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled } }
+            withContext(Dispatchers.IO) { app.repository.settings("A", "Alpha", "http://192.168.1.2:8080", 10) }
             setReachable(null)
             app.operational.value = Operational(health = Health(wifi_connected = true))
-            until { texts(a).contains("Command offline") }
-            assertFalse("Wi-Fi alone is not Command contact", texts(a).contains("Command online"))
+            until { texts(a).contains("Not checked yet") }
+            assertFalse("Unknown is not offline", texts(a).contains("Unreachable"))
+            assertFalse("Wi-Fi alone is not Command contact", texts(a).contains("Reachable"))
             setReachable(true)
-            app.operational.value = Operational(health = Health(wifi_connected = true), link = "changed")
-            until { texts(a).contains("Command online") }
+            app.operational.value = Operational(health = Health(wifi_connected = true, battery_percent = 51))
+            until { texts(a).contains("Reachable") }
             setReachable(false)
             app.operational.value = Operational(health = Health(wifi_connected = true))
-            until { texts(a).contains("Command offline") }
+            until { texts(a).contains("Unreachable") }
             assertFalse(texts(a).any { it.contains("Saved data will retry") || it.contains("Observations retained until received") })
         } finally { controller.pause().stop().destroy() }
     }
@@ -108,9 +111,9 @@ class V46RefinementTest {
                 for (name in retired) assertFalse("$name entry on $screen", labels.any { it.startsWith(name) })
             }
             @Suppress("UNCHECKED_CAST") val navigate = field(a, "navigateTo") as (String) -> Unit
-            for ((old, owner) in listOf("Storage health" to "Saved data & sync", "Transfer recovery" to "Saved data & sync",
+            for ((old, owner) in listOf("Storage health" to "SAVED DATA & SYNC", "Transfer recovery" to "SAVED DATA & SYNC",
                 "GNSS details" to "Diagnostics", "Command contact" to "Diagnostics",
-                "Identity & verification details" to "Manage access & trust")) {
+                "Identity & verification details" to "This phone ID")) {
                 navigate(old)
                 settle()
                 assertTrue("$old → $owner", texts(a).contains(owner))
@@ -128,9 +131,12 @@ class V46RefinementTest {
             openNativeScreen(a, "Manage Command access")
             settle()
             val buttons = shown(a).filterIsInstance<Button>().map { it.text.toString() }
-            assertTrue(buttons.containsAll(listOf("Copy Command ID", "Copy phone ID", "More evidence & rejection reasons", "Disable remote control", "Re-enroll Command")))
-            assertTrue(texts(a).containsAll(listOf("This phone ID", "Saved Command address")))
-            assertEquals("Read-only identities, not editable fields", 0, shown(a).count { it is android.widget.EditText })
+            assertTrue(buttons.toString(), buttons.contains("Copy phone ID"))
+            assertFalse("Destructive access actions only after enrollment: $buttons",
+                buttons.any { it == "Disable remote control" || it == "Re-enroll Command" })
+            assertTrue(texts(a).contains("This phone ID"))
+            assertEquals("Only the private credential is editable before enrollment", listOf("Paste Command credential"),
+                shown(a).filterIsInstance<android.widget.EditText>().map { it.hint.toString() })
 
             openNativeScreen(a, "Diagnostic tools")
             settle()
@@ -147,7 +153,7 @@ class V46RefinementTest {
 
             openNativeScreen(a, "Field readiness")
             settle()
-            assertFalse("Granted permission offers no fix action", shown(a).filterIsInstance<Button>().any { it.text == "Allow precise location" })
+            assertFalse("Granted permission offers no fix action", shown(a).filterIsInstance<Button>().any { it.contentDescription == "Allow precise location · Precise location" })
             assertTrue(texts(a).contains("Precise location"))
         } finally { controller.pause().stop().destroy() }
     }
@@ -182,10 +188,12 @@ class V46RefinementTest {
             openNativeScreen(a, "Tracking policy")
             settle()
             val controls = shown(a).filter { it is android.widget.Spinner || it is android.widget.EditText || (it is Button && it !is android.widget.CompoundButton && it.text.isNotEmpty() && it.parent?.parent?.let { p -> p is android.widget.ScrollView || (p as View).id != View.NO_ID } == true) }
-            assertTrue("No interval selector or editor", controls.none { it is android.widget.Spinner || it is android.widget.EditText })
+            // v3: Tracking policy owns the reporting interval, adaptive storage and the facts in effect.
+            assertTrue("Interval selector", controls.any { it is android.widget.Spinner && it.contentDescription == "Reporting interval" })
             assertTrue(shown(a).filterIsInstance<android.widget.Switch>().any { it.text == "Adaptive storage" })
-            assertFalse(shown(a).filterIsInstance<Button>().any { it.text == "Save policy" })
-            assertTrue(shown(a).any { it.contentDescription?.startsWith("Policy details. ") == true })
+            assertFalse("Save appears only after a change", shown(a).filterIsInstance<Button>().any { it.text == "Save" })
+            assertTrue(texts(a).contains("IN EFFECT"))
+            assertFalse("Policy details merged into this page", shown(a).any { it.contentDescription?.startsWith("Policy details. ") == true })
         } finally { controller.pause().stop().destroy() }
     }
 
@@ -197,9 +205,10 @@ class V46RefinementTest {
             settle()
             openNativeScreen(a, "Field readiness")
             settle()
-            val allow = shown(a).filterIsInstance<Button>().single { it.text == "Allow precise location" }
+            val allow = shown(a).filterIsInstance<Button>().single { it.contentDescription == "Allow precise location · Precise location" }
             assertEquals(View.VISIBLE, allow.visibility)
-            assertTrue(texts(a).contains("Required"))
+            assertEquals("Fix", allow.text.toString())
+            assertTrue(texts(a).any { it.startsWith("Required") })
         } finally { controller.pause().stop().destroy() }
     }
 }

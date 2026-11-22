@@ -34,7 +34,16 @@ class CommandConsoleUiTest {
                 .filterIsInstance<Button>()
                 .single { it.text == "Diagnostics" }
                 .performClick()
-            openNativeScreen(activity.get(), "Command Instructions")
+            openNativeScreen(activity.get(), "History search & filters")
+            // History search excludes Rejected / blocked until the operator includes it.
+            views(root).filterIsInstance<Button>().single { it.isShown && it.text == "Filter history" }.performClick()
+            val outcomes = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
+            views(outcomes.window!!.decorView)
+                .filterIsInstance<android.widget.Switch>()
+                .single { it.text == "Rejected / blocked" }
+                .performClick()
+            outcomes.getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick()
+            shadowOf(Looper.getMainLooper()).idle()
             val id = Protocol.newId()
             val state = app.repository.state()
             app.repository.dao.insertCommand(
@@ -73,6 +82,16 @@ class CommandConsoleUiTest {
                 }
             )
             filter.setText("blocked")
+            withTimeout(10000) {
+                while (
+                    views(root).none {
+                        it.isShown && it.contentDescription?.toString()?.contains("Open instruction details") == true
+                    }
+                ) {
+                    shadowOf(Looper.getMainLooper()).idle()
+                    delay(10)
+                }
+            }
             val title =
                 views(root).first {
                     it.isShown && it.contentDescription?.toString()?.contains("Open instruction details") == true
@@ -130,11 +149,13 @@ class CommandConsoleUiTest {
                     .text
                     .toString(),
             )
-            openNativeScreen(activity.get(), "Command Instructions")
-            val focusedRow =
-                views(root).single {
+            openNativeScreen(activity.get(), "History search & filters")
+            val focusedRows =
+                views(root).filter {
                     it.isShown && it.contentDescription?.toString()?.contains("Open instruction details") == true
                 }
+            assertEquals("One filtered instruction row", 1, focusedRows.size)
+            val focusedRow = focusedRows.single()
             focusedRow.requestFocus()
             app.repository.dao.updateCommand(app.repository.dao.command(id)!!)
             repeat(20) {

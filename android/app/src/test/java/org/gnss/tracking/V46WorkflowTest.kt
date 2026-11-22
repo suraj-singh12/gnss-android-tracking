@@ -53,8 +53,8 @@ class V46WorkflowTest {
             await {
                 all().filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled }
             }
-            // The reporting interval is edited only on Party & Command (20 Nov 2026 operator scope).
-            openNativeScreen(controller.get(), "Party & Command")
+            // v3 (#68): the reporting interval is edited on Tracking policy.
+            openNativeScreen(controller.get(), "Tracking policy")
             editor().requestFocus()
             editor().setText("5")
             assertTrue("Typing the first digit of 50 must not hide Custom", editor().isShown)
@@ -89,7 +89,7 @@ class V46WorkflowTest {
             await {
                 all().filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled }
             }
-            openNativeScreen(controller.get(), "Party & Command")
+            openNativeScreen(controller.get(), "Tracking policy")
             shadowOf(Looper.getMainLooper()).idle()
             val picker =
                 all().filterIsInstance<Spinner>().single {
@@ -108,25 +108,25 @@ class V46WorkflowTest {
             picker.setSelection(4)
             shadowOf(Looper.getMainLooper()).idle()
             custom.setText("3")
-            click("Save settings")
+            click("Save")
             await {
                 all().filterIsInstance<TextView>().any { it.text.startsWith("Settings not saved") }
             }
             assertEquals(35, app.repository.state().localInterval)
             ShadowAlertDialog.getLatestAlertDialog()?.dismiss()
             custom.setText("45")
-            click("Save settings")
+            click("Save")
             await {
                 all().filterIsInstance<TextView>().any { it.text.startsWith("Settings saved") }
             }
             assertEquals(45, app.repository.state().localInterval)
             assertEquals("Alpha", app.repository.state().partyName)
-            // Tracking policy no longer carries a second interval editor or a Save button.
-            openNativeScreen(controller.get(), "Tracking policy")
+            // Party & Command no longer carries a second interval editor; Save hides once saved.
+            await { all().filterIsInstance<Button>().none { it.isShown && it.text == "Save" } }
+            openNativeScreen(controller.get(), "Party & Command")
             shadowOf(Looper.getMainLooper()).idle()
             assertTrue(all().none { it.isShown && it is Spinner })
-            assertTrue(all().filterIsInstance<Button>().none { it.isShown && it.text == "Save policy" })
-            openNativeScreen(controller.get(), "Party & Command")
+            openNativeScreen(controller.get(), "Tracking policy")
             controller.recreate()
             await {
                 all().filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled }

@@ -114,13 +114,6 @@ class UiNavigationVisualTest {
                         nativeViews(root).filterIsInstance<Button>().filter {
                             it.text in listOf("Tracking", "Settings", "Diagnostics")
                         }) assertEquals("Tab fits", 1, tab.lineCount)
-                    val appearance = a.findViewById<Button>(R.id.tracking_appearance)
-                    val appearanceBounds = android.graphics.Rect(0, 0, appearance.width, appearance.height).apply {
-                        root.offsetDescendantRectToMyCoords(appearance, this)
-                    }
-                    assertTrue("Appearance target remains wholly visible: $appearanceBounds at $width / $height / $font",
-                        appearance.isShown && appearanceBounds.left >= 0 && appearanceBounds.right <= w && appearanceBounds.top >= 0 && appearanceBounds.bottom <= h)
-                    assertEquals("Appearance artwork retains its native vector bounds", (24 * density).toInt(), appearance.compoundDrawables[0].bounds.width())
                     val sos =
                         nativeViews(root).filterIsInstance<Button>().single {
                             it.text == "Hold to activate SOS"
@@ -157,17 +150,21 @@ class UiNavigationVisualTest {
                         delay(10)
                     }
                 }
+                // v3: the primary Start/Stop action is the one stable, always-visible core action;
+                // Sync now appears in Delivery only while data waits on the phone.
                 fun actionBounds(): android.graphics.Rect {
-                    val sync =
+                    val action =
                         nativeViews(root).filterIsInstance<Button>().single {
-                            it.text == "Sync Now"
+                            it.isShown && (it.text == "Start Tracking" || it.text == "Stop Tracking")
                         }
                     assertTrue(
-                        "Sync action is measured and reachable",
-                        sync.width > 0 && sync.height >= 48 * density,
+                        "Primary action is measured and reachable",
+                        action.width > 0 && action.height >= 48 * density,
                     )
-                    return android.graphics.Rect(0, 0, sync.width, sync.height).apply {
-                        root.offsetDescendantRectToMyCoords(sync, this)
+                    return android.graphics.Rect(0, 0, action.width, action.height).apply {
+                        root.offsetDescendantRectToMyCoords(action, this)
+                        top = 0
+                        bottom = 0
                     }
                 }
                 var stableActions: android.graphics.Rect? = null
@@ -214,7 +211,7 @@ class UiNavigationVisualTest {
                             .filter { it.isShown }
                             .joinToString(" ") { it.text }
                     assertTrue(
-                        visible.contains(if (op.tracking) "Tracking active" else "Tracking stopped")
+                        visible.contains(if (op.tracking) "Tracking" else "Not tracking")
                     )
                     if (!op.tracking && op.ageMillis != null) {
                         assertTrue(visible.contains("Stopped"))

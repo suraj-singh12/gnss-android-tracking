@@ -138,6 +138,7 @@ class MainActivity : Activity() {
     private lateinit var instructionFilter: EditText
     private var instructionPage = 0
     private var refreshConsole: (() -> Unit)? = null
+    private var renderSaveBarsHook: (() -> Unit)? = null
     private var refreshTrust: (() -> Unit)? = null
     private val consoleFilters = linkedMapOf<String, Spinner>()
     private var consumedNotificationAction = false
@@ -1579,7 +1580,7 @@ class MainActivity : Activity() {
             } ?: savedInstanceState?.getString("destination") ?: "Tracking"
         )
         savedInstanceState?.getBundle("settingsDraft")?.let { draft ->
-            if (route == "Party & Command" && draft.getString("focus") == "interval")
+            if (route == "Tracking policy" && draft.getString("focus") == "interval")
                 v46PartyInterval?.apply {
                     requestFocus()
                     setSelection(draft.getInt("intervalSelection", length()).coerceIn(0, length()))
@@ -1622,6 +1623,7 @@ class MainActivity : Activity() {
                         // afterwards, so the fix, Tracking pill and controls describe one instant.
                         val op = app.operational.value
                         savedInstallation = state
+                        renderSaveBarsHook?.invoke()
                         // Present this emission's counts in every refresh below. A stale value
                         // made Sync controls flip disabled/enabled within one emission, which
                         // can move focus and cancel a protected accessibility SOS attempt.
@@ -3776,6 +3778,7 @@ class MainActivity : Activity() {
                 if (state != null && interval.text.toString() != state.localInterval.toString()) View.VISIBLE else View.GONE
         }
         listOf(partyId, partyName, endpoint, interval).forEach { watch(it) { renderSaveBars() } }
+        renderSaveBarsHook = ::renderSaveBars
         val policyCard = ui.card(policy, 12)
         ui.switchRow(adaptive)
         ui.text(policyStatus, TextRole.Meta)
