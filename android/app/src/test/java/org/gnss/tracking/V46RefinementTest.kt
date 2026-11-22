@@ -82,17 +82,20 @@ class V46RefinementTest {
             val a = controller.get()
             until { shown(a).filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled } }
             withContext(Dispatchers.IO) { app.repository.settings("A", "Alpha", "http://192.168.1.2:8080", 10) }
-            setReachable(null)
-            app.operational.value = Operational(health = Health(wifi_connected = true))
-            until { texts(a).contains("Not checked yet") }
+            // The live Sender may reset its own contact state (endpoint generation,
+            // connectivity callbacks) while the test runs; re-apply the state under test
+            // with a fresh Operational emission until the Tracking row renders it.
+            var tick = 0
+            suspend fun shows(reachable: Boolean?, text: String) = until {
+                setReachable(reachable)
+                app.operational.value = Operational(health = Health(wifi_connected = true, battery_percent = 50 + tick++ % 2))
+                texts(a).contains(text)
+            }
+            shows(null, "Not checked yet")
             assertFalse("Unknown is not offline", texts(a).contains("Unreachable"))
             assertFalse("Wi-Fi alone is not Command contact", texts(a).contains("Reachable"))
-            setReachable(true)
-            app.operational.value = Operational(health = Health(wifi_connected = true, battery_percent = 51))
-            until { texts(a).contains("Reachable") }
-            setReachable(false)
-            app.operational.value = Operational(health = Health(wifi_connected = true))
-            until { texts(a).contains("Unreachable") }
+            shows(true, "Reachable")
+            shows(false, "Unreachable")
             assertFalse(texts(a).any { it.contains("Saved data will retry") || it.contains("Observations retained until received") })
         } finally { controller.pause().stop().destroy() }
     }
