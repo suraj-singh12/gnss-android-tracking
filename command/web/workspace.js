@@ -122,6 +122,7 @@
     const recording = window.recordingLiveState?.()?.recording;
     const health = $("capture-health").textContent.trim();
     const unverified = health.includes("Unverified");
+    const confirmed = !unverified && /confirmed/i.test(health);
     const status = !recording ? "Ready" : recording.status === "stopped" ? "Stopped" : recording.active ? "Recording" : "Paused";
     return {
       title: "Recording facts",
@@ -147,7 +148,7 @@
         },
         {
           title: "Presentation evidence",
-          rows: [{ title: unverified ? "Unverified" : "Browser presentation confirmed", detail: health, tone: unverified ? "warn" : "live" }],
+          rows: [{ title: confirmed ? "Browser presentation confirmed" : unverified ? "Unverified" : "Not being captured", detail: health, tone: confirmed ? "live" : unverified ? "warn" : "" }],
         },
       ],
       raw: recording ? { label: "Recording state", text: JSON.stringify(recording, null, 2) } : undefined,
