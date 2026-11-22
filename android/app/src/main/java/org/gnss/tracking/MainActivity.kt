@@ -6,6 +6,8 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.view.KeyEvent
 import android.view.View
@@ -139,6 +141,8 @@ class MainActivity : Activity() {
     private var instructionPage = 0
     private var refreshConsole: (() -> Unit)? = null
     private var renderSaveBarsHook: (() -> Unit)? = null
+    private var sosCardExpiry = Runnable {}
+    private val sosCardTimer = Handler(Looper.getMainLooper())
     private var refreshTrust: (() -> Unit)? = null
     private val consoleFilters = linkedMapOf<String, Spinner>()
     private var consumedNotificationAction = false
@@ -3590,17 +3594,28 @@ class MainActivity : Activity() {
                 (latest.deliveredAt == null || now - latest.capturedMillis < SOS_TRACKING_CARD_MILLIS)
             sosCard.visibility = if (active) View.VISIBLE else View.GONE
             hero.visibility = View.VISIBLE
+            sosCardTimer.removeCallbacks(sosCardExpiry)
             if (latest == null || !active) return
+            // Room only emits on outbox writes; re-evaluate when the delivered card's window ends.
+            if (latest.deliveredAt != null)
+                sosCardTimer.postDelayed(sosCardExpiry, latest.capturedMillis + SOS_TRACKING_CARD_MILLIS - now + 1_000L)
+            val installation = savedInstallation
             val raised = shortCommandTime(latest.capturedMillis)
             sosRaised.text = "Raised $raised on this phone"
             markStep(sosSaved, true, raised)
             markStep(
                 sosDelivered,
                 latest.deliveredAt != null,
-                latest.deliveredAt?.let { shortUtcTime(it) } ?: "Waiting for Command receipt · retries automatically",
+                latest.deliveredAt?.let { shortUtcTime(it) } ?: when {
+                    latest.quarantined -> "Delivery rejected · fix the error, then Retry saved messages"
+                    installation != null && installation.endpoint.isBlank() -> "Not sent · add a Command address"
+                    installation?.deliveryPaused == true -> "Not sent · delivery paused; check Saved data & sync"
+                    else -> "Waiting for Command receipt · retries automatically"
+                },
             )
             markStep(sosOperator, false, "Check Command. Delivery is not a human acknowledgement.")
         }
+        sosCardExpiry = Runnable { renderSosCard(); v46Refresh?.invoke() }
         scope.launch {
             app.repository.dao.observeSos().collect { rows ->
                 latestSos = rows
@@ -3761,12 +3776,12 @@ class MainActivity : Activity() {
             return picker
         }
         /** Save / Cancel appear only while the page has unsaved changes. */
-        fun saveBar(page: LinearLayout, cancel: () -> Unit): LinearLayout {
+        fun saveBar(page: LinearLayout, commit: () -> Unit, cancel: () -> Unit): LinearLayout {
             val bar = LinearLayout(this)
             bar.addView(ui.label("Unsaved changes", TextRole.Caption), LinearLayout.LayoutParams(0, -2, 1f))
             bar.addView(ui.button("Cancel") { cancel() }, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(8) })
             bar.addView(
-                ui.button("Save") { saveButton.performClick() }.apply { ui.style(this, primary = true) },
+                ui.button("Save") { commit() }.apply { ui.style(this, primary = true) },
                 LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(8) },
             )
             ui.equalHeights(bar)
@@ -3774,7 +3789,8 @@ class MainActivity : Activity() {
             bar.visibility = View.GONE
             return bar
         }
-        val partyActions = saveBar(party) {
+        // Each bar saves only its own page; the other page's draft is neither saved nor validated.
+        val partyActions = saveBar(party, { save(partyOnly = true) }) {
             val state = savedInstallation ?: return@saveBar
             partyId.setText(state.partyId)
             partyName.setText(state.partyName)
@@ -3791,7 +3807,7 @@ class MainActivity : Activity() {
         val intervalCard = ui.card(policy, 0)
         v46PartyIntervalPicker = intervalPicker(intervalCard, partyInterval, restoredPartyCustomInterval)
         footer(policy, "Future observations only. History is unchanged.")
-        val policyActions = saveBar(policy) {
+        val policyActions = saveBar(policy, { save(policyOnly = true) }) {
             savedInstallation?.let { interval.setText(it.localInterval.toString()) }
         }
         fun renderSaveBars() {
@@ -4767,9 +4783,13 @@ class MainActivity : Activity() {
             commandSummary.contentDescription =
                 "Command, $commandText" + if (unreachable) "; saved data retries automatically" else ""
             lastAckValue.text = state?.lastAck?.let { shortUtcTime(it) } ?: "—"
+            renderSosCard()
             val setup = preflight.snapshot()
+            val sosBlocked = sosCard.visibility == View.VISIBLE &&
+                latestSos.maxByOrNull { it.capturedMillis }?.let { it.deliveredAt == null && (it.quarantined || state?.deliveryPaused == true) } == true
             val attention =
                 when {
+                    sosBlocked -> Triple("SOS not delivered", "Delivery needs attention. Open Saved data & sync.", "Saved data & sync")
                     !configured -> Triple("Add a Command address", "Tracking works offline; nothing can be delivered yet.", "Party & Command")
                     !setup.precise -> Triple("Precise location required", "Allow precise location so fixes are accurate.", "Field readiness")
                     setup.gps == false -> Triple("Location (GPS) is off", "Turn on location to collect GNSS fixes.", "Field readiness")
@@ -4778,7 +4798,8 @@ class MainActivity : Activity() {
                     setup.optimizationExemption != true -> Triple("Background activity may be limited", "Android may pause tracking with the screen off.", "Field readiness")
                     else -> null
                 }
-            val showAttention = attention != null && sosCard.visibility != View.VISIBLE
+            // During SOS only actions that unblock its delivery stay visible.
+            val showAttention = attention != null && (sosCard.visibility != View.VISIBLE || sosBlocked || !configured)
             if (attention != attentionShown) {
                 attentionShown = attention
                 attentionList.removeAllViews()
@@ -5082,6 +5103,7 @@ class MainActivity : Activity() {
         start: Boolean = false,
         reenroll: Boolean = false,
         policyOnly: Boolean = false,
+        partyOnly: Boolean = false,
     ) {
         if (!initialized && !start) {
             settingsFeedback.text = "Settings not saved · storage unavailable"
@@ -5104,7 +5126,8 @@ class MainActivity : Activity() {
         val id = partyId.text.toString().trim()
         val name = partyName.text.toString().trim()
         val url = endpoint.text.toString().trim()
-        val seconds = interval.text.toString().toIntOrNull()
+        val seconds =
+            if (partyOnly) savedInstallation?.localInterval else interval.text.toString().toIntOrNull()
         val saveJob =
             scope.launch {
                 try {
@@ -5353,6 +5376,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         resumed = true
+        v46Refresh?.invoke()
         app.physicalButtonTest.activityResumed()
         if (::physicalButtonPanel.isInitialized && physicalButtonPanel.visibility == View.VISIBLE)
             refreshPhysicalButtonHistory()
@@ -5648,6 +5672,7 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         resumed = false
         if (::sosHold.isInitialized) sosHold.dispose()
+        sosCardTimer.removeCallbacksAndMessages(null)
         if (pendingStart && (!isChangingConfigurations || savingStart))
             app.operational.update { it.copy(starting = false) }
         physicalButtonRefresh?.cancel()

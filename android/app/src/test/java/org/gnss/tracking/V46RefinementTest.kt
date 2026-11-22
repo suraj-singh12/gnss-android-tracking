@@ -101,6 +101,68 @@ class V46RefinementTest {
     }
 
     @Test
+    fun eachSaveBarSavesOnlyItsOwnPageAndIgnoresTheOtherDraft() = runBlocking {
+        withContext(Dispatchers.IO) { app.repository.settings("A", "Alpha", "http://192.168.1.2:8080", 10) }
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            val a = controller.get()
+            until { shown(a).filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled } }
+            until { (field(a, "endpoint") as TextView).text.toString() == "http://192.168.1.2:8080" }
+            fun save() = shown(a).filterIsInstance<Button>().single { it.text == "Save" }.performClick()
+            openNativeScreen(a, "Party & Command"); settle()
+            (field(a, "endpoint") as TextView).text = "http://192.168.1.9:8080"
+            openNativeScreen(a, "Tracking policy"); settle()
+            (field(a, "interval") as TextView).text = "30"
+            settle()
+            save()
+            until { kotlinx.coroutines.runBlocking(Dispatchers.IO) { app.repository.state() }.localInterval == 30 }
+            assertEquals("Unsaved address draft is not committed by Tracking policy",
+                "http://192.168.1.2:8080", withContext(Dispatchers.IO) { app.repository.state() }.endpoint)
+            (field(a, "interval") as TextView).text = "3"
+            openNativeScreen(a, "Party & Command"); settle()
+            save()
+            until { kotlinx.coroutines.runBlocking(Dispatchers.IO) { app.repository.state() }.endpoint == "http://192.168.1.9:8080" }
+            assertEquals("Invalid interval draft neither blocks nor rides along", 30,
+                withContext(Dispatchers.IO) { app.repository.state() }.localInterval)
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test
+    fun deliveredSosCardExpiresOnItsDeadlineWithoutADatabaseEmission() = runBlocking {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            val a = controller.get()
+            until { shown(a).filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled } }
+            val captured = System.currentTimeMillis() - 30 * 60_000L + 3_000L
+            withContext(Dispatchers.IO) {
+                val row = app.repository.saveSos(Protocol.newId(), captured, captured, null, Health()).row
+                app.repository.dao.updateRow(app.repository.dao.row(row.sequence)!!.copy(deliveredAt = "2026-11-22T00:00:00Z"))
+            }
+            until { texts(a).any { it.startsWith("Raised ") } }
+            // No further outbox write: only the scheduled deadline can hide the card.
+            until { texts(a).none { it.startsWith("Raised ") } }
+            assertTrue("Needs attention returns once the card is gone", texts(a).contains("Add a Command address"))
+        } finally {
+            controller.pause().stop().destroy()
+        }
+    }
+
+    @Test
+    fun undeliverableSosSaysWhyAndKeepsTheUnblockingAction() = runBlocking {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            val a = controller.get()
+            until { shown(a).filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled } }
+            withContext(Dispatchers.IO) {
+                app.repository.saveSos(Protocol.newId(), System.currentTimeMillis(), System.currentTimeMillis(), null, Health())
+            }
+            until { texts(a).contains("Not sent · add a Command address") }
+            assertFalse(texts(a).contains("Waiting for Command receipt · retries automatically"))
+            assertTrue("Setup stays reachable during SOS", texts(a).contains("Add a Command address"))
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test
     fun retiredDestinationsHaveNoEntriesAndRestoredRoutesLandOnTheirOwners() = runBlocking {
         val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
         try {
