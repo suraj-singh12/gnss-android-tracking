@@ -192,8 +192,8 @@ class VisualRegressionTest(private val profile: Profile) {
             if (scrollBottom()) check("tracking-urgent-alert-bottom", "Tracking")
             // Every destination, top and scrolled end.
             for (screen in listOf(
-                "Settings", "Party & Command", "Command access", "Manage Command access",
-                "Field readiness", "Tracking policy", "Policy details", "Emergency controls",
+                "Settings", "Party & Command", "Command access",
+                "Field readiness", "Tracking policy", "Emergency", "Appearance",
                 "Diagnostics", "Command Instructions", "History search & filters", "Instruction filters", "Phone Alerts",
                 "Saved data & sync", "SOS event history", "SOS details",
                 "Diagnostic tools", "Advanced logs",
@@ -256,17 +256,32 @@ class VisualRegressionTest(private val profile: Profile) {
                     openNativeScreen(a, "Tracking"); app.operational.value = Operational(tracking = true); settle(); click("Stop Tracking")
                 }
                 app.operational.value = Operational(); settle()
-                dialog("enrollment-steps") { openNativeScreen(a, "Command access"); settle(); click("Enrollment steps ›") }
-                dialog("disable-remote-control") { openNativeScreen(a, "Manage Command access"); settle(); click("Disable remote control") }
-                dialog("re-enroll") { openNativeScreen(a, "Manage Command access"); settle(); click("Re-enroll Command") }
+                val fixture = withContext(Dispatchers.IO) { app.repository.state() }
+                val authority = "11111111-1111-4111-8111-111111111111"
+                val enrollment = "22222222-2222-4222-8222-222222222222"
+                dialog("review-authorization") {
+                    openNativeScreen(a, "Command access"); settle()
+                    nativeViews(content).filterIsInstance<EditText>().single { it.isShown && it.hint == "Paste Command credential" }
+                        .setText("gnss1:$authority:${fixture.deviceId}:$enrollment:${"01".repeat(32)}")
+                    click("Review & authorize")
+                }
+                // Disable and Re-enroll exist only once an enrollment does.
+                withContext(Dispatchers.IO) { app.repository.edit { it.copy(controlAuthority = authority, controlEnrollment = enrollment) } }
+                settle()
+                dialog("disable-remote-control") { openNativeScreen(a, "Command access"); settle(); click("Disable remote control") }
+                dialog("re-enroll") { openNativeScreen(a, "Command access"); settle(); click("Re-enroll Command") }
+                withContext(Dispatchers.IO) {
+                    app.repository.edit { it.copy(controlAuthority = fixture.controlAuthority, controlEnrollment = fixture.controlEnrollment) }
+                }
+                settle()
                 dialog("instruction-filter") { openNativeScreen(a, "History search & filters"); settle(); click("Filter history") }
                 dialog("retry") { openNativeScreen(a, "Saved data & sync"); settle(); click("Retry saved messages") }
-                dialog("phone-alert") { openNativeScreen(a, "Phone Alerts"); settle(); click("View alert & acknowledge") }
+                dialog("phone-alert") { openNativeScreen(a, "Phone Alerts"); settle(); click("Acknowledge / Stop Alert") }
                 dialog("invalid-interval") {
-                    openNativeScreen(a, "Party & Command"); settle()
+                    openNativeScreen(a, "Tracking policy"); settle()
                     val label = nativeViews(root).filterIsInstance<android.widget.TextView>().single { it.text == "Custom interval · seconds" && it.labelFor != View.NO_ID && (it.parent as View).isShown }
                     a.findViewById<EditText>(label.labelFor).setText("3")
-                    click("Save settings")
+                    click("Save")
                 }
                 dialog("unsaved-edits") {
                     @Suppress("DEPRECATION") a.onBackPressed()

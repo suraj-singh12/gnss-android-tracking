@@ -217,7 +217,9 @@ class UiNavigationVisualTest {
                         assertTrue(visible.contains("Stopped"))
                         assertFalse(
                             "A stopped snapshot must not imply a current fresh fix",
-                            visible.contains("Fresh fix"),
+                            nativeViews(root).filterIsInstance<TextView>().any {
+                                it.isShown && (it.text == "Fresh" || it.text == "Fresh fix")
+                            },
                         )
                     }
                     assertTrue(

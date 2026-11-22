@@ -169,7 +169,7 @@ class DialogVisualTest {
                 settle()
                 openNativeScreen(a, "Phone Alerts")
                 settle()
-                click("View alert & acknowledge")
+                click("Acknowledge / Stop Alert")
                 capture("phone-alert")
                 assertEquals("unknown", app.repository.dao.command(alertId)!!.state)
                 openNativeScreen(a, "Diagnostic tools")

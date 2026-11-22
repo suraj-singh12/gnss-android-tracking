@@ -41,12 +41,13 @@ class V46PolishTest {
             val root = a.findViewById<ViewGroup>(android.R.id.content)
             root.measure(View.MeasureSpec.makeMeasureSpec(390, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(842, View.MeasureSpec.EXACTLY))
             root.layout(0, 0, 390, 842)
-            for ((caption, expected) in listOf("Pending observations" to "1", "Command ACKed" to "0")) {
-                val label = nativeViews(root).filterIsInstance<TextView>().single { it.isShown && it.text == caption }
-                val metric = (label.parent as LinearLayout).getChildAt(0) as TextView
+            for ((caption, expected) in listOf("Waiting on phone" to "1", "Delivered to Command" to "0")) {
+                val label = nativeViews(root).filterIsInstance<TextView>().last { it.isShown && it.text == caption }
+                val row = (label.parent as View).parent as LinearLayout
+                val metric = row.getChildAt(row.childCount - 1) as TextView
                 assertEquals(expected, metric.text.toString())
                 assertTrue("Real queue value has visible width", metric.width > 0)
-                assertTrue("Metric is laid out above its caption", metric.bottom <= label.top)
+                assertTrue("Value is laid out after its label", metric.left >= label.right)
             }
             val source = TextView(a).apply { text = "Address: http://192.168.1.10:8080\nIdentity: 12345678-1234-4234-8234-123456789012\nUnknown condition: Unverified\n2026-11-09T10:20:30Z" }
             val host = NativeUi(a).evidence(source)

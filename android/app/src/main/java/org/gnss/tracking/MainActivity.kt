@@ -1429,10 +1429,22 @@ class MainActivity : Activity() {
             healthRows
                 .getValue("Remote control")
                 .update(
-                    trustState,
-                    if (binding?.controlEnrollment == null) "Enrollment required"
-                    else "Authority bound",
-                    if (trustState == "Contact verified") R.color.accent else R.color.muted,
+                    when (trustState) {
+                        "Not enrolled", "Loading…" -> trustState
+                        "Disabled on this phone" -> "Disabled"
+                        "Authentication failed", "Contact unavailable" -> "Unconfirmed"
+                        else -> "Enrolled"
+                    },
+                    when (trustState) {
+                        "Not enrolled" -> "Enrollment required"
+                        "Credential enrolled" -> "Contact not checked yet"
+                        else -> trustState
+                    },
+                    when (trustState) {
+                        "Contact verified", "Credential enrolled" -> R.color.accent
+                        "Disabled on this phone", "Authentication failed", "Contact unavailable" -> R.color.warning
+                        else -> R.color.muted
+                    },
                 )
         }
         scope.launch {
@@ -1713,7 +1725,7 @@ class MainActivity : Activity() {
                         unresolvedDetail.text = queues.blocked.toString()
                         lastAckLabel.text =
                             "Last ACK · ${state.lastAck?.let { shortUtcTime(it) } ?: "None"}"
-                        ackDetail.text = state.lastAck ?: "No message ACK recorded"
+                        ackDetail.text = state.lastAck ?: "—"
                         // V4.6: the Command indicator owns connectivity and the SOS collector
                         // owns pending-SOS context (see the observeSos combine).
                         if (!v46Layout) {
@@ -1784,13 +1796,13 @@ class MainActivity : Activity() {
                             op.tracking &&
                                 op.gnss == "fix" &&
                                 op.ageMillis != null &&
-                                op.ageMillis in 0..30000
+                                op.ageMillis in 0..maxOf(30_000L, (state.overrideSeconds ?: state.localInterval) * 2_000L)
                         healthRows
                             .getValue("GNSS")
                             .update(
                                 if (!op.tracking) "Stopped"
-                                else if (fresh) "Fresh fix"
-                                else if (op.ageMillis != null) "Stale / unknown" else "No fix",
+                                else if (fresh) "Fresh"
+                                else if (op.ageMillis != null) "Stale" else "No fix",
                                 listOfNotNull(
                                         op.accuracy?.let {
                                             "%.1f m".format(java.util.Locale.ROOT, it)
@@ -1802,7 +1814,7 @@ class MainActivity : Activity() {
                                     )
                                     .joinToString(" · ")
                                     .ifEmpty { "Accuracy unavailable" },
-                                if (fresh) R.color.accent else R.color.muted,
+                                if (!op.tracking) R.color.muted else if (fresh) R.color.accent else R.color.warning,
                             )
                         healthRows
                             .getValue("Storage")
@@ -1810,7 +1822,7 @@ class MainActivity : Activity() {
                                 if (collectionHealth.writeFailures > 0) "Write error"
                                 else if (state.knownCollectionLoss > 0) "Needs attention"
                                 else if (collectionHealth.awaitingCommit > 0) "Writing"
-                                else "Ready",
+                                else "OK",
                                 "${queues.gnss} queued" +
                                     if (state.knownCollectionLoss > 0)
                                         " · ${state.knownCollectionLoss} lost"
@@ -1826,43 +1838,56 @@ class MainActivity : Activity() {
                             .getValue("Command")
                             .update(
                                 // Same vocabulary and authority as the Tracking indicator.
-                                if (app.sender.commandReachable == true) "Online"
-                                else "Offline",
+                                when {
+                                    state.endpoint.isBlank() -> "Not set up"
+                                    app.sender.commandReachable == true -> "Reachable"
+                                    app.sender.commandReachable == false -> "Unreachable"
+                                    else -> "Not checked yet"
+                                },
                                 "Message ACK · ${state.lastAck?.let { shortUtcTime(it) } ?: "None"}",
-                                if (app.sender.commandReachable == true) R.color.accent
-                                else R.color.muted,
+                                when {
+                                    state.endpoint.isBlank() -> R.color.muted
+                                    app.sender.commandReachable == true -> R.color.accent
+                                    app.sender.commandReachable == false -> R.color.warning
+                                    else -> R.color.muted
+                                },
                             )
                         healthRows
                             .getValue("Sync")
                             .update(
                                 if (queues.blocked > 0 || state.deliveryPaused) "Needs attention"
                                 else if (op.historyPaused) "Paused"
-                                else if (queues.gnss == 0) "Queue clear" else "Pending",
+                                else if (queues.gnss > 0) "${queues.gnss} waiting"
+                                else if (queues.deliveredGnss == 0) "Nothing saved" else "Up to date",
                                 "${queues.gnss} pending" +
                                     if (queues.blocked > 0) " · ${queues.blocked} unresolved"
                                     else "",
-                                if (queues.blocked > 0 || state.deliveryPaused) R.color.warning
+                                if (queues.blocked > 0 || state.deliveryPaused ||
+                                    (queues.gnss > 0 && app.sender.commandReachable == false)) R.color.warning
+                                else if (queues.gnss == 0 && queues.deliveredGnss > 0) R.color.accent
                                 else R.color.muted,
                             )
                         healthRows
                             .getValue("SOS")
                             .update(
-                                if (queues.sos > 0) "${queues.sos} pending" else "No pending",
-                                "Operator ACK · Command only",
+                                if (queues.sos > 0) "Active" else "None",
+                                if (queues.sos > 0) "${queues.sos} awaiting Command receipt"
+                                else "Operator ACK · Command only",
                                 if (queues.sos > 0) R.color.warning else R.color.muted,
                             )
                         val freeSpace = filesDir.usableSpace
                         healthRows
                             .getValue("Device space")
                             .update(
-                                if (freeSpace < 64L * 1024 * 1024) "Low" else "Available",
-                                if (freeSpace >= 1024L * 1024 * 1024)
-                                    "%.1f GB free"
-                                        .format(
-                                            java.util.Locale.ROOT,
-                                            freeSpace.toDouble() / (1024L * 1024 * 1024),
-                                        )
-                                else "${freeSpace / (1024 * 1024)} MB free",
+                                (if (freeSpace < 64L * 1024 * 1024) "Low · " else "") +
+                                    if (freeSpace >= 1024L * 1024 * 1024)
+                                        "%.1f GB free"
+                                            .format(
+                                                java.util.Locale.ROOT,
+                                                freeSpace.toDouble() / (1024L * 1024 * 1024),
+                                            )
+                                    else "${freeSpace / (1024 * 1024)} MB free",
+                                "",
                                 if (freeSpace < 64L * 1024 * 1024) R.color.warning
                                 else R.color.muted,
                             )
@@ -4161,7 +4186,12 @@ class MainActivity : Activity() {
             }
         // Activity: type chips over the existing record owners (instructions, alerts, SOS).
         val activityChips = LinearLayout(this)
-        add(activitySeg, activityChips)
+        // Chips scroll sideways instead of wrapping or shrinking below 48dp at large text.
+        val activityChipScroll = android.widget.HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(activityChips)
+        }
+        add(activitySeg, activityChipScroll)
         val activityBoxes = linkedMapOf("Instructions" to ui.column(), "Alerts" to ui.column(), "SOS" to ui.column())
         activityBoxes.values.forEach { add(activitySeg, it) }
         val chipButtons = linkedMapOf<String, Button>()
@@ -4170,6 +4200,10 @@ class MainActivity : Activity() {
             activityBoxes.forEach { (key, box) -> box.visibility = if (kind == "All" || kind == key) View.VISIBLE else View.GONE }
             chipButtons.forEach { (key, chip) ->
                 styleChoice(chip, key == kind)
+                chip.setPadding(dp(12), 0, dp(12), 0)
+                chip.minWidth = ui.px(R.dimen.control_height)
+                chip.minimumWidth = ui.px(R.dimen.control_height)
+                chip.maxLines = 1
                 chip.background = ui.shape(if (key == kind) R.color.positive_surface else R.color.surface, R.dimen.radius_pill, if (key == kind) null else R.color.line)
                 chip.setTextColor(getColor(if (key == kind) R.color.accent else R.color.ink))
                 chip.contentDescription = "$key${if (key == kind) ", selected" else ""}"
@@ -4177,7 +4211,6 @@ class MainActivity : Activity() {
         }
         for (kind in listOf("All", "Instructions", "Alerts", "SOS")) {
             val chip = ui.button(kind) { selectActivity(kind) }
-            chip.setPadding(dp(12), 0, dp(12), 0)
             chipButtons[kind] = chip
             activityChips.addView(chip, LinearLayout.LayoutParams(-2, -2).apply { if (kind != "All") marginStart = dp(6) })
         }
@@ -4198,17 +4231,18 @@ class MainActivity : Activity() {
         // Saved data & sync is the single recovery destination: real Room counts, unresolved
         // rows, last durable ACK, Sync All Now, the existing confirmed Retry and export.
         val saved = page("Saved data & sync", "Diagnostics")
-        val savedCard = ui.card(saved, 0)
-        val savedMetrics = LinearLayout(this)
-        for ((view, caption) in listOf(pendingDetail to "Pending observations", deliveredDetail to "Command ACKed")) {
-            ui.metric(savedMetrics, view, caption)
+        // v3: one grouped list (Waiting on phone, Delivered to Command, Unresolved, Last
+        // Command ACK) over the same Room-count owners, then sync progress and actions.
+        val savedList = ui.list(saved)
+        valueRow(savedList, "Waiting on phone", plainValue(pendingDetail))
+        valueRow(savedList, "Delivered to Command", plainValue(deliveredDetail))
+        valueRow(savedList, "Unresolved", plainValue(unresolvedDetail))
+        valueRow(savedList, "Last Command ACK", plainValue(ackDetail))
+        val savedCard = ui.column().apply {
+            setPadding(ui.px(R.dimen.list_row_padding_h), ui.px(R.dimen.list_row_padding_v), ui.px(R.dimen.list_row_padding_h), ui.px(R.dimen.list_row_padding_v))
         }
-        add(savedCard, savedMetrics)
-        peerRow(savedCard, "Unresolved observations", value(unresolvedDetail))
-        peerRow(savedCard, "Last message ACK", value(ackDetail))
-        (unresolvedDetail.parent as View).let { (it.layoutParams as LinearLayout.LayoutParams).topMargin = dp(14) }
-        // Saved-GNSS sync state and progress (formerly on the retired Storage health page):
-        // the same Room-count based summary/percentage owners, now beside Sync All Now.
+        savedList.addView(savedCard, LinearLayout.LayoutParams(-1, -2))
+        // Saved-GNSS sync state and progress: the same Room-count based summary/percentage owners.
         val syncState = LinearLayout(this).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
         for (v in listOf(historySummary, historyProgressLabel)) {
             detach(v)
@@ -4218,11 +4252,9 @@ class MainActivity : Activity() {
         ui.text(historySummary, TextRole.Label)
         ui.text(historyProgressLabel, TextRole.Meta)
         syncState.addView(historySummary, LinearLayout.LayoutParams(0, -2, 1f))
-        syncState.addView(historyProgressLabel, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8) })
-        add(savedCard, syncState, 14)
+        add(savedCard, syncState)
+        // v3: the rows above carry the counts; a 0/0 "Queue clear" bar read as delivered.
         detach(historyProgressBar)
-        add(savedCard, historyProgressBar, 6)
-        historyProgressBar.layoutParams.height = dp(4)
         val savedSync = action(savedCard, "Sync All Now", true) { syncNowButton.performClick() }
         detach(retryButton)
         ui.style(retryButton)
@@ -4233,7 +4265,8 @@ class MainActivity : Activity() {
                 visibility = View.GONE
             }
         add(savedCard, recoveryFailure, 6)
-        export(savedCard, "Export transfer evidence")
+        export(savedCard, "Export evidence")
+        footer(saved, "Message receipt and Command reconstruction are separate.")
         val tools = routes.getValue("Diagnostic tools")
         tools.removeAllViews()
         pagePadding(tools)
@@ -4426,7 +4459,7 @@ class MainActivity : Activity() {
         add(alertCard, alertFailure, 6)
         lateinit var alertAction: Button
         alertAction =
-            action(alertCard, "View alert & acknowledge", true) {
+            action(alertCard, "Acknowledge / Stop Alert", true) {
                 val row =
                     v46Records.firstOrNull {
                         it.trusted &&
@@ -4534,7 +4567,7 @@ class MainActivity : Activity() {
                 alertCustody.text = if (row.confirmed) "Confirmed" else "Unconfirmed"
             }
             alertAction.text =
-                if (active != null) "View alert & acknowledge" else "View alert history"
+                if (active != null) "Acknowledge / Stop Alert" else "View alert history"
             // Primary only while the recipient has something to do.
             ui.style(alertAction, primary = active != null)
             alertAction.isEnabled = true
@@ -4816,10 +4849,11 @@ class MainActivity : Activity() {
             dock.setPadding(dp(9), dp(7), dp(9), dp(7))
             sosStatus.minHeight = 0
             sosStatus.minLines = 1
-            sosStatus.maxLines = 1
+            // Safety caption wraps at large text instead of truncating ("Release to can…").
+            sosStatus.maxLines = 2
             ui.text(sosStatus, TextRole.Micro, R.color.danger)
             sosStatus.setPadding(0, 0, 0, 0)
-            sosStatus.ellipsize = android.text.TextUtils.TruncateAt.END
+            sosStatus.ellipsize = null
             peerRow(dock, "Emergency SOS", sosStatus)
             (dock.getChildAt(0).layoutParams as LinearLayout.LayoutParams).topMargin = 0
             ((dock.getChildAt(0) as LinearLayout).getChildAt(0) as TextView).let {

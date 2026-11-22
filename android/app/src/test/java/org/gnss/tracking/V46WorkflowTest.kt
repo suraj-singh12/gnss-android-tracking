@@ -227,10 +227,10 @@ class V46WorkflowTest {
             openNativeScreen(controller.get(), "Phone Alerts")
             await {
                 all().filterIsInstance<Button>().any {
-                    it.isShown && it.text == "View alert & acknowledge"
+                    it.isShown && it.text == "Acknowledge / Stop Alert"
                 }
             }
-            click("View alert & acknowledge")
+            click("Acknowledge / Stop Alert")
             ShadowAlertDialog.getLatestAlertDialog()
                 .getButton(AlertDialog.BUTTON_NEUTRAL)
                 .performClick()
@@ -240,7 +240,7 @@ class V46WorkflowTest {
                 }
             }
             assertEquals("unknown", app.repository.dao.command(id)!!.state)
-            click("View alert & acknowledge")
+            click("Acknowledge / Stop Alert")
             ShadowAlertDialog.getLatestAlertDialog()
                 .getButton(AlertDialog.BUTTON_POSITIVE)
                 .performClick()

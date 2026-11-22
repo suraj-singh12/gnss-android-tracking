@@ -4,9 +4,12 @@ This is the canonical engineering guide for Android user-interface work. It cove
 where styling lives, how to inspect the rendered app, how the automated visual
 regression suite works, and the self-review every UI change must pass before delivery.
 
-Design authority is unchanged: the approved
-[Android V4.6 reference](https://github.com/suraj-singh12/gnss-android-tracking/blob/8d95eafe6fdcd1423027194ea128ae7a8b91236d/docs/design/approved/android-v4.6-interactive.html),
-the Android sections and the 15 operator rules in [design-system.md](../docs/design-system.md),
+Design authority: the operator-approved
+[Android v3 prototype](../docs/design/approved/android-v3-simplified-interactive.html)
+([Issue #68](https://github.com/suraj-singh12/gnss-android-tracking/issues/68)), which
+supersedes the [Android V4.6 reference](https://github.com/suraj-singh12/gnss-android-tracking/blob/8d95eafe6fdcd1423027194ea128ae7a8b91236d/docs/design/approved/android-v4.6-interactive.html)
+for placement and hierarchy while keeping its tokens and components; the v3 and Android
+sections and the 15 operator rules in [design-system.md](../docs/design-system.md),
 the [preservation matrix](../docs/ui-preservation-matrix.md) and the decisions and
 evidence in [ui-acceptance.md](../docs/ui-acceptance.md). This guide says how to
 implement and verify that design. It does not authorize a redesign; new or changed
@@ -22,7 +25,15 @@ layered for historical reasons:
    (Room, `Sender`, `SosHoldGesture`, `CommandControl`, preflight and so on).
 2. `installReferenceScreens` and then `installV46Screens` re-parent those same controls
    into the V4.6 destinations. **The V4.6 layer is what users see.** It never creates a
-   second state owner; it moves and restyles existing views.
+   second state owner; it moves and restyles existing views. Since Issue #68 the same
+   layer lays out the v3 hierarchy: root tabs get a large in-page title (`rootTitle`) and
+   the app bar shows only on nested pages; Tracking is a status card plus grouped
+   `valueRow` lists; the Settings landing is rebuilt from current state by
+   `renderSettingsLanding`; Diagnostics embeds the existing Saved data, Tools,
+   Instructions, Phone Alerts and SOS history pages into Health / Activity / Tools
+   segments. Old route names stay as aliases (`navigate` maps them to their v3 owner).
+3. `Appearance.kt` owns the System / Day / Night preference (legacy `night` boolean is
+   still read until a mode is chosen). `TrackingNotification` uses the same resolution.
 
 When you change how something looks, change it in the V4.6 layer or in the shared
 components below. Do not restyle a control in `onCreate` and expect the result to
@@ -59,11 +70,11 @@ To restyle the whole app, change a token or a `NativeUi` component. Examples:
 | `shape(tone, radiusToken, stroke?)` | Any rounded surface | `stroke = null` for borderless. `surface(tone, radiusDp)` remains for legacy call sites. |
 | `card(parent, gap, tone)` | Grouped content | 16dp radius, 1dp `line` border, 14dp padding. |
 | `section(parent, title)` | Uppercase group heading | 18dp above, 8dp below; accessibility heading. |
-| `menu(parent, title, subtitle, action)` | Navigation rows | Title + muted subtitle + right chevron; 60dp minimum. Grouped rows share one bordered list with dividers only between peers. |
+| `menu(parent, title, subtitle, status?, value?, action)` | Navigation rows | Title + muted subtitle + optional trailing value or status pill + right chevron; 60dp minimum. Grouped rows share one bordered list with dividers only between peers. The Settings landing uses `value` for the current setting ("10 s", "System"). |
 | `fact(parent, label, value)` | Read-only label/value | Selectable value, end-aligned. |
 | `pill(view, positive)` | Status | Borderless full pill; teal positive, amber degraded/unknown. |
 | `statusPill(view, StatusTone)` | Status with a neutral option | `POSITIVE`, `WARNING`, `NEUTRAL` (quiet informational, e.g. "Test inactive"). |
-| `iconPill(view, icon, positive)` | Status with an icon | Tracking's Command online/offline indicator (`ic_command`). |
+| `iconPill(view, icon, positive)` | Status with an icon | Legacy; v3 Tracking shows Command reachability as a plain value row. |
 | `style(button, primary, danger)` | Actions | Secondary (wash + border), primary (filled `action`), danger (caution wash). Disabled uses `disabled_*` with readable `disabled_ink`. |
 | `stopStyle(button)` | Stop Tracking (hero and its confirmation) | Approved pale-red treatment in both themes. Do not replace. |
 | `quiet(button)` | Cancel/Close/inline links | Text action with ripple. |
@@ -73,15 +84,16 @@ To restyle the whole app, change a token or a `NativeUi` component. Examples:
 | `list(parent)`, `menu(…, status)` , `rowRipple()` | Record lists | One bordered list with peer dividers; rows may carry a trailing `statusPill`. Used by Command Instructions and History search. |
 | `selector(spinner)` + `selectorAdapter(items)` / `selectorItem(view)` | Exclusive choices | Outlined field, single down-chevron at a fixed 12dp end inset, Body type in field and popup. |
 | `switchRow(switch)` | Binary settings | Label start, Switch end, 48dp. Use a Switch, never a CheckBox, for a binary setting. |
-| `intervalPicker(card, editor, …)` (in `installV46Screens`) | Reporting interval | One selector + Custom field shared by Party & Command and Tracking policy over the same mirrored draft. |
+| `intervalPicker(card, editor, …)` (in `installV46Screens`) | Reporting interval | One selector + Custom field; v3 shows it on Tracking policy with its own Save bar over the same canonical draft. |
 | `metric(parent, value, caption)` | Large counts | 26sp autosizing value with caption. |
 | `feedback(view)`, `collapsingLabel(role)` | Status/error text | A collapsing label measures 0 height while empty, so an idle slot leaves no gap. |
 | `dialog(alertDialog)`, `dialogContent`, `dialogListAdapter` | App-owned dialogs | 18dp radius, 18sp title, 14sp body, quiet negative, primary or caution positive (`CAUTION_ACTIONS`), 12dp bottom inset, 64dp minimum action width. |
 | `evidence(source)` | Structured read-only evidence | Presentation adapter over an existing bound TextView. |
 | `icon(resource, size, tint)` | Vector artwork | Tinted with a semantic colour. Navigation chevrons point right; selectors use the down chevron. |
 
-The 24dp half-shaded appearance vector, the 1.2-second SOS hold dock and Stop Tracking
-are protected approved treatments. Do not reintroduce sun/moon artwork or text glyphs.
+The 1.2-second SOS hold dock and Stop Tracking are protected approved treatments.
+Appearance is chosen in Settings › Appearance (v3); do not reintroduce an app-bar
+theme control, sun/moon artwork or text glyphs.
 
 ### Rules for new UI code
 
@@ -274,11 +286,11 @@ and visual inspection complement each other; neither replaces the other.
 |---|---|---|---|---|---|---|
 | Tracking: stopped / active / offline / error | ● | ● | ● | ● | ● | ● |
 | Tracking: SOS pending, urgent alert (+ scrolled) | ● | ● | ● | ● | ● | ● |
-| Settings and its 7 nested pages | ● | ● | ● | ● | ● | ● |
-| Diagnostics and its 9 nested pages, instruction details | ● | ● | ● | ● | ● | ● |
+| Settings landing and its nested pages (Party & Command, Command access, Tracking policy, Field readiness, Emergency, Appearance) | ● | ● | ● | ● | ● | ● |
+| Diagnostics Health / Activity / Tools (legacy routes open the owning segment), record details | ● | ● | ● | ● | ● | ● |
 | Physical-key listening and real key-event result | ● | ● | ● | ● | ● | ● |
 | Party & Command with keyboard | K | | K | K | | |
-| Dialogs: stop tracking, enrollment steps, disable, re-enroll, instruction filter, retry, phone alert, invalid interval, unsaved edits | D | D | D | | | |
+| Dialogs: stop tracking, review authorization, disable, re-enroll, instruction filter, retry, phone alert, invalid interval, unsaved edits | D | D | D | | | |
 | Notifications (OS-owned content) | `NotificationVisualTest` | | | | | |
 
 Retired on 20 Nov 2026 and no longer reachable: Identity & verification details,
@@ -302,6 +314,6 @@ OEM rendering.
 - With the keyboard open, the SOS dock and navigation stay above it by design, which
   leaves a small form viewport on short screens. Real-device IME behaviour must be
   checked.
-- App-bar titles and the SOS dock caption are bounded single lines; at large text they
-  ellipsize. The full text stays available (screen content, content descriptions,
+- Nested-page app-bar titles and the SOS dock caption are bounded single lines; at large
+  text they ellipsize. Root tabs use a wrapping in-page title. The full text stays available (screen content, content descriptions,
   SOS history).
