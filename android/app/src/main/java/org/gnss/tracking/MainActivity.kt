@@ -263,16 +263,19 @@ class MainActivity : Activity() {
                     when (requested) {
                         "Physical Button Test" -> "Diagnostic tools"
                         "Command trust",
-                        "Identity & verification details" -> "Manage Command access"
+                        "Manage Command access",
+                        "Identity & verification details" -> "Command access"
                         "Storage health",
                         "Transfer recovery" -> "Saved data & sync"
                         "GNSS details",
                         "Command contact" -> "Diagnostics"
-                        "Change trusted Command" -> "Manage Command access"
+                        "Change trusted Command" -> "Command access"
+                        "Policy details" -> "Tracking policy"
+                        "Emergency controls" -> "Emergency"
                         "Edit connection" -> "Party & Command"
                         "Tracking & GNSS",
                         "Reporting interval" -> "Tracking policy"
-                        "Appearance & SOS" -> "Emergency controls"
+                        "Appearance & SOS" -> "Emergency"
                         "Advanced settings",
                         "Compare this phone",
                         "Enter credential",
@@ -3562,19 +3565,59 @@ class MainActivity : Activity() {
             }
         }
         val settings = routes.getValue("Settings")
-        rootTitle(settings, "Settings", "Set up the device, reporting and operational readiness.")
-        section(settings, "Device & Command")
-        menu(settings, "Party & Command", "Identity, address and reporting interval")
-        menu(settings, "Command access", "Enrollment and authenticated contact")
-        menu(settings, "Field readiness", "Location, notifications and battery")
-        menu(settings, "Tracking policy", "Adaptive storage and policy details")
-        section(settings, "Safety")
-        menu(settings, "Emergency controls", "SOS configuration and optional volume-key shortcut")
+        rootTitle(settings, "Settings")
+        // v3: a short grouped list; each row shows its current value and opens one page.
+        val settingsGroups = ui.column()
+        add(settings, settingsGroups)
+        var settingsSignature = ""
+        fun readinessIssues(setup: FieldReadiness) =
+            listOf(!setup.precise, setup.gps != true, setup.notifications != true, setup.powerSave != false, setup.optimizationExemption != true).count { it }
+        fun renderSettingsLanding() {
+            val state = savedInstallation
+            val configured = !state?.endpoint.isNullOrBlank()
+            val issues = readinessIssues(preflight.snapshot())
+            val accessStatus =
+                when {
+                    state == null -> "Loading" to StatusTone.NEUTRAL
+                    state.controlDisabled -> "Disabled" to StatusTone.WARNING
+                    state.controlEnrollment != null -> "Enrolled" to StatusTone.POSITIVE
+                    else -> "Not enrolled" to StatusTone.NEUTRAL
+                }
+            val intervalValue = state?.localInterval?.let { "$it s" } ?: "—"
+            val mode = Appearance.mode(this)
+            val signature = listOf(configured, state?.endpoint, state?.partyName, accessStatus.first, intervalValue, issues, mode).joinToString("|")
+            if (signature == settingsSignature) return
+            settingsSignature = signature
+            settingsGroups.removeAllViews()
+            ui.list(settingsGroups).also { g ->
+                ui.menu(g, "Party & Command", if (configured) state!!.endpoint else "Not set up", value = if (configured) state!!.partyName else null) { navigate("Party & Command") }
+                ui.menu(g, "Command access", "", accessStatus) { navigate("Command access") }
+            }
+            ui.list(settingsGroups, 20).also { g ->
+                ui.menu(g, "Tracking policy", "Reporting interval and storage", value = intervalValue) { navigate("Tracking policy") }
+                ui.menu(
+                    g, "Field readiness", "Location, notifications and battery",
+                    if (issues == 0) "Ready" to StatusTone.POSITIVE
+                    else "$issues ${if (issues == 1) "issue" else "issues"}" to StatusTone.WARNING,
+                ) { navigate("Field readiness") }
+            }
+            ui.list(settingsGroups, 20).also { g ->
+                ui.menu(g, "Emergency", "SOS hold and volume shortcut") { navigate("Emergency") }
+                ui.menu(g, "Appearance", "", value = mode) { navigate("Appearance") }
+            }
+        }
         val party = page("Party & Command", "Settings")
+        section(party, "Party")
         val form = ui.card(party, 0)
         field(form, "Party ID", partyId)
         field(form, "Party name", partyName)
-        field(form, "Command address", endpoint)
+        section(party, "Command")
+        val commandForm = ui.card(party, 0)
+        field(commandForm, "Address", endpoint)
+        partyId.hint = "e.g. alpha-2"
+        partyName.hint = "e.g. Field team"
+        endpoint.hint = "e.g. http://192.168.1.10:8080"
+        footer(party, "Saved on this phone. Tracking works offline without Command.")
         val partyInterval =
             EditText(this)
                 .also { v46PartyInterval = it }
@@ -3673,22 +3716,26 @@ class MainActivity : Activity() {
             renderPicker()
             return picker
         }
-        v46PartyIntervalPicker = intervalPicker(form, partyInterval, restoredPartyCustomInterval)
-        val partyActions = LinearLayout(this)
-        partyActions.addView(
-            ui.button("Cancel") {
-                cancelButton.performClick()
-                navigate("Settings")
-            },
-            LinearLayout.LayoutParams(0, -2, 1f),
-        )
-        partyActions.addView(
-            ui.button("Save settings") { saveButton.performClick() }
-                .apply { ui.style(this, primary = true) },
-            LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(8) },
-        )
-        ui.equalHeights(partyActions)
-        add(form, partyActions, 16)
+        /** Save / Cancel appear only while the page has unsaved changes. */
+        fun saveBar(page: LinearLayout, cancel: () -> Unit): LinearLayout {
+            val bar = LinearLayout(this)
+            bar.addView(ui.label("Unsaved changes", TextRole.Caption), LinearLayout.LayoutParams(0, -2, 1f))
+            bar.addView(ui.button("Cancel") { cancel() }, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(8) })
+            bar.addView(
+                ui.button("Save") { saveButton.performClick() }.apply { ui.style(this, primary = true) },
+                LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(8) },
+            )
+            ui.equalHeights(bar)
+            add(page, bar, 16)
+            bar.visibility = View.GONE
+            return bar
+        }
+        val partyActions = saveBar(party) {
+            val state = savedInstallation ?: return@saveBar
+            partyId.setText(state.partyId)
+            partyName.setText(state.partyName)
+            endpoint.setText(state.endpoint)
+        }
         add(party, settingsFeedback)
         val policy = page("Tracking policy", "Settings")
         // Tracking policy owns only Adaptive storage; the reporting interval lives in
@@ -3696,7 +3743,23 @@ class MainActivity : Activity() {
         // (app.requestAdaptive), so there is no Save button. The canonical `interval`
         // editor stays off-screen as the shared draft mirrored by the Party field.
         detach(interval)
-        val policyCard = ui.card(policy, 0)
+        section(policy, "Reporting interval")
+        val intervalCard = ui.card(policy, 0)
+        v46PartyIntervalPicker = intervalPicker(intervalCard, partyInterval, restoredPartyCustomInterval)
+        footer(policy, "Future observations only. History is unchanged.")
+        val policyActions = saveBar(policy) {
+            savedInstallation?.let { interval.setText(it.localInterval.toString()) }
+        }
+        fun renderSaveBars() {
+            val state = savedInstallation
+            partyActions.visibility =
+                if (state != null && (partyId.text.toString() != state.partyId || partyName.text.toString() != state.partyName ||
+                        endpoint.text.toString() != state.endpoint)) View.VISIBLE else View.GONE
+            policyActions.visibility =
+                if (state != null && interval.text.toString() != state.localInterval.toString()) View.VISIBLE else View.GONE
+        }
+        listOf(partyId, partyName, endpoint, interval).forEach { watch(it) { renderSaveBars() } }
+        val policyCard = ui.card(policy, 12)
         ui.switchRow(adaptive)
         ui.text(policyStatus, TextRole.Meta)
         policyStatus.setPadding(0, 0, 0, 0)
@@ -3705,59 +3768,62 @@ class MainActivity : Activity() {
         add(policyCard, policyStatus, 0)
         add(policyCard, ui.label("ON keeps fewer future observations when steady or stationary.", TextRole.Meta), 3)
         val policyFeedback = ui.collapsingLabel(TextRole.Caption)
-        menu(policy, "Policy details", "Phone setting, requested/effective interval and revision")
-            .also { row ->
-                // Standard 12dp card gap between the Adaptive storage card and its details row.
-                ((row.parent as View).layoutParams as LinearLayout.LayoutParams).topMargin = ui.px(R.dimen.space_md)
-            }
+        section(policy, "In effect")
+        // Filled from the retired Policy details page once its facts are bound (below).
+        val policyInEffect = ui.column()
+        add(policy, policyInEffect)
+        footer(policy, "Command can override the phone interval with an authenticated instruction.")
         val ready = page("Field readiness", "Settings")
         // One peer list: each requirement shows its actual state; only a requirement that
         // needs attention offers the existing OS action that resolves it.
-        val readinessList = ui.column().apply {
-            background = ui.shape(R.color.surface)
-            showDividers = LinearLayout.SHOW_DIVIDER_MIDDLE
-            dividerDrawable = android.graphics.drawable.GradientDrawable().apply {
-                setColor(getColor(R.color.line))
-                setSize(1, ui.px(R.dimen.stroke))
-            }
-        }
-        add(ready, readinessList)
-        class ReadinessRow(val state: TextView, val action: Button)
-        fun readinessRow(title: String, owner: Button, actionLabel: String): ReadinessRow {
+        val readinessAttentionHeader = ui.section(ready, "Needs attention")
+        val readinessAttention = ui.list(ready)
+        val readinessOkHeader = ui.section(ready, "Ready")
+        val readinessList = ui.list(ready)
+        class ReadinessRow(val view: LinearLayout, val state: TextView, val action: Button, val detail: TextView, val issue: String)
+        val readinessRows = mutableListOf<ReadinessRow>()
+        fun readinessRow(title: String, owner: Button, actionLabel: String, issue: String): ReadinessRow {
             val row = LinearLayout(this).apply {
                 gravity = android.view.Gravity.CENTER_VERTICAL
                 minimumHeight = ui.px(R.dimen.list_row_min_height)
                 val h = ui.px(R.dimen.list_row_padding_h)
-                setPadding(h, dp(6), h, dp(6))
+                setPadding(h, ui.px(R.dimen.list_row_padding_v), h, ui.px(R.dimen.list_row_padding_v))
             }
             val text = ui.column()
             text.addView(ui.label(title, TextRole.RowTitle))
-            val fix = ui.button(actionLabel) { owner.performClick() }.apply {
-                ui.quiet(this)
-                gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
-                setPadding(0, 0, 0, 0)
-                visibility = View.GONE
-            }
-            text.addView(fix, LinearLayout.LayoutParams(-2, -2))
+            val detail = ui.label("", TextRole.Meta).apply { visibility = View.GONE }
+            add(text, detail, 3)
             row.addView(text, LinearLayout.LayoutParams(0, -2, 1f))
             val state = ui.label("Checking", TextRole.Pill)
-            ui.pill(state)
+            ui.statusPill(state, StatusTone.NEUTRAL)
             row.addView(state, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8) })
-            readinessList.addView(row, LinearLayout.LayoutParams(-1, -2))
-            return ReadinessRow(state, fix)
+            val fix = ui.button("Fix") { owner.performClick() }.apply {
+                ui.style(this)
+                contentDescription = "$actionLabel · $title"
+                visibility = View.GONE
+            }
+            row.addView(fix, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8) })
+            return ReadinessRow(row, state, fix, detail, issue).also { readinessRows += it }
         }
-        val preciseRow = readinessRow("Precise location", locationAction, "Allow precise location")
-        val gpsRow = readinessRow("Location (GPS)", gpsAction, "Open Location settings")
-        val notifyRow = readinessRow("Notifications", notificationAction, "Allow notifications")
-        val saverRow = readinessRow("Battery Saver", saverAction, "Open Battery Saver settings")
-        val backgroundRow = readinessRow("Background activity", backgroundAction, "Open battery settings")
-        add(ready, ui.label("Some phones also require Unrestricted battery use for GNSS Tracking.", TextRole.Meta).apply {
-            setPadding(dp(2), 0, dp(2), 0)
-        }, 8)
+        val preciseRow = readinessRow("Precise location", locationAction, "Allow precise location", "Allow precise location so fixes are accurate.")
+        val gpsRow = readinessRow("Location (GPS)", gpsAction, "Open Location settings", "Turn on location to collect GNSS fixes.")
+        val notifyRow = readinessRow("Notifications", notificationAction, "Allow notifications", "Tracking and phone alerts need notifications.")
+        val saverRow = readinessRow("Battery Saver", saverAction, "Open Battery Saver settings", "Battery Saver can stop background tracking.")
+        val backgroundRow = readinessRow("Background activity", backgroundAction, "Open battery settings", "Android may limit background tracking and alerts.")
+        footer(ready, "Some phones also require Unrestricted battery use for GNSS Tracking.")
+        action(ready, "Recheck") {
+            renderReadiness?.invoke()
+            v46Refresh?.invoke()
+        }
+        val readinessOk = mutableMapOf<ReadinessRow, Boolean>()
         fun showReadiness(row: ReadinessRow, ok: Boolean, value: String) {
             row.state.text = value
-            ui.pill(row.state, ok)
+            ui.statusPill(row.state, StatusTone.POSITIVE)
+            row.state.visibility = if (ok) View.VISIBLE else View.GONE
             row.action.visibility = if (ok) View.GONE else View.VISIBLE
+            row.detail.text = "$value · ${row.issue}"
+            row.detail.visibility = if (ok) View.GONE else View.VISIBLE
+            readinessOk[row] = ok
         }
         renderReadiness = {
             val setup = preflight.snapshot()
@@ -3770,11 +3836,22 @@ class MainActivity : Activity() {
                 setup.optimizationExemption == true,
                 if (setup.optimizationExemption == true) "Exempt" else "May be limited",
             )
+            // Issues sort to the top; every row keeps its place inside its group.
+            readinessAttention.removeAllViews()
+            readinessList.removeAllViews()
+            for (row in readinessRows) {
+                detach(row.view)
+                (if (readinessOk[row] == true) readinessList else readinessAttention).addView(row.view, LinearLayout.LayoutParams(-1, -2))
+            }
+            readinessAttentionHeader.visibility = if (readinessAttention.childCount > 0) View.VISIBLE else View.GONE
+            readinessAttention.visibility = readinessAttentionHeader.visibility
+            readinessOkHeader.visibility = if (readinessList.childCount > 0) View.VISIBLE else View.GONE
+            readinessList.visibility = readinessOkHeader.visibility
         }
         add(routes.getValue("Policy details"), serviceReadiness)
-        val emergency = page("Emergency controls", "Settings")
+        val emergency = page("Emergency", "Settings")
         val safety = ui.card(emergency, 0)
-        peerRow(safety, "Protected SOS hold", ui.label("Always on", TextRole.Value))
+        peerRow(safety, "Protected SOS hold", ui.label("Always on", TextRole.Pill).also { ui.statusPill(it, StatusTone.NEUTRAL) })
         note(safety, "Hold continuously for 1.2 seconds. Release early to cancel.")
         keyOption.visibility = View.GONE
         val shortcut =
@@ -3786,17 +3863,69 @@ class MainActivity : Activity() {
         ui.switchRow(shortcut)
         add(safety, shortcut, 12)
         add(safety, ui.label("Optional · 3 Volume + presses within 1.5 seconds · app open and unlocked", TextRole.Meta), 2)
+        footer(emergency, "Test the keys in Diagnostics › Tools.")
+        val appearancePage = page("Appearance", "Settings")
+        val appearanceList = ui.list(appearancePage)
+        val currentMode = Appearance.mode(this)
+        for (mode in Appearance.modes) {
+            val selected = mode == currentMode
+            appearanceList.addView(
+                LinearLayout(this).apply {
+                    gravity = android.view.Gravity.CENTER_VERTICAL
+                    minimumHeight = ui.px(R.dimen.list_row_min_height)
+                    setPadding(ui.px(R.dimen.list_row_padding_h), ui.px(R.dimen.list_row_padding_v), ui.px(R.dimen.list_row_padding_h), ui.px(R.dimen.list_row_padding_v))
+                    background = ui.rowRipple()
+                    isClickable = true
+                    isFocusable = true
+                    isSelected = selected
+                    contentDescription = "$mode${if (selected) ", selected" else ""}"
+                    addView(ui.label(mode, TextRole.RowTitle), LinearLayout.LayoutParams(0, -2, 1f))
+                    addView(ui.label(if (selected) "✓" else "", TextRole.RowTitle, R.color.accent).apply {
+                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    })
+                    setOnClickListener {
+                        if (mode == Appearance.mode(this@MainActivity)) return@setOnClickListener
+                        Appearance.set(this@MainActivity, mode)
+                        NotificationAppearance.refresh(this@MainActivity)
+                        recreate()
+                    }
+                },
+                LinearLayout.LayoutParams(-1, -2),
+            )
+        }
+        footer(appearancePage, "System follows the phone's dark theme setting.")
         val access = page("Command access", "Settings")
-        val accessCard = ui.card(access, 0)
+        // Not enrolled: the Command-side steps are shown inline instead of in a dialog.
+        val stepsCard = ui.card(access, 0)
+        listOf(
+            "On the Command computer" to "Open Phone controls, select this phone and compare its full phone ID.",
+            "Compare this phone ID" to "The IDs below must match exactly before you authorize.",
+            "Paste the private credential" to "Transfer it privately from Phone controls. It is never exported.",
+        ).forEachIndexed { n, (title, detail) ->
+            val row = LinearLayout(this).apply { gravity = android.view.Gravity.TOP }
+            row.addView(ui.label("${n + 1}", TextRole.Pill).apply {
+                gravity = android.view.Gravity.CENTER
+                ui.statusPill(this, StatusTone.POSITIVE)
+                setPadding(0, 0, 0, 0)
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }, LinearLayout.LayoutParams(dp(28), dp(28)).apply { marginEnd = ui.px(R.dimen.space_md) })
+            row.addView(ui.column().apply {
+                addView(ui.label(title, TextRole.RowTitle))
+                add(this, ui.label(detail, TextRole.Meta), 2)
+                contentDescription = "Step ${n + 1}. $title. $detail"
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+            add(stepsCard, row, if (n == 0) 0 else 12)
+        }
+        val accessCard = ui.card(access, 12)
         val enrollmentState = ui.label("Loading…", TextRole.Value)
         peerRow(accessCard, "Command enrollment", enrollmentState)
         // Read-only identities: muted caption + standard sans value (selectable, wrapping),
         // the same grammar as Manage access & trust. Editable fields below use FieldLabel.
         val phone = ui.label("", TextRole.Value).apply { setTextIsSelectable(true); setLineSpacing(dp(2).toFloat(), 1f) }
         val authority = ui.label("", TextRole.Value).apply { setTextIsSelectable(true); setLineSpacing(dp(2).toFloat(), 1f) }
-        add(accessCard, ui.label("This phone UUID", TextRole.Section), 14)
+        add(accessCard, ui.label("This phone ID", TextRole.Section), 14)
         add(accessCard, phone, 3)
-        add(accessCard, ui.label("Command authority UUID", TextRole.Section), 10)
+        add(accessCard, ui.label("Authorized Command ID", TextRole.Section), 10)
         add(accessCard, authority, 3)
         // Authenticated contact remains owned by CommandControl and shown on Manage access & trust.
         val contact = ui.label("Not verified", TextRole.Value)
@@ -3892,28 +4021,11 @@ class MainActivity : Activity() {
                 }
             }
         accessActions.addView(authorize)
-        accessActions.addView(
-            ui.button("Enrollment steps ›") {
-                    AlertDialog.Builder(this)
-                        .setTitle("Authorize Command")
-                        .setMessage(
-                            "1. Open Phone controls on Command.\n2. Compare phone and Command UUIDs.\n3. Transfer the per-phone credential privately.\n4. Confirm fresh authenticated contact."
-                        )
-                        .setPositiveButton("Done", null)
-                        .showRefined()
-                }
-                .apply { ui.quiet(this) },
-            LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8) },
-        )
         ui.equalHeights(accessActions)
         add(accessCard, accessActions, 12)
-        section(access, "Advanced")
-        menu(
-            access,
-            "Manage access & trust",
-            "Identity, disable and re-enrollment",
-            "Manage Command access",
-        )
+        // Manage access & trust renders inline below (moved once its evidence is bound).
+        val accessTrust = ui.column()
+        add(access, accessTrust)
         val manage = page("Manage Command access", "Command access")
         val managementError = ui.collapsingLabel(TextRole.Caption, R.color.danger, gap = 0)
         add(manage, managementError)
@@ -3931,7 +4043,7 @@ class MainActivity : Activity() {
                 }
             }
         }
-        section(manage, "Change access")
+        val changeAccessHeader = ui.section(manage, "Change access")
         val disableAccess = action(manage, "Disable remote control") {
             AlertDialog.Builder(this)
                 .setTitle("Disable remote control?")
@@ -3945,7 +4057,7 @@ class MainActivity : Activity() {
                 .showRefined()
         }
         ui.style(disableAccess, danger = true)
-        action(manage, "Re-enroll Command") {
+        val reenrollAccess = action(manage, "Re-enroll Command") {
             AlertDialog.Builder(this)
                 .setTitle("Start re-enrollment?")
                 .setMessage("The current authority must not be silently replaced.")
@@ -4412,6 +4524,17 @@ class MainActivity : Activity() {
             }
             (manage.getChildAt(manage.indexOfChild(managementError) + 1)?.layoutParams as? LinearLayout.LayoutParams)?.topMargin = 0
         }
+        // v3: Manage access & trust and Policy details are part of their owner pages.
+        run {
+            val trust = (0 until manage.childCount).map { manage.getChildAt(it) }
+            manage.removeAllViews()
+            ui.section(accessTrust, "Access & trust")
+            trust.forEach { accessTrust.addView(it, it.layoutParams) }
+            val policyPage = routes.getValue("Policy details")
+            val details = (0 until policyPage.childCount).map { policyPage.getChildAt(it) }
+            policyPage.removeAllViews()
+            details.forEach { policyInEffect.addView(it, it.layoutParams) }
+        }
                 fun technical(view: TextView) {
             val parent = view.parent as? LinearLayout ?: return
             val index = parent.indexOfChild(view)
@@ -4431,6 +4554,15 @@ class MainActivity : Activity() {
         v46Refresh = {
             val state = savedInstallation
             val op = app.operational.value
+            renderSettingsLanding()
+            renderSaveBars()
+            val enrolled = state?.controlEnrollment != null
+            val accessDisabled = state?.controlDisabled == true
+            stepsCard.visibility = if (state != null && !enrolled && !accessDisabled) View.VISIBLE else View.GONE
+            disableAccess.visibility = if (enrolled && !accessDisabled) View.VISIBLE else View.GONE
+            reenrollAccess.visibility = if (enrolled || accessDisabled) View.VISIBLE else View.GONE
+            changeAccessHeader.visibility =
+                if (disableAccess.visibility == View.VISIBLE || reenrollAccess.visibility == View.VISIBLE) View.VISIBLE else View.GONE
             v46PartyInterval?.isEnabled = interval.isEnabled
             recoveryFailure.text =
                 op.error?.takeIf { it.startsWith("Saved delivery retry") }.orEmpty()
@@ -4558,7 +4690,7 @@ class MainActivity : Activity() {
                     checking -> "Checking…"
                     state?.controlDisabled == true -> "Disabled"
                     state?.controlEnrollment != null -> "Recheck"
-                    else -> "Authorize"
+                    else -> "Review & authorize"
                 }
             authorize.isEnabled = state != null && !state.controlDisabled && !checking
             // Disabled is already stated by the enrollment status; no inert "Disabled" button.
