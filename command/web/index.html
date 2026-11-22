@@ -49,9 +49,19 @@
       <div class="header-tools header-right">
         <details class="header-menu-root menu" open><summary class="utility-trigger" aria-label="Open navigation and tools"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></summary>
           <div class="menu-groups">
-            <button id="open-map" class="header-link">Maps</button>
+            <span class="menu-group-title compact-only">Explore</span>
             <button id="open-records" class="header-link" aria-haspopup="dialog">Records</button>
             <button id="open-tools" class="header-link" aria-haspopup="dialog">Tools</button>
+            <button id="open-map" class="header-link">Maps<span class="compact-only">&nbsp;&amp; Layers</span></button>
+            <button class="header-link compact-only" data-menu-proxy="open-layers" aria-haspopup="dialog">Map layers</button>
+            <div class="menu-divider compact-only"></div>
+            <span class="menu-group-title compact-only">Workspace</span>
+            <button class="header-link compact-only" data-menu-proxy="toggle-parties">Parties panel</button>
+            <button class="header-link compact-only" data-menu-proxy="toggle-details">Selected details</button>
+            <button class="header-link compact-only" data-menu-proxy="open-history" aria-haspopup="dialog">Event history</button>
+            <button class="header-link compact-only" data-menu-proxy="open-sos" aria-haspopup="dialog">SOS emergencies</button>
+            <div class="menu-divider compact-only"></div>
+            <button class="header-link compact-only" data-menu-proxy="open-about" aria-haspopup="dialog">About Command</button>
             <div class="legacy-entry-points" hidden><button id="open-travel" tabindex="-1">Travel Back</button><button id="open-control" tabindex="-1">Phone controls</button></div>
           </div>
         </details>
@@ -162,7 +172,7 @@
       <span id="recording" role="status">Connecting…</span>
       <details class="capture-disclosure"><summary id="capture-summary">Presentation status</summary><div class="capture-detail"><strong id="capture-heading" hidden>Presentation unverified at this time</strong><span id="capture-health" role="status">Awaiting browser ownership</span></div></details>
       <div class="controls">
-        <button id="start" class="primary">Start Recording</button>
+        <button id="start" class="primary">Start recording</button>
         <button id="pause" class="primary" hidden>Pause</button>
         <button id="resume" class="primary" hidden>Resume</button>
         <button id="save-recording">Save</button>
@@ -234,34 +244,17 @@
       <button id="retry-owner">Retry</button>
     </dialog>
     <dialog id="recording-start" aria-labelledby="recording-start-title">
-      <div class="dialog-heading"><div class="dialog-title"><h1 id="recording-start-title">Start Recording from</h1><p class="dialog-sub">Choose where the operator recording begins.</p></div><button data-close="recording-start" aria-label="Close Start Recording"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button></div>
+      <div class="dialog-heading"><div class="dialog-title"><h1 id="recording-start-title">Start recording</h1><p class="dialog-sub">Choose which received observations the recording includes. Recording begins when you press Start.</p></div><button data-close="recording-start" aria-label="Close Start Recording"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button></div>
       <form id="recording-start-form">
-        <label
-          ><input
-            type="radio"
-            name="mode"
-            id="session-mode"
-            value="from_beginning"
-          />
-          Beginning of retained history</label
-        >
-        <p id="session-mode-status" class="muted"></p>
-        <label
-          ><input
-            type="radio"
-            name="mode"
-            id="current-mode"
-            value="from_now"
-            checked
-          />
-          Current Time</label
-        >
+        <div class="record-choice-group" role="radiogroup" aria-label="Recording start">
+          <label class="record-choice"><input type="radio" name="mode" id="current-mode" value="from_now" checked /><span><strong>From now</strong><small>Begin with observations received after Start</small></span></label>
+          <label class="record-choice"><input type="radio" name="mode" id="session-mode" value="from_beginning" /><span><strong>From beginning</strong><small>Include all retained received history</small></span></label>
+        </div>
+        <p id="session-mode-status" class="dialog-hint"></p>
         <p id="recording-start-error" role="alert"></p>
         <div class="controls">
           <button type="button" data-close="recording-start">Cancel</button
-          ><button id="confirm-recording" class="primary">
-            Start Recording
-          </button>
+          ><button id="confirm-recording" class="primary">Start recording</button>
         </div>
       </form>
     </dialog>

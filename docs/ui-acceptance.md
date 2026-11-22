@@ -1028,7 +1028,7 @@ Branch `feature/issue6-terrain-appearance` starts at verified PR #17 SHA
 Native Android Day/Night uses early Activity configuration and semantic resources,
 with Settings selection and independent persistence. Command themes every surface;
 header contact/count sits under identity, About beside SOS, and Start requires a
-mode modal defaulting Current Time. Existing actions/engines are preserved.
+mode modal defaulting From now (Current Time). Existing actions/engines are preserved.
 
 Optional terrain supports real operator-supplied square SRTM HGT and bounded binary
 export/re-import. One DEM subset supplies selected shading/contours/elevation; local

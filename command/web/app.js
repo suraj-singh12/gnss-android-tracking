@@ -112,7 +112,7 @@ function updateSessionChoice() {
   // From Beginning selects all retained sessions; no current session report needed.
   $("session-mode").disabled = false;
   $("session-mode-status").textContent =
-    "Includes retained observations from all received tracking sessions, even if they arrive late.";
+    "From beginning includes retained observations from all received tracking sessions, even if they arrive late.";
   $("confirm-recording").disabled = !!state?.recording;
 }
 $("start").onclick = () => {
@@ -4296,3 +4296,11 @@ const chromeBounds = new ResizeObserver(updateMapChromeBounds);
 for (const element of [mapToolbar, $('playback-timeline'), document.querySelector('.recording-bar'), document.querySelector('.playback-context')]) chromeBounds.observe(element);
 window.addEventListener('resize', updateMapChromeBounds);
 updateMapChromeBounds();
+
+// Compact header menu entries reuse the existing workspace controls.
+document.addEventListener("click", (event) => {
+  const proxy = event.target.closest("[data-menu-proxy]");
+  if (!proxy) return;
+  headerMenuRoot.open = false;
+  $(proxy.dataset.menuProxy).click();
+});

@@ -335,7 +335,7 @@ labels. Native Android resources and Command CSS semantic tokens apply throughou
 each app stores its independent choice. Command keeps About and Day/Night beside SOS;
 connection and connected/total parties sit beneath identity. No Local workspace label.
 
-Start dialog defaults Current Time, requires confirmation, and explains unavailable
+Start dialog defaults From now (Current Time), requires confirmation, and explains unavailable
 session metadata. About/appearance never acknowledge events or silence alarms.
 Layers beside Focus selected is a compact nonmodal popover, disabled for missing
 components, with local instant toggles. DEM availability is not inferred from checkbox

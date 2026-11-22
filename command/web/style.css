@@ -3547,3 +3547,26 @@ body[data-history-mode="travel"] #playback-status { top:94px; }
 #command #layers input[role="switch"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 body.hide-qualified-tracks #tracks polyline[data-segment] { display: none; }
 body.hide-party-labels #tracks [data-party-label] { display: none; }
+
+/* V5.14 compact utility menu and Start recording choices. */
+#command .compact-only { display: none; }
+@media (max-width: 1250px) {
+  #command .header-menu-root[open] > .menu-groups .compact-only { display: block; }
+  #command .header-menu-root[open] > .menu-groups span.compact-only:not(.menu-group-title) { display: inline; }
+  #command .menu-groups > button { display: flex; align-items: center; min-height: 39px; padding: 10px 12px; border: 0; border-radius: 9px; background: transparent; font-size: 12px; font-weight: 650; }
+  #command .menu-groups > button:hover { background: var(--soft); }
+  #command .menu-groups .menu-group-title { padding: 8px 12px 4px; font-size: 10px; font-weight: 720; letter-spacing: .5px; text-transform: uppercase; color: var(--muted); }
+  #command .menu-groups .menu-divider { height: 1px; margin: 5px 7px; background: var(--line); }
+}
+#command .record-choice-group { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 6px 0 13px; }
+#command .record-choice { position: relative; display: flex; align-items: center; justify-content: center; min-width: 0; min-height: 122px; margin: 0; padding: 15px 12px; text-align: center; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); cursor: pointer; }
+#command .record-choice:hover { border-color: #83b99e; background: var(--soft); }
+#command .record-choice:has(input:checked) { border: 2px solid var(--green); background: var(--greenwash, #e6f3ed); }
+#command .record-choice:has(input:focus-visible) { outline: 3px solid #78a7fb; outline-offset: 2px; }
+#command .record-choice input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+#command .record-choice strong { display: block; margin: 0 auto 5px; font-size: 14px; font-weight: 740; line-height: 1.35; color: var(--ink); }
+#command .record-choice small { display: block; font-size: 11px; line-height: 1.45; color: var(--muted); }
+#command .record-choice:has(input:checked) strong { color: var(--green); }
+#command #recording-start .dialog-hint { margin: 6px 0 3px; padding: 0; font-size: 12px; line-height: 1.55; color: var(--ink); }
+@media (max-width: 520px) { #command .record-choice-group { grid-template-columns: 1fr; } #command .record-choice { min-height: 84px; } }
+#command dialog.v514-modal#recording-start { width: min(720px, calc(100vw - 32px)); }
