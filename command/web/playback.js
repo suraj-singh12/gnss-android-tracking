@@ -1427,6 +1427,8 @@
   }
   for (const w of ["from", "to"]) $(`travel-${w}-date`).onclick = () => toggleCalendar(w);
   $("travel-calendar").onclick = (event) => {
+    // Re-rendering detaches the clicked button, so keep the outside-click check away.
+    event.stopPropagation();
     const button = event.target.closest("button"), which = picker?.open;
     if (!button || !which) return;
     if (button.dataset.shift) {
