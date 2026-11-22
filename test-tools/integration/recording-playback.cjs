@@ -910,7 +910,6 @@ async function wait(fn) {
     () => window.HistoricalPlayback.position,
   );
   await page.locator("#playback-last").click();
-  await page.locator("#travel-settings > summary").click();
   assert(
     (await page.locator("#travel-diagnostics").textContent()).includes(
       "maximum_accuracy_m",

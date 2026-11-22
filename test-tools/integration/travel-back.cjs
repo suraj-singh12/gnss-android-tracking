@@ -145,7 +145,6 @@ const report = { physical_acceptance: false };
     await page.locator("#travel-pending").textContent(),
     /New stored observations/,
   );
-  await page.locator("#travel-settings > summary").click();
   await page.locator("#travel-refresh").click();
   await page.waitForTimeout(200);
   assert.equal(await page.locator(".historical-party-name").count(), 21);
@@ -209,7 +208,6 @@ const report = { physical_acceptance: false };
     await page.locator("#playback-play").getAttribute("aria-label"),
     "Play",
   );
-  await page.locator("#travel-settings > summary").click();
   // The shared menu helper may already have dismissed the notification (never the SOS).
   if (await page.locator("#sos-toast-dismiss").isVisible()) await page.locator("#sos-toast-dismiss").click();
   await page.locator(".historical-party-name").first().click();

@@ -4217,6 +4217,7 @@ playbackMoreContent.className = "menu-content";
 for (const id of ["playback-facts", "playback-start"]) playbackMoreContent.append($(id));
 playbackMore.append(playbackMoreSummary, playbackMoreContent);
 $("playback-timeline").append(playbackMore);
+$("playback-timeline").append($("travel-settings"));
 // Restore focus for non-modal narrow drawers, including historical inspection.
 document.addEventListener("click", event => {
   if (!detailsDrawer()) return;
