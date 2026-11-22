@@ -256,8 +256,8 @@
   {
     const body = $("phone-control").querySelector(".dialog-body");
     const panels = {
-      enrollment: [body.querySelector(".control-identity")],
-      results: [...body.querySelectorAll("h2")].filter((h) => /history/i.test(h.textContent)).concat($("control-history")),
+      enrollment: [body.querySelector(".control-identity"), $("control-enrollment"), body.querySelector(".control-enrollment-help")],
+      results: [body.querySelector(".control-results-filter"), $("control-history"), body.querySelector(".control-results-help")],
     };
     const tabs = document.createElement("div");
     tabs.className = "phone-tabs";

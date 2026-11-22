@@ -114,12 +114,13 @@ async function wait(check) {
   let provisioningPrompts=0;
   const credentials=new Map(), confirmations=[];
   page.on("dialog",async dialog=>{if(dialog.type()==="prompt"){provisioningPrompts++;assert.match(dialog.defaultValue(),/^gnss1:/);credentials.set(dialog.defaultValue().split(":")[2],dialog.defaultValue());}else confirmations.push(dialog.message());await dialog.accept();});
-  await page.locator("#phone-tab-send").click();
-  await page.locator("#control-phones button").first().click();
+
+  await page.locator("#control-enrollment button").first().click();
   await wait(async()=>provisioningPrompts===1);
   // Enroll remaining phones through the same production local API.
   for(const id of ids){const v=await (await fetch(local+"/local/control")).json();if(!v.phones[id]){const enrolled=await post("control/enroll",{device:id,confirmed:true});credentials.set(id,enrolled.credential);}}
-  await page.locator("#control-all").click();
+  await page.locator("#phone-tab-send").click();
+  await page.locator("#control-recipients").selectOption("all");
   await wait(async()=>await page.locator("#control-phones input:checked").count()===20);
   await page.locator("#control-operation").selectOption("sync");
   await page.locator("#control-issue").click();
@@ -134,7 +135,8 @@ async function wait(check) {
   const late=structuredClone(fixture);late.device_id=randomUUID();late.message_id=randomUUID();late.observation.observation_id=late.message_id;late.observation.tracking_session_id=randomUUID();await send(late);await post("control/enroll",{device:late.device_id,confirmed:true});
   let controls=await (await fetch(local+"/local/control")).json();assert.equal(controls.commands.some(c=>c.device===late.device_id),false);
   assert.ok(controls.commands.every(c=>c.state==="queued"&&c.result===null));
-  await page.locator("#control-none").click();
+  await page.locator("#control-recipients").selectOption("custom");
+  await page.locator("#control-none").evaluate(e=>e.click());
   await wait(async()=>await page.locator("#control-phones input:checked").count()===0);
   await page.locator("#control-phones input").nth(0).check();await page.locator("#control-phones input").nth(1).check();
   await page.locator("#control-operation").selectOption("tracking_stop");await page.locator("#control-issue").click();
@@ -158,7 +160,7 @@ async function wait(check) {
   let selectionHeld=false, releaseSelection;
   const selectionGate=new Promise(resolve=>{releaseSelection=resolve;});
   await page.route("**/local/control",async route=>{selectionHeld=true;await selectionGate;await route.continue();});
-  await page.locator("#control-all").click();
+  await page.locator("#control-all").evaluate(e=>e.click());
   await wait(async()=>selectionHeld);
   assert.equal(await page.locator("#control-issue").isDisabled(),true);
   assert.equal(await page.locator("#control-none").isDisabled(),true);

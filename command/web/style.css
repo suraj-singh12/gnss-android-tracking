@@ -3570,3 +3570,60 @@ body.hide-party-labels #tracks [data-party-label] { display: none; }
 #command #recording-start .dialog-hint { margin: 6px 0 3px; padding: 0; font-size: 12px; line-height: 1.55; color: var(--ink); }
 @media (max-width: 520px) { #command .record-choice-group { grid-template-columns: 1fr; } #command .record-choice { min-height: 84px; } }
 #command dialog.v514-modal#recording-start { width: min(720px, calc(100vw - 32px)); }
+
+/* V5.14 Phone controls (prototype openPhone). */
+#command #phone-control #control-phones, #command #phone-control #control-enrollment, #command #phone-control #control-history { display: block; max-height: none; margin: 0; padding: 0; border: 0; overflow: visible; }
+#command #phone-control .phone-form .formrow { display: block; margin: 0 0 14px; }
+#command #phone-control .formrow > label, #command #phone-control .formrow > .form-label { display: block; margin: 0 0 7px; font-size: 12px; font-weight: 700; color: var(--ink); }
+#command #phone-control .formrow input, #command #phone-control .formrow select { width: 100%; min-height: 45px; margin: 0; padding: 11px 13px; border: 1px solid #afc0ba; border-radius: 10px; background-color: var(--panel); font-size: 12.5px; }
+#command #phone-control .formrow select { padding-right: 34px; }
+#command #phone-control .formrow:focus-within :is(input, select) { border-color: var(--green); }
+#command #phone-control .formgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+#command #phone-control fieldset { margin: 0; padding: 0; border: 0; }
+#command #phone-control fieldset legend { display: none; }
+#command #phone-control [hidden] { display: none !important; }
+#command #phone-control .note { margin: 0 0 14px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); font-size: 11px; line-height: 1.5; color: var(--muted); }
+#command #phone-control .footer-helper { margin: 10px 0 0; font-size: 10.5px; line-height: 1.5; color: var(--muted); }
+#command #phone-control #control-status { margin: 8px 0 0; font-size: 11px; color: var(--muted); }
+#command #phone-control #control-status:empty { display: none; }
+#command #phone-control .switchline { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 0 14px; padding: 12px 0; border-top: 1px solid var(--line); cursor: pointer; }
+#command #phone-control .switchline b { display: block; font-size: 12.5px; }
+#command #phone-control .switchline small { display: block; margin-top: 4px; font-size: 11px; line-height: 1.4; color: var(--muted); }
+#command #phone-control #control-phones { max-height: 174px; margin: -4px 0 14px; padding: 6px 10px; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; }
+#command #phone-control .recipient-line { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 0; padding: 8px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+#command #phone-control .recipient-line:last-child { border-bottom: 0; }
+#command #phone-control .recipient-line > span { flex: 1; min-width: 0; }
+#command #phone-control .recipient-line strong { display: block; font-size: 11.5px; }
+#command #phone-control .recipient-line small { display: block; margin-top: 2px; font-size: 10.5px; color: var(--muted); overflow-wrap: anywhere; }
+#command #phone-control input[role="switch"] { appearance: none; -webkit-appearance: none; position: relative; flex-shrink: 0; width: 43px; min-width: 43px; height: 25px; margin: 0; padding: 0; border: 1px solid #bccac4; border-radius: 99px; background: #cbd7d2; cursor: pointer; }
+#command #phone-control input[role="switch"]::after { content: ""; position: absolute; top: 2px; left: 2px; width: 19px; height: 19px; border-radius: 99px; background: #fff; box-shadow: 0 1px 4px #0002; transition: transform .15s; }
+#command #phone-control input[role="switch"]:checked { background: #216f56; border-color: #216f56; }
+#command #phone-control input[role="switch"]:checked::after { transform: translateX(18px); }
+#command #phone-control input[role="switch"]:disabled { opacity: .45; cursor: not-allowed; }
+#command #phone-control input[role="switch"]:focus-visible { outline: 3px solid #78a7fb; outline-offset: 3px; }
+#command #phone-control .control-identity { display: block; margin: 0; padding: 0; border: 0; background: none; }
+#command #phone-control .control-identity .formrow { margin: 0 0 8px; }
+#command #phone-control #control-authority { margin: 0; padding: 12px 13px; border: 1px solid #afc0ba; border-radius: 10px; font-size: 12px; overflow-wrap: anywhere; }
+#command #phone-control .control-identity-actions { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; font-size: 11px; color: var(--muted); }
+#command #phone-control .control-status { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 11px; overflow-wrap: anywhere; }
+#command #phone-control .control-status > div { min-width: 0; }
+#command #phone-control .control-status b { display: block; font-size: 11.5px; }
+#command #phone-control .control-status small { display: block; margin-top: 2px; color: var(--muted); }
+#command #phone-control .control-status-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; flex-shrink: 0; max-width: 50%; }
+#command #phone-control .control-status-actions button { min-height: 30px; padding: 5px 10px; font-size: 11px; }
+#command #phone-control .filter-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 0 10px; padding: 3px 0 14px; border-bottom: 1px solid var(--line); }
+#command #phone-control .filter-row > label { flex: 1; min-width: 0; font-size: 12px; font-weight: 700; }
+#command #phone-control .filter-row select { width: min(215px, 58%); min-width: 145px; min-height: 39px; padding: 8px 33px 8px 12px; border-radius: 9px; font-weight: 600; }
+#command #phone-control #control-history > details { margin: 0; padding: 12px 0; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: none; }
+#command #phone-control #control-history summary { display: block; padding: 0 70px 0 0; position: relative; list-style: none; cursor: pointer; }
+#command #phone-control #control-history summary::-webkit-details-marker { display: none; }
+#command #phone-control #control-history summary::after { content: "Details"; position: absolute; right: 0; top: 50%; transform: translateY(-50%); padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 11px; font-weight: 650; }
+#command #phone-control #control-history details[open] summary::after { content: "Hide"; }
+#command #phone-control #control-history .result-head { display: flex; align-items: center; gap: 8px; }
+#command #phone-control #control-history .result-head strong { font-size: 12.5px; }
+#command #phone-control #control-history summary small { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); }
+#command #phone-control #control-history details > p { margin: 8px 0 0; font-size: 11px; line-height: 1.5; color: var(--muted); overflow-wrap: anywhere; }
+#command #phone-control #control-history details > button { margin: 8px 6px 0 0; }
+#command #phone-control #control-history:empty::before { content: "No phone instructions have been issued from this Command."; display: block; padding: 12px 0; font-size: 11.5px; color: var(--muted); }
+@media (max-width: 520px) { #command #phone-control .formgrid { grid-template-columns: 1fr; } #command #phone-control .control-status { flex-direction: column; align-items: stretch; } #command #phone-control .control-status-actions { max-width: none; justify-content: flex-start; } }
+#command #phone-control .formrow select, #command #phone-control .filter-row select { text-align: left; text-align-last: left; }
