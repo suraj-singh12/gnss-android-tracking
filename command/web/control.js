@@ -74,7 +74,7 @@ async function refreshControl() {
     const head=el("span",undefined,"result-head");
     head.append(el("strong",controlOperationLabels[entry.operation]||entry.operation),el("span",controlStateLabels[entry.state]||entry.state,"soft-tag"+(tagged?"":" warn")));
     title.append(head,el("small",`${party} · ${entry.device}`));
-    detail.dataset.commandId=entry.id;detail.dataset.outcome=entry.result?"applied":["cancelled","expired"].includes(entry.state)?"closed":"pending";detail.open=expanded.has(entry.id);
+    detail.dataset.commandId=entry.id;detail.dataset.outcome=controlOutcome(entry);detail.open=expanded.has(entry.id);
     const result=entry.result;
     const meanings={queued:"Queued / phone may be offline",sent_unknown:"Sent; phone receipt unknown",received:"Delivered and durably received",output_attempted:"Notification/output attempted; heard/felt unknown",alert_blocked:"OS blocked output; local acknowledgement pending",recipient_acknowledged:"Human recipient locally acknowledged (authenticated result stored by Command)",cancel_requested_unknown:"Cancel requested by operator; phone Stop pending/unknown",cancelled:result?"Cancellation confirmed by Android":"Cancelled before delivery; no phone receipt claimed",expired:"Expired / duration ended",unknown:"Unknown / unresolved"};
     title.append(el("small",meanings[entry.state]||entry.state));
@@ -167,6 +167,13 @@ $("control-recipients").onchange=()=>{
   else syncRecipientChoice();
 };
 $("control-results-filter").onchange=filterControlResults;
+// Only authenticated success counts as applied; receipt alone stays pending.
+function controlOutcome(entry){
+  const reported=entry.result?.state;
+  if(entry.state==="recipient_acknowledged"||["applied","sync_complete"].includes(reported))return"applied";
+  if(["cancelled","expired"].includes(entry.state)||["blocked","failed","rejected","expired","cancelled","superseded","unsupported"].includes(reported))return"closed";
+  return"pending";
+}
 function filterControlResults(){
   const value=$("control-results-filter").value;
   for(const detail of $("control-history").children)detail.hidden=value!=="all"&&detail.dataset.outcome!==value;
