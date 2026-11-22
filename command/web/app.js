@@ -1378,12 +1378,15 @@ function syncTerrainSwitch() {
   $("terrain-metadata").hidden = !available.length;
 }
 $("layer-terrain").onchange = () => {
+  // Each product handler re-derives the master switch, so read the request once.
+  const want = $("layer-terrain").checked;
   for (const kind of terrainLayers) {
     const control = $("layer-" + kind);
-    if (control.disabled || control.checked === $("layer-terrain").checked) continue;
-    control.checked = $("layer-terrain").checked;
+    if (control.disabled || control.checked === want) continue;
+    control.checked = want;
     control.onchange();
   }
+  syncTerrainSwitch();
 };
 $("apply-layers").onclick = () => $("layers").close();
 async function attachTerrain(id, file, components) {
