@@ -14,7 +14,7 @@
 #   scroll                  Scroll the main content down one page
 #   font <scale>            Set system font scale (e.g. 1.0, 1.3, 1.5, 2.0)
 #   size <WxH> <dpi>|reset  Override display size and density (e.g. 1080x2400 420)
-#   night                   Toggle the app's own Day/Night control
+#   night                   Toggle Settings › Appearance between Day and Night
 #   tour [prefix]           Capture every destination and nested page at current settings
 #   bounds <name>           Print node class, text and bounds from $OUT/<name>.xml
 #
@@ -98,6 +98,13 @@ scroll_down() {
   settle
 }
 
+scroll_top() { # Roots keep their scroll position; swipe back to the top.
+  local w h i
+  read -r w h < <(adb_ shell wm size | sed -E 's/.*: ([0-9]+)x([0-9]+).*/\1 \2/' | tail -1)
+  for i in 1 2 3; do adb_ shell input swipe $((w / 2)) $((h * 3 / 10)) $((w / 2)) $((h * 8 / 10)) 150; done
+  settle
+}
+
 tap() { # Off-screen rows are absent from the dump; scroll down up to three times.
   local tmp="$OUT/.tap.xml" pos="" i
   for i in 0 1 2 3; do
@@ -132,8 +139,10 @@ case "$cmd" in
     settle
     ;;
   night)
+    tap Tracking; tap Settings; tap Appearance
     tmp="$OUT/.tap.xml"; dump "$tmp"
-    if node_center "$tmp" "Switch to Night mode" >/dev/null 2>&1; then tap "Switch to Night mode"; else tap "Switch to Day mode"; fi
+    if node_center "$tmp" "Night, selected" >/dev/null 2>&1; then tap Day; else tap Night; fi
+    tap Tracking
     ;;
   bounds)
     python3 - "$OUT/${1:?name}.xml" <<'PY'
@@ -148,19 +157,23 @@ PY
     "$0" launch
     shot "${p}tracking"; "$0" scroll; shot "${p}tracking-bottom"
     tap Settings; shot "${p}settings"
-    for row in "Party & Command" "Command access" "Field readiness" "Tracking policy" "Emergency controls"; do
+    for row in "Party & Command" "Command access" "Tracking policy" "Field readiness" "Emergency" "Appearance"; do
       tap "$row"; shot "${p}settings-$(echo "$row" | tr 'A-Z &' 'a-z--' | tr -s '-')"
       case "$row" in
-        "Command access") tap "Manage access & trust"; shot "${p}settings-manage-access"; "$0" back ;;
-        "Party & Command") tap "Reporting interval"; shot "${p}settings-interval-selector-open"; "$0" back ;;
+        "Command access") "$0" scroll; shot "${p}settings-command-access-bottom" ;;
+        "Tracking policy") tap "Reporting interval"; shot "${p}settings-interval-selector-open"; "$0" back ;;
       esac
       "$0" back
     done
-    tap Diagnostics; shot "${p}diagnostics"; "$0" scroll; shot "${p}diagnostics-bottom"
-    for row in "Command Instructions" "Phone alerts" "Saved data & sync" "SOS history" "Diagnostic tools"; do
-      tap "Tracking"; tap "Diagnostics"   # fresh root at its top scroll position
-      tap "$row"; shot "${p}diagnostics-$(echo "$row" | tr 'A-Z &' 'a-z--' | tr -s '-')"; "$0" back
+    tap Diagnostics; tap Health; shot "${p}diagnostics"; "$0" scroll; shot "${p}diagnostics-bottom"
+    for seg in Activity Tools; do
+      scroll_top; tap "$seg"; shot "${p}diagnostics-$(echo "$seg" | tr 'A-Z' 'a-z')"
     done
+    scroll_top; tap Activity
+    for chip in Instructions Alerts SOS; do
+      tap "$chip"; shot "${p}diagnostics-activity-$(echo "$chip" | tr 'A-Z' 'a-z')"
+    done
+    tap All; scroll_top; tap Health
     tap Tracking
     ;;
   *) sed -n '2,25p' "$0" ;;
