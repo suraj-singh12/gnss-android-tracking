@@ -173,10 +173,13 @@
         <button id="stop" class="danger">Stop</button>
       </div>
     </section>
-    <div id="stopped-choice" hidden role="status">
-      Recording finally stopped. Unsaved evidence is retained.
-      <button id="stopped-save">Save snapshot</button
-      ><button id="discard-recording">Discard unsaved recording</button>
+    <div class="recording-notices">
+      <div id="stopped-choice" hidden role="status">
+        <span id="stopped-choice-text">Recording finally stopped. Unsaved evidence is retained.</span>
+        <button id="stopped-save">Save snapshot</button
+        ><button id="discard-recording">Discard unsaved recording</button>
+      </div>
+      <output id="snapshot-receipt" hidden></output>
     </div>
     <dialog id="save-snapshot" aria-labelledby="save-snapshot-title">
       <div class="dialog-heading">
@@ -231,7 +234,6 @@
         </div>
       </form>
     </dialog>
-    <output id="snapshot-receipt" hidden></output>
     <dialog id="browser-occupied" aria-labelledby="browser-occupied-title">
       <h1 id="browser-occupied-title">Command browser access</h1>
       <p id="browser-ownership-reason">
@@ -447,11 +449,11 @@
             <button id="zoom-in" aria-label="Zoom in" title="Zoom in"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M4 12h16"/></svg></button><button id="zoom-out" aria-label="Zoom out" title="Zoom out"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h16"/></svg></button><button id="fit" title="Fit all parties into view">Fit parties</button><button id="focus-party" title="Focus on selected party">Focus selected</button><button id="inspect-history" title="Inspect original history of the selected party">Inspect history</button><button id="open-layers" title="Show or hide locally prepared terrain layers" aria-label="Map Layers" aria-expanded="false">Layers <svg class="small-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5"/></svg></button><button id="toggle-parties" class="panel-toggle" aria-label="Show Parties" aria-expanded="true">Parties</button><button id="toggle-details" class="panel-toggle" aria-label="Show selected party details" aria-expanded="false">Details</button>
           </div>
         </div>
-        <div class="playback-context"><div id="playback-status" role="status" hidden></div>
+        <div class="playback-context"><details id="travel-settings" hidden><summary>Capture range & diagnostics</summary><label>Start <input id="travel-start" step="1" type="datetime-local"></label><label>End <input id="travel-end" step="1" type="datetime-local"></label><button id="travel-refresh">Refresh View</button><span id="travel-pending" role="status"></span><p>Retained original GNSS only · unknown gaps remain unknown. Quality uses the current policy without editing it.</p><label><input id="travel-offline" type="checkbox">Exclude offline at snapshot (contact, not GNSS quality)</label><label><input id="travel-raw" type="checkbox">Use All Observations (diagnostic dots, no qualified distance)</label><pre id="travel-diagnostics"></pre></details>
+<div id="playback-status" role="status" hidden></div>
         <details id="playback-evidence" hidden><summary>Presentation unverified at this time</summary><p id="playback-evidence-detail"></p></details></div>
         <div id="playback-notice" role="status" hidden></div>
         <div id="playback-sos" hidden></div>
-        <details id="travel-settings" hidden><summary>Capture range & diagnostics</summary><label>Start <input id="travel-start" step="1" type="datetime-local"></label><label>End <input id="travel-end" step="1" type="datetime-local"></label><button id="travel-refresh">Refresh View</button><span id="travel-pending" role="status"></span><p>Retained original GNSS only · unknown gaps remain unknown. Quality uses the current policy without editing it.</p><label><input id="travel-offline" type="checkbox">Exclude offline at snapshot (contact, not GNSS quality)</label><label><input id="travel-raw" type="checkbox">Use All Observations (diagnostic dots, no qualified distance)</label><pre id="travel-diagnostics"></pre></details>
         <div id="projection-status" role="status"></div>
         <div id="label-density" role="status" hidden></div>
         <div id="map-detail-status" role="status"></div>

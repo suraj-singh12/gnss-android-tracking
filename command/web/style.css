@@ -3170,3 +3170,26 @@ body[data-history-mode="travel"] #playback-status { top:94px; }
 }
 /* Danger colour only while an SOS still needs acknowledgement. */
 #command #sos-summary.clear { color: var(--muted); }
+/* Dialogs never exceed the viewport; text actions in dialog footers are not icon-sized close buttons. */
+#command dialog { box-sizing: border-box; max-width: calc(100vw - 24px); }
+#command #recording-start { width: min(480px, calc(100vw - 24px)); }
+#command #about { width: min(560px, calc(100vw - 24px)); }
+#command dialog .controls > [data-close] { width: auto; min-width: 0; height: auto; min-height: 36px; padding: 7px 12px; font-size: 13px; }
+/* Stopped-recording choice and save receipt stack instead of overlapping. */
+#command .recording-notices {
+  position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%); z-index: 40;
+  display: flex; flex-direction: column; gap: 8px; width: max-content;
+  max-width: min(560px, calc(100vw - 26px)); pointer-events: none;
+}
+#command .recording-notices > #stopped-choice:not([hidden]), #command .recording-notices > #snapshot-receipt:not([hidden]) {
+  position: static; transform: none; max-width: none; pointer-events: auto;
+}
+/* Travel Back range settings flow inside the playback context, below the map tools. */
+#command #travel-settings { position: static; max-height: 40vh; margin: 0 0 6px; }
+/* Narrow timelines wrap: transport, time, speed and More first; the seek bar takes its own row. */
+@media (max-width: 800px) {
+  #command #playback-timeline:not([hidden]), #command.playback #playback-timeline:not([hidden]) { flex-wrap: wrap; row-gap: 6px; }
+  #command #playback-timeline .playback-time { flex: 1 1 110px; }
+  #command #playback-timeline .playback-time strong { white-space: normal; }
+  #command #playback-seek { order: 5; flex: 1 0 100%; }
+}

@@ -157,6 +157,17 @@ async function wait(check, message = "Timed out waiting for real state") {
         assert(b && b.x >= 0 && b.x + b.width <= width && b.y >= 0 && b.y + b.height <= height, `${id} reachable at ${width}x${height}`);
       }
       await page.screenshot({ path: path.join(out, `v514-${theme}-${width}x${height}.png`) });
+      // Dialogs fit the viewport, including their close buttons.
+      for (const id of ["about", "recording-start", "save-snapshot"]) {
+        const d = await page.evaluate((id) => {
+          const dialog = document.getElementById(id);
+          dialog.showModal();
+          const r = dialog.getBoundingClientRect(), c = dialog.querySelector(".dialog-heading [data-close]").getBoundingClientRect();
+          dialog.close();
+          return [r.left, r.right, c.left, c.right];
+        }, id);
+        assert(d[0] >= 0 && d[1] <= width && d[2] >= 0 && d[3] <= width, `${id} fits ${width}x${height}: ${d}`);
+      }
       await page.locator("#mode-button").click();
       const m = await box("#mode-navigation .mode-menu-item:last-child");
       assert(m.x >= 0 && m.x + m.width <= width && m.y + m.height <= height, `mode menu bounded at ${width}x${height}`);
@@ -185,6 +196,12 @@ async function wait(check, message = "Timed out waiting for real state") {
   await menuAction(page, "mode-recording");
   await page.waitForSelector("#recording-start[open]");
   assert.equal((await state()).recording, null, "opening Start must not mutate recording");
+  const actionsClear = (dialog) => page.evaluate((dialog) => {
+    const [cancel, ...rest] = [...document.querySelectorAll(`#${dialog} .controls > button`)].filter((b) => b.getClientRects().length);
+    const c = cancel.getBoundingClientRect();
+    return cancel.scrollWidth <= cancel.clientWidth && rest.every((b) => { const r = b.getBoundingClientRect(); return r.left >= c.right || r.top >= c.bottom; });
+  }, dialog);
+  assert(await actionsClear("recording-start"), "Start Recording Cancel is unclipped and not overlapped");
   await page.locator('#recording-start [data-close="recording-start"]').last().click();
   assert.equal((await state()).recording, null, "Cancel must not start a recording");
   await wait(async () => (await page.locator("#mode-label").textContent()) === "RECORD");
@@ -207,9 +224,18 @@ async function wait(check, message = "Timed out waiting for real state") {
   await page.keyboard.press("Escape");
   await page.locator("#stop").click();
   await page.waitForSelector("#save-snapshot[open]");
-  await page.locator('#save-snapshot [data-close="save-snapshot"]').last().click();
   await wait(async () => (await state()).recording?.status === "stopped");
+  assert(await actionsClear("save-snapshot"), "Save snapshot Cancel is unclipped and not overlapped");
+  await page.locator('#save-snapshot [data-close="save-snapshot"]').last().click();
   assert(await page.locator("#stopped-choice").isVisible(), "unsaved stopped recording is retained after Cancel");
+  // Saving the stopped recording stacks the receipt; Discard stays usable and the notice stays truthful.
+  await page.locator("#stopped-save").click();
+  await page.locator("#snapshot-name").fill("V5.14 workspace snapshot");
+  await page.locator("#snapshot-submit").click();
+  await page.waitForSelector("#snapshot-receipt:not([hidden])");
+  const receipt = await box("#snapshot-receipt"), discard = await box("#discard-recording");
+  assert(receipt.y >= discard.y + discard.height || receipt.y + receipt.height <= discard.y, "save receipt does not cover Discard");
+  assert.match(await page.locator("#stopped-choice").innerText(), /Snapshot saved/);
 
   // Provider failure: losing the state API is reported, not hidden.
   const liveRequests = (url) => /\/local\/(live|state)$/.test(url.pathname);

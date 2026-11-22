@@ -223,6 +223,26 @@ const report = { physical_acceptance: false };
     [1440, 900],
   ]) {
     await page.setViewportSize({ width, height });
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    // Travel Back settings must not cover map tools; timeline controls stay inside the viewport.
+    const blocked = await page.evaluate(() =>
+      ["zoom-in", "zoom-out", "open-layers", "playback-speed", "exit-playback"]
+        .map((id) => {
+          const e = document.getElementById(id), r = e.getBoundingClientRect();
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return r.left < 0 || r.right > innerWidth || !e.contains(hit) ? id : null;
+        })
+        .concat(
+          [...document.querySelectorAll("#playback-timeline > *")]
+            .filter((e) => e.getClientRects().length)
+            .map((e) => e.getBoundingClientRect())
+            .some((r) => r.left < 0 || r.right > innerWidth + 0.5)
+            ? ["timeline child outside viewport"]
+            : [],
+        )
+        .filter(Boolean),
+    );
+    assert.deepEqual(blocked, [], `Travel Back controls blocked at ${width}x${height}`);
     for (const theme of ["day", "night"]) {
       await page.evaluate(
         (t) => (document.documentElement.dataset.appearance = t),

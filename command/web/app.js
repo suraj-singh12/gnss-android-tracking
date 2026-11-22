@@ -421,6 +421,9 @@ function renderDashboard() {
     !recording || recording.active || recording.status === "stopped";
   $("stop").disabled = !recording || recording.status === "stopped";
   $("save-recording").disabled = !recording;
+  if (recording?.status !== "stopped")
+    $("stopped-choice-text").textContent =
+      "Recording finally stopped. Unsaved evidence is retained.";
   $("stopped-choice").hidden = recording?.status !== "stopped";
   const devices = Object.values(state.devices).sort((a, b) =>
     a.device_id.localeCompare(b.device_id),

@@ -17,6 +17,11 @@ Design authority: `docs/design/approved/command-v5.14-interactive.html` (SHA-256
 | The SOS summary was red when nothing was pending | Danger colour applies only while acknowledgement is pending. |
 | The amber “last fix” chip failed AA contrast (axe) | The chip uses `--amber-text` (`#7a5216` Day). |
 | The prototype Day secondary text `#6d7d80` (and `#61747A`) fails 4.5:1 on the washes | Day keeps Command's existing `#596970`. |
+| Recorded browser acceptance: Cancel in Start Recording and Save snapshot was styled as a 36 px icon close button, clipped to “Canc” and overlapped by the next action | Only heading close buttons are icon-sized; footer Cancel is a normal text button. |
+| At 390 px, About (560 px) and Start Recording (480 px) extended off-screen, hiding Close and Start | Dialogs are capped at the viewport width minus 24 px. |
+| After saving a stopped recording, the save receipt covered Discard while the notice still said the evidence was unsaved | Notice and receipt stack in one container; the notice changes to “Snapshot saved. The stopped recording stays retained until discarded.” |
+| At ≤800 px, Speed and More were clipped and timeline text overlapped the seek bar | The timeline wraps; the seek bar takes its own row. |
+| In Travel Back at narrow widths, Capture range & diagnostics covered Zoom in | The panel is part of the playback context block, below the measured map tools. |
 
 ### Verification (local, Linux)
 
@@ -29,6 +34,8 @@ Design authority: `docs/design/approved/command-v5.14-interactive.html` (SHA-256
   - seven viewports in Day and Night, with menu bounds, control reachability and no document overflow
   - the recording lifecycle (start/cancel, start, pause, resume, stop) and keeping unsaved stopped evidence
   - provider failure, the SOS sound switch, and axe WCAG 2.1 AA with zero violations
+  - dialog bounds at every viewport, unclipped dialog Cancel actions, and the save receipt staying clear of Discard
+- `travel-back` asserts that zoom, Layers, Speed and Exit stay reachable at 390, 960 and 1440 px.
 
 ### Not verified
 
