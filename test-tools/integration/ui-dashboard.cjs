@@ -351,9 +351,7 @@ async function wait(check) {
   await menuAction(page, "fit");
   await menuAction(page, "focus-party");
   await menuAction(page, "open-map");
-  await page.locator("#tab-maps-library").click();
-  await page.getByText("Display & geographic details", { exact: true }).click();
-  await page.locator("#tab-maps-library").click();
+  await page.locator("#tab-map-display").click();
   await page
     .locator("#dots")
     .evaluate((e) => (e.closest("details").open = true));
@@ -394,7 +392,7 @@ async function wait(check) {
   });
   await page.waitForSelector('[data-layer="offline-map"]');
   assert.match(await page.locator("#map-metadata").innerText(), /EPSG:4326/);
-  await page.locator("#tab-maps-library").click();
+  await page.locator("#tab-map-display").click();
   await page
     .locator("#map-opacity")
     .evaluate((e) => (e.closest("details").open = true));
@@ -846,7 +844,7 @@ async function wait(check) {
     fullPage: true,
   });
   await menuAction(page, "open-history");
-  await page.locator("#event-filter").selectOption("operations");
+  await page.locator('[data-event-filter="operations"]').click();
   await page.waitForSelector(".history-event");
   assert.ok((await page.locator(".history-event").count()) > 0);
   await page.screenshot({
@@ -1058,7 +1056,7 @@ async function wait(check) {
   );
   await page.locator('[data-close="sos-panel"]').click();
   await menuAction(page, "open-history");
-  await page.locator("#event-filter").selectOption("sos");
+  await page.locator('[data-event-filter="sos"]').click();
   await page.waitForFunction(
     () => document.querySelectorAll(".history-event").length === 3,
   );

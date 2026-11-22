@@ -68,6 +68,14 @@ function distance(m) {
 function time(s) {
   return new Date(s).toLocaleString(undefined, { timeZoneName: "short" });
 }
+// Compact inspector time: time of day for today, date + time otherwise.
+function shortTime(s) {
+  const t = new Date(s),
+    today = t.toDateString() === new Date().toDateString();
+  return today
+    ? t.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    : t.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
 function color(id) {
   return state.devices[id].track_color;
 }
@@ -254,9 +262,6 @@ function renderSOS() {
       a.device_id.localeCompare(b.device_id),
   );
   const pending = alerts.filter((a) => !a.operator_acknowledged_at).length;
-  $("sos-heading").textContent = pending
-    ? "SOS emergencies"
-    : "SOS event history";
   $("sos-count").textContent = pending;
   $("open-sos").classList.toggle("active", pending > 0);
   $("open-sos").setAttribute(
@@ -678,22 +683,28 @@ function renderDashboard() {
         render();
       };
       const overviewTitle = el("div", undefined, "device-title");
-      const dot = el("span", undefined, "swatch");
-      dot.style.backgroundColor = color(d.device_id);
-      overviewTitle.append(dot, select, toggle);
+      const dot = el(
+        "span",
+        undefined,
+        "swatch pip " + (sosPending ? "red" : d.contact_condition),
+      );
+      overviewTitle.append(dot, select);
+      if (sosPending) {
+        const sos = el("span", "SOS", "party-sos");
+        sos.title = "SOS received · needs acknowledgement";
+        sos.append(el("span", " received · needs acknowledgement", "sr-only"));
+        overviewTitle.append(sos);
+      }
+      overviewTitle.append(toggle);
+      overview.title = `${d.snapshot.party.name} · ${historyLabel(d)}`;
       overview.append(
         overviewTitle,
-        el("small", d.snapshot.party.name),
-        el("div", labels[d.contact_condition], d.contact_condition),
-        el("div", gnssLabel(d)),
-        el("small", historyLabel(d)),
+        el(
+          "small",
+          `${{ healthy: "Connected", delayed: "Contact delayed", contact_lost: "Offline" }[d.contact_condition]} · ${gnssLabel(d)} · ${distance(d.total_m)}`,
+          "party-meta " + d.contact_condition,
+        ),
       );
-      if (
-        state.sos_alerts?.some(
-          (a) => a.device_id === d.device_id && !a.operator_acknowledged_at,
-        )
-      )
-        overview.append(el("strong", "SOS Received · needs acknowledgement"));
       if (!preserveDevices) $("devices").append(overview);
       if (selectedParty === d.device_id && !preserveDetail) {
         // V5.14 inspector: actionable contact/GNSS facts first, evidence in one disclosure.
@@ -701,7 +712,7 @@ function renderDashboard() {
         const inspector = el("section", undefined, "selected-content inspector-person");
         const head = el("div", undefined, "inspector-person-header");
         const name = el("h2", undefined, "detail-name");
-        name.append(swatch, el("span", d.snapshot.party.id));
+        name.append(el("span", d.snapshot.party.id));
         head.append(
           name,
           el(
@@ -741,7 +752,7 @@ function renderDashboard() {
         }
         critical.append(contact, metrics);
         const facts = el("div", undefined, "inspector-facts");
-        for (const [label, value] of [
+        for (const [label, value, full] of [
           ["Team", d.snapshot.party.name],
           [
             "Accuracy",
@@ -749,8 +760,8 @@ function renderDashboard() {
               ? "Unknown"
               : "±" + f.horizontal_accuracy_m + " m",
           ],
-          ["Last fix", f ? time(f.observed_at) : "No fix received"],
-          ["Last Command contact", time(d.last_contact)],
+          ["Last fix", f ? shortTime(f.observed_at) : "No fix received", f && time(f.observed_at)],
+          ["Last Command contact", shortTime(d.last_contact), time(d.last_contact)],
           ["Qualified distance", distance(d.total_m)],
           [
             "Coordinates",
@@ -761,7 +772,9 @@ function renderDashboard() {
           ["Recording", historyLabel(d)],
         ]) {
           const row = el("div", undefined, "fact");
-          row.append(el("span", label), el("span", value));
+          const v = el("span", value);
+          if (full) v.title = full;
+          row.append(el("span", label), v);
           facts.append(row);
         }
         const reporting = el("div", undefined, "inspector-reporting");
@@ -782,7 +795,10 @@ function renderDashboard() {
           el("strong", "Observation evidence & quality"),
           el("small", "Original fixes, qualification, gaps and significant events"),
         );
-        evidenceSummary.append(evidenceCopy, el("span", "Expand", "evidence-disclosure"));
+        const disclosure = el("span", undefined, "evidence-disclosure");
+        disclosure.append(el("span", "Expand", "evidence-open-text"), el("span", "Collapse", "evidence-close-text"));
+        disclosure.insertAdjacentHTML("beforeend", '<svg class="small-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>');
+        evidenceSummary.append(evidenceCopy, disclosure);
         diagnostics.append(evidenceSummary, status);
         for (const event of state.sos_alerts ?? []) {
           if (event.device_id !== d.device_id) continue;
@@ -914,6 +930,13 @@ for (const button of document.querySelectorAll("[data-close]"))
   button.onclick = () => $(button.dataset.close).close();
 let eventEvidence = [];
 let eventSnapshot;
+function eventSummary(title, detail, kind) {
+  const summary = el("summary"),
+    copy = el("span", undefined, "event-main");
+  copy.append(el("strong", title), el("small", detail));
+  summary.append(copy, el("span", kind, "event-kind"));
+  return summary;
+}
 function renderEvents() {
   const root = $("history-events"),
     filter = $("event-filter").value;
@@ -933,9 +956,10 @@ function renderEvents() {
       row.dataset.key = "sos/" + a.device_id + "/" + a.event_id;
       row.open = opened.has(row.dataset.key);
       row.append(
-        el(
-          "summary",
-          `SOS · ${a.party.id} · ${time(a.triggered_at)} · ${a.operator_acknowledged_at ? "Acknowledged" : "Unacknowledged"}`,
+        eventSummary(
+          `SOS · ${a.party.id}`,
+          `${time(a.triggered_at)} · ${a.operator_acknowledged_at ? "Acknowledged" : "Unacknowledged"}`,
+          "SOS",
         ),
       );
       row.append(
@@ -962,9 +986,10 @@ function renderEvents() {
       row.dataset.key = "operation/" + e.ordinal;
       row.open = opened.has(row.dataset.key);
       row.append(
-        el(
-          "summary",
-          `${e.kind.replaceAll("_", " ")} · ${time(e.at)}${e.device_id ? " · " + (state?.devices[e.device_id]?.snapshot.party.id || e.device_id.slice(0, 8)) : ""}`,
+        eventSummary(
+          `${e.kind.replaceAll("_", " ")}${e.device_id ? " · " + (state?.devices[e.device_id]?.snapshot.party.id || e.device_id.slice(0, 8)) : ""}`,
+          time(e.at),
+          "Operation",
         ),
       );
       row.append(el("pre", JSON.stringify(e, null, 2)));
@@ -1252,7 +1277,7 @@ $("open-layers").onclick = () => {
   updateLayers();
   const dialog = $("layers");
   if (dialog.open) dialog.close();
-  else dialog.show();
+  else dialog.showModal();
   $("open-layers").setAttribute("aria-expanded", String(dialog.open));
 };
 $("layers").onclose = () =>
@@ -3224,7 +3249,9 @@ function initializeMapModal() {
   const oldDisplay = current.querySelector("details");
   for (const node of [...oldDisplay.children].slice(1)) display.append(node);
   oldDisplay.remove();
-  library.append(display, $("map-warning"));
+  display.id = "map-display";
+  display.querySelector("summary").id = "open-map-display";
+  library.append($("map-warning"));
   current.classList.add("map-current-strip");
   $("current-map-title").textContent = "Current Map";
   const change = el("button", "Change in My Maps →");
@@ -3239,6 +3266,7 @@ function initializeMapModal() {
     [get, "Get a Map", "new-map"],
     [imports, "Import", "open-map-import"],
     [library, "My Maps", "choose-saved-map"],
+    [display, "Display", "open-map-display"],
   ];
   let importAreaEdited = false;
   function selectTab(id) {
@@ -3276,17 +3304,17 @@ function initializeMapModal() {
     tab.onclick = () => selectTab(panel.id);
     tab.onkeydown = (e) => {
       let next = index;
-      if (e.key === "ArrowRight") next = (index + 1) % 3;
-      else if (e.key === "ArrowLeft") next = (index + 2) % 3;
+      if (e.key === "ArrowRight") next = (index + 1) % panels.length;
+      else if (e.key === "ArrowLeft") next = (index + panels.length - 1) % panels.length;
       else if (e.key === "Home") next = 0;
-      else if (e.key === "End") next = 2;
+      else if (e.key === "End") next = panels.length - 1;
       else return;
       e.preventDefault();
       selectTab(panels[next][0].id);
       $("tab-" + panels[next][0].id).focus();
     };
     tabs.append(tab);
-    $(legacy).onclick = (e) => {
+    panel.querySelector("#" + legacy).onclick = (e) => {
       e.preventDefault();
       selectTab(panel.id);
     };
@@ -3296,7 +3324,7 @@ function initializeMapModal() {
   body.className = "map-modal-body";
   const feedback = dialog.querySelector(".map-download-feedback");
   tabs.after(body);
-  body.append(get, imports, library);
+  body.append(get, imports, library, display);
   for (const [panel] of panels) {
     const wrapper = el("div");
     wrapper.id = panel.id + "-panel";
@@ -3642,14 +3670,14 @@ function initializeMapModal() {
   consentArea.className = "map-footer-consent";
   consentArea.append(footerNote, consent);
   footer.prepend(consentArea);
-  library.insertBefore(display.querySelector(".current-map-controls"), display);
-  library.insertBefore($("current-map-layers"), display);
+  const displayControls = display.querySelector(".current-map-controls"),
+    displayLayers = $("current-map-layers");
   const visibility = el("button", "Layer visibility");
   visibility.onclick = () => {
     dialog.close();
     $("open-layers").click();
   };
-  library.insertBefore(visibility, display);
+  display.querySelector("summary").after(displayControls, displayLayers, visibility);
   $("regional-import-options").hidden = false;
   for (const id of ["import-map-lat", "import-map-lon", "import-map-radius"])
     $(id).addEventListener("input", () => {

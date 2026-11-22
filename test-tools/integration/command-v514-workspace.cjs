@@ -174,13 +174,14 @@ async function wait(check, message = "Timed out waiting for real state") {
       await page.keyboard.press("Escape");
       if (width <= 1250) {
         await page.locator(".header-menu-root > summary").click();
-        const tools = page.locator(".menu-groups > details").nth(1);
-        await tools.locator(":scope > summary").click();
-        const q = await box("#open-quality");
-        assert(q.x >= 0 && q.x + q.width <= width && q.y + q.height <= height, `utility menu bounded at ${width}x${height}`);
+        const t = await box("#open-tools");
+        assert(t.x >= 0 && t.x + t.width <= width && t.y + t.height <= height, `utility menu bounded at ${width}x${height}`);
         await page.screenshot({ path: path.join(out, `v514-${theme}-${width}x${height}-menu.png`) });
+        await page.locator("#open-tools").click();
+        const q = await box("#open-quality");
+        assert(q.x >= 0 && q.x + q.width <= width && q.y + q.height <= height, `Tools tabs bounded at ${width}x${height}`);
         await page.keyboard.press("Escape");
-        await page.keyboard.press("Escape");
+        if (await page.locator(".header-menu-root").evaluate((e) => e.open)) await page.keyboard.press("Escape");
       }
     }
     await page.setViewportSize({ width: 1440, height: 900 });

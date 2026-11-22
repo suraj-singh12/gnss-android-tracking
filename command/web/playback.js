@@ -468,16 +468,11 @@
       card.dataset.attention = String(p.visible && !located);
       if (id === selected) card.classList.add("historical-selected");
       if (p.device?.track_color)
-        card.style.borderLeftColor = p.device.track_color;
-      card.append(
-        row,
-        label(
-          "small",
-          p.visible
-            ? "Historical · read only"
-            : "Unselected · locked by original visibility",
-        ),
-      );
+        card.style.setProperty("--track", p.device.track_color);
+      const meta = [
+        p.visible ? "Read only" : "Unselected · locked by original visibility",
+      ];
+      card.append(row);
       const choose = label("button", identity(p, id), "historical-party-name");
       choose.setAttribute("aria-label", `Details for ${identity(p, id)}`);
       choose.disabled = !p.visible;
@@ -494,17 +489,14 @@
       };
       row.firstChild?.remove();
       row.prepend(choose);
-      if (p.device?.snapshot?.party?.name)
-        card.append(label("small", p.device.snapshot.party.name));
+      if (p.device?.snapshot?.party?.name) meta.push(p.device.snapshot.party.name);
       if (p.visible)
-        card.append(
-          label(
-            "small",
-            travel && !p.device?.location?.fix
-              ? "No qualified observation at this playhead"
-              : `Historic position · ${new Date(frame.presentation_at).toLocaleTimeString()}`,
-          ),
+        meta.push(
+          travel && !p.device?.location?.fix
+            ? "No qualified observation at this playhead"
+            : `Historic position · ${new Date(frame.presentation_at).toLocaleTimeString()}`,
         );
+      card.append(label("small", meta.join(" · "), "party-meta"));
       $("devices").append(card);
       if (permitted(id)) {
         const g = geometry(p.svg);

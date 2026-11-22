@@ -111,7 +111,8 @@ async function stop() {
     const pane = await page.locator('.party-detail').boundingBox();
     await page.locator('#open-sos').click();
     const drawer = await page.locator('#sos-panel').boundingBox();
-    assert(Math.abs(pane.width-drawer.width)<2, JSON.stringify({pane,drawer}));
+    // SOS emergencies is a centered V5.14 modal bounded by the viewport.
+    assert(pane && drawer.x >= 0 && drawer.x + drawer.width <= width && drawer.y >= 0 && drawer.y + drawer.height <= height && Math.abs(drawer.x + drawer.width / 2 - width / 2) < 2, JSON.stringify({pane,drawer}));
     if (await page.locator('.sos-more').first().evaluate(e=>e.open)) await page.locator('.sos-more summary').first().click();
     await page.screenshot({path:path.join(evidence,`sos-day-${width}.png`)});
     await page.locator('.sos-more summary').first().click();
@@ -124,11 +125,12 @@ async function stop() {
     await menuAction(page,'appearance');
     await menuAction(page,'open-history');
     const events = await page.locator('#event-history').boundingBox();
-    assert(Math.abs(events.width-pane.width)<2);
+    assert(events.x >= 0 && events.x + events.width <= width && Math.abs(events.x + events.width / 2 - width / 2) < 2, JSON.stringify(events));
     await page.locator('[data-close="event-history"]').click();
     await page.locator('#close-details').click();
     await page.locator('#open-layers').click(); assert(await page.locator('#layers').isVisible());
-    await page.locator('#open-layers').click(); assert(!(await page.locator('#layers').isVisible()));
+    // Map layers is a V5.14 modal: its own Close dismisses it.
+    await page.locator('[data-close="layers"]').click(); assert(!(await page.locator('#layers').isVisible()));
     await page.locator('#open-layers').click(); await page.keyboard.press('Escape');
     assert(await page.locator('#open-layers').evaluate(e=>e===document.activeElement));
     await page.locator('#open-layers').click(); await page.locator('[data-close="layers"]').click();
@@ -153,7 +155,7 @@ async function stop() {
   );
   await page.locator('[data-close="sos-panel"]').click();
   await menuAction(page, "open-history");
-  await page.locator("#event-filter").selectOption("sos");
+  await page.locator('[data-event-filter="sos"]').click();
   await page.waitForSelector(".history-event");
   assert.match(
     await page.locator(".history-event").innerText(),
@@ -211,7 +213,7 @@ async function stop() {
   assert.equal(await page.locator(".sos-alert:not(.acknowledged)").count(), 1);
   await page.locator('[data-close="sos-panel"]').click();
   await menuAction(page, "open-history");
-  await page.locator("#event-filter").selectOption("sos");
+  await page.locator('[data-event-filter="sos"]').click();
   await page.waitForFunction(
     () => document.querySelectorAll(".history-event").length === 2,
   );

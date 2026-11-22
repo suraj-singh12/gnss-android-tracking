@@ -32,6 +32,11 @@ async function headerAction(id) {
   // A new/reopened real SOS notification can cover the mobile header menu.
   // Dismiss only the toast; the outstanding emergency remains unacknowledged.
   if(await page.locator("#sos-toast-dismiss").isVisible()) await page.locator("#sos-toast-dismiss").click();
+  if (["open-travel", "open-library", "open-history", "open-quality", "open-about"].includes(id)) {
+    await menuAction(page, id);
+    if (id === 'open-library') await page.waitForFunction(() => !document.querySelector('#library-status').textContent.includes('Loading'));
+    return;
+  }
   const target = page.locator(`#${id}`);
   const root = page.locator(".header-menu-root");
   const mobileSummary = root.locator(":scope > summary");
@@ -171,7 +176,8 @@ async function wait(fn) {
       await inspectPanel('.party-overview','live',width,theme);
       await page.screenshot({path:path.join(out,`live-${theme}-parties-${width}.png`)});
       const party=page.locator('.party-select').first();
-      await wait(async () => (await party.boundingBox())?.height >= 40);
+      // The whole party card is the selection target, as in the approved design.
+      await wait(async () => (await party.locator('xpath=ancestor::*[contains(concat(" ",@class," ")," device ")][1]').boundingBox())?.height >= 40);
       await party.click();
       await inspectPanel('.party-detail','live',width,theme);
       await page.screenshot({path:path.join(out,`live-${theme}-details-${width}.png`)});
@@ -423,14 +429,14 @@ async function wait(fn) {
     if (!(await page.locator('#collapse-parties').isVisible())) await page.locator('#toggle-parties').click();
     await page.locator('.party-select').first().click();
     const detailWidth=(await page.locator('.party-detail').boundingBox()).width;
-    assert(Math.abs(libraryWidth-detailWidth)<1, `library ${libraryWidth} != Details ${detailWidth} at ${width}`);
+    // Saved recordings is a centered V5.14 modal bounded by the viewport.
+    assert(detailWidth > 0 && libraryWidth > 0 && libraryWidth <= Math.min(720, width - 32) + 1, `library ${libraryWidth} unbounded at ${width}`);
     await headerAction('open-library');
     for (const theme of ['day','night']) {
       const overflow=await page.locator('#saved-library').evaluate(root=>[root,...root.querySelectorAll('#library-rows, .library-row, #library-selected, .library-sortline')].filter(e=>e.scrollWidth>e.clientWidth+1).map(e=>e.id || e.className));
       assert.deepEqual(overflow,[], `library overflow ${width} ${theme}`);
       const r=await page.locator('#saved-library').boundingBox();
-      assert(Math.abs(r.x+r.width-width)<1, 'library aligned right');
-      assert(Math.abs(r.width-detailWidth)<1);
+      assert(r.x >= 0 && r.x + r.width <= width && Math.abs(r.x + r.width / 2 - width / 2) < 2, 'library centered within viewport');
       panelMeasurements.push({mode:'library',width,theme,selector:'#saved-library',widthMeasured:r.width,detailWidth});
       fs.writeFileSync(path.join(out,'panel-measurements.json'),JSON.stringify(panelMeasurements,null,2));
       await page.locator('#library-search').fill('no-such-recording');
@@ -468,7 +474,7 @@ async function wait(fn) {
   assert.equal(realSOS.status,200,await realSOS.text());
   await page.evaluate(()=>poll());
   await page.locator('#open-sos').click();
-  await page.locator('.sos-alert').last().getByRole('button',{name:'Locate'}).click();
+  await page.locator(`.sos-alert[data-event$="/${emergency.sos.event_id}"]`).getByRole('button',{name:'Locate'}).click();
   assert.equal(await page.evaluate(()=>window.HistoricalPlayback.active),false);
   await page.locator('#historical-return').click();
   assert.equal(await page.evaluate(()=>window.HistoricalPlayback.position),returnPosition);
@@ -753,7 +759,7 @@ async function wait(fn) {
     for (const theme of ['day','night']) {
       await headerAction('open-library');
       const measured=await page.locator('#saved-library').evaluate(e=>({width:e.getBoundingClientRect().width,overflow:e.scrollWidth>e.clientWidth+1}));
-      assert(Math.abs(measured.width-inspectedDetails.width)<1, 'playback library must match Details');
+      assert(measured.width > 0 && measured.width <= Math.min(720, width - 32) + 1, 'playback library is a viewport-bounded modal');
       assert.equal(measured.overflow,false);
       assert(await page.evaluate(()=>window.HistoricalPlayback.active), 'library does not exit playback');
       panelMeasurements.push({mode:'playback-library',width,theme,selector:'#saved-library',widthMeasured:measured.width,detailWidth:inspectedDetails.width});
@@ -851,7 +857,7 @@ async function wait(fn) {
   await page.locator("#library-name").fill("Renamed persisted recording");
   await page.locator("#library-date").fill("27 Oct 2026 · Asia/Calcutta");
   await page.locator("#library-description").fill("Historical metadata only");
-  await page.locator('#library-edit-form button[type="submit"]').click();
+  await page.locator('#library-edit button[type="submit"]').click();
   await page.locator('[data-close="saved-library"]').click();
   command.kill();
   await once(command, "exit");
