@@ -3441,3 +3441,23 @@ body[data-history-mode="travel"] #playback-status { top:94px; }
   #command .brand .brand-name { display: block; font-size: 13px; font-weight: 750; white-space: nowrap; }
   #command .brand .brand-name::after { content: none; }
 }
+
+/* V5.14 inspector: observation sync, evidence facts, Quality policy, disclaimer. */
+#command .inspector-sync { margin-top: 3px; padding: 17px 0 13px; border-bottom: 1px solid var(--line); }
+#command .inspector-sync .sync-head { display: flex; justify-content: space-between; align-items: center; gap: 9px; }
+#command .inspector-sync .sync-head > b { font-size: 12.5px; }
+#command .inspector-sync .sync-count { margin-top: 10px; font-size: 22px; font-weight: 780; letter-spacing: -.5px; line-height: 1.2; }
+#command .inspector-sync .sync-count > span { font-size: 11px; font-weight: 650; letter-spacing: 0; color: var(--muted); }
+#command .inspector-sync .sync-track { width: 100%; height: 6px; margin: 9px 0 11px; overflow: hidden; border-radius: 10px; background: #d3e0da; }
+:root[data-appearance="night"] #command .inspector-sync .sync-track { background: var(--line); }
+#command .inspector-sync .sync-track i { display: block; height: 100%; border-radius: 9px; background: var(--green); transition: width .45s; }
+#command .inspector-sync .sync-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 11px; }
+#command .inspector-sync .sync-meta span { font-size: 10px; color: var(--muted); text-align: right; }
+#command .inspector-evidence .evidence-facts { margin-bottom: 4px; }
+#command .inspector-evidence .evidence-facts .fact:last-child { border-bottom: 0; }
+#command .inspector-evidence .inspector-reporting { border-top: 1px solid var(--line); border-bottom: 0; }
+#command .inspector-evidence > button.full { width: 100%; min-height: 38px; margin: 4px 0 13px; }
+#command .inspector-disclaimer { margin: 14px 0 0; font-size: 9.5px; line-height: 1.45; color: var(--muted); }
+#command .soft-tag { padding: 5px 8px; border-radius: 12px; background: var(--greenwash); color: var(--green); font-size: 10px; font-weight: 730; white-space: nowrap; }
+#command .soft-tag.warn { background: var(--amberwash, #fff3df); color: var(--amber); }
+#command .soft-tag.danger { background: var(--redwash, #fdecec); color: var(--red); }

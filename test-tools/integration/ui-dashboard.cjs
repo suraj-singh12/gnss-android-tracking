@@ -878,6 +878,8 @@ async function wait(check) {
     if (!(await page.locator('#collapse-parties').isVisible())) await page.locator('#toggle-parties').click();
     await page.locator('.party-select[aria-pressed="true"]').click();
   }
+  // The legacy v1 override lives in the inspector's evidence disclosure.
+  await page.locator("#selected-detail .inspector-evidence").evaluate((e) => (e.open = true));
   await page.locator("#selected-detail .override input").fill("15");
   await page.locator("#selected-detail .override button").first().click();
   await wait(

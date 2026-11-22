@@ -751,32 +751,52 @@ function renderDashboard() {
           metrics.append(metric);
         }
         critical.append(contact, metrics);
-        const facts = el("div", undefined, "inspector-facts");
-        for (const [label, value, full] of [
-          ["Team", d.snapshot.party.name],
-          [
-            "Accuracy",
-            f?.horizontal_accuracy_m == null
-              ? "Unknown"
-              : "±" + f.horizontal_accuracy_m + " m",
-          ],
-          ["Last fix", f ? shortTime(f.observed_at) : "No fix received", f && time(f.observed_at)],
-          ["Last Command contact", shortTime(d.last_contact), time(d.last_contact)],
-          ["Qualified distance", distance(d.total_m)],
-          [
-            "Coordinates",
-            f
-              ? `${f.latitude.toFixed(6)}, ${f.longitude.toFixed(6)}`
-              : "Unavailable",
-          ],
-          ["Recording", historyLabel(d)],
-        ]) {
+        const fact = (root, label, value, full) => {
           const row = el("div", undefined, "fact");
           const v = el("span", value);
           if (full) v.title = full;
           row.append(el("span", label), v);
-          facts.append(row);
-        }
+          root.append(row);
+        };
+        const facts = el("div", undefined, "inspector-facts");
+        fact(facts, "Accuracy", f?.horizontal_accuracy_m == null ? "Unknown" : "±" + f.horizontal_accuracy_m + " m");
+        fact(facts, "Last fix", f ? shortTime(f.observed_at) : "No fix received", f && time(f.observed_at));
+        fact(facts, "Qualified distance", distance(d.total_m));
+        // Observation sync: Command-durable receipts against the phone's last queue report.
+        const h = d.history, queue = h?.last_reported_phone_queue, live = !!h?.phone_state_recent;
+        const received = h?.received_observations ?? 0,
+          pendingCount = queue?.pending_observations,
+          total = received + (pendingCount ?? 0);
+        const sync = el("section", undefined, "inspector-sync");
+        sync.setAttribute("aria-label", "Observation synchronization");
+        const syncHead = el("div", undefined, "sync-head");
+        syncHead.append(
+          el("b", "Observation sync"),
+          el("span", !queue ? "No queue report" : !live ? "Last report" : pendingCount === 0 ? "Reported zero pending" : "Receiving",
+            "soft-tag" + (live && pendingCount === 0 ? "" : " warn")),
+        );
+        const count = el("div", undefined, "sync-count");
+        count.append(el("strong", received.toLocaleString()), el("span", queue ? ` of ${total.toLocaleString()} received` : " received"));
+        const track = el("div", undefined, "sync-track");
+        track.setAttribute("role", "progressbar");
+        track.setAttribute("aria-label", "Durably received observations");
+        track.setAttribute("aria-valuemin", "0");
+        track.setAttribute("aria-valuemax", String(Math.max(total, received)));
+        track.setAttribute("aria-valuenow", String(received));
+        const bar = el("i");
+        bar.style.width = (total ? Math.min(100, (received / total) * 100) : received ? 100 : 0) + "%";
+        track.append(bar);
+        const syncMeta = el("div", undefined, "sync-meta");
+        syncMeta.append(
+          el("b", pendingCount == null ? "Pending unknown" : pendingCount.toLocaleString() + " pending"),
+          el("span", !queue ? "Phone queue unavailable" : live ? "Last phone queue report" : "Offline · last reported, not live"),
+        );
+        sync.append(syncHead, count, track, syncMeta);
+        const evidenceFacts = el("div", undefined, "inspector-facts evidence-facts");
+        fact(evidenceFacts, "Team", d.snapshot.party.name);
+        fact(evidenceFacts, "Last Command contact", shortTime(d.last_contact), time(d.last_contact));
+        fact(evidenceFacts, "Coordinates", f ? `${f.latitude.toFixed(6)}, ${f.longitude.toFixed(6)}` : "Unavailable");
+        fact(evidenceFacts, "Recording", historyLabel(d));
         const reporting = el("div", undefined, "inspector-reporting");
         reporting.append(
           el("span", "Reporting interval override · seconds", "inspector-kicker"),
@@ -788,6 +808,9 @@ function renderDashboard() {
               " · legacy v1 setting; authenticated controls are in Phone controls",
           ),
         );
+        const policy = el("button", "Quality policy", "full");
+        policy.type = "button";
+        policy.onclick = () => $("open-quality").click();
         const diagnostics = el("details", undefined, "inspector-evidence");
         const evidenceSummary = el("summary"),
           evidenceCopy = el("span", undefined, "evidence-copy");
@@ -799,7 +822,7 @@ function renderDashboard() {
         disclosure.append(el("span", "Expand", "evidence-open-text"), el("span", "Collapse", "evidence-close-text"));
         disclosure.insertAdjacentHTML("beforeend", '<svg class="small-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>');
         evidenceSummary.append(evidenceCopy, disclosure);
-        diagnostics.append(evidenceSummary, status);
+        diagnostics.append(evidenceSummary, evidenceFacts, status, reporting);
         for (const event of state.sos_alerts ?? []) {
           if (event.device_id !== d.device_id) continue;
           diagnostics.append(
@@ -812,8 +835,11 @@ function renderDashboard() {
         const actions = el("div", undefined, "inspector-actions");
         remote.className = "primary";
         actions.append(remote);
-        inspector.append(head, critical, facts, reporting, diagnostics, actions);
-        $("selected-detail").append(inspector);
+        diagnostics.append(policy);
+        inspector.append(head, critical, facts);
+        $("selected-detail").append(inspector, sync, diagnostics, actions);
+        if (!live)
+          $("selected-detail").append(el("p", "* Last-reported values are not live.", "inspector-disclaimer"));
       }
     }
   }
