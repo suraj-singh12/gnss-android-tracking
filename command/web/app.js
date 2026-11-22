@@ -1122,12 +1122,39 @@ async function refreshMaps(selected) {
     );
     option.dataset.source = m.source;
     $("saved-maps").add(option);
-    const row = el("div", undefined, "saved-map-row");
-    const select = el("strong", m.source);
+    const row = el("div", undefined, "saved-map-row map-row");
+    const main = el("button", undefined, "map-row-main");
+    main.type = "button";
+    main.onclick = () => {
+      $("saved-maps").value = m.id;
+      loadSavedMap(m.id).catch(showError);
+    };
     row.dataset.mapId = m.id;
     row.classList.toggle("selected", m.id === (selected || activeMapID));
-    row.append(
-      select,
+    const rowActions = el("div", undefined, "map-row-actions");
+    const active = m.id === (selected || activeMapID);
+    const tag = el("span", active ? "Active" : "Stored", "soft-tag map-row-tag" + (active ? "" : " warn"));
+    const more = el("button", "Details");
+    more.type = "button";
+    more.onclick = () => {
+      const open = $("maps-library").dataset.details !== m.id;
+      if (open) $("maps-library").dataset.details = m.id;
+      else delete $("maps-library").dataset.details;
+      if (open && activeMapID !== m.id) {
+        $("saved-maps").value = m.id;
+        loadSavedMap(m.id).catch(showError);
+      }
+    };
+    const remove = el("button", "Delete", "danger");
+    remove.type = "button";
+    remove.onclick = async () => {
+      if (activeMapID !== m.id) await loadSavedMap(m.id).catch(showError);
+      if (activeMapID === m.id) $("delete-map").click();
+    };
+    rowActions.append(tag, more, remove);
+    row.append(main, rowActions);
+    main.append(
+      el("strong", m.source),
       el(
         "small",
         `${m.bounds ? m.bounds.map((v) => v.toFixed(4)).join(", ") : "Imported geographic coverage"} · ${
@@ -1144,8 +1171,9 @@ async function refreshMaps(selected) {
   }
   if (!maps.length)
     $("saved-map-list").append(
-      el("p", "No saved maps yet. Download or import a map."),
+      el("p", "No offline maps yet. Import one or download a new area.", "inline-status"),
     );
+  $("saved-map-count").textContent = `${maps.length} saved map${maps.length === 1 ? "" : "s"} · click a map to use it`;
   if (selected) $("saved-maps").value = selected;
 }
 function useMap(text, source, id, recordingAsset = "") {
@@ -1170,8 +1198,15 @@ function useMap(text, source, id, recordingAsset = "") {
   offlineMap = parsed;
   activeMapID = id;
   $("current-map-name").textContent = source;
-  for (const row of $("saved-map-list").children)
-    row.classList.toggle("selected", row.dataset.mapId === id);
+  for (const row of $("saved-map-list").children) {
+    const active = row.dataset.mapId === id;
+    row.classList.toggle("selected", active);
+    const tag = row.querySelector(".map-row-tag");
+    if (tag) {
+      tag.textContent = active ? "Active" : "Stored";
+      tag.classList.toggle("warn", !active);
+    }
+  }
   terrain = undefined;
   updateLayers();
   $("map-mode").value = "offline";
@@ -3385,6 +3420,7 @@ function initializeMapModal() {
   const use = el("button", "Use selected map");
   use.className = "primary";
   use.id = "use-selected-map";
+  use.hidden = true;
   use.onclick = () => $("save-use-map").onclick();
   libraryActions.append(use);
   actions.append(libraryActions);
@@ -3579,19 +3615,45 @@ function initializeMapModal() {
       $("download-map").disabled = !!preparedMap?.plan?.unsupported;
     }
   };
-  imports.insertBefore(
-    el("h2", "Import an existing offline map"),
-    imports.children[1],
-  );
-  $("source-map-file").closest("label").classList.add("map-file-drop");
+  imports.insertBefore(el("p", "Existing map file", "map-field-caption"), imports.children[1]);
+  {
+    const input = $("source-map-file"), picker = input.closest("label");
+    picker.className = "map-file-picker";
+    picker.replaceChildren();
+    const info = el("span", undefined, "file-info");
+    const fileName = el("strong", "Choose an offline map file", "file-name");
+    info.append(fileName, el("small", ".gmap.zip, GeoJSON or OSM PBF"));
+    const icon = el("span", "⇧", "file-icon");
+    icon.setAttribute("aria-hidden", "true");
+    const browse = el("span", "Choose file", "file-browse");
+    browse.setAttribute("aria-hidden", "true");
+    input.setAttribute("aria-label", "Choose offline map file");
+    picker.append(icon, info, browse, input);
+    input.addEventListener("change", () => {
+      const file = input.files[0];
+      fileName.textContent = file ? file.name : "Choose an offline map file";
+    });
+  }
   $("import-map-source").disabled = !$("source-map-file").files.length;
+  $("import-map-source").textContent = "Import map";
   $("source-map-file").addEventListener("change", () => {
     $("import-map-source").disabled =
       !$("source-map-file").files.length || !!downloadAbort || mapImportPending;
   });
   $("source-map-mode").options[0].textContent = "Selected area";
   $("source-map-mode").options[1].textContent = "Entire file · if feasible";
-  library.insertBefore(el("h2", "Your offline maps"), library.children[1]);
+  const listHeading = el("div", undefined, "map-list-heading");
+  const listCopy = el("div");
+  const count = el("small", "0 saved maps");
+  count.id = "saved-map-count";
+  listCopy.append(el("b", "Your offline maps"), count);
+  const beginImport = el("button", "Import map", "primary");
+  beginImport.type = "button";
+  beginImport.onclick = () => selectTab("map-import");
+  listHeading.append(listCopy, beginImport);
+  library.insertBefore(listHeading, library.children[1]);
+  $("saved-maps").closest("label").hidden = true;
+  $("delete-map").hidden = true;
   function updateTask() {
     const previousState = dialog.dataset.mapState;
     const transfer = radiusManifest?.transfer;
@@ -3674,7 +3736,7 @@ function initializeMapModal() {
     $("delete-map").disabled = busy || !activeMapID;
     $("export-map").hidden = !activeMapID;
     $("use-import-centre").disabled = busy || !viewport;
-    $("use-import-centre").hidden = $("source-map-mode").value === "full";
+    $("use-import-centre").hidden = true;
   }
   // Backend handlers already publish authoritative progress/manifest state into
   // these nodes. Observe those changes, without introducing another job timer.
@@ -3708,7 +3770,54 @@ function initializeMapModal() {
     $("open-layers").click();
   };
   display.querySelector("summary").after(displayControls, displayLayers, visibility);
-  $("regional-import-options").hidden = false;
+  // Display carries the prototype controls; map choice lives in My Maps, layers in Map layers.
+  displayControls.hidden = displayLayers.hidden = visibility.hidden = true;
+  $("map-metadata").hidden = true;
+  {
+    const all = $("all-observations"), allLabel = all.closest("label");
+    allLabel.className = "map-switchline";
+    all.setAttribute("role", "switch");
+    const copy = el("span");
+    copy.append(el("b", "Use all observations"), el("small", "Off by default · diagnostic dots do not add distance"));
+    allLabel.replaceChildren(copy, all);
+    allLabel.nextElementSibling?.tagName === "P" && allLabel.nextElementSibling.remove();
+    const dots = $("dots"), dotsLabel = dots.closest("label");
+    const dotRow = el("div", undefined, "dot-interval-row");
+    const dotText = el("label", "Display dot interval");
+    dotText.htmlFor = "dots";
+    const dotValue = el("div", undefined, "dot-value");
+    dotValue.append(dots, el("span", "seconds"));
+    dotRow.append(dotText, dotValue);
+    dotsLabel.replaceWith(dotRow);
+    const opacity = $("map-opacity"), opacityLabel = opacity.closest("label");
+    const opacityRow = el("div", undefined, "display-opacity");
+    const opacityText = el("label", "Background opacity ");
+    opacityText.htmlFor = "map-opacity";
+    const opacityValue = el("strong");
+    const showOpacity = () => (opacityValue.textContent = Math.round(opacity.value * 100) + "%");
+    opacity.addEventListener("input", showOpacity);
+    showOpacity();
+    opacityText.append(opacityValue);
+    opacityRow.append(opacityText, opacity);
+    opacityLabel.replaceWith(opacityRow);
+    const displayActions = el("div");
+    displayActions.dataset.mapAction = "map-display";
+    const apply = el("button", "Apply", "primary");
+    apply.type = "button";
+    apply.id = "apply-map-display";
+    apply.onclick = () => {
+      if (!$("dots").checkValidity()) return $("dots").reportValidity();
+      dialog.close();
+    };
+    displayActions.append(apply);
+    actions.append(displayActions);
+  }
+  const importArea = () => /\.(osm\.)?pbf$/i.test($("source-map-file").files[0]?.name || "");
+  const syncImportArea = () => {
+    $("regional-import-options").hidden = !importArea();
+    importPreview.hidden = !importArea();
+  };
+  $("source-map-file").addEventListener("change", syncImportArea);
   for (const id of ["import-map-lat", "import-map-lon", "import-map-radius"])
     $(id).addEventListener("input", () => {
       importAreaEdited = true;
@@ -3724,6 +3833,7 @@ function initializeMapModal() {
     updateImportPreview().catch(showError);
   };
   $("import-crop-fields").before(useImportCentre);
+  useImportCentre.hidden = true;
   const importLimits = $("regional-import-options").querySelector("p");
   const importDetails = el("details");
   importDetails.append(
@@ -3731,11 +3841,10 @@ function initializeMapModal() {
     importLimits,
   );
   imports.append(importDetails);
-  const importFormatNote = el(
-    "small",
-    "Supported: OSM PBF, GeoJSON and portable .gmap.zip.",
-  );
-  $("source-map-file").closest("label").append(importFormatNote);
+  importDetails.hidden = true;
+  // One picker imports GeoJSON, PBF and packages; the legacy GeoJSON input stays for automation.
+  $("map-file").closest("details").hidden = true;
+
   const importPreview = el("section");
   importPreview.className = "map-selection-preview";
   const importSVG = svg("svg", {
@@ -3753,13 +3862,13 @@ function initializeMapModal() {
     ),
   );
   imports.insertBefore(importPreview, $("map-import-status"));
+  syncImportArea();
   let importPreviewVersion = 0;
   async function updateImportPreview() {
     const revision = ++importPreviewVersion;
     const file = $("source-map-file").files[0];
     importPreview.hidden =
-      $("source-map-mode").value === "full" ||
-      (file && !/\.pbf$/i.test(file.name));
+      $("source-map-mode").value === "full" || !file || !/\.pbf$/i.test(file.name);
     if (importPreview.hidden) return;
     try {
       const plan = await mapPost("map-plan", {

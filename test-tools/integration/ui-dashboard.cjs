@@ -587,6 +587,7 @@ async function wait(check) {
   await page.locator('[data-close="layers"]').click();
   await menuAction(page, "open-map");
   await page.locator("#tab-maps-library").click();
+  await page.locator(".saved-map-row.selected").getByRole("button", { name: "Details" }).click();
   await page
     .getByText("Acquire or import terrain for this saved map", { exact: true })
     .click();

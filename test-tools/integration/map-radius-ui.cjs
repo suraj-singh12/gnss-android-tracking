@@ -157,7 +157,7 @@ async function wait(f) {
   const maps = await (await fetch(local + "/local/maps")).json();
   assert.equal(maps.length, 1);
   await page.locator("#tab-maps-library").click();
-  await page.locator("#saved-maps").selectOption(maps[0].id);
+  await page.locator(`.saved-map-row[data-map-id="${maps[0].id}"] .map-row-main`).click();
   await wait(async () => !(await page.locator("#layer-contours").isDisabled()));
   await page.locator("#tab-map-preparation").click();
   await page.getByRole("button", { name: "Custom", exact: true }).click();
@@ -455,7 +455,7 @@ async function wait(f) {
   );
   report.portable_package_and_full_pbf = "PASS (local fixture, no providers)";
   await page.locator("#tab-maps-library").click();
-  await page.locator("#saved-maps").selectOption(maps[0].id);
+  await page.locator(`.saved-map-row[data-map-id="${maps[0].id}"] .map-row-main`).click();
   assert.deepEqual(errors, []);
   report.browser_render = await page.evaluate(() => terrainGeneration);
   report.manifest = await (
@@ -470,12 +470,12 @@ async function wait(f) {
   assert.equal(report.manifest.transfer.approved_bytes, 5000000);
   assert.equal(report.manifest.transfer.received_bytes, 0);
   report.elapsed_browser_ms = await page.evaluate(() => performance.now());
-  await page.locator("#saved-maps").selectOption(maps[0].id);
+  await page.locator(`.saved-map-row[data-map-id="${maps[0].id}"] .map-row-main`).click();
   page.once("dialog", (d) => d.dismiss());
-  await page.locator("#delete-map").click();
+  await page.locator(`.saved-map-row[data-map-id="${maps[0].id}"] .map-row-actions .danger`).click();
   assert.equal((await (await fetch(local + "/local/maps")).json()).length, 4);
   page.once("dialog", (d) => d.accept());
-  await page.locator("#delete-map").click();
+  await page.locator(`.saved-map-row[data-map-id="${maps[0].id}"] .map-row-actions .danger`).click();
   await wait(
     async () =>
       (await (await fetch(local + "/local/maps")).json()).length === 3,

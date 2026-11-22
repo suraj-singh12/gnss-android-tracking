@@ -229,6 +229,7 @@ async function port() {
     }
   }
   await page.locator("#tab-maps-library").click();
+  await page.locator(".saved-map-row.selected").getByRole("button", { name: "Details" }).click();
   await page
     .getByText("Acquire or import terrain for this saved map", { exact: true })
     .click();
