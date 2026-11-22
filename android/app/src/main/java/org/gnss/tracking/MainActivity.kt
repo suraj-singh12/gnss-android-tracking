@@ -77,6 +77,9 @@ class MainActivity : Activity() {
     private lateinit var cancelStartButton: Button
     private var v46Layout = false
     private var v46Refresh: (() -> Unit)? = null
+    private var v3Segment: ((String) -> Unit)? = null
+    private var diagnosticsSegment = "Health"
+    private var diagnosticsActivity = "All"
     private var v46Records: List<CommandRecord> = emptyList()
     private var v46Header: ((String) -> Unit)? = null
     private val v46Outcomes = linkedSetOf("applied", "unknown")
@@ -283,11 +286,22 @@ class MainActivity : Activity() {
                         else -> requested
                     }
                 else requested
-            val name = normalized.takeIf { routes.containsKey(it) } ?: "Tracking"
+            val segment =
+                if (v46Layout)
+                    when (normalized) {
+                        "Saved data & sync" -> "Health"
+                        "Diagnostic tools" -> "Tools"
+                        "Command Instructions" -> "Instructions"
+                        "Phone Alerts" -> "Alerts"
+                        "SOS event history" -> "SOS"
+                        else -> null
+                    }
+                else null
+            val name = (if (segment != null) "Diagnostics" else normalized).takeIf { routes.containsKey(it) } ?: "Tracking"
             if (route != name) routeScrolls[route] = scroll.scrollY
             if (name == "Instruction filters")
                 v46Outcomes.addAll(listOf("applied", "unknown", "rejected"))
-            if (v46Layout && route == "Diagnostic tools" && name != route)
+            if (v46Layout && route == "Diagnostics" && diagnosticsSegment == "Tools" && name != route)
                 app.physicalButtonTest.activityPaused()
             if (::sosHold.isInitialized) sosHold.cancel()
             if (route != name) {
@@ -317,8 +331,10 @@ class MainActivity : Activity() {
             if (::trackingActions.isInitialized)
                 trackingActions.visibility =
                     if (destination == "Tracking") View.VISIBLE else View.GONE
+            val pageHost = routes.getValue("Tracking").parent
             routes.forEach { (key, page) ->
-                page.visibility = if (key == name) View.VISIBLE else View.GONE
+                // Pages embedded in a Diagnostics segment stay owned by that segment.
+                if (page.parent === pageHost) page.visibility = if (key == name) View.VISIBLE else View.GONE
             }
             tabButtons.forEach { (key, tab) ->
                 tab.isSelected = key == destination
@@ -329,6 +345,7 @@ class MainActivity : Activity() {
             }
             scroll.post { scroll.scrollTo(0, routeScrolls[name] ?: 0) }
             if (destination == "Diagnostics") refreshConsole?.invoke()
+            segment?.let { v3Segment?.invoke(it) }
             if (name == "Physical Button Test" || name == "Diagnostic tools")
                 refreshPhysicalButtonHistory()
             refreshTrackingBanners()
@@ -4086,16 +4103,49 @@ class MainActivity : Activity() {
         val diagnostics = routes.getValue("Diagnostics")
         val healthPanel = healthRows.getValue("GNSS").parent as LinearLayout
         detach(healthPanel)
-        // Sync/SOS/device-space rows belonged to the retired Storage health page. Their
-        // owners keep running; the facts stay in the diagnostic ZIP and Saved data & sync.
-        listOf("Sync", "SOS", "Device space").map { healthRows.getValue(it) }.forEach(::detach)
-        rootTitle(diagnostics, "Diagnostics", "Readiness, evidence and tools for troubleshooting.")
+        rootTitle(diagnostics, "Diagnostics")
+        // v3: one Diagnostics page with Health / Activity / Tools segments.
+        val segmentBar = LinearLayout(this).apply {
+            background = ui.shape(R.color.secondary_surface, R.dimen.radius_button, null)
+            setPadding(dp(3), dp(3), dp(3), dp(3))
+        }
+        add(diagnostics, segmentBar, 12)
+        val healthSeg = ui.column()
+        val activitySeg = ui.column()
+        val toolsSeg = ui.column()
+        val segments = linkedMapOf("Health" to healthSeg, "Activity" to activitySeg, "Tools" to toolsSeg)
+        segments.values.forEach { add(diagnostics, it) }
+        val segmentButtons = linkedMapOf<String, Button>()
+        fun styleChoice(button: Button, selected: Boolean) {
+            ui.quiet(button)
+            button.isSelected = selected
+            button.gravity = android.view.Gravity.CENTER
+            button.minHeight = ui.px(R.dimen.control_height)
+            button.setTextColor(getColor(if (selected) R.color.ink else R.color.muted))
+            button.setTypeface(null, if (selected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+            button.background = if (selected) ui.shape(R.color.surface, R.dimen.radius_button, R.color.line) else null
+        }
+        fun selectSegment(name: String) {
+            if (diagnosticsSegment == "Tools" && name != "Tools") app.physicalButtonTest.activityPaused()
+            diagnosticsSegment = name
+            segments.forEach { (key, seg) -> seg.visibility = if (key == name) View.VISIBLE else View.GONE }
+            segmentButtons.forEach { (key, button) ->
+                styleChoice(button, key == name)
+                button.contentDescription = "$key${if (key == name) ", selected" else ""}"
+            }
+            if (name == "Tools") refreshPhysicalButtonHistory()
+        }
+        for (name in segments.keys) {
+            val button = ui.button(name) { selectSegment(name) }
+            segmentButtons[name] = button
+            segmentBar.addView(button, LinearLayout.LayoutParams(0, -2, 1f))
+        }
         val overviewRows =
-            listOf("GNSS", "Command", "Storage", "Remote control").map { healthRows.getValue(it) }
+            listOf("GNSS", "Storage", "Command", "Sync", "SOS", "Device space", "Remote control").map { healthRows.getValue(it) }
         healthPanel.removeAllViews()
-        overviewRows.forEach { healthPanel.addView(it) }
-        section(diagnostics, "Current device health")
-        add(diagnostics, healthPanel, 1)
+        overviewRows.forEach { detach(it); healthPanel.addView(it) }
+        section(healthSeg, "Health")
+        add(healthSeg, healthPanel, 1)
         // Same bordered list surface as every other grouped list; dividers only between peers.
         healthPanel.background = ui.shape(R.color.surface)
         healthPanel.setPadding(dp(4), 0, dp(4), 0)
@@ -4106,11 +4156,34 @@ class MainActivity : Activity() {
                 setColor(getColor(R.color.line))
                 setSize(1, ui.px(R.dimen.stroke))
             }
-        section(diagnostics, "Operational records")
-        menu(diagnostics, "Command Instructions", "Requested, applied and unknown outcomes")
-        menu(diagnostics, "Phone alerts", "Output, ACK and alert history", "Phone Alerts")
-        menu(diagnostics, "Saved data & sync", "Backlog, retry and receipts")
-        menu(diagnostics, "SOS history", "Local, Command and human ACKs", "SOS event history")
+        // Activity: type chips over the existing record owners (instructions, alerts, SOS).
+        val activityChips = LinearLayout(this)
+        add(activitySeg, activityChips)
+        val activityBoxes = linkedMapOf("Instructions" to ui.column(), "Alerts" to ui.column(), "SOS" to ui.column())
+        activityBoxes.values.forEach { add(activitySeg, it) }
+        val chipButtons = linkedMapOf<String, Button>()
+        fun selectActivity(kind: String) {
+            diagnosticsActivity = kind
+            activityBoxes.forEach { (key, box) -> box.visibility = if (kind == "All" || kind == key) View.VISIBLE else View.GONE }
+            chipButtons.forEach { (key, chip) ->
+                styleChoice(chip, key == kind)
+                chip.background = ui.shape(if (key == kind) R.color.positive_surface else R.color.surface, R.dimen.radius_pill, if (key == kind) null else R.color.line)
+                chip.setTextColor(getColor(if (key == kind) R.color.accent else R.color.ink))
+                chip.contentDescription = "$key${if (key == kind) ", selected" else ""}"
+            }
+        }
+        for (kind in listOf("All", "Instructions", "Alerts", "SOS")) {
+            val chip = ui.button(kind) { selectActivity(kind) }
+            chip.setPadding(dp(12), 0, dp(12), 0)
+            chipButtons[kind] = chip
+            activityChips.addView(chip, LinearLayout.LayoutParams(-2, -2).apply { if (kind != "All") marginStart = dp(6) })
+        }
+        v3Segment = { target ->
+            when (target) {
+                "Instructions", "Alerts", "SOS" -> { selectSegment("Activity"); selectActivity(target) }
+                else -> selectSegment(target)
+            }
+        }
         routeParents["SOS event history"] = "Diagnostics"
         // The reference layer's in-page "‹ parent" link and title duplicate the app bar (and
         // named the superseded parent). Keep the two indexed header slots, but hide them.
@@ -4119,8 +4192,6 @@ class MainActivity : Activity() {
         // Re-present rows already rendered by the reference layer with the V4.6 spacing.
         while (sosHistoryPage.childCount > 2) sosHistoryPage.removeViewAt(2)
         renderSosHistory(sosRows)
-        section(diagnostics, "Troubleshooting")
-        menu(diagnostics, "Diagnostic tools", "Physical-key test and diagnostic export")
         // Saved data & sync is the single recovery destination: real Room counts, unresolved
         // rows, last durable ACK, Sync All Now, the existing confirmed Retry and export.
         val saved = page("Saved data & sync", "Diagnostics")
@@ -4534,6 +4605,22 @@ class MainActivity : Activity() {
             val details = (0 until policyPage.childCount).map { policyPage.getChildAt(it) }
             policyPage.removeAllViews()
             details.forEach { policyInEffect.addView(it, it.layoutParams) }
+            // Diagnostics: the existing record/recovery/tool owners render inside segments.
+            fun embed(target: LinearLayout, page: LinearLayout, header: String?) {
+                detach(page)
+                page.setPadding(0, 0, 0, 0)
+                page.visibility = View.VISIBLE
+                header?.let { section(target, it) }
+                add(target, page)
+            }
+            embed(healthSeg, saved, "Saved data & sync")
+            embed(toolsSeg, tools, null)
+            embed(activityBoxes.getValue("Instructions"), recentPage, "Command instructions")
+            embed(activityBoxes.getValue("Alerts"), alertsPage, "Phone alerts")
+            embed(activityBoxes.getValue("SOS"), sosHistoryPage, "SOS records")
+            routeParents["History search & filters"] = "Diagnostics"
+            selectActivity(diagnosticsActivity)
+            selectSegment(diagnosticsSegment)
         }
                 fun technical(view: TextView) {
             val parent = view.parent as? LinearLayout ?: return
