@@ -1386,14 +1386,23 @@
       alert(e.message);
     }
   };
-  $("travel-offline").onchange = () => seek(position);
-  $("travel-raw").onchange = () => seek(position);
   $("travel-refresh").onclick = () =>
     refreshTravel().catch((e) => alert(e.message));
+  // Range and filter edits apply only through Apply range; Cancel restores them.
+  const travelRangeFields = ["travel-start", "travel-end", "travel-offline", "travel-raw"];
+  let travelRangeSaved = null;
   $("travel-range-open").onclick = () => {
     $("travel-range-error").textContent = "";
+    travelRangeSaved = travelRangeFields.map((id) => [id, $(id).value, $(id).checked]);
     $("travel-range").showModal();
   };
+  $("travel-range").addEventListener("close", () => {
+    for (const [id, value, checked] of travelRangeSaved || []) {
+      $(id).value = value;
+      $(id).checked = checked;
+    }
+    travelRangeSaved = null;
+  });
   $("travel-range-form").onsubmit = async (event) => {
     event.preventDefault();
     if (Date.parse($("travel-start").value) >= Date.parse($("travel-end").value)) {
@@ -1402,6 +1411,7 @@
     }
     try {
       await refreshTravel();
+      travelRangeSaved = null;
       $("travel-range").close();
     } catch (e) {
       $("travel-range-error").textContent = e.message;
