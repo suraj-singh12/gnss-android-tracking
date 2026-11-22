@@ -211,18 +211,18 @@
     <dialog id="travel-range" aria-labelledby="travel-range-title">
       <div class="dialog-heading"><div class="dialog-title"><h1 id="travel-range-title">Capture range</h1><p class="dialog-sub">Choose the original GNSS capture-time window.</p></div><button data-close="travel-range" aria-label="Close Capture range"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button></div>
       <form id="travel-range-form" method="dialog">
-        <div class="travel-range-grid"><label class="formrow"><span>From</span><input id="travel-start" step="1" type="datetime-local" required /></label><label class="formrow"><span>To</span><input id="travel-end" step="1" type="datetime-local" required /></label></div>
+        <div class="capture-grid"><div class="capture-field"><span class="capture-label" id="travel-from-label">From</span><div class="capture-fields"><button type="button" class="capture-date-button" id="travel-from-date" data-which="from" aria-haspopup="true" aria-controls="travel-calendar" aria-expanded="false" aria-labelledby="travel-from-label travel-from-date-text"><span class="date-button-label" id="travel-from-date-text"></span><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 3v4M16 3v4M3.5 10h17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button><input class="capture-time-input" id="travel-from-time" type="text" inputmode="numeric" maxlength="5" autocomplete="off" spellcheck="false" aria-label="From time in 24-hour HH:MM format" /></div><div class="capture-time-hint">24-hour time</div></div><div class="capture-field"><span class="capture-label" id="travel-to-label">To</span><div class="capture-fields"><button type="button" class="capture-date-button" id="travel-to-date" data-which="to" aria-haspopup="true" aria-controls="travel-calendar" aria-expanded="false" aria-labelledby="travel-to-label travel-to-date-text"><span class="date-button-label" id="travel-to-date-text"></span><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 3v4M16 3v4M3.5 10h17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button><input class="capture-time-input" id="travel-to-time" type="text" inputmode="numeric" maxlength="5" autocomplete="off" spellcheck="false" aria-label="To time in 24-hour HH:MM format" /></div><div class="capture-time-hint">24-hour time</div></div></div><input type="hidden" id="travel-start" /><input type="hidden" id="travel-end" /><p id="travel-range-error" role="alert"></p>
         <p class="section-label">Observation filters</p>
         <label class="switchline"><span><b>Exclude parties offline at snapshot</b><small>Uses contact at snapshot acquisition, not GNSS quality.</small></span><input type="checkbox" role="switch" id="travel-offline" /></label>
         <label class="switchline"><span><b>Show all observations</b><small>Diagnostic dots only; does not alter qualified distance.</small></span><input type="checkbox" role="switch" id="travel-raw" /></label>
-        <p class="note">New arrivals become visible only after Refresh. Original GNSS remains unchanged; unknown gaps remain unknown and quality uses the current policy without editing it.</p>
-        <details class="travel-diagnostics"><summary>Reconstruction diagnostics</summary><pre id="travel-diagnostics"></pre></details>
-        <p id="travel-range-error" role="alert"></p>
+        <p class="range-guidance">New arrivals become visible only after Refresh. Original GNSS remains unchanged.</p>
+        <pre id="travel-diagnostics" hidden></pre>
         <div class="controls">
           <button type="button" data-close="travel-range">Cancel</button
           ><button type="submit" id="travel-apply" class="primary">Apply range</button>
         </div>
       </form>
+      <div id="travel-calendar" class="range-calendar capture-popover" role="group" aria-label="Choose a capture date" hidden></div>
     </dialog>
     <dialog id="recording-start" aria-labelledby="recording-start-title">
       <div class="dialog-heading"><div class="dialog-title"><h1 id="recording-start-title">Start recording</h1><p class="dialog-sub">Choose which received observations the recording includes. Recording begins when you press Start.</p></div><button data-close="recording-start" aria-label="Close Start Recording"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button></div>
@@ -443,8 +443,7 @@
           >
         </div>
         <div id="hover" role="status">
-          Select a location point to inspect coordinates, time and accuracy.
-        </div>
+                  </div>
         <div class="canvas-legend">
           <span>● Live GNSS</span
           ><span id="track-layer-label">— Qualified history</span

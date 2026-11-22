@@ -54,6 +54,11 @@ async function openDetails() {
   if (await page.locator('#collapse-parties').isVisible() === false) await page.locator('#toggle-parties').click();
   await page.locator('.historical-party-name:not(:disabled)').first().click();
 }
+// The narrow Details drawer overlays the rail; close it like an operator would.
+async function exitPlayback() {
+  if (await page.locator("#close-details").isVisible()) await page.locator("#close-details").click();
+  await page.locator("#exit-playback").click();
+}
 const panelMeasurements = [];
 async function inspectPanel(selector, mode, width, theme) {
   if (await page.locator('#follow-label').isVisible()) {
@@ -844,7 +849,7 @@ async function wait(fn) {
   await seek(timeline.duration);
   assert(await page.locator("#playback-sos").isVisible());
   assert.equal(await page.locator("#playback-sos button").count(), 0);
-  await page.locator("#exit-playback").click();
+  await exitPlayback();
   await headerAction("appearance");
   await headerAction("open-library");
   await page.screenshot({ path: path.join(out, "library-night-after-playback.png") });
@@ -854,7 +859,7 @@ async function wait(fn) {
   await page.getByRole("button", { name: "Open", exact: true }).click();
   await page.waitForFunction(() => window.HistoricalPlayback?.active);
   await seek(timeline.duration);
-  await page.locator("#exit-playback").click();
+  await exitPlayback();
   await headerAction("open-library");
   await page.locator(".library-more summary").click();
   await page
@@ -877,7 +882,7 @@ async function wait(fn) {
   await page.waitForFunction(() => window.HistoricalPlayback?.active);
   await seek(timeline.duration);
   assert(await page.locator("#playback-sos").isVisible());
-  await page.locator("#exit-playback").click();
+  await exitPlayback();
   const operationalBefore = await (await fetch(local + "/local/state")).json();
   await headerAction("open-library");
   await page.locator(".library-more summary").click();
@@ -904,6 +909,7 @@ async function wait(fn) {
   await page.locator('[data-close="saved-library"]').click();
   await page.setViewportSize({ width: 1440, height: 900 });
   await headerAction("open-travel");
+  await page.locator("#travel-apply").click();
   await wait(() => page.evaluate(() => window.HistoricalPlayback.active));
   assert.equal(await page.locator("#follow-label").isVisible(), false);
   const travelPosition = await page.evaluate(
@@ -953,7 +959,7 @@ async function wait(fn) {
   );
   await page.locator("#travel-refresh").click();
   assert.equal(await page.locator("#follow-label").isVisible(), false);
-  await page.locator("#exit-playback").click();
+  await exitPlayback();
   assert.deepEqual(errors, []);
   report.passed = true;
   report.parties = 21;

@@ -109,8 +109,29 @@ const report = { physical_acceptance: false };
   });
   assert.match(unverified, /Stop or discard/);
 
+  // Entering Travel Back asks for the capture range first; Cancel stays live.
   await menuAction(page, "mode-travel");
+  await page.locator("#travel-range").waitFor();
+  assert(!(await page.evaluate(() => window.HistoricalPlayback.active)));
+  await page.locator('#travel-range [data-close="travel-range"]').last().click();
+  assert(!(await page.evaluate(() => window.HistoricalPlayback.active)));
+  await menuAction(page, "mode-travel");
+  await page.locator("#travel-range").waitFor();
+  assert.match(await page.locator("#travel-from-time").inputValue(), /^\d\d:\d\d$/);
+  await page.locator("#travel-from-date").click();
+  assert.equal(await page.locator("#travel-from-date").getAttribute("aria-expanded"), "true");
+  assert(await page.locator("#travel-calendar .calendar-day.selected").isVisible());
+  await page.keyboard.press("Escape");
+  assert(await page.locator("#travel-calendar").isHidden());
+  assert(await page.locator("#travel-range").isVisible(), "Escape closes the calendar before the dialog");
+  const fromTime = await page.locator("#travel-from-time").inputValue();
+  await page.locator("#travel-from-time").fill("25:00");
+  await page.locator("#travel-apply").click();
+  assert.match(await page.locator("#travel-range-error").textContent(), /24-hour time/);
+  await page.locator("#travel-from-time").fill(fromTime);
+  await page.locator("#travel-apply").click();
   await page.waitForFunction(() => window.HistoricalPlayback.active);
+  assert(await page.locator("#travel-range").isHidden());
   assert(!(await page.locator("#follow-label").isVisible()));
   assert.match(
     await page.locator("#playback-seek").getAttribute("aria-label"),

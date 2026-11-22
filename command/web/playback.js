@@ -469,9 +469,7 @@
       if (id === selected) card.classList.add("historical-selected");
       if (p.device?.track_color)
         card.style.setProperty("--track", p.device.track_color);
-      const meta = [
-        p.visible ? "Read only" : "Unselected · locked by original visibility",
-      ];
+      const meta = p.visible ? [] : ["Unselected · locked by original visibility"];
       card.append(row);
       const choose = label("button", identity(p, id), "historical-party-name");
       choose.setAttribute("aria-label", `Details for ${identity(p, id)}`);
@@ -493,7 +491,7 @@
       if (p.visible)
         meta.push(
           travel && !p.device?.location?.fix
-            ? "No qualified observation at this playhead"
+            ? "No qualified fix yet"
             : `Historic position · ${new Date(frame.presentation_at).toLocaleTimeString()}`,
         );
       card.append(label("small", meta.join(" · "), "party-meta"));
@@ -551,7 +549,7 @@
         )
         .toFixed(
           1,
-        )} m · Original GNSS capture time · READ ONLY reconstruction · gaps are not interpolated`;
+        )} m · Unknown gaps preserved`;
       return;
     }
     const trailing = session.metadata.trailing_unverified_interval;
@@ -1371,32 +1369,123 @@
     $("playback-seek").max = session.duration;
     await seek((oldWall - Date.parse(start)) / 1000);
   }
-  $("open-travel").onclick = async () => {
-    const local = (t) =>
-      new Date(t - new Date(t).getTimezoneOffset() * 60000)
-        .toISOString()
-        .slice(0, 19);
-    if (!travel) {
-      $("travel-end").value = local(Date.now());
-      $("travel-start").value = local(Date.now() - 3600000);
+  // Capture range dialog (V5.14): date popover plus 24-hour time per bound. The
+  // hidden #travel-start/#travel-end hold the applied local range.
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const localStamp = (d) =>
+    `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}:00`;
+  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const formatDay = (iso) => {
+    const [y, m, d] = iso.split("-").map(Number);
+    return `${d} ${months[m - 1].slice(0, 3)} ${y}`;
+  };
+  const travelRangeFields = ["travel-start", "travel-end", "travel-offline", "travel-raw"];
+  let travelRangeSaved = null, picker = null;
+  function closeCalendar() {
+    $("travel-calendar").hidden = true;
+    if (picker) picker.open = null;
+    for (const w of ["from", "to"]) $(`travel-${w}-date`).setAttribute("aria-expanded", "false");
+  }
+  function renderCalendar(which) {
+    const [y, m] = picker[which + "Month"].split("-").map(Number);
+    const offset = (new Date(y, m - 1, 1).getDay() + 6) % 7;
+    const cells = Math.ceil((offset + new Date(y, m, 0).getDate()) / 7) * 7;
+    const today = localStamp(new Date()).slice(0, 10);
+    const days = [];
+    for (let i = 0; i < cells; i++) {
+      const d = new Date(y, m - 1, i - offset + 1), iso = localStamp(d).slice(0, 10);
+      const cls = ["calendar-day", iso.slice(0, 7) !== picker[which + "Month"] && "other-month", iso === picker[which] && "selected", iso === today && "today"].filter(Boolean).join(" ");
+      days.push(`<button type="button" class="${cls}" data-date="${iso}" aria-pressed="${iso === picker[which]}" aria-label="${formatDay(iso)}">${d.getDate()}</button>`);
     }
-    try {
-      await refreshTravel();
-    } catch (e) {
-      alert(e.message);
+    $("travel-calendar").innerHTML =
+      `<div class="calendar-toolbar"><span class="calendar-month">${months[m - 1]} ${y}</span><div class="calendar-nav"><button type="button" class="calendar-arrow" data-shift="-1" aria-label="Previous month">‹</button><button type="button" class="calendar-arrow" data-shift="1" aria-label="Next month">›</button></div></div>` +
+      `<div class="calendar-weekdays" aria-hidden="true">${["M", "T", "W", "T", "F", "S", "S"].map((x) => `<span>${x}</span>`).join("")}</div>` +
+      `<div class="calendar-days">${days.join("")}</div>` +
+      `<div class="calendar-bottom"><span class="calendar-guidance">${which === "from" ? "Start" : "End"} date</span><button type="button" data-date="${today}">Today</button></div>`;
+  }
+  function positionCalendar(which) {
+    const pop = $("travel-calendar"), box = $("travel-range").getBoundingClientRect();
+    const anchor = $(`travel-${which}-date`).getBoundingClientRect();
+    const width = Math.min(300, box.width - 20);
+    pop.style.width = width + "px";
+    const h = pop.offsetHeight;
+    let top = anchor.bottom + 8 - box.top;
+    if (anchor.bottom + 8 + h > innerHeight - 10) top = Math.max(10 - box.top, anchor.top - 8 - h - box.top);
+    pop.style.left = Math.min(Math.max(anchor.left, box.left + 10), box.right - 10 - width) - box.left + "px";
+    pop.style.top = top + "px";
+  }
+  function toggleCalendar(which) {
+    const next = picker.open === which ? null : which;
+    closeCalendar();
+    if (!next) return;
+    picker.open = next;
+    $("travel-calendar").hidden = false;
+    $(`travel-${next}-date`).setAttribute("aria-expanded", "true");
+    renderCalendar(next);
+    positionCalendar(next);
+    $("travel-calendar").querySelector(".calendar-day.selected")?.focus();
+  }
+  for (const w of ["from", "to"]) $(`travel-${w}-date`).onclick = () => toggleCalendar(w);
+  $("travel-calendar").onclick = (event) => {
+    const button = event.target.closest("button"), which = picker?.open;
+    if (!button || !which) return;
+    if (button.dataset.shift) {
+      const [y, m] = picker[which + "Month"].split("-").map(Number);
+      picker[which + "Month"] = localStamp(new Date(y, m - 1 + Number(button.dataset.shift), 1)).slice(0, 7);
+      renderCalendar(which);
+      positionCalendar(which);
+      return;
     }
+    picker[which] = button.dataset.date;
+    picker[which + "Month"] = button.dataset.date.slice(0, 7);
+    $(`travel-${which}-date-text`).textContent = formatDay(button.dataset.date);
+    $("travel-range-error").textContent = "";
+    closeCalendar();
+    $(`travel-${which}-date`).focus();
+  };
+  $("travel-range").addEventListener("click", (event) => {
+    if (picker?.open && !event.target.closest("#travel-calendar, .capture-date-button")) closeCalendar();
+  });
+  $("travel-range").addEventListener("cancel", (event) => {
+    if (!picker?.open) return;
+    event.preventDefault();
+    const which = picker.open;
+    closeCalendar();
+    $(`travel-${which}-date`).focus();
+  });
+  function openTravelRange() {
+    $("travel-range-error").textContent = "";
+    travelRangeSaved = travelRangeFields.map((id) => [id, $(id).value, $(id).checked]);
+    picker = { open: null };
+    for (const [w, id] of [["from", "travel-start"], ["to", "travel-end"]]) {
+      const value = $(id).value;
+      picker[w] = value.slice(0, 10);
+      picker[w + "Month"] = value.slice(0, 7);
+      $(`travel-${w}-date-text`).textContent = formatDay(picker[w]);
+      $(`travel-${w}-time`).value = value.slice(11, 16);
+    }
+    closeCalendar();
+    $("travel-range").showModal();
+  }
+  // Entering Travel Back asks for the capture range first, as in the design;
+  // Cancel leaves the current mode untouched.
+  $("open-travel").onclick = () => {
+    if (locked()) return;
+    if (!$("travel-start").value) {
+      const end = new Date();
+      end.setSeconds(0, 0);
+      end.setMinutes(end.getMinutes() + 1);
+      $("travel-end").value = localStamp(end);
+      $("travel-start").value = localStamp(new Date(end - 3600000));
+    }
+    openTravelRange();
   };
   $("travel-refresh").onclick = () =>
     refreshTravel().catch((e) => alert(e.message));
+  $("travel-range-open").onclick = openTravelRange;
   // Range and filter edits apply only through Apply range; Cancel restores them.
-  const travelRangeFields = ["travel-start", "travel-end", "travel-offline", "travel-raw"];
-  let travelRangeSaved = null;
-  $("travel-range-open").onclick = () => {
-    $("travel-range-error").textContent = "";
-    travelRangeSaved = travelRangeFields.map((id) => [id, $(id).value, $(id).checked]);
-    $("travel-range").showModal();
-  };
   $("travel-range").addEventListener("close", () => {
+    closeCalendar();
     for (const [id, value, checked] of travelRangeSaved || []) {
       $(id).value = value;
       $(id).checked = checked;
@@ -1405,10 +1494,19 @@
   });
   $("travel-range-form").onsubmit = async (event) => {
     event.preventDefault();
-    if (Date.parse($("travel-start").value) >= Date.parse($("travel-end").value)) {
-      $("travel-range-error").textContent = "The start must be before the end.";
+    const time = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+    const from = $("travel-from-time").value.trim(), to = $("travel-to-time").value.trim();
+    if (!time.test(from) || !time.test(to)) {
+      $("travel-range-error").textContent = "Use a valid 24-hour time in HH:MM format (for example, 11:21).";
       return;
     }
+    const start = `${picker.from}T${from}:00`, end = `${picker.to}T${to}:00`;
+    if (start >= end) {
+      $("travel-range-error").textContent = "The end must be later than the start.";
+      return;
+    }
+    $("travel-start").value = start;
+    $("travel-end").value = end;
     try {
       await refreshTravel();
       travelRangeSaved = null;

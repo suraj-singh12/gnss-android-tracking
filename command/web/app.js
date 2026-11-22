@@ -112,7 +112,7 @@ function updateSessionChoice() {
   // From Beginning selects all retained sessions; no current session report needed.
   $("session-mode").disabled = false;
   $("session-mode-status").textContent =
-    "From beginning includes retained observations from all received tracking sessions, even if they arrive late.";
+    "From beginning also includes late arrivals from all received tracking sessions.";
   $("confirm-recording").disabled = !!state?.recording;
 }
 $("start").onclick = () => {
@@ -405,7 +405,7 @@ function renderDashboard() {
   $("projection-status").textContent = state.projection_error
     ? "Projection failed: " + state.projection_error
     : state.projection_pending
-      ? "Projection catching up — displayed history is not fully synchronized"
+      ? "Catching up history…"
       : "";
   updateConnectionLabel();
   $("connection").classList.toggle(
@@ -414,7 +414,7 @@ function renderDashboard() {
   );
   if (state.history_sampled)
     $("projection-status").textContent +=
-      " · Map preview only (bounded points); use Inspect selected history for every full-resolution point and original observation. Distance remains full resolution.";
+      " · Preview points; Inspect history shows every point";
   const recording = state.recording;
   $("recording").textContent = recording
     ? `${recording.status === "stopped" ? "STOPPED" : recording.active ? "● REC" : "PAUSED"} · ${duration(recording.duration_s)}`
@@ -727,7 +727,7 @@ function renderDashboard() {
           el("span", "Command contact", "inspector-kicker"),
           el(
             "strong",
-            { healthy: "Connected", delayed: "Contact delayed", contact_lost: "Offline · contact lost" }[d.contact_condition],
+            { healthy: "Connected", delayed: "Delayed", contact_lost: "Offline" }[d.contact_condition],
             d.contact_condition,
           ),
         );

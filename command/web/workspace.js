@@ -14,7 +14,7 @@
     LIVE: ["Live operations", () => `${$("connection").title || $("connection").textContent} · contact and GNSS freshness stay separate`],
     "RECORDING LIVE": ["Operator recording", () => recordCopy[recordState()].context],
     "VIEWING RECORDING": ["Viewing recording", () => "Frozen presentation-time evidence · read-only"],
-    "TRAVEL BACK": ["Travel Back", () => "Original GNSS capture time · operator-controlled refresh"],
+    "TRAVEL BACK": [() => travelRangeTitle(), () => "Original GNSS capture time · operator-controlled refresh"],
   };
   const recordCopy = {
     idle: { context: "Ready to begin presentation-evidence capture", pill: "Not started", title: "Ready to record", sub: "Start captures what Command renders from that moment" },
@@ -22,6 +22,15 @@
     paused: { context: "Recording paused · GNSS and SOS continue", pill: "Paused", title: "Recording paused", sub: "Save creates an immutable snapshot without ending the session" },
     stopped: { context: "Capture stopped · unsaved recording retained", pill: "Unsaved", title: "Recording stopped · Unsaved", sub: "" },
   };
+  const shortMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const day = (v) => `${Number(v.slice(8, 10))} ${shortMonths[Number(v.slice(5, 7)) - 1]} ${v.slice(0, 4)}`;
+  function travelRangeTitle() {
+    const a = $("travel-start").value, b = $("travel-end").value;
+    if (!a || !b) return "Travel Back";
+    return a.slice(0, 10) === b.slice(0, 10)
+      ? `${day(a)} · ${a.slice(11, 16)}–${b.slice(11, 16)}`
+      : `${day(a)} ${a.slice(11, 16)} – ${day(b)} ${b.slice(11, 16)}`;
+  }
   const shown = (id) => !$(id).hidden;
   // Derived only from the existing recording controls' visibility.
   const recordState = () =>
@@ -45,7 +54,11 @@
     const disclosure = document.querySelector(".capture-disclosure");
     disclosure.open = !disclosure.open;
   };
-  $("context-actions").prepend(recordPill, factsButton);
+  const travelPill = document.createElement("span");
+  travelPill.id = "travel-new-pill";
+  travelPill.className = "pill warn";
+  travelPill.textContent = "New history";
+  $("context-actions").prepend(recordPill, factsButton, travelPill);
   const setText = (node, text) => {
     if (node.textContent !== text) node.textContent = text;
   };
@@ -59,7 +72,8 @@
       if (check) setText(check, item.getAttribute("aria-pressed") === "true" ? "✓" : "");
     }
     const [title, detail] = contexts[mode] || contexts.LIVE;
-    setText($("context-title"), title);
+    setText($("context-title"), typeof title === "function" ? title() : title);
+    travelPill.hidden = mode !== "TRAVEL BACK" || !/New stored/.test($("travel-pending").textContent);
     setText($("context-detail"), detail());
     document.body.dataset.mode = mode.toLowerCase().replaceAll(" ", "-");
     const state = recordState(), copy = recordCopy[state];
@@ -125,7 +139,7 @@
       !total
         ? "Contact and GNSS are independent."
         : shown === total
-          ? `${total} of ${total} · contact and GNSS are independent`
+          ? `${total} of ${total} shown`
           : `${shown} of ${total} shown`,
     );
   }
