@@ -285,6 +285,16 @@
       b.onclick = () => select(view);
       tabs.append(b);
     }
+    tabs.addEventListener("keydown", (event) => {
+      const buttons = [...tabs.children], index = buttons.indexOf(document.activeElement);
+      if (index < 0) return;
+      const next = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: buttons.length - 1 }[event.key];
+      if (next === undefined) return;
+      event.preventDefault();
+      const target = buttons[(next + buttons.length) % buttons.length];
+      target.click();
+      target.focus();
+    });
     body.prepend(tabs);
     select("send");
   }
@@ -315,10 +325,13 @@
         b.tabIndex = selected ? 0 : -1;
       }
     };
-    for (const b of buttons)
-      b.addEventListener("click", () => {
-        for (const d of dialogs) if (d.open && d.id !== b.dataset.tabDialog) d.close();
-      }, true);
+    // Window capture runs before playback's document-level interception, so a
+    // tab repurposed during playback (Quality) still closes its group dialog.
+    window.addEventListener("click", (event) => {
+      const b = event.target.closest?.("[data-tab-dialog]");
+      if (!buttons.includes(b)) return;
+      for (const d of dialogs) if (d.open && d.id !== b.dataset.tabDialog) d.close();
+    }, true);
     for (const d of dialogs)
       new MutationObserver(() => {
         if (d.open) {
@@ -336,7 +349,10 @@
       buttons[(next + buttons.length) % buttons.length].click();
     });
     $(tabs.dataset.tabOpener).addEventListener("click", () => {
-      (buttons.find((b) => !b.disabled) || buttons[0]).click();
+      // Playback repurposes open-quality as historical inspection, so the
+      // opener starts on the first tab that still opens its own dialog.
+      const intercepted = (b) => b.id === "open-quality" && document.body.classList.contains("playback");
+      (buttons.find((b) => !b.disabled && !intercepted(b)) || buttons[0]).click();
     });
   }
   $("open-diagnostics").addEventListener("click", () => $("diagnostics").showModal());

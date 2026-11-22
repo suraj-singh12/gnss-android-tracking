@@ -261,6 +261,16 @@ async function wait(check, message = "Timed out waiting for real state") {
     await page.locator("#sos-audio").click();
     assert.equal(await page.locator("#sos-audio").getAttribute("aria-checked"), "true", "SOS sound switch turns back on");
   }
+  await page.locator('[data-close="sos-panel"]').click();
+  // Phone control tabs are a roving-tabindex tablist reachable by arrow keys.
+  await menuAction(page, "open-control");
+  await page.locator("#phone-tab-send").focus();
+  await page.keyboard.press("ArrowRight");
+  assert.equal(await page.locator("#phone-tab-enrollment").getAttribute("aria-selected"), "true");
+  await page.keyboard.press("End");
+  assert(await page.locator("#phone-tab-results").evaluate((e) => e === document.activeElement && e.getAttribute("aria-selected") === "true"), "End selects Results");
+  await page.evaluate(() => document.querySelector("#phone-control").close());
+  await menuAction(page, "open-sos");
   const sosAxe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();
   await page.locator('[data-close="sos-panel"]').click();
 

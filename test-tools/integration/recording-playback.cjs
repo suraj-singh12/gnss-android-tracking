@@ -484,6 +484,12 @@ async function wait(fn) {
   await page.locator('#follow-original').check();
   await page.locator('#playback-speed').selectOption('1');
   await page.locator('#sos-toast-dismiss').click();
+  // Tools stays reachable during playback even though Quality is historical there.
+  await page.locator('#open-tools').click();
+  assert(await page.locator('#diagnostics').isVisible(), 'playback Tools opens a Tools tab');
+  await page.locator('#open-about').click();
+  assert(await page.locator('#about').isVisible(), 'playback Tools › About reachable');
+  await page.evaluate(() => document.querySelector('#about').close());
 
   assert.equal(await page.locator("#follow-original").isChecked(), true);
   const timeline = await (
