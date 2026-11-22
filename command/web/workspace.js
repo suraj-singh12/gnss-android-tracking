@@ -153,6 +153,7 @@
     "phone-control": ["#control-issue"],
     "library-edit": ["#library-edit-form > button[type=submit]"],
     "event-history": ["a.secondary-action", "#export-runtime"],
+    layers: ["#apply-layers"],
   };
   for (const dialog of document.querySelectorAll("#command dialog")) {
     const heading = dialog.querySelector(":scope > .dialog-heading");

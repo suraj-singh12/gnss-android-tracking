@@ -1267,6 +1267,7 @@ function updateLayers() {
         ? `Available in visible DEM chunks · ${control.checked ? "visible" : "hidden"}; inspect coverage gaps`
         : "Unavailable in current view; inspect saved source / render status";
   }
+  syncTerrainSwitch();
   $("current-map-layers").textContent =
     offlineMap?.plan && radiusManifest
       ? radiusSummary(radiusManifest)
@@ -1359,6 +1360,32 @@ for (const kind of terrainLayers)
     updateLayers();
     draw();
   };
+// Qualified tracks and party labels are presentation-only; history and distance are unchanged.
+for (const [kind, cls] of [["tracks", "hide-qualified-tracks"], ["labels", "hide-party-labels"]]) {
+  const control = $("layer-" + kind), key = "gnss-layer-" + kind;
+  control.checked = localStorage.getItem(key) !== "false";
+  document.body.classList.toggle(cls, !control.checked);
+  control.onchange = () => {
+    localStorage.setItem(key, String(control.checked));
+    document.body.classList.toggle(cls, !control.checked);
+  };
+}
+function syncTerrainSwitch() {
+  const available = terrainLayers.filter((k) => !$("layer-" + k).disabled);
+  $("layer-terrain").disabled = !available.length;
+  $("layer-terrain").checked = available.some((k) => $("layer-" + k).checked);
+  $("layers").querySelector(".layer-products").hidden = !available.length;
+  $("terrain-metadata").hidden = !available.length;
+}
+$("layer-terrain").onchange = () => {
+  for (const kind of terrainLayers) {
+    const control = $("layer-" + kind);
+    if (control.disabled || control.checked === $("layer-terrain").checked) continue;
+    control.checked = $("layer-terrain").checked;
+    control.onchange();
+  }
+};
+$("apply-layers").onclick = () => $("layers").close();
 async function attachTerrain(id, file, components) {
   if (!file)
     throw Error(

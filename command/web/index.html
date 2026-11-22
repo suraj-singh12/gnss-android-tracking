@@ -549,19 +549,15 @@
     </dialog>
     <dialog id="layers" aria-labelledby="layers-title">
       <div class="dialog-heading"><div class="dialog-title"><h1 id="layers-title">Map layers</h1><p class="dialog-sub">Adjust what is visible in this view.</p></div><button data-close="layers" aria-label="Close Layers"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button></div>
-      <p class="muted">
-        Vector features remain visible. Toggles use local data only.
-      </p>
-      <label
-        ><input type="checkbox" id="layer-hillshade" /> Hillshade
-        <small id="availability-hillshade"></small></label
-      ><label
-        ><input type="checkbox" id="layer-contours" /> Contours
-        <small id="availability-contours"></small></label
-      ><label
-        ><input type="checkbox" id="layer-elevation" /> Elevation
-        <small id="availability-elevation"></small
-      ></label>
+      <label class="switchline layer-switch"><span><b>Qualified tracks</b></span><input type="checkbox" role="switch" id="layer-tracks" checked /></label>
+      <label class="switchline layer-switch"><span><b>Party labels</b></span><input type="checkbox" role="switch" id="layer-labels" checked /></label>
+      <label class="switchline layer-switch"><span><b>Terrain</b><small>Requires saved DEM products.</small></span><input type="checkbox" role="switch" id="layer-terrain" /></label>
+      <div class="layer-products" aria-label="Terrain products">
+        <label class="switchline layer-switch"><span><b>Hillshade</b><small id="availability-hillshade"></small></span><input type="checkbox" role="switch" id="layer-hillshade" /></label>
+        <label class="switchline layer-switch"><span><b>Contours</b><small id="availability-contours"></small></span><input type="checkbox" role="switch" id="layer-contours" /></label>
+        <label class="switchline layer-switch"><span><b>Elevation</b><small id="availability-elevation"></small></span><input type="checkbox" role="switch" id="layer-elevation" /></label>
+      </div>
+      <button type="button" id="apply-layers" class="primary">Apply layers</button>
       <p id="terrain-metadata" class="muted"></p>
     </dialog>
     <dialog id="quality" aria-labelledby="quality-title">
