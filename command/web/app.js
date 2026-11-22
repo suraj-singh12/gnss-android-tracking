@@ -2529,7 +2529,7 @@ function renderHistory(page, layer, snapshot) {
         historySection(
           "Quality decisions",
           decisions.map((d) =>
-            historyRow("", historyWords(d.reason), `Message ${String(d.message_id || "").slice(0, 8)} · Policy ${d.policy_revision}`, "", [["Excluded", "warn"]]),
+            historyRow("", historyWords(d.reason), `Message ${String(d.message_id || "").slice(0, 8)} · Policy ${d.policy_revision}`, "", d.reason === "accepted" ? [] : [["Excluded", "warn"]]),
           ),
         ),
       );
