@@ -114,7 +114,8 @@ async function wait(check, message = "Timed out waiting for real state") {
   await page.waitForFunction(() => document.querySelector("#selected-detail .detail-name")?.textContent.includes("Bravo"));
   const detail = await page.locator("#selected-detail").innerText();
   assert.match(detail, /Command contact\s+Connected/);
-  assert.match(detail, /River team/);
+  assert.match(await page.locator("#selected-detail .inspector-evidence").textContent(), /River team/, "team is in the evidence disclosure");
+  assert.match(detail, /Observation sync/);
   assert.match(detail, /GNSS Fresh/);
   await page.getByRole("button", { name: "Charlie", exact: true }).click();
   await page.waitForFunction(() => document.querySelector("#selected-detail .detail-name")?.textContent.includes("Charlie"));

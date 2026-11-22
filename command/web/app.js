@@ -1610,7 +1610,7 @@ function invalidatePreparation(resetConsent = true) {
   $("map-preparation-status").textContent =
     resetConsent === false
       ? "Checking requested area…"
-      : "Area changed · Preview & Download checks the new selection before acquisition.";
+      : "Area changed · Download map checks the new selection before acquisition.";
   $("download-map").disabled = false;
 }
 for (const id of ["map-lat", "map-lon", "map-width", "map-height"])
@@ -3346,6 +3346,7 @@ function initializeMapModal() {
     };
   });
   current.after(tabs);
+  current.hidden = true;
   const body = el("div");
   body.className = "map-modal-body";
   const feedback = dialog.querySelector(".map-download-feedback");
@@ -3363,11 +3364,12 @@ function initializeMapModal() {
   }
   const footer = el("div");
   footer.className = "map-modal-footer";
-  const footerNote = el("small", "Saved maps work without internet");
-  footerNote.className = "muted";
+  const closeMaps = el("button", "Close");
+  closeMaps.type = "button";
+  closeMaps.onclick = () => dialog.close();
   const actions = el("div");
   actions.className = "map-footer-actions";
-  footer.append(footerNote, actions);
+  footer.append(closeMaps, actions);
   dialog.append(footer);
   const getActions = el("div");
   getActions.dataset.mapAction = "map-preparation";
@@ -3408,19 +3410,30 @@ function initializeMapModal() {
   form.id = "get-map-form";
   for (const node of [...get.children].slice(1)) form.append(node);
   get.append(form);
-  form.prepend(el("h2", "Where do you need the map?"));
   const search = form.querySelector(".map-search-row");
-  const centre = el("button", "Use map centre");
-  centre.id = "use-map-centre";
-  centre.onclick = () => {
-    if (!viewport) return;
-    const [lon, lat] = GeoMap.unproject(viewport.cx, viewport.cy);
+  $("search-map").textContent = "Search";
+  $("search-map").classList.add("primary");
+  $("map-search").placeholder = "Place or latitude, longitude";
+  $("map-search").setAttribute("aria-label", "Place, landmark or comma separated coordinates");
+  const searchLabel = $("map-search").closest("label");
+  searchLabel.firstChild.textContent = "";
+  const locationTitle = el("p", "Location", "map-field-caption");
+  search.before(locationTitle);
+  // "latitude, longitude" in the search box sets the centre directly.
+  $("search-map").addEventListener("click", (event) => {
+    const m = $("map-search").value.trim().match(/^([-+]?\d+(?:\.\d+)?)\s*,\s*([-+]?\d+(?:\.\d+)?)$/);
+    if (!m) return;
+    event.stopImmediatePropagation();
+    const lat = Number(m[1]), lon = Number(m[2]);
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      $("map-preparation-status").textContent = "Latitude must be between −90 and 90; longitude between −180 and 180.";
+      return;
+    }
     $("map-lat").value = lat;
-    $("map-lon").value = ((lon + 540) % 360) - 180;
+    $("map-lon").value = lon;
+    $("map-search-results").hidden = true;
     invalidatePreparation();
-  };
-  search.append(centre);
-  $("search-map").textContent = "Find";
+  }, true);
   const precise = el("details");
   precise.className = "map-precise";
   precise.append(el("summary", "Coordinates & advanced area"));
@@ -3433,6 +3446,7 @@ function initializeMapModal() {
   shapeDetails.remove();
   precise.append($("legacy-area"));
   search.after(precise);
+  precise.hidden = true;
   const presets = el("div");
   presets.className = "map-radius-presets";
   presets.setAttribute("aria-label", "Coverage radius");
@@ -3466,14 +3480,7 @@ function initializeMapModal() {
   presets.children[1].click();
   const preview = el("section");
   preview.className = "map-selection-preview";
-  preview.append(
-    el("p", "Selection preview"),
-    $("map-preview"),
-    el(
-      "small",
-      "Requested area only · geographic features appear after acquisition.",
-    ),
-  );
+  preview.append($("map-preview"));
   get.append(preview);
   const optional = el("div");
   optional.className = "map-optional-terrain";
@@ -3481,10 +3488,11 @@ function initializeMapModal() {
   const include = el("input");
   include.type = "checkbox";
   include.id = "include-map-terrain";
-  terrainLabel.append(
-    include,
-    document.createTextNode(" Include terrain & elevation"),
-  );
+  terrainLabel.className = "map-switchline";
+  include.setAttribute("role", "switch");
+  const terrainCopy = el("span");
+  terrainCopy.append(el("b", "Include terrain & elevation data"), el("small", "Optional · downloaded only where source data exists"));
+  terrainLabel.append(terrainCopy, include);
   const terrainOptions = $("download-hillshade").closest("fieldset");
   const products = el("details");
   products.append(
@@ -3493,15 +3501,10 @@ function initializeMapModal() {
   );
   products.hidden = true;
   include.onchange = () => {
-    products.hidden = !include.checked;
     for (const k of terrainLayers) $("download-" + k).checked = include.checked;
     invalidatePreparation();
   };
-  optional.append(
-    terrainLabel,
-    el("small", "Hillshade and contours use available elevation data."),
-    products,
-  );
+  optional.append(terrainLabel, products);
   get.append(optional);
   optional.after(precise);
   for (const k of terrainLayers)
@@ -3514,6 +3517,13 @@ function initializeMapModal() {
   consent.lastChild.textContent =
     " Allow up to 5 MB for this map. Ask before any additional transfer.";
   get.append(consent);
+  // Download is the explicit approval for the first 5 MB; more asks again.
+  consent.hidden = true;
+  $("download-map").addEventListener("click", () => {
+    if ($("confirm-map-cost").checked) return;
+    $("confirm-map-cost").checked = true;
+    $("confirm-map-cost").dispatchEvent(new Event("change"));
+  }, true);
   const technical = el("details");
   technical.append(
     el("summary", "Coverage, sources & resource limits"),
@@ -3522,6 +3532,7 @@ function initializeMapModal() {
   );
   form.querySelector(".map-actions").remove();
   get.append(technical);
+  technical.hidden = true;
   // The old details container now has no plan content; remove that empty wrapper.
   for (const d of [...form.querySelectorAll(":scope > details")])
     if (!d.querySelector("input,select,button,p")) d.remove();
@@ -3540,7 +3551,7 @@ function initializeMapModal() {
   taskSource.after(taskReason);
   feedback.setAttribute("aria-label", "Map acquisition and recovery");
   const originalDownload = $("download-map").onclick;
-  $("download-map").textContent = "Preview & Download";
+  $("download-map").textContent = "Download map";
   $("download-map").disabled = false;
   let primaryPending = false;
   $("download-map").onclick = async () => {
@@ -3624,9 +3635,8 @@ function initializeMapModal() {
       body.scrollTop = 0;
     form.hidden = acquiring || approval;
     optional.hidden = acquiring || approval;
-    precise.hidden = acquiring || approval;
-    consent.hidden =
-      acquiring || approval || dialog.dataset.mapTab !== "map-preparation";
+    precise.hidden = true;
+    consent.hidden = true;
     $("map-preparation-status").hidden = acquiring || approval;
     feedback.hidden =
       !task ||
@@ -3663,14 +3673,8 @@ function initializeMapModal() {
     $("save-use-map").disabled = !!radiusManifest && !available;
     $("delete-map").disabled = busy || !activeMapID;
     $("export-map").hidden = !activeMapID;
-    centre.disabled = busy || !viewport;
     $("use-import-centre").disabled = busy || !viewport;
     $("use-import-centre").hidden = $("source-map-mode").value === "full";
-    footerNote.textContent = acquiring
-      ? "Verified saved areas are retained"
-      : approval
-        ? "Approval applies to this cumulative allowance"
-        : "Saved maps work without internet";
   }
   // Backend handlers already publish authoritative progress/manifest state into
   // these nodes. Observe those changes, without introducing another job timer.
@@ -3694,7 +3698,7 @@ function initializeMapModal() {
   });
   const consentArea = el("div");
   consentArea.className = "map-footer-consent";
-  consentArea.append(footerNote, consent);
+  consentArea.append(consent);
   footer.prepend(consentArea);
   const displayControls = display.querySelector(".current-map-controls"),
     displayLayers = $("current-map-layers");

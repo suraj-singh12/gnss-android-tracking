@@ -15,6 +15,25 @@ const { default: AxeBuilder } = require(
   process.env.GNSS_AXE_MODULE || "@axe-core/playwright",
 );
 const { randomUUID } = require("node:crypto");
+
+// Get a Map exposes the prototype surface (search, radius, terrain switch, Download).
+// Engine-level fields kept behind it are driven directly where a test needs them.
+const setCentre = async (page, lat, lon) => {
+  await page.locator("#map-search").fill(`${lat}, ${lon}`);
+  await page.locator("#search-map").click();
+};
+const setHidden = (page, sel, value) =>
+  page.locator(sel).evaluate((e, v) => {
+    if (e.type === "checkbox") e.checked = v;
+    else e.value = v;
+    e.dispatchEvent(new Event("input", { bubbles: true }));
+    e.dispatchEvent(new Event("change", { bubbles: true }));
+  }, value);
+const clickHidden = async (page, sel) => {
+  await page.waitForFunction((s) => !document.querySelector(s).disabled, sel);
+  await page.locator(sel).evaluate((e) => e.click());
+};
+
 const work = fs.mkdtempSync(path.join(os.tmpdir(), "gnss-ui-")),
   out = process.env.GNSS_SCREENSHOT_DIR || path.join(work, "screenshots");
 fs.mkdirSync(out, { recursive: true });
@@ -352,9 +371,6 @@ async function wait(check) {
   await menuAction(page, "focus-party");
   await menuAction(page, "open-map");
   await page.locator("#tab-map-display").click();
-  await page
-    .locator("#dots")
-    .evaluate((e) => (e.closest("details").open = true));
   await page.locator("#dots").fill("40");
   await page.locator("#dots").blur();
   const qualifiedBeforeRaw = (await state()).devices[partyIds[2]].total_m;
@@ -393,9 +409,6 @@ async function wait(check) {
   await page.waitForSelector('[data-layer="offline-map"]');
   assert.match(await page.locator("#map-metadata").innerText(), /EPSG:4326/);
   await page.locator("#tab-map-display").click();
-  await page
-    .locator("#map-opacity")
-    .evaluate((e) => (e.closest("details").open = true));
   await page.locator("#map-opacity").fill("0.25");
   await page.locator('[data-close="map-settings"]').click();
   await menuAction(page, "fit");
@@ -470,7 +483,6 @@ async function wait(check) {
     return route.fulfill({ json: downloaded });
   });
   await page.locator("#tab-map-preparation").click();
-  await page.locator(".map-precise").evaluate((e) => (e.open = true));
   await page.getByRole("button", { name: "Custom", exact: true }).click();
   await page.locator("#map-search").fill("Delhi");
   await page.locator("#search-map").click();
@@ -480,19 +492,13 @@ async function wait(check) {
   await page.locator("#map-search-results").selectOption({ index: 1 });
   assert.equal(await page.locator("#map-lat").inputValue(), "28.617");
   for (const size of ["500", "1000", "custom"]) {
-    await page
-      .locator("#map-shape")
-      .evaluate((e) => (e.closest("details").open = true));
-    await page.locator("#map-shape").selectOption("rectangle");
-    await page.locator("#map-area").selectOption(size);
+    await setHidden(page, "#map-shape", "rectangle");
+    await setHidden(page, "#map-area", size);
     if (size === "custom") {
-      await page.locator("#map-width").fill("1500");
-      await page.locator("#map-height").fill("300");
+      await setHidden(page, "#map-width", "1500");
+      await setHidden(page, "#map-height", "300");
     }
-    await page
-      .locator("#preview-map")
-      .evaluate((e) => (e.closest("details").open = true));
-    await page.locator("#preview-map").click();
+    await clickHidden(page, "#preview-map");
     await page.waitForFunction(() => !!preparedMap);
     assert.match(
       await page.locator("#map-preparation-status").innerText(),
@@ -511,25 +517,19 @@ async function wait(check) {
   assert.equal(
     await page.evaluate(() => preparedMap === undefined),
     true,
-    "changing place invalidates the previous preview before Preview & Download can acquire",
+    "changing place invalidates the previous preview before Download map can acquire",
   );
-  await page.locator("#map-lat").fill("");
-  await page
-    .locator("#preview-map")
-    .evaluate((e) => (e.closest("details").open = true));
-  await page.locator("#preview-map").click();
+  await setHidden(page, "#map-lat", "");
+  await clickHidden(page, "#preview-map");
   assert.equal(
     areas.length,
     3,
     "blank coordinates must not silently become zero",
   );
-  await page.locator("#map-lat").fill("28.617");
+  await setHidden(page, "#map-lat", "28.617");
   delayPreview = true;
-  await page
-    .locator("#preview-map")
-    .evaluate((e) => (e.closest("details").open = true));
-  await page.locator("#preview-map").click();
-  await page.locator("#map-lon").fill("77.213");
+  await clickHidden(page, "#preview-map");
+  await setHidden(page, "#map-lon", "77.213");
   await page.waitForFunction(() =>
     document
       .querySelector("#map-preparation-status")
@@ -541,29 +541,20 @@ async function wait(check) {
     "a stale response cannot authorize the wrong area's download",
   );
   delayPreview = false;
-  await page.locator("#map-lon").fill("77.212");
+  await setHidden(page, "#map-lon", "77.212");
   await page.locator("#include-map-terrain").check();
-  await page
-    .locator("#download-elevation")
-    .evaluate((e) => (e.closest("details").open = true));
-  await page.locator("#download-hillshade").uncheck();
-  await page.locator("#download-contours").uncheck();
-  await page.locator("#download-elevation").check();
-  await page
-    .locator("#preview-map")
-    .evaluate((e) => (e.closest("details").open = true));
-  await page.locator("#preview-map").click();
+  await setHidden(page, "#download-hillshade", false);
+  await setHidden(page, "#download-contours", false);
+  await setHidden(page, "#download-elevation", true);
+  await clickHidden(page, "#preview-map");
   await page.waitForFunction(() => !!preparedMap);
   assert.equal(
     await page.locator("#download-dem").count(),
     0,
     "automatic DEM preview must not require a manual file",
   );
-  await page.locator("#download-elevation").uncheck();
-  await page
-    .locator("#preview-map")
-    .evaluate((e) => (e.closest("details").open = true));
-  await page.locator("#preview-map").click();
+  await setHidden(page, "#download-elevation", false);
+  await clickHidden(page, "#preview-map");
   await page.waitForFunction(() => !!preparedMap);
   const mapDistance = (await state()).devices[partyIds[2]].total_m;
   await page.screenshot({
