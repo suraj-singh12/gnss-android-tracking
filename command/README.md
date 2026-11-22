@@ -901,7 +901,9 @@ clear stale presentation. No ACK or preview proves all history complete.
 points and decisions, pinned to a published generation. A generation or policy/window
 change returns 409; restart inspection. `layer=raw` returns up to 16 original retained
 envelopes with capture/measurement/receipt times, in original transport-sequence order.
-The Inspect history dialog exposes both layers and pagination. Raw diagnostic map
+The History dialog (map toolbar) shows both layers as tabs with structured, paginated
+entries; the raw page JSON stays available under Page data. Recording facts opens a
+read-only sheet for live recording, saved playback and Travel Back. Raw diagnostic map
 mode is bounded too; authoritative geometry and raw originals are never decimated
 in SQLite. Queue reports retain freshness and unresolved-count distinctions.
 

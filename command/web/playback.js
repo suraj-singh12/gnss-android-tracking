@@ -813,26 +813,87 @@
     }
     repaint();
   };
-  $("playback-facts").onclick = () =>
-    travel
-      ? inspection(
-          "Travel Back facts · READ ONLY",
-          $("travel-diagnostics").textContent,
-        )
-      : inspection(
-          "Recording facts · READ ONLY",
-          JSON.stringify(
+  const factTime = (value) =>
+    value && Number.isFinite(Date.parse(value))
+      ? new Date(value).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
+      : "—";
+  const factWords = (text) => {
+    const value = String(text || "").replaceAll("_", " ").trim();
+    return value ? value[0].toUpperCase() + value.slice(1) : "";
+  };
+  function travelFacts() {
+    let diagnostics = {};
+    try {
+      diagnostics = JSON.parse($("travel-diagnostics").textContent || "{}");
+    } catch {}
+    const decisions = Object.entries(diagnostics.decisions || {}).sort((a, b) => b[1] - a[1]);
+    const excluded = decisions.reduce((sum, [reason, n]) => (reason === "accepted" ? sum : sum + n), 0);
+    return {
+      title: "Travel Back facts",
+      subtitle: `${$("context-title").textContent || "Capture range"} · Read only`,
+      stats: [
+        ["From", factTime(travel.start)],
+        ["To", factTime(travel.end)],
+        ["Excluded", String(excluded)],
+      ],
+      sections: [
+        {
+          title: "History",
+          rows: [
             {
-              actual_start: session.metadata.started_at,
-              cutoff: session.metadata.cutoff_at,
-              interruptions: session.groups,
-              underlying_facts: session.facts,
-              limitations: session.metadata.limitations,
+              title: diagnostics.background_projection_error
+                ? "Qualification error"
+                : diagnostics.background_projection_pending
+                  ? "Qualifying newer observations"
+                  : "Qualified history up to date",
+              detail: diagnostics.background_projection_error || "Snapshot is fixed until Refresh.",
+              tone: diagnostics.background_projection_error ? "danger" : diagnostics.background_projection_pending ? "warn" : "",
             },
-            null,
-            2,
-          ),
-        );
+          ],
+        },
+        {
+          title: "Quality decisions",
+          rows: decisions.map(([reason, n]) => ({ title: factWords(reason), aside: String(n) })),
+          empty: "No observations were excluded in this range.",
+        },
+      ],
+      raw: { label: "Diagnostics", text: $("travel-diagnostics").textContent },
+    };
+  }
+  function recordingFacts() {
+    const meta = session.metadata,
+      groups = session.groups || [];
+    return {
+      title: "Recording facts",
+      subtitle: `${meta.name || "Saved recording"} · Read only`,
+      stats: [
+        ["Started", factTime(meta.started_at)],
+        ["Cut off", factTime(meta.cutoff_at)],
+        ["Parties", `${(meta.included || []).length} of ${meta.total_parties ?? "—"}`],
+      ],
+      sections: [
+        {
+          title: "Interruptions",
+          rows: groups.map((g) => ({
+            title: `${factTime(g.From)} – ${factTime(g.Until)}`,
+            detail: factWords(g.Kind),
+            aside: interruptionDuration(g.Duration || 0),
+          })),
+          empty: "Recorded without interruption.",
+        },
+        {
+          title: "Limitations",
+          rows: (meta.limitations || []).map((text) => ({ title: text })),
+          empty: "None recorded.",
+        },
+      ],
+      raw: {
+        label: `Underlying facts · ${(session.facts || []).length}`,
+        text: JSON.stringify(session.facts || [], null, 2),
+      },
+    };
+  }
+  $("playback-facts").onclick = () => (travel || session) && window.showFacts(travel ? travelFacts() : recordingFacts());
   function addRecordedLayer(kind) {
     const c = frame.checkpoint.common,
       source = geometry(c.map_svg),
@@ -995,25 +1056,39 @@
           main.classList.add(left ? "details-closed" : "parties-closed");
         repaint();
       } else if (id === "open-quality") showQuality();
-      else if (id === "inspect-history")
-        inspection(
-          "Historical party · READ ONLY",
-          JSON.stringify(
-            travel
-              ? {
-                  capture_range: { start: travel.start, end: travel.end },
-                  original_observations: travel.originals.filter(
-                    (o) => o.message.device_id === selected,
-                  ),
-                  quality_decisions: travel.decisions.filter(
-                    (d) => d.device_id === selected,
-                  ),
-                }
-              : frame?.checkpoint?.parties?.[selected] || {},
-            null,
-            2,
-          ),
-        );
+      else if (id === "inspect-history") {
+        if (!selected) return;
+        const device = frame?.checkpoint?.parties?.[selected]?.device;
+        const name = device?.snapshot?.party?.id || "Selected party";
+        if (travel)
+          window.showHistorySnapshot(`${name} · Capture range`, {
+            points: (travel.points || []).filter((p) => p.device_id === selected),
+            decisions: travel.decisions.filter((d) => d.device_id === selected),
+            original_observations: travel.originals.filter((o) => o.message.device_id === selected),
+          });
+        else {
+          const fix = device?.location?.fix;
+          window.showFacts({
+            title: "History",
+            subtitle: `${name} · At this moment · Read only`,
+            stats: [
+              ["Contact", factWords(device?.contact_condition) || "—"],
+              ["GNSS", factWords(device?.gnss_condition) || "—"],
+              ["Distance", Number.isFinite(device?.total_m) ? distance(device.total_m) : "—"],
+            ],
+            sections: [
+              {
+                title: "Last position",
+                rows: fix
+                  ? [{ title: `${fix.latitude.toFixed(5)}, ${fix.longitude.toFixed(5)}`, detail: [fix.horizontal_accuracy_m != null ? `±${fix.horizontal_accuracy_m} m` : "", factTime(fix.observed_at)].filter(Boolean).join(" · ") }]
+                  : [],
+                empty: "No qualified position at this moment.",
+              },
+            ],
+            raw: { label: "Party snapshot", text: JSON.stringify(frame?.checkpoint?.parties?.[selected] || {}, null, 2) },
+          });
+        }
+      }
       else if (id === "open-control")
         inspection(
           "Historical · READ ONLY",

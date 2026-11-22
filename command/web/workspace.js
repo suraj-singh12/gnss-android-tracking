@@ -50,10 +50,109 @@
   factsButton.id = "record-facts";
   factsButton.className = "context-button";
   factsButton.textContent = "Recording facts";
-  factsButton.onclick = () => {
-    const disclosure = document.querySelector(".capture-disclosure");
-    disclosure.open = !disclosure.open;
+  factsButton.onclick = () => window.showFacts(liveRecordingFacts(), "live");
+  // One read-only facts sheet for live recording, saved playback and Travel Back.
+  const factsText = (tag, text, cls) => {
+    const node = document.createElement(tag);
+    if (text) node.textContent = text;
+    if (cls) node.className = cls;
+    return node;
   };
+  let factsSource;
+  window.showFacts = (spec, source) => {
+    factsSource = source;
+    const signature = JSON.stringify(spec);
+    const dialog = $("recording-facts");
+    if (dialog.open && dialog.dataset.signature === signature) return;
+    dialog.dataset.signature = signature;
+    const openRaw = dialog.querySelector(".facts-raw")?.open;
+    $("recording-facts-title").textContent = spec.title;
+    $("recording-facts-sub").textContent = spec.subtitle || "Read only";
+    const content = [];
+    if (spec.stats?.length) {
+      const stats = factsText("dl", "", "facts-stats");
+      for (const [label, value, tone] of spec.stats) {
+        const item = factsText("div", "", tone ? `facts-stat ${tone}` : "facts-stat");
+        item.append(factsText("dt", label), factsText("dd", value));
+        stats.append(item);
+      }
+      content.push(stats);
+    }
+    for (const section of spec.sections || []) {
+      const node = factsText("section", "", "facts-section");
+      node.append(factsText("h2", section.title));
+      const list = factsText("div", "", "facts-rows");
+      list.setAttribute("role", "list");
+      if (!section.rows?.length) list.append(factsText("p", section.empty || "None.", "facts-empty"));
+      for (const row of section.rows || []) {
+        const item = factsText("div", "", "facts-row");
+        item.setAttribute("role", "listitem");
+        const copy = factsText("span", "", "facts-copy");
+        copy.append(factsText("strong", row.title));
+        if (row.detail) copy.append(factsText("small", row.detail));
+        item.append(copy);
+        if (row.tone) item.prepend(factsText("i", "", `facts-dot ${row.tone}`));
+        if (row.aside) item.append(factsText("b", row.aside, "facts-aside"));
+        list.append(item);
+      }
+      node.append(list);
+      content.push(node);
+    }
+    if (spec.raw?.text) {
+      const raw = factsText("details", "", "facts-raw");
+      raw.open = !!openRaw;
+      raw.append(factsText("summary", spec.raw.label), factsText("pre", spec.raw.text));
+      content.push(raw);
+    }
+    $("recording-facts-content").replaceChildren(...content);
+    if (!dialog.open) dialog.showModal();
+  };
+  for (const button of document.querySelectorAll("#recording-facts [data-dismiss-facts]"))
+    button.onclick = () => $("recording-facts").close();
+  $("recording-facts").addEventListener("close", () => (factsSource = undefined));
+  const liveClock = (value) =>
+    value && Number.isFinite(Date.parse(value))
+      ? new Date(value).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
+      : "—";
+  const liveWords = (text) => {
+    const value = String(text || "").replaceAll("_", " ").trim();
+    return value ? value[0].toUpperCase() + value.slice(1) : "";
+  };
+  function liveRecordingFacts() {
+    const recording = window.recordingLiveState?.()?.recording;
+    const health = $("capture-health").textContent.trim();
+    const unverified = health.includes("Unverified");
+    const status = !recording ? "Ready" : recording.status === "stopped" ? "Stopped" : recording.active ? "Recording" : "Paused";
+    return {
+      title: "Recording facts",
+      subtitle: `${status} · Read only`,
+      stats: [
+        ["Status", status, recording?.active ? "live" : recording ? "warn" : ""],
+        ["Started", liveClock(recording?.started_at)],
+        ["Duration", recording ? duration(recording.duration_s) : "—"],
+      ],
+      sections: [
+        {
+          title: "Coverage",
+          rows: recording
+            ? [
+                {
+                  title: recording.mode === "from_beginning" ? "From the beginning of retained history" : "From the moment recording started",
+                  detail: recording.stopped_at ? `Stopped ${liveClock(recording.stopped_at)}` : "",
+                  tone: recording.active ? "live" : "",
+                },
+              ]
+            : [],
+          empty: "No recording in progress.",
+        },
+        {
+          title: "Presentation evidence",
+          rows: [{ title: unverified ? "Unverified" : "Browser presentation confirmed", detail: health, tone: unverified ? "warn" : "live" }],
+        },
+      ],
+      raw: recording ? { label: "Recording state", text: JSON.stringify(recording, null, 2) } : undefined,
+    };
+  }
   const travelPill = document.createElement("span");
   travelPill.id = "travel-new-pill";
   travelPill.className = "pill warn";
@@ -84,6 +183,7 @@
     if ($("recording").hidden !== quiet) $("recording").hidden = quiet;
     recordPill.classList.toggle("warn", state === "paused" || state === "stopped");
     recordPill.hidden = factsButton.hidden = mode !== "RECORDING LIVE";
+    if ($("recording-facts").open && factsSource === "live") window.showFacts(liveRecordingFacts(), "live");
     // The rail belongs to Record; an existing recording stays visible in LIVE
     // so active, paused or unsaved evidence is never hidden from the operator.
     const recording = window.recordingLiveState?.()?.recording;

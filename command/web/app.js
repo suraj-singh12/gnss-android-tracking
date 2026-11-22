@@ -25,7 +25,9 @@ let viewport, offlineMap, inspectedPoint, locatedSOS, terrain, activeMapID;
 function applyAppearance() {
   const night = localStorage.getItem("gnss-appearance") === "night";
   document.documentElement.dataset.appearance = night ? "night" : "day";
-  $("appearance").firstElementChild.textContent = night ? "☀" : "☾";
+  $("appearance").firstElementChild.innerHTML = night
+    ? '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/>'
+    : '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
   $("appearance").setAttribute(
     "aria-label",
     `Switch to ${night ? "Day" : "Night"} appearance`,
@@ -2427,37 +2429,212 @@ function drawMap() {
 let polling = false;
 let inspectionCursor = "";
 let inspectionDevice;
+let inspectionLayer = "qualified";
+let inspectionPage = 1;
+let inspectionSnapshot;
+const historyClock = (value) =>
+  value && Number.isFinite(Date.parse(value))
+    ? new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
+    : "—";
+const historyDay = (value) =>
+  value && Number.isFinite(Date.parse(value))
+    ? new Date(value).toLocaleDateString([], { day: "numeric", month: "short" })
+    : "";
+const historyCoordinate = (fix) =>
+  fix && Number.isFinite(fix.latitude) && Number.isFinite(fix.longitude)
+    ? `${fix.latitude.toFixed(5)}, ${fix.longitude.toFixed(5)}`
+    : "";
+const historyDistance = (m) =>
+  Number.isFinite(m) ? (m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${m.toFixed(1)} m`) : "—";
+const historyWords = (text) => {
+  const value = String(text || "").replaceAll("_", " ").trim();
+  return value ? value[0].toUpperCase() + value.slice(1) : "";
+};
+function historyRow(time, title, detail, aside, tags = []) {
+  const row = el("div", undefined, "history-row");
+  row.setAttribute("role", "listitem");
+  const main = el("span", undefined, "history-main");
+  main.append(el("strong", title), el("small", detail));
+  const meta = el("span", undefined, "history-meta");
+  for (const [text, tone] of tags) meta.append(el("span", text, "pill" + (tone ? " " + tone : "")));
+  if (aside) meta.append(el("b", aside));
+  row.append(el("span", time, "history-time"), main, meta);
+  return row;
+}
+function historySection(title, rows) {
+  const section = el("section", undefined, "history-section");
+  const list = el("div", undefined, "history-rows");
+  list.setAttribute("role", "list");
+  list.append(...rows);
+  section.append(el("h2", title), list);
+  return section;
+}
+function historyEmpty(title, detail) {
+  const empty = el("div", undefined, "history-empty");
+  empty.append(el("strong", title), el("small", detail));
+  return empty;
+}
+// Presentation only: every value is read from the bounded Command page as returned.
+function renderHistory(page, layer, snapshot) {
+  const stats = [],
+    sections = [];
+  let note = "";
+  if (layer === "raw") {
+    const originals = page.original_observations || [];
+    const times = originals.map((o) => o.message?.captured_at).filter(Boolean);
+    stats.push(["Observations", String(originals.length)], ["First", historyClock(times[0])], ["Last", historyClock(times.at(-1))]);
+    if (originals.length)
+      sections.push(
+        historySection(
+          "Received by Command",
+          originals.map((o) => {
+            const m = o.message || {},
+              fix = m.fix,
+              type = m.type || "message";
+            const detail = [
+              `#${m.sequence ?? "—"}`,
+              fix?.horizontal_accuracy_m != null ? `±${fix.horizontal_accuracy_m} m` : "",
+              m.health?.gnss_status ? `GNSS ${m.health.gnss_status}` : "",
+              `Received ${historyClock(o.received_at)}`,
+            ].filter(Boolean).join(" · ");
+            const tags = type === "sos" ? [["SOS", "danger"]] : type === "location" ? (fix ? [] : [["No fix", "warn"]]) : [[historyWords(type), ""]];
+            return historyRow(historyClock(m.captured_at), historyCoordinate(fix) || (type === "sos" ? "SOS event" : "No position"), detail, "", tags);
+          }),
+        ),
+      );
+    note = "Capture and receipt times in transport order. No distance is derived from originals.";
+  } else {
+    const points = page.points || [],
+      decisions = page.decisions || [];
+    stats.push(["Points", String(points.length)], ["Decisions", String(decisions.length)], ["Distance", points.length ? historyDistance(points.at(-1).cumulative_m) : "—"]);
+    let segment;
+    if (points.length)
+      sections.push(
+        historySection(
+          "Qualified points",
+          points.map((p) => {
+            const tags = p.segment_id !== segment && segment !== undefined ? [[historyWords(p.segment_reason) || "New segment", ""]] : [];
+            segment = p.segment_id;
+            const detail = [
+              `#${p.sequence}`,
+              p.fix?.horizontal_accuracy_m != null ? `±${p.fix.horizontal_accuracy_m} m` : "",
+              historyDay(p.fix?.observed_at),
+            ].filter(Boolean).join(" · ");
+            return historyRow(historyClock(p.fix?.observed_at), historyCoordinate(p.fix), detail, historyDistance(p.cumulative_m), tags);
+          }),
+        ),
+      );
+    if (decisions.length)
+      sections.push(
+        historySection(
+          "Quality decisions",
+          decisions.map((d) =>
+            historyRow("", historyWords(d.reason), `Message ${String(d.message_id || "").slice(0, 8)} · Policy ${d.policy_revision}`, "", [["Excluded", "warn"]]),
+          ),
+        ),
+      );
+    note = "Full-resolution points. Distances are cumulative and authoritative.";
+  }
+  $("inspection-summary").replaceChildren(
+    ...stats.map(([label, value]) => {
+      const item = el("div");
+      item.append(el("dt", label), el("dd", value));
+      return item;
+    }),
+  );
+  $("inspection-list").replaceChildren(
+    ...(sections.length
+      ? sections
+      : [
+          page.projection_pending
+            ? historyEmpty("Rebuilding history", "Command is still qualifying stored observations. Try again shortly.")
+            : layer === "raw"
+              ? historyEmpty("No observations", "Command has not received observations for this party.")
+              : historyEmpty("No qualified points", "Original observations show everything Command received."),
+        ]),
+  );
+  $("inspection-list").scrollTop = 0;
+  $("inspection-note").textContent = sections.length ? note : "";
+  $("inspection-data").textContent = JSON.stringify(page, null, 2);
+  for (const tab of document.querySelectorAll("#history-inspection [data-layer]"))
+    tab.setAttribute("aria-selected", String(tab.dataset.layer === layer));
+  $("history-inspection").dataset.snapshot = String(!!snapshot);
+}
+function partyLabel(device) {
+  const party = state?.devices?.[device]?.snapshot?.party;
+  return party ? [party.id, party.name].filter(Boolean).join(" · ") : "Selected party";
+}
 async function inspectHistory(cursor = "") {
   const device = selectedParty;
   if (!device) return;
-  $("inspection-status").textContent = "Loading a bounded page…";
+  let failed = false;
+  inspectionSnapshot = undefined;
+  if (!cursor) inspectionPage = 1;
+  $("inspection-party").textContent = `${partyLabel(device)} · Read only`;
+  $("inspection-status").textContent = "Loading…";
+  $("history-inspection").setAttribute("aria-busy", "true");
   try {
-    const layer = $("inspection-layer").value;
+    const layer = inspectionLayer;
     const response = await fetch(
       `/local/history?device_id=${encodeURIComponent(device)}&layer=${layer}&cursor=${encodeURIComponent(cursor)}`,
       { signal: AbortSignal.timeout(4000) },
     );
     const page = await response.json();
-    if (!response.ok) throw Error(page.message || "History unavailable");
+    if (!response.ok)
+      throw Error(
+        response.status === 409
+          ? "History changed. Start again from the first page."
+          : page.message || "History unavailable",
+      );
+    if (cursor) inspectionPage++;
     inspectionCursor = page.next_cursor || "";
-    $("inspection-next").disabled = !inspectionCursor;
-    $("inspection-data").textContent = JSON.stringify(page, null, 2);
     inspectionDevice = device;
-    $("inspection-status").textContent =
-      layer === "raw"
-        ? "Original capture/envelope and Command receipt times; transport sequence order. No distance derived here."
-        : "Full-resolution qualified points and decisions; cumulative distances remain authoritative. Generation changes require First page.";
+    renderHistory(page, layer);
+    $("inspection-status").textContent = `Page ${inspectionPage}`;
   } catch (e) {
-    $("inspection-status").textContent = e.message;
+    failed = true;
+    $("inspection-status").textContent = "";
+    $("inspection-list").replaceChildren(historyEmpty("History unavailable", e.message));
+    $("inspection-summary").replaceChildren();
+    inspectionCursor = "";
+  } finally {
+    $("history-inspection").removeAttribute("aria-busy");
+    $("inspection-next").disabled = !inspectionCursor;
+    $("inspection-restart").disabled = inspectionPage <= 1 && !failed;
   }
 }
+// Read-only view of history already held by playback; no request is made.
+window.showHistorySnapshot = (subtitle, page, layer = "qualified") => {
+  inspectionSnapshot = { subtitle, page };
+  inspectionLayer = layer;
+  $("inspection-party").textContent = `${subtitle} · Read only`;
+  $("inspection-status").textContent = "";
+  renderHistory(page, layer, true);
+  if (!$("history-inspection").open) $("history-inspection").showModal();
+};
 $("inspect-history").onclick = () => {
+  inspectionLayer = "qualified";
   $("history-inspection").showModal();
   inspectHistory();
 };
 $("inspection-restart").onclick = () => inspectHistory();
 $("inspection-next").onclick = () => inspectHistory(inspectionCursor);
-$("inspection-layer").onchange = () => inspectHistory();
+for (const tab of document.querySelectorAll("#history-inspection [data-layer]"))
+  tab.onclick = () => {
+    if (tab.dataset.layer === inspectionLayer) return;
+    inspectionLayer = tab.dataset.layer;
+    if (inspectionSnapshot) renderHistory(inspectionSnapshot.page, inspectionLayer, true);
+    else inspectHistory();
+  };
+$("history-inspection").addEventListener("keydown", (event) => {
+  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+  const tab = event.target.closest?.("[data-layer]");
+  if (!tab) return;
+  const other = [...document.querySelectorAll("#history-inspection [data-layer]")].find((t) => t !== tab);
+  other.focus();
+  other.click();
+  event.preventDefault();
+});
 let livePolling = false;
 let latestLive;
 let latestLiveStarted = -Infinity;
@@ -2746,7 +2923,8 @@ async function previewRadius() {
     $("map-plan-details").textContent =
       `Additional network transfer: unknown. Initial cumulative allowance: 5 MB, shared by vectors, DEM, source discovery and retries. Large fallback requires additional approval before transfer. Disk: ≤256 MiB saved chunks, ≤1 GB source cache plus bounded on-disk index and 3 GB free-space admission for regional processing. WGS84 centre ${request.lat}, ${request.lon}; radius ${request.radius_m} m; approximate ellipsoidal area ${(plan.approximate_ellipsoidal_area_m2 / 1000000).toFixed(6)} km² (sampled boundary). Ellipsoidal geodesic circle. Envelope W/S/E/N ${plan.bounds.map((v) => v.toFixed(7)).join(", ")}. ${plan.chunks.length} chunks; ${plan.source_tiles.length} possible native source tiles including sampling halo; ${plan.maximum_source_requests_before_retries} maximum source requests before cache/retries. DEM transfer ≤ ${(plan.maximum_compressed_dem_bytes / 1048576).toFixed(1)} MiB before bounded retries (compressed sizes unknown). Vector sizes unknown, ≤20 MiB/chunk. DEM ≤${(plan.maximum_terrain_bytes / 1048576).toFixed(1)} MiB; chunk library budget 256 MiB; source cache 99 MiB; disk reserve 128 MiB; one network/decode at a time. Provider cooldown 10 s/vector request. ${plan.dem_unsupported || "DEM adapter: 56°S–60°N, WGS84/EGM96, native 1 arc sec; source accuracy varies."} ${plan.unsupported || "Confirm estimate, then acquire available layers. Coverage gaps remain explicit."}`;
     $("map-preparation-status").textContent =
-      `${request.radius_m} m radius · ${plan.chunks.length} geographic chunks. Additional transfer unknown; initially limited to 5 MB. Regional sources require up to 3 GB free disk space. ${plan.unsupported || "Review coverage and resource limits, then Download Map."}`;
+      plan.unsupported ||
+      `${request.radius_m} m radius · ${plan.chunks.length} ${plan.chunks.length === 1 ? "area" : "areas"} · starts within 5 MB · regional sources need up to 3 GB free disk`;
     $("map-preview").replaceChildren();
     if (plan.circle?.length) {
       const pts = plan.circle.map((p) => {
@@ -2774,6 +2952,7 @@ async function previewRadius() {
           "stroke-width": 2,
           "data-requested-circle": "true",
         }),
+        svg("circle", { cx: 200, cy: 90, r: 3.5, class: "map-preview-centre" }),
       );
     }
     $("download-map").disabled = !!plan.unsupported;
@@ -3558,8 +3737,30 @@ function initializeMapModal() {
   presets.children[1].click();
   const preview = el("section");
   preview.className = "map-selection-preview";
-  preview.append($("map-preview"));
-  get.append(preview);
+  // The preview is geometry only; say what it shows and where, never a bare box.
+  const previewEmpty = el("div", undefined, "map-preview-empty");
+  previewEmpty.innerHTML =
+    '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/></svg><b>Map preview</b><small>Enter a location or latitude, longitude and select Search.</small>';
+  const previewLabel = el("div", undefined, "map-preview-label");
+  previewLabel.id = "map-preview-label";
+  preview.append($("map-preview"), previewEmpty, previewLabel);
+  radiusLabel.before(preview);
+  const syncPreview = () => {
+    const drawn = $("map-preview").childElementCount > 0;
+    previewEmpty.hidden = drawn;
+    previewLabel.hidden = !drawn;
+    if (!drawn) return;
+    const lat = Number($("map-lat").value),
+      lon = Number($("map-lon").value),
+      radius = Number($("map-radius").value) * Number($("radius-unit").value);
+    const place = $("map-search").value.trim();
+    previewLabel.replaceChildren(
+      el("strong", place && !/^[-+\d.,\s]+$/.test(place) ? place : `${lat.toFixed(4)}, ${lon.toFixed(4)}`),
+      el("small", $("map-shape").value === "circle" ? `${radius >= 1000 ? +(radius / 1000).toFixed(1) + " km" : radius + " m"} radius` : "Rectangle"),
+    );
+  };
+  new MutationObserver(syncPreview).observe($("map-preview"), { childList: true });
+  syncPreview();
   const optional = el("div");
   optional.className = "map-optional-terrain";
   const terrainLabel = el("label");

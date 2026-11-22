@@ -215,6 +215,13 @@ async function wait(check, message = "Timed out waiting for real state") {
   await wait(async () => await page.locator("#pause").isVisible());
   await page.locator("#pause").click();
   await wait(async () => (await state()).recording?.status === "paused");
+  // Recording facts is a read-only sheet built from Command recording state.
+  await page.locator("#record-facts").click();
+  assert(await page.locator("#recording-facts").evaluate((d) => d.open), "Recording facts opens as a dialog");
+  await wait(async () => (await page.locator("#recording-facts .facts-stat").first().textContent()).includes("Paused"));
+  assert.equal(await page.locator("#recording-facts-sub").textContent(), "Paused · Read only");
+  await page.locator("#recording-facts [data-dismiss-facts]").click();
+  assert.equal(await page.locator("#recording-facts").evaluate((d) => d.open), false);
   await page.locator("#resume").click();
   await wait(async () => (await state()).recording?.status === "active");
   // LIVE keeps an existing recording visible; history stays locked.
@@ -271,16 +278,33 @@ async function wait(check, message = "Timed out waiting for real state") {
   await page.keyboard.press("End");
   assert(await page.locator("#phone-tab-results").evaluate((e) => e === document.activeElement && e.getAttribute("aria-selected") === "true"), "End selects Results");
   await page.evaluate(() => document.querySelector("#phone-control").close());
+  // History: layer tabs, structured entries (never a bare JSON dump) and close.
+  await page.locator("#devices .device .party-select").first().click();
+  await page.locator("#inspect-history").click();
+  await wait(async () => (await page.locator("#history-inspection").getAttribute("aria-busy")) === null);
+  assert.equal(await page.locator("#inspection-qualified").getAttribute("aria-selected"), "true");
+  assert(await page.locator("#inspection-list :is(.history-row, .history-empty)").first().isVisible(), "qualified layer shows entries or an empty state");
+  await page.locator("#inspection-raw").click();
+  await wait(async () => (await page.locator("#inspection-raw").getAttribute("aria-selected")) === "true" && (await page.locator("#history-inspection").getAttribute("aria-busy")) === null);
+  assert((await page.locator("#inspection-list .history-row").count()) > 0, "original observations are listed");
+  assert.equal(await page.locator(".history-raw").evaluate((d) => d.open), false, "page data stays collapsed");
+  const historyAxe = await new AxeBuilder({ page }).include("#history-inspection").withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();
+  await page.locator('[data-close="history-inspection"]').click();
+  assert.equal(await page.locator("#history-inspection").evaluate((d) => d.open), false);
+  // Get a Map never shows a blank preview: an empty state or labelled geometry.
+  await menuAction(page, "open-map");
+  assert.equal(await page.locator("#map-settings .map-selection-preview :is(.map-preview-empty, .map-preview-label):visible").count(), 1, "map preview is never blank");
+  await page.evaluate(() => document.querySelector("#map-settings").close());
   await menuAction(page, "open-sos");
   const sosAxe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();
   await page.locator('[data-close="sos-panel"]').click();
 
   const axe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();
-  const violations = [...axe.violations, ...sosAxe.violations].map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) }));
+  const violations = [...axe.violations, ...sosAxe.violations, ...historyAxe.violations].map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) }));
   fs.writeFileSync(path.join(out, "v514-accessibility.json"), JSON.stringify(violations, null, 2));
   assert.deepEqual(violations, []);
   assert.deepEqual(errors, []);
-  console.log("PASS: V5.14 workspace geometry, mode menu keyboard/refresh, party search/filters, inspector, panels, Day/Night persistence, 7 viewports × 2 themes, Record cancel/start/pause/resume/stop-retains, provider failure, SOS sound switch, axe. Screenshots: " + out);
+  console.log("PASS: V5.14 workspace geometry, mode menu keyboard/refresh, party search/filters, inspector, panels, Day/Night persistence, 7 viewports × 2 themes, Record cancel/start/pause/resume/stop-retains, provider failure, SOS sound switch, Recording facts, History layers, Get a Map preview state, axe. Screenshots: " + out);
 })()
   .catch(async (e) => {
     console.error(e);
