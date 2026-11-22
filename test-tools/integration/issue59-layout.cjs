@@ -30,13 +30,14 @@ const {chromium} = require(process.env.GNSS_PLAYWRIGHT_MODULE || "playwright");
         assert.equal(await page.locator('.map-tools').count(),0);
         const root=page.locator(".header-menu-root");
         if (!(await root.evaluate(e=>e.open))) await root.locator(":scope > summary").click();
-        const records=page.locator(".menu-groups > details").nth(0);
-        await records.locator(":scope > summary").click();
-        assert(await page.locator("#open-library").isVisible());
+        // V5.14 opens Records as a modal from the utility menu and restores focus on Escape.
+        await page.locator("#open-records").click();
+        await page.locator("dialog[open]").first().waitFor();
+        assert.equal(await page.locator("dialog[open]").count(),1);
         await page.keyboard.press("Escape");
-        assert.equal(await records.evaluate(e=>e.open),false);
-        assert.equal(await records.locator(":scope > summary").evaluate(e=>e===document.activeElement),true);
-        if (width <= 1250) await page.keyboard.press("Escape");
+        assert.equal(await page.locator("dialog[open]").count(),0);
+        if (await page.locator("#open-records").isVisible()) assert.equal(await page.locator("#open-records").evaluate(e=>e===document.activeElement),true);
+        if (width <= 1250 && await root.evaluate(e=>e.open)) await page.keyboard.press("Escape");
         for (const id of ["zoom-in","zoom-out","fit","focus-party","inspect-history","open-layers"]) assert(await page.locator(`#${id}`).isVisible());
       }
       assert.deepEqual(errors,[]); await page.close();
