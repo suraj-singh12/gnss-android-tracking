@@ -87,6 +87,7 @@ class VisualRegressionTest(private val profile: Profile) {
     @Test
     fun everyScreenPassesLayoutAuditAndMatchesApprovedGeometry() = runBlocking {
         TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
+        MainActivity.freeSpaceForTests = 28L * 1024 * 1024 * 1024
         // Test-only fixed identity before any message exists: a random UUID in a
         // proportional font can wrap differently and move the identity screens.
         val state = withContext(Dispatchers.IO) {
@@ -295,6 +296,7 @@ class VisualRegressionTest(private val profile: Profile) {
             assertTrue("Geometry differs from the approved baseline for ${profile.name}. Review captures, then record a justified baseline:\n" + diffs.joinToString("\n"), diffs.isEmpty())
         } finally {
             controller.pause().stop().destroy()
+            MainActivity.freeSpaceForTests = null
             app.finishForTests()
         }
     }

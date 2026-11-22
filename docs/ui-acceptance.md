@@ -20,7 +20,9 @@ Tests: route/ownership and wording assertions moved to the v3 owners
 (`NativeScreenTestSupport`, V46/visual/dialog suites); `VisualRegressionTest` covers the v3
 screen list and a `review-authorization` dialog (Disable / Re-enroll captured with an
 enrollment present). Baselines re-recorded only after reviewing the captures; hashes and
-reason in `visual-baseline/APPROVALS.md`.
+reason in `visual-baseline/APPROVALS.md`. Device space is pinned to a test-only 28 GB free value
+(`MainActivity.freeSpaceForTests`) so the Diagnostics/Saved data pixel digests do not follow
+the host disk; that re-record changed pixel digests only, not geometry.
 
 Not verified: real-device rendering, TalkBack on hardware, physical volume keys and real
 Command reachability on a LAN. Command access captures are black by design (`FLAG_SECURE`).

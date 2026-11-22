@@ -1875,7 +1875,7 @@ class MainActivity : Activity() {
                                 else "Operator ACK · Command only",
                                 if (queues.sos > 0) R.color.warning else R.color.muted,
                             )
-                        val freeSpace = filesDir.usableSpace
+                        val freeSpace = freeSpaceForTests ?: filesDir.usableSpace
                         healthRows
                             .getValue("Device space")
                             .update(
@@ -5482,6 +5482,8 @@ class MainActivity : Activity() {
 
     companion object {
         internal const val EXPORT_DIAGNOSTICS = 40
+        /** Test-only fixed free space so visual baselines do not follow the host disk. */
+        internal var freeSpaceForTests: Long? = null
     }
 
     override fun dispatchTouchEvent(event: android.view.MotionEvent): Boolean {
