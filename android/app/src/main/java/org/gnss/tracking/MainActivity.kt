@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 
+private const val SOS_TRACKING_CARD_MILLIS = 30 * 60_000L
+
 class MainActivity : Activity() {
     private val app
         get() = application as TrackingApp
@@ -174,8 +176,7 @@ class MainActivity : Activity() {
     }
 
     override fun attachBaseContext(newBase: android.content.Context) {
-        val night =
-            newBase.getSharedPreferences("appearance", MODE_PRIVATE).getBoolean("night", false)
+        val night = Appearance.isNight(newBase)
         val appearanceConfiguration =
             android.content.res.Configuration(newBase.resources.configuration)
         appearanceConfiguration.uiMode =
@@ -187,7 +188,9 @@ class MainActivity : Activity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        val night = getSharedPreferences("appearance", MODE_PRIVATE).getBoolean("night", false)
+        val night =
+            (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                android.content.res.Configuration.UI_MODE_NIGHT_YES
         setTheme(if (night) R.style.AppThemeNight else R.style.AppTheme)
         super.onCreate(savedInstanceState)
         consumedNotificationAction =
@@ -438,10 +441,7 @@ class MainActivity : Activity() {
                         minHeight = dp(48)
                         minWidth = dp(48)
                         setOnClickListener {
-                            getSharedPreferences("appearance", MODE_PRIVATE)
-                                .edit()
-                                .putBoolean("night", !night)
-                                .apply()
+                            Appearance.set(this@MainActivity, if (night) Appearance.DAY else Appearance.NIGHT)
                             NotificationAppearance.refresh(this@MainActivity)
                             recreate()
                         }
@@ -888,10 +888,7 @@ class MainActivity : Activity() {
                         dialog,
                         choice ->
                         if ((choice == 1) != night) {
-                            getSharedPreferences("appearance", MODE_PRIVATE)
-                                .edit()
-                                .putBoolean("night", choice == 1)
-                                .apply()
+                            Appearance.set(this@MainActivity, if (choice == 1) Appearance.NIGHT else Appearance.DAY)
                             NotificationAppearance.refresh(this@MainActivity)
                             recreate()
                         }
@@ -3376,12 +3373,6 @@ class MainActivity : Activity() {
                     id = R.id.appbar_back
                     ui.iconButton(this, R.drawable.ic_back, "Back")
                 }
-        val brand =
-            ui.label("G", TextRole.AppBarTitle, R.color.accent).apply {
-                gravity = android.view.Gravity.CENTER
-                background = ui.shape(R.color.positive_surface, R.dimen.radius_brand, null)
-                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }
         val heading = ui.label("GNSS Tracker", TextRole.AppBarTitle).apply {
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
@@ -3392,61 +3383,119 @@ class MainActivity : Activity() {
         }
         appbar.addView(back, LinearLayout.LayoutParams(ui.px(R.dimen.control_height), ui.px(R.dimen.control_height)).apply { rightMargin = dp(4) })
         appbar.addView(
-            brand,
-            LinearLayout.LayoutParams(ui.px(R.dimen.brand_size), ui.px(R.dimen.brand_size)).apply {
-                leftMargin = ui.px(R.dimen.page_margin) - ui.px(R.dimen.appbar_padding_start)
-                rightMargin = dp(10)
-            },
-        )
-        appbar.addView(
             ui.column().apply {
                 addView(heading)
                 addView(subtitle)
             },
             LinearLayout.LayoutParams(0, -2, 1f),
         )
-        headerThemeToggle?.let {
-            detach(it)
-            appbar.addView(it, LinearLayout.LayoutParams(dp(48), dp(48)))
-        }
+        // v3: Day/Night lives in Settings › Appearance; no app-bar theme control.
+        headerThemeToggle?.let { detach(it) }
+        headerThemeToggle = null
+        // v3: root tabs use a large in-page title; nested pages show Back, title and parent.
         v46Header = { name ->
-            brand.visibility = if (routeParents.containsKey(name)) View.GONE else View.VISIBLE
-            back.visibility = if (routeParents.containsKey(name)) View.VISIBLE else View.GONE
-            heading.text =
-                if (!routeParents.containsKey(name)) "GNSS Tracker"
-                else if (name == "Manage Command access") "Manage access & trust" // matches its entry row
-                else name
-            subtitle.text =
-                when (name) {
-                    "Party & Command" -> "Identity, Command address and reporting"
-                    "Command access" -> "Enrollment and verified authority"
-                    "Tracking policy" -> "Local adaptive storage"
-                    "Emergency controls" -> "Protected SOS and safety"
-                    else ->
-                        if (routeParents.containsKey(name)) "${routeParents[name]}"
-                        else "Operator device"
-                }
+            val nested = routeParents.containsKey(name)
+            appbar.visibility = if (nested) View.VISIBLE else View.GONE
+            back.visibility = if (nested) View.VISIBLE else View.GONE
+            heading.text = name
+            subtitle.text = routeParents[name].orEmpty()
+            back.contentDescription = "Back to ${routeParents[name].orEmpty()}"
         }
-        fun rootTitle(p: LinearLayout, title: String, lead: String) {
+        fun rootTitle(p: LinearLayout, title: String, lead: String = ""): TextView {
             p.removeAllViews()
             pagePadding(p)
             add(p, ui.label(title, TextRole.Display).apply {
                 if (Build.VERSION.SDK_INT >= 28) isAccessibilityHeading = true
             })
-            add(p, ui.label(lead, TextRole.Caption), 4)
+            return ui.label(lead, TextRole.Caption).also {
+                add(p, it, 4)
+                it.visibility = if (lead.isEmpty()) View.GONE else View.VISIBLE
+            }
         }
+        fun statusDot(view: TextView, tone: Int) {
+            val size = dp(10)
+            view.setCompoundDrawablesRelative(
+                android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    setColor(getColor(tone))
+                    setBounds(0, 0, size, size)
+                },
+                null, null, null,
+            )
+            view.compoundDrawablePadding = dp(10)
+            view.gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+        }
+        /** Grouped-list row: title at the start, an existing owner value at the end. */
+        fun valueRow(list: LinearLayout, title: String, value: TextView, note: String = ""): TextView {
+            val row = LinearLayout(this).apply {
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                minimumHeight = ui.px(R.dimen.list_row_min_height)
+                setPadding(ui.px(R.dimen.list_row_padding_h), ui.px(R.dimen.list_row_padding_v), ui.px(R.dimen.list_row_padding_h), ui.px(R.dimen.list_row_padding_v))
+            }
+            row.addView(ui.column().apply {
+                addView(ui.label(title, TextRole.RowTitle))
+                if (note.isNotEmpty()) add(this, ui.label(note, TextRole.Meta), 3)
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+            detach(value)
+            value.gravity = android.view.Gravity.END or android.view.Gravity.CENTER_VERTICAL
+            row.addView(value, LinearLayout.LayoutParams(-2, -2).apply { marginStart = ui.px(R.dimen.space_md) })
+            list.addView(row, LinearLayout.LayoutParams(-1, -2))
+            return value
+        }
+        fun plainValue(view: TextView, text: String = "—"): TextView = view.apply {
+            ui.text(this, TextRole.Value)
+            background = null
+            setPadding(0, 0, 0, 0)
+            setCompoundDrawablesRelative(null, null, null, null)
+            if (text.isNotEmpty() && this.text.isNullOrEmpty()) this.text = text
+        }
+        fun footer(p: LinearLayout, text: String) =
+            ui.label(text, TextRole.Meta).also {
+                add(p, it, 6)
+                (it.layoutParams as LinearLayout.LayoutParams).marginStart = dp(2)
+            }
         val tracking = routes.getValue("Tracking")
-        rootTitle(tracking, "Tracking", "Your phone's collection and delivery status.")
+        val partyLine = rootTitle(tracking, "Tracking")
+        // SOS active: three separate checkpoints; transport delivery is never shown as
+        // a human acknowledgement.
+        val sosCard = ui.card(tracking, 15, R.color.emergency_surface).apply { visibility = View.GONE }
+        val sosTitle = ui.label("SOS active", TextRole.Hero, R.color.danger).apply {
+            accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+        }
+        statusDot(sosTitle, R.color.danger)
+        add(sosCard, sosTitle)
+        val sosRaised = ui.label("", TextRole.Caption)
+        add(sosCard, sosRaised, 4)
+        fun sosStep(title: String): Pair<TextView, TextView> {
+            val row = LinearLayout(this).apply { gravity = android.view.Gravity.TOP }
+            val mark = ui.label("…", TextRole.Pill).apply {
+                gravity = android.view.Gravity.CENTER
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }
+            row.addView(mark, LinearLayout.LayoutParams(dp(28), dp(28)).apply { marginEnd = ui.px(R.dimen.space_md) })
+            val detail = ui.label("", TextRole.Meta)
+            row.addView(ui.column().apply {
+                addView(ui.label(title, TextRole.RowTitle))
+                add(this, detail, 2)
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+            add(sosCard, row, 10)
+            return mark to detail
+        }
+        val sosSaved = sosStep("Saved on phone")
+        val sosDelivered = sosStep("Delivered to Command")
+        val sosOperator = sosStep("Acknowledged by an operator")
+        fun markStep(step: Pair<TextView, TextView>, done: Boolean, detail: String) {
+            step.first.text = if (done) "✓" else "…"
+            ui.statusPill(step.first, if (done) StatusTone.POSITIVE else StatusTone.NEUTRAL)
+            step.first.setPadding(0, 0, 0, 0)
+            step.first.background = ui.shape(if (done) R.color.positive_surface else R.color.surface, R.dimen.radius_pill, null)
+            step.second.text = detail
+        }
         val hero = ui.card(tracking, 15)
-        val trackingBadge = ui.label("…", TextRole.Pill)
-        val heroTop = LinearLayout(this).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
         detach(trackingSummary)
-        // The legacy owner carried text()/pill padding; the hero title aligns with the card edge.
         trackingSummary.setPadding(0, 0, 0, 0)
         trackingSummary.includeFontPadding = false
-        heroTop.addView(trackingSummary, LinearLayout.LayoutParams(0, -2, 1f))
-        heroTop.addView(trackingBadge, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8) })
-        add(hero, heroTop)
+        add(hero, trackingSummary)
         val trackingCopy =
             ui.label("Reading collection state", TextRole.Caption).apply {
                 minLines = if (resources.configuration.fontScale > 1.25f) 2 else 1
@@ -3455,44 +3504,62 @@ class MainActivity : Activity() {
         detach(startButton)
         add(hero, startButton, 12)
         add(tracking, cancelStartButton)
-        val fix = ui.card(tracking)
-        peerRow(fix, "GNSS position", gnssSummary, heading = true)
-        val fixValues = LinearLayout(this)
-        for ((view, caption) in listOf(fixAccuracy to "Accuracy", fixAge to "Fix age")) {
-            ui.metric(fixValues, view, caption)
+        val attentionHeader = ui.section(tracking, "Needs attention")
+        val attentionList = ui.list(tracking)
+        var attentionShown: Triple<String, String, String>? = null
+        section(tracking, "GNSS")
+        val gnssList = ui.list(tracking)
+        valueRow(gnssList, "Position fix", gnssSummary)
+        valueRow(gnssList, "Accuracy", plainValue(fixAccuracy))
+        valueRow(gnssList, "Fix age", plainValue(fixAge))
+        val batteryValue = valueRow(gnssList, "Battery", plainValue(ui.label("—", TextRole.Value)))
+        section(tracking, "Delivery to Command")
+        val deliveryList = ui.list(tracking)
+        valueRow(deliveryList, "Command", commandSummary)
+        valueRow(deliveryList, "Waiting on phone", plainValue(pendingMetric))
+        valueRow(deliveryList, "Delivered to Command", plainValue(deliveredMetric))
+        val lastAckValue = valueRow(deliveryList, "Last Command ACK", plainValue(ui.label("—", TextRole.Value)))
+        val syncRow = ui.column().apply {
+            setPadding(ui.px(R.dimen.list_row_padding_h), ui.px(R.dimen.list_row_padding_v), ui.px(R.dimen.list_row_padding_h), ui.px(R.dimen.list_row_padding_v))
         }
-        add(fix, fixValues, 10)
-        val delivery = ui.card(tracking)
-        peerRow(delivery, "Delivery to Command", commandSummary, heading = true)
-        val countValues = LinearLayout(this)
-        for ((view, caption) in listOf(pendingMetric to "Pending locally", deliveredMetric to "Durably ACKed")) {
-            ui.metric(countValues, view, caption)
-        }
-        add(delivery, countValues, 10)
-        val deliveryFoot =
-            LinearLayout(this).apply {
-                gravity = android.view.Gravity.CENTER_VERTICAL or android.view.Gravity.END
-                isBaselineAligned = false
-            }
-        val retentionCaption =
-            ui.collapsingLabel(TextRole.Caption, gap = 0).apply {
-                accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_NONE
-                gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
-            }
-        deliveryFoot.addView(retentionCaption, LinearLayout.LayoutParams(0, -2, 1f))
         detach(syncNowButton)
-        ui.style(syncNowButton, primary = true)
-        deliveryFoot.addView(syncNowButton, LinearLayout.LayoutParams(-2, -2))
-        // With the retention sentence removed, the action row sits inside the card body:
-        // an optional truthful state caption at the start, Sync Now at the end.
-        add(delivery, deliveryFoot, 12)
-        (syncNowButton.layoutParams as LinearLayout.LayoutParams).marginStart = dp(10)
+        ui.style(syncNowButton)
+        syncNowButton.text = "Sync now"
+        syncRow.addView(syncNowButton, LinearLayout.LayoutParams(-1, -2))
+        deliveryList.addView(syncRow, LinearLayout.LayoutParams(-1, -2))
+        footer(tracking, "Delivered means Command stored the observation and acknowledged it. Waiting observations stay on this phone until then.")
         add(tracking, trackingContext, 12)
         add(tracking, trackingError, 12)
         add(tracking, trackingAlerts, 12)
         for (banner in listOf(trackingContext, trackingError)) {
             ui.text(banner, TextRole.Value, if (banner === trackingError) R.color.danger else R.color.ink)
             banner.setPadding(ui.px(R.dimen.space_md), dp(10), ui.px(R.dimen.space_md), dp(10))
+        }
+        var latestSos: List<Outbound> = emptyList()
+        fun renderSosCard() {
+            val latest = latestSos.maxByOrNull { it.capturedMillis }
+            val now = System.currentTimeMillis()
+            val active = latest != null &&
+                (latest.deliveredAt == null || now - latest.capturedMillis < SOS_TRACKING_CARD_MILLIS)
+            sosCard.visibility = if (active) View.VISIBLE else View.GONE
+            hero.visibility = View.VISIBLE
+            if (latest == null || !active) return
+            val raised = shortCommandTime(latest.capturedMillis)
+            sosRaised.text = "Raised $raised on this phone"
+            markStep(sosSaved, true, raised)
+            markStep(
+                sosDelivered,
+                latest.deliveredAt != null,
+                latest.deliveredAt?.let { shortUtcTime(it) } ?: "Waiting for Command receipt · retries automatically",
+            )
+            markStep(sosOperator, false, "Check Command. Delivery is not a human acknowledgement.")
+        }
+        scope.launch {
+            app.repository.dao.observeSos().collect { rows ->
+                latestSos = rows
+                renderSosCard()
+                v46Refresh?.invoke()
+            }
         }
         val settings = routes.getValue("Settings")
         rootTitle(settings, "Settings", "Set up the device, reporting and operational readiness.")
@@ -4373,61 +4440,99 @@ class MainActivity : Activity() {
             alertFailure.visibility = if (alertFailure.text.isEmpty()) View.GONE else View.VISIBLE
             renderReadiness?.invoke()
             val collection = app.observationPersistence.state
+            val configured = !state?.endpoint.isNullOrBlank()
+            val reachable = app.sender.commandReachable
+            val unreachable = configured && reachable == false
+            partyLine.text = if (configured && state != null) "${state.partyName} · ${state.partyId}" else ""
+            partyLine.visibility = if (partyLine.text.isEmpty()) View.GONE else View.VISIBLE
+            val intervalSeconds = state?.overrideSeconds ?: state?.localInterval ?: 10
             trackingCopy.text =
                 when {
-                    op.stopping -> "Stopping GNSS collection"
-                    op.starting -> "Preparing GNSS collection"
-                    !op.tracking -> "No new GNSS collection in progress"
+                    op.stopping -> "Stopping GNSS collection."
+                    op.starting -> "Preparing GNSS collection."
+                    !op.tracking -> "Observations are saved on this phone first, then delivered to Command."
                     collection.writeFailures > 0 ||
                         collection.overflow > 0 ||
                         (state?.knownCollectionLoss ?: 0) > 0 ->
-                        "Collection active · storage needs attention"
-                    collection.awaitingCommit > 0 -> "Collecting GNSS · saving on phone"
-                    collection.committedObservations > 0 -> "GNSS observations saved locally"
-                    else -> "Collecting GNSS · awaiting first saved observation"
+                        "Collection active · storage needs attention. See Diagnostics."
+                    unreachable -> "Saving on phone. Command unreachable; waiting observations send automatically."
+                    !configured -> "Saving on phone. Add a Command address to deliver observations."
+                    else -> "Reporting every $intervalSeconds s"
                 }
-            trackingBadge.text =
-                when {
-                    op.starting -> "Starting"
-                    op.stopping -> "Stopping"
-                    op.tracking -> "ON"
-                    else -> "OFF"
-                }
-            ui.pill(trackingBadge, op.tracking)
-            // The legacy refresh re-applies its pill to this owner; V4.6 shows a plain hero title.
+            ui.text(trackingSummary, TextRole.Hero)
             trackingSummary.background = null
             trackingSummary.setPadding(0, 0, 0, 0)
-            ui.text(trackingSummary, TextRole.Hero)
             trackingSummary.text =
                 when {
                     op.starting -> "Starting tracking"
                     op.stopping -> "Stopping tracking"
-                    op.tracking -> "Tracking active"
-                    else -> "Tracking stopped"
+                    op.tracking -> "Tracking"
+                    else -> "Not tracking"
                 }
+            statusDot(
+                trackingSummary,
+                when {
+                    !op.tracking || op.starting || op.stopping -> R.color.muted
+                    unreachable || !configured || collection.writeFailures > 0 -> R.color.warning
+                    else -> R.color.accent
+                },
+            )
+            // Fresh within two reporting intervals (never less than 30 s), so a healthy
+            // 60 s phone is not called stale between fixes.
+            val freshLimit = maxOf(30_000L, intervalSeconds * 2_000L)
+            val fresh = op.tracking && op.gnss == "fix" && op.ageMillis != null && op.ageMillis in 0..freshLimit
             gnssSummary.text =
                 when {
                     !op.tracking -> "Stopped"
-                    op.gnss == "fix" && op.ageMillis != null && op.ageMillis in 0..30000 -> "Fresh"
+                    fresh -> "Fresh"
                     op.ageMillis != null -> "Stale"
                     else -> "Unavailable"
                 }
-            ui.pill(
-                gnssSummary,
-                op.tracking && op.gnss == "fix" && op.ageMillis != null && op.ageMillis in 0..30000,
-            )
+            if (op.tracking) ui.statusPill(gnssSummary, if (fresh) StatusTone.POSITIVE else StatusTone.WARNING)
+            else plainValue(gnssSummary, "")
             fixAccuracy.text =
                 if (op.tracking)
-                    op.accuracy?.let { "%.1f m".format(java.util.Locale.ROOT, it) } ?: "—"
+                    op.accuracy?.let { "±%.1f m".format(java.util.Locale.ROOT, it) } ?: "—"
                 else "—"
             fixAge.text = if (op.tracking) op.ageMillis?.let { "${it/1000} s" } ?: "—" else "—"
-            // Persistent Command indicator: online only after a real Command response
-            // (Sender.commandReachable == true); unknown and failed both stay offline.
-            val commandOnline = app.sender.commandReachable == true
-            commandSummary.text = if (commandOnline) "Command online" else "Command offline"
-            ui.iconPill(commandSummary, R.drawable.ic_command, commandOnline)
+            batteryValue.text =
+                (op.health.battery_percent?.let { "$it%" } ?: "Unavailable") +
+                    if (op.health.charging == true) " · Charging" else ""
+            // Reachable only after a real Command response; unknown is never "offline".
+            val (commandText, commandTone) =
+                when {
+                    !configured -> "Not set up" to StatusTone.NEUTRAL
+                    reachable == true -> "Reachable" to StatusTone.POSITIVE
+                    reachable == false -> "Unreachable" to StatusTone.WARNING
+                    else -> "Not checked yet" to StatusTone.NEUTRAL
+                }
+            commandSummary.text = commandText
+            commandSummary.setCompoundDrawablesRelative(null, null, null, null)
+            ui.statusPill(commandSummary, commandTone)
             commandSummary.contentDescription =
-                if (commandOnline) "Command online" else "Command offline; saved data retries automatically"
+                "Command, $commandText" + if (unreachable) "; saved data retries automatically" else ""
+            lastAckValue.text = state?.lastAck?.let { shortUtcTime(it) } ?: "—"
+            val setup = preflight.snapshot()
+            val attention =
+                when {
+                    !configured -> Triple("Add a Command address", "Tracking works offline; nothing can be delivered yet.", "Party & Command")
+                    !setup.precise -> Triple("Precise location required", "Allow precise location so fixes are accurate.", "Field readiness")
+                    setup.gps == false -> Triple("Location (GPS) is off", "Turn on location to collect GNSS fixes.", "Field readiness")
+                    setup.notifications != true -> Triple("Notifications blocked", "Tracking and phone alerts need notifications.", "Field readiness")
+                    setup.powerSave == true -> Triple("Battery Saver is on", "Turn it off for field tracking.", "Field readiness")
+                    setup.optimizationExemption != true -> Triple("Background activity may be limited", "Android may pause tracking with the screen off.", "Field readiness")
+                    else -> null
+                }
+            val showAttention = attention != null && sosCard.visibility != View.VISIBLE
+            if (attention != attentionShown) {
+                attentionShown = attention
+                attentionList.removeAllViews()
+                attention?.let { (title, detail, route) ->
+                    ui.menu(attentionList, title, detail, "Fix" to StatusTone.WARNING) { navigate(route) }
+                }
+            }
+            attentionHeader.visibility = if (showAttention) View.VISIBLE else View.GONE
+            attentionList.visibility = attentionHeader.visibility
             val label =
                 commandContactLabel(state, app.commandControl.contact, SystemClock.elapsedMillis())
             contact.text = label
@@ -4460,13 +4565,7 @@ class MainActivity : Activity() {
             authorize.visibility = if (state?.controlDisabled == true) View.GONE else View.VISIBLE
             syncNowButton.isEnabled =
                 initialized && (currentQueueCounts?.gnss ?: 0) > 0 && !op.drainStarting
-            retentionCaption.text =
-                when {
-                    currentQueueCounts == null -> "Observation counts unavailable"
-                    currentQueueCounts!!.gnss == 0 -> "No pending observations"
-                    else -> ""
-                }
-            retentionCaption.visibility = if (retentionCaption.text.isEmpty()) View.GONE else View.VISIBLE
+            syncRow.visibility = if ((currentQueueCounts?.gnss ?: 0) > 0) View.VISIBLE else View.GONE
             savedSync.isEnabled = syncNowButton.isEnabled
         }
         refreshTrust = {

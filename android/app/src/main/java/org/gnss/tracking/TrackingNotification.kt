@@ -41,10 +41,7 @@ internal object TrackingNotification {
 /** Reads the existing preference; Android still owns system notification surfaces. */
 internal object NotificationAppearance {
     fun colour(context: Context, resource: Int): Int {
-        val night =
-            context
-                .getSharedPreferences("appearance", Context.MODE_PRIVATE)
-                .getBoolean("night", false)
+        val night = Appearance.isNight(context)
         val config =
             Configuration(context.resources.configuration).apply {
                 uiMode =
