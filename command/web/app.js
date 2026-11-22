@@ -1370,6 +1370,18 @@ for (const [kind, cls] of [["tracks", "hide-qualified-tracks"], ["labels", "hide
     document.body.classList.toggle(cls, !control.checked);
   };
 }
+// Recorded frames keep only what the operator saw, so saved playback reproduces the layer switches.
+function presentedOuterHTML(element) {
+  const hidden = [
+    ...($("layer-tracks").checked ? [] : ["polyline[data-segment]"]),
+    ...($("layer-labels").checked ? [] : ["[data-party-label]"]),
+  ].join(",");
+  if (!hidden) return element.outerHTML;
+  if (element.matches(hidden)) return "";
+  const copy = element.cloneNode(true);
+  for (const node of copy.querySelectorAll(hidden)) node.remove();
+  return copy.outerHTML;
+}
 function syncTerrainSwitch() {
   const available = terrainLayers.filter((k) => !$("layer-" + k).disabled);
   $("layer-terrain").disabled = !available.length;
@@ -4040,7 +4052,7 @@ window.recordingAppliedState = () => {
           sos: (applied.sos_alerts || []).filter((a) => a.device_id === id),
           svg: [...$("tracks").querySelectorAll("[data-device]")]
             .filter((e) => e.dataset.device === id)
-            .map((e) => e.outerHTML)
+            .map(presentedOuterHTML)
             .join(""),
           panel:
             id === selectedParty ? $("selected-detail")?.innerText : undefined,

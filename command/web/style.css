@@ -3545,8 +3545,8 @@ body[data-history-mode="travel"] #playback-status { top:94px; }
 #command #layers input[role="switch"]:checked::after { transform: translateX(18px); }
 #command #layers input[role="switch"]:disabled { opacity: .45; cursor: not-allowed; }
 #command #layers input[role="switch"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-body.hide-qualified-tracks #tracks polyline[data-segment] { display: none; }
-body.hide-party-labels #tracks [data-party-label] { display: none; }
+body.hide-qualified-tracks:not(.playback) #tracks polyline[data-segment], body.hide-qualified-tracks[data-history-mode="travel"] #tracks polyline[data-segment] { display: none; }
+body.hide-party-labels:not(.playback) #tracks [data-party-label], body.hide-party-labels[data-history-mode="travel"] #tracks [data-party-label] { display: none; }
 
 /* V5.14 compact utility menu and Start recording choices. */
 #command .compact-only { display: none; }
