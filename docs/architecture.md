@@ -1,4 +1,6 @@
-# System architecture — v1 and Issue #4 amendments
+# System architecture
+
+Tracked in [#1](https://github.com/suraj-singh12/gnss-android-tracking/issues/1) and [#4](https://github.com/suraj-singh12/gnss-android-tracking/issues/4).
 
 Issue #1 established the responsibility boundaries. The dated Issue #4 amendment
 adds native-resolution collection, negotiated history batches and current-policy
@@ -232,7 +234,9 @@ distance, dynamic join, Pause/Resume, final Stop, Save/Discard, retries, arrival
 convergence and restart. #4 adds real LAN integration; #5 implements SOS triggers;
 #6 adds diagnostics/UI/offline map; #7 proves field acceptance and portable releases.
 
-## Issue #5 SOS implementation
+## SOS implementation
+
+Tracked in [#5](https://github.com/suraj-singh12/gnss-android-tracking/issues/5).
 
 The shared SOS engine accepts on-screen and supported physical-key adapters.
 It immediately snapshots the existing `LatestLocation`/device health and commits
@@ -287,7 +291,9 @@ can call this engine through an authorized adapter without changing delivery.
 The unresolved Issue #4 GNSS stall remains unresolved; an SOS with unavailable or
 stale location is still saved and delivered truthfully.
 
-## Final Issue #4 reliability amendment (2026-10-09)
+## Reliability amendment (2026-10-09)
+
+Tracked in [#4](https://github.com/suraj-singh12/gnss-android-tracking/issues/4).
 
 Raw SQLite commit precedes ACK and schedules restart-safe projection work. Derivation
 failure cannot undo an already committed receipt. A worker checkpoints the existing
@@ -357,7 +363,9 @@ engine. Local HGT import remains available. Map
 import/display/preparation never feeds reconstruction, raw observations, Recording,
 live/SOS state or qualified distance. There is no parallel database or projection.
 
-## Issue #22 synchronization changes
+## History synchronization
+
+Tracked in [#22](https://github.com/suraj-singh12/gnss-android-tracking/issues/22).
 
 Android retains one Room/outbox/Sender authority. Room v5 indexes retry deadlines and native measurement-time selection; v4 adds transactional derived
 queue counters; session progress uses bounded examples plus exact counts. Normal
@@ -386,7 +394,9 @@ command/README.md and protocol/protocol-v1.md for bounds and compatibility.
 
 Agent guidance lives in `AGENTS.md` on `main`.
 
-## Issue #25 durable authenticated Command → Android control
+## Durable authenticated Command → Android control
+
+Tracked in [#25](https://github.com/suraj-singh12/gnss-android-tracking/issues/25).
 
 Control extends the existing configured endpoint, persistent authority UUID, local
 Command browser API, receiver, SQLite, Android enrollment Settings, Room and single
@@ -432,7 +442,9 @@ TTL and monotonic duration. Restart stops/reconciles uncertain output without re
 See protocol/protocol-v1.md for authoritative bounds, uncertainty and cancellation
 races. Diagnostic ZIP redacts message content while retaining canonical alert events.
 
-### Issue #28 radius acquisition extension
+### Radius acquisition extension
+
+Tracked in [#28](https://github.com/suraj-singh12/gnss-android-tracking/issues/28).
 
 `offline_maps` owns a persisted ellipsoidal WGS84 circle plan. Additive
 `offline_map_chunks(map_id,chunk_key)` owns per-chunk GeoJSON, existing GTERR001 and
@@ -464,7 +476,9 @@ positions. Source/coverage metadata and render availability remain separate. See
 Command README for API/resource/operator details and UI acceptance for evidence limits.
 
 
-### Issue #28 automatic acquisition and standalone map portability
+### Automatic acquisition and standalone map portability
+
+Tracked in [#28](https://github.com/suraj-singh12/gnss-android-tracking/issues/28).
 
 The existing radius map job is the sole acquisition owner. Its map-owned child transfer ledger
 persists cumulative approved/reserved/received body bytes across all providers and
@@ -496,7 +510,9 @@ operational assets. This archive is not frozen recording evidence; #38 retains t
 separate ownership. UI uses one Map & Layers dialog with Download New Map, Use
 Existing Map and Import Map, existing Saved Maps selection and Layers controls.
 
-### Issue #39 Android presentation boundary
+### Android presentation boundary
+
+Tracked in [#39](https://github.com/suraj-singh12/gnss-android-tracking/issues/39).
 
 MainActivity retains the existing three top-level destinations, with a small native
 parent-route map for focused detail screens. NativeUi supplies shared view/spacing/
@@ -549,7 +565,9 @@ removed during subsequent map admission; validated HGT/catalog/SQLite assets are
 never included. Existing source publication, map transactions and GNSS/SOS/LIVE
 ownership remain unchanged.
 
-## Recording presentation foundation (Issue #27)
+## Recording presentation foundation
+
+Tracked in [#27](https://github.com/suraj-singh12/gnss-android-tracking/issues/27).
 
 The recording projection still uses the existing raw SQLite observations, identity,
 quality policy and gap-safe windows. A separate **presentation journal in that same

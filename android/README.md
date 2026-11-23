@@ -39,7 +39,8 @@ HTTP a total call deadline (including writes), bounded response bodies and expli
 Wi-Fi socket/DNS routing. Robolectric is a
 JVM test dependency for the actual Room database, including reopen/transaction
 rollback tests. No product DI, maps, cloud or background scheduler dependencies.
-Generated APKs/build output are ignored. No release workflow is provided.
+Generated APKs/build output are ignored. CI builds the debug APK published with each
+release (see the [root README](../README.md)).
 
 ## Operation
 
@@ -82,7 +83,9 @@ quality policy. GNSS accuracy/altitude/speed/bearing use platform `has*` flags.
 Wi-Fi RSSI is nullable (including on older platforms/redacted callbacks); no
 SSID/BSSID/MAC access is required.
 
-## Optional adaptive GNSS persistence (Issue #24)
+## Optional adaptive GNSS persistence
+
+Tracked in [#24](https://github.com/suraj-singh12/gnss-android-tracking/issues/24).
 
 **OFF is the default**, for fresh installs, upgrades and absent/unreadable policy.
 Settings → Tracking policy → Adaptive GNSS persistence explicitly opts in/out.
@@ -142,7 +145,9 @@ the real [Room/Sender → Command bridge](../test-tools/integration/README.md).
 Physical GNSS, battery, screen-off/OEM and sustained multi-day LAN acceptance are
 **NOT TESTED** by those tests; use [device acceptance](DEVICE-ACCEPTANCE.md).
 
-### Reproducible software evidence (Issue #24)
+### Adaptive persistence software evidence
+
+Tracked in [#24](https://github.com/suraj-singh12/gnss-android-tracking/issues/24).
 
 Deterministic instrumented 1 Hz fixtures through production Room/handoff/Sender and
 real Command SQLite, using its unchanged default qualification policy. These are
@@ -255,7 +260,9 @@ See [device acceptance](DEVICE-ACCEPTANCE.md), the
 [Protocol v1](../protocol/protocol-v1.md). Command recording/tracks remain
 Command-owned; SOS operation is described below.
 
-## SOS operation and limitations (Issue #5)
+## SOS operation and limitations
+
+Tracked in [#5](https://github.com/suraj-singh12/gnss-android-tracking/issues/5).
 
 Save the Party/Command settings before field use. **Hold “SOS — hold to activate”**
 continuously for **1.2 seconds**. A visible progress bar and percentage show the
@@ -400,11 +407,15 @@ its existing durable session rather than creating a new operation.
 
 The sender reschedules the next live opportunity from its last live attempt when the effective interval changes. A 30→5 override does not wait for the old 30-second deadline; clearing 5→30 prevents another live send at the old five-second cadence. Historical delivery remains independent.
 
-## Issue #6 operational interface
+## Operational interface
+
+Tracked in [#6](https://github.com/suraj-singh12/gnss-android-tracking/issues/6).
 
 See [UI setup and acceptance](../docs/ui-acceptance.md) and [shared design system](../docs/design-system.md) for the three-destination Android interface, Command workspace, recording/quality controls, protected SOS and exactly two offline canvas/map modes. The existing tracking and SOS engines remain authoritative.
 
-### Issue #22 synchronization
+### History synchronization
+
+Tracked in [#22](https://github.com/suraj-singh12/gnss-android-tracking/issues/22).
 
 Room v5 retains every original envelope, observation/session ID, timestamp and ACKed
 row. Version 3's delivery/session index remains. Version 4 adds the derived single-row
@@ -488,7 +499,9 @@ Issue #25 now invokes this same Sender for authenticated Command-originated Sync
 All Now. Synchronization does not alter GNSS acquisition/persistence cadence (#24),
 original recording/quality rules or human SOS acknowledgement.
 
-## Authenticated Command instructions (Issue #25)
+## Authenticated Command instructions
+
+Tracked in [#25](https://github.com/suraj-singh12/gnss-android-tracking/issues/25).
 
 In existing Settings configure the Command IP:port, then compare this installation's
 phone UUID directly at the local Command → Phone controls console. Generate a private
