@@ -3679,7 +3679,6 @@ class MainActivity : Activity() {
         syncNowButton.text = "Sync now"
         syncRow.addView(syncNowButton, LinearLayout.LayoutParams(-1, -2))
         deliveryList.addView(syncRow, LinearLayout.LayoutParams(-1, -2))
-        footer(tracking, "Delivered means Command stored the observation and acknowledged it. Waiting observations stay on this phone until then.")
         add(tracking, trackingContext, 12)
         add(tracking, trackingError, 12)
         add(tracking, trackingAlerts, 12)
@@ -3728,7 +3727,7 @@ class MainActivity : Activity() {
         rootTitle(settings, "Settings")
         // v3: a short grouped list; each row shows its current value and opens one page.
         val settingsGroups = ui.column()
-        add(settings, settingsGroups)
+        add(settings, settingsGroups, 12)
         var settingsSignature = ""
         fun readinessIssues(setup: FieldReadiness) =
             listOf(!setup.precise, setup.gps != true, setup.notifications != true, setup.powerSave != false, setup.optimizationExemption != true).count { it }
@@ -3757,16 +3756,16 @@ class MainActivity : Activity() {
                 ui.menu(g, "Command access", "", accessStatus, icon = icon(R.drawable.ic_health_trust)) { navigate("Command access") }
             }
             ui.list(settingsGroups, 20, inset).also { g ->
-                ui.menu(g, "Tracking policy", "Reporting interval and storage", value = intervalValue, icon = icon(R.drawable.ic_tracking)) { navigate("Tracking policy") }
+                ui.menu(g, "Tracking policy", "", value = intervalValue, icon = icon(R.drawable.ic_tracking)) { navigate("Tracking policy") }
                 ui.menu(
-                    g, "Field readiness", "Location, notifications and battery",
+                    g, "Field readiness", "",
                     if (issues == 0) "Ready" to StatusTone.POSITIVE
                     else "$issues ${if (issues == 1) "issue" else "issues"}" to StatusTone.WARNING,
                     icon = icon(R.drawable.ic_check, if (issues == 0) teal else Triple(0, R.color.warning_surface, R.color.warning)),
                 ) { navigate("Field readiness") }
             }
             ui.list(settingsGroups, 20, inset).also { g ->
-                ui.menu(g, "Emergency", "SOS hold and volume shortcut", icon = icon(R.drawable.ic_warning, Triple(0, R.color.emergency_surface, R.color.danger))) { navigate("Emergency") }
+                ui.menu(g, "Emergency", "", icon = icon(R.drawable.ic_warning, Triple(0, R.color.emergency_surface, R.color.danger))) { navigate("Emergency") }
                 ui.menu(g, "Appearance", "", value = mode, icon = icon(R.drawable.ic_appearance, Triple(0, R.color.background, R.color.muted))) { navigate("Appearance") }
             }
         }
@@ -3781,7 +3780,6 @@ class MainActivity : Activity() {
         partyId.hint = "e.g. alpha-2"
         partyName.hint = "e.g. Field team"
         endpoint.hint = "e.g. http://192.168.1.10:8080"
-        footer(party, "Saved on this phone. Required before tracking can start; then data saves here when Command can't be reached.")
         val partyInterval =
             EditText(this)
                 .also { v46PartyInterval = it }
@@ -3929,6 +3927,17 @@ class MainActivity : Activity() {
             endpoint.setText(state.endpoint)
         }
         add(party, settingsFeedback)
+        // The idle placeholder is not feedback; only real save results show.
+        fun renderPartyFeedback() {
+            val text = settingsFeedback.text.toString()
+            settingsFeedback.visibility = if (text.isEmpty() || text == "Local changes only") View.GONE else View.VISIBLE
+        }
+        settingsFeedback.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { renderPartyFeedback() }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+        renderPartyFeedback()
         val policy = page("Tracking policy", "Settings")
         // Tracking policy owns only Adaptive storage; the reporting interval lives in
         // Party & Command. The Switch applies and persists through its existing owner
@@ -3938,7 +3947,6 @@ class MainActivity : Activity() {
         ui.section(policy, "Reporting interval").also { (it.layoutParams as LinearLayout.LayoutParams).topMargin = 0 }
         val intervalCard = ui.card(policy, 0)
         v46PartyIntervalPicker = intervalPicker(intervalCard, partyInterval, restoredPartyCustomInterval)
-        footer(policy, "Future observations only. History is unchanged.")
         val policyActions = saveBar(policy, { save(policyOnly = true) }) {
             savedInstallation?.let { interval.setText(it.localInterval.toString()) }
         }
@@ -3959,7 +3967,7 @@ class MainActivity : Activity() {
         policyStatus.setPadding(0, 0, 0, 0)
         policyStatus.includeFontPadding = false
         add(policyCard, adaptive)
-        add(policyCard, ui.label("Keeps fewer future observations when steady or stationary.", TextRole.Meta), 2)
+        add(policyCard, ui.label("Fewer points when stationary", TextRole.Meta), 2)
         // Plain ON/OFF is already the switch and Applied storage; only saving or fallback shows.
         add(policyCard, policyStatus, 6)
         fun renderPolicyStatus() {
@@ -3979,8 +3987,7 @@ class MainActivity : Activity() {
         fun effectValue() = ui.label("—", TextRole.Value, R.color.muted).apply { setTextIsSelectable(true) }
         valueRow(inEffect, "Phone interval", plainValue(policyLocal).apply { setTextColor(getColor(R.color.muted)) })
         val appliedInterval = valueRow(inEffect, "Applied interval", effectValue())
-        valueRow(inEffect, "Command request", plainValue(policyRequested).apply { setTextColor(getColor(R.color.muted)) }, "No retained instruction for this enrollment")
-        val requestNote = ((inEffect.getChildAt(inEffect.childCount - 1) as LinearLayout).getChildAt(0) as LinearLayout).getChildAt(1)
+        valueRow(inEffect, "Command request", plainValue(policyRequested).apply { setTextColor(getColor(R.color.muted)) })
         val overrideValue = valueRow(inEffect, "Command override", effectValue())
         val appliedStorage = valueRow(inEffect, "Applied storage", effectValue())
         val serviceValue = effectValue()
@@ -4009,12 +4016,10 @@ class MainActivity : Activity() {
                 // The sampler stores densely while a fallback is active, whatever the saved switch says.
                 val adaptiveInEffect = storage.enabled && storage.error == null && app.observationPersistence.samplingState.fallback == null
                 appliedStorage.text = "${if (adaptiveInEffect) "Adaptive" else "Dense"} · rev ${storage.revision}"
-                requestNote.visibility = if (policyRequested.text.toString() == "Unknown") View.VISIBLE else View.GONE
                 configErrorValue.text = state.configError.orEmpty()
                 configErrorRow.visibility = if (state.configError == null) View.GONE else View.VISIBLE
             }
         }
-        footer(policy, "Saving here doesn’t prove Command requested or applied a change; check Diagnostics › Activity. Command can override the phone interval with an authenticated instruction.")
         val ready = page("Field readiness", "Settings")
         // One peer list: each requirement shows its actual state; only a requirement that
         // needs attention offers the existing OS action that resolves it.
@@ -4052,7 +4057,6 @@ class MainActivity : Activity() {
         val notifyRow = readinessRow("Notifications", notificationAction, "Allow notifications", "Tracking and phone alerts need notifications.")
         val saverRow = readinessRow("Battery Saver", saverAction, "Open Battery Saver settings", "Battery Saver can stop background tracking.")
         val backgroundRow = readinessRow("Background activity", backgroundAction, "Open battery settings", "Android may limit background tracking and alerts.")
-        footer(ready, "Some phones also require Unrestricted battery use for GNSS Tracking.")
         action(ready, "Recheck") {
             renderReadiness?.invoke()
             v46Refresh?.invoke()
@@ -4063,7 +4067,7 @@ class MainActivity : Activity() {
             ui.statusPill(row.state, StatusTone.POSITIVE)
             row.state.visibility = if (ok) View.VISIBLE else View.GONE
             row.action.visibility = if (ok) View.GONE else View.VISIBLE
-            row.detail.text = "$value · ${row.issue}"
+            row.detail.text = value
             row.detail.visibility = if (ok) View.GONE else View.VISIBLE
             readinessOk[row] = ok
         }
@@ -4094,7 +4098,6 @@ class MainActivity : Activity() {
         val emergency = page("Emergency", "Settings")
         val safety = ui.card(emergency, 0)
         peerRow(safety, "Protected SOS hold", ui.label("Always on", TextRole.Pill).also { ui.statusPill(it, StatusTone.NEUTRAL) })
-        note(safety, "Hold continuously for 1.2 seconds. Release early to cancel.")
         keyOption.visibility = View.GONE
         val shortcut =
             Switch(this).apply {
@@ -4104,8 +4107,7 @@ class MainActivity : Activity() {
             }
         ui.switchRow(shortcut)
         add(safety, shortcut, 12)
-        add(safety, ui.label("Optional · 3 Volume + presses within 1.5 seconds · app open and unlocked", TextRole.Meta), 2)
-        footer(emergency, "Test the keys in Diagnostics › Tools.")
+        add(safety, ui.label("3 × Volume + within 1.5 s · app open", TextRole.Meta), 2)
         val appearancePage = page("Appearance", "Settings")
         val appearanceList = ui.list(appearancePage)
         val currentMode = Appearance.mode(this)
@@ -4135,7 +4137,6 @@ class MainActivity : Activity() {
                 LinearLayout.LayoutParams(-1, -2),
             )
         }
-        footer(appearancePage, "System follows the phone's dark theme setting.")
         val access = page("Command access", "Settings")
         fun clip(label: String, value: () -> String?) = ui.button(label) {
             value()?.let { id ->
@@ -4450,7 +4451,7 @@ class MainActivity : Activity() {
         val activitySeg = ui.column()
         val toolsSeg = ui.column()
         val segments = linkedMapOf("Health" to healthSeg, "Activity" to activitySeg, "Tools" to toolsSeg)
-        segments.values.forEach { add(diagnostics, it) }
+        segments.values.forEach { add(diagnostics, it, 12) }
         val segmentButtons = linkedMapOf<String, Button>()
         fun styleChoice(button: Button, selected: Boolean) {
             ui.quiet(button)
@@ -4480,8 +4481,7 @@ class MainActivity : Activity() {
             listOf("GNSS", "Storage", "Command", "Sync", "SOS", "Device space", "Remote control").map { healthRows.getValue(it) }
         healthPanel.removeAllViews()
         overviewRows.forEach { detach(it); healthPanel.addView(it) }
-        section(healthSeg, "Health")
-        add(healthSeg, healthPanel, 1)
+        add(healthSeg, healthPanel)
         // Same bordered list surface as every other grouped list; dividers only between peers.
         healthPanel.background = ui.shape(R.color.surface)
         healthPanel.setPadding(dp(4), 0, dp(4), 0)
@@ -4611,7 +4611,6 @@ class MainActivity : Activity() {
             }
         add(savedCard, recoveryFailure, 6)
         export(savedCard, "Export evidence")
-        footer(saved, "Message receipt and Command reconstruction are separate.")
         val tools = routes.getValue("Diagnostic tools")
         tools.removeAllViews()
         pagePadding(tools)
@@ -4623,7 +4622,7 @@ class MainActivity : Activity() {
         add(physicalCard, physicalHead)
         add(
             physicalCard,
-            ui.label("Press the phone's volume keys while listening. The SOS volume shortcut pauses during the test.", TextRole.Caption),
+            ui.label("Volume SOS shortcut pauses during the test", TextRole.Caption),
             6,
         )
         val testActions = LinearLayout(this)
@@ -4661,7 +4660,6 @@ class MainActivity : Activity() {
         // Diagnostic export: one action, one line of context, real success/failure feedback.
         val exportCard = ui.card(tools)
         add(exportCard, ui.label("Diagnostic export", TextRole.Heading))
-        add(exportCard, ui.label("Sanitized ZIP of logs and evidence. Tracking continues.", TextRole.Caption), 6)
         detach(exportButton)
         ui.style(exportButton)
         add(exportCard, exportButton, 12)
@@ -4683,7 +4681,7 @@ class MainActivity : Activity() {
                 add(routes.getValue("Advanced logs"), it, 12)
             }
         section(tools, "Advanced")
-        menu(tools, "Advanced logs", "Retained incidents, technical and security evidence")
+        menu(tools, "Advanced logs", "")
         // Keep the canonical full console as the advanced history workflow.
         val console = routes.getValue("Command Instructions")
         routes["History search & filters"] = console
@@ -4850,10 +4848,8 @@ class MainActivity : Activity() {
                 recent.setPadding(pad, pad, pad, pad)
                 if (all.isEmpty()) {
                     add(recent, ui.label("No received instructions", TextRole.RowTitle))
-                    add(recent, ui.label("Instructions from Command appear here with their outcome.", TextRole.Meta), 3)
                 } else {
                     add(recent, ui.label("No matching instructions", TextRole.RowTitle))
-                    add(recent, ui.label("Change the search or filters to see more.", TextRole.Meta), 3)
                 }
             } else recent.setPadding(0, 0, 0, 0)
             val list = if (rows.isEmpty()) null else ui.list(recent)
@@ -5127,17 +5123,18 @@ class MainActivity : Activity() {
             val intervalSeconds = state?.overrideSeconds ?: state?.localInterval ?: 10
             trackingCopy.text =
                 when {
-                    op.stopping -> "Stopping GNSS collection."
-                    op.starting -> "Preparing GNSS collection."
-                    !op.tracking -> "Observations are saved on this phone first, then delivered to Command."
+                    op.stopping -> "Stopping…"
+                    op.starting -> "Starting…"
+                    !op.tracking -> ""
                     collection.writeFailures > 0 ||
                         collection.overflow > 0 ||
                         (state?.knownCollectionLoss ?: 0) > 0 ->
-                        "Collection active · storage needs attention. See Diagnostics."
-                    unreachable -> "Saving on phone. Command unreachable; waiting observations send automatically."
-                    !configured -> "Saving on phone. Add a Command address to deliver observations."
-                    else -> "Reporting every $intervalSeconds s"
+                        "Storage needs attention"
+                    unreachable -> "Saving on phone · Command unreachable"
+                    !configured -> "Saving on phone · no Command address"
+                    else -> "Every $intervalSeconds s"
                 }
+            trackingCopy.visibility = if (trackingCopy.text.isEmpty()) View.GONE else View.VISIBLE
             ui.text(trackingSummary, TextRole.Hero)
             trackingSummary.background = null
             trackingSummary.setPadding(0, 0, 0, 0)
@@ -5198,7 +5195,7 @@ class MainActivity : Activity() {
             val attention =
                 when {
                     sosBlocked -> Triple("SOS not delivered", "Delivery needs attention. Open Saved data & sync.", "Saved data & sync")
-                    !configured -> Triple("Add a Command address", "Required before tracking can start. After that, data saves on the phone when Command can't be reached.", "Party & Command")
+                    !configured -> Triple("Add a Command address", "Required to start tracking", "Party & Command")
                     !setup.precise -> Triple("Precise location required", "Allow precise location so fixes are accurate.", "Field readiness")
                     setup.gps == false -> Triple("Location (GPS) is off", "Turn on location to collect GNSS fixes.", "Field readiness")
                     setup.notifications != true -> Triple("Notifications blocked", "Tracking and phone alerts need notifications.", "Field readiness")

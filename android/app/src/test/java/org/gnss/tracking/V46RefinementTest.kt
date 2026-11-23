@@ -234,7 +234,7 @@ class V46RefinementTest {
         try {
             val a = controller.get()
             // Fresh install: the address is required before Start; no promise that tracking already works.
-            until { texts(a).any { it.startsWith("Required before tracking can start.") } }
+            until { texts(a).any { it == "Required to start tracking" } }
             assertFalse(texts(a).any { it.contains("Tracking works offline") })
             val device = withContext(Dispatchers.IO) { app.repository.state().deviceId }
             withContext(Dispatchers.IO) {
