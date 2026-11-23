@@ -41,18 +41,28 @@ as human acknowledgement. Fresh/Stale uses `max(30 s, 2 × interval)`.
 **Settings** is a short grouped list with current values: Party & Command (address,
 party name) · Command access (Not enrolled / Enrolled / Disabled) · Tracking policy
 (interval) · Field readiness (Ready / n issues) · Emergency · Appearance (mode). Each page
-is one tap from Settings:
+is one tap from Settings. Every Settings-family group is **one rounded surface** (`NativeUi.list`)
+with hairline dividers inset to the row text; rows never draw their own border or card.
+Settings landing rows carry a tinted 36dp icon tile (teal; amber when readiness has
+issues; burgundy for Emergency; neutral for Appearance) (Issue #73):
 
 - *Party & Command*: Party ID, Party name, Command address (example hints in empty
   fields); Save / Cancel appear only when a field differs from the saved value.
-- *Command access* (`FLAG_SECURE`): inline enrollment steps, phone ID with Copy, private
-  credential, **Review & authorize** → review dialog → Authorize; when enrolled:
-  authenticated contact, Recheck, identity IDs, saved address, About trust, evidence
-  disclosure, Re-enroll and Disable, each confirmed. Disable and Re-enroll are hidden
-  until an enrollment exists.
-- *Tracking policy*: reporting interval 5 / 10 / 30 / 60 / Custom (5–86 400 s in
-  multiples of 5, inline error) with its own Save bar; Adaptive storage; phone interval,
-  applied interval and Command request.
+- *Command access* (`FLAG_SECURE`): a status group (Status pill, Authenticated contact
+  when enrolled or disabled, Saved Command address when not enrolled). Not enrolled:
+  **Enroll this phone** group with three numbered steps (phone ID shown once, monospaced,
+  with Copy phone ID) and the private credential, **Review & authorize** → review dialog
+  → Authorize, then a Trust group (Last verified response, About trust disclosure). When
+  enrolled the trust rows and **Recheck** join the status group, and an **Identity** group
+  shows each ID once (monospaced, full width, Copy) plus the saved address. One
+  **Evidence & rejection reasons** disclosure. **Change access** rows (Re-enroll, Disable,
+  each confirmed) appear only when an enrollment exists or access is disabled.
+- *Tracking policy*: segmented reporting interval 5 / 10 / 30 / 60 s / Custom (5–86 400 s
+  in multiples of 5, inline error under the Seconds field) with its own Save bar; Storage
+  (Adaptive storage switch; saving/fallback status only when it is not plain ON/OFF);
+  one **In effect** list: Phone interval, Applied interval (with revision), Command request,
+  Command override, Applied storage (with revision), Start from the app, and a
+  Configuration error row only when one exists.
 - *Field readiness*: one status row per requirement, a **Fix** action only where needed,
   Recheck.
 - *Emergency*: mandatory protected SOS hold (Always on) and the optional volume-up

@@ -60,7 +60,7 @@ class V46PolishTest {
             assertTrue(nativeViews(host).filterIsInstance<TextView>().any { it.text.toString() == "Unavailable" })
             openNativeScreen(a, "Manage Command access")
             settle()
-            val disclosure = nativeViews(root).filterIsInstance<Button>().single { it.isShown && it.text == "More evidence & rejection reasons" }
+            val disclosure = nativeViews(root).filterIsInstance<Button>().single { it.isShown && it.text == "Evidence & rejection reasons" }
             val page = disclosure.parent as LinearLayout
             val evidence = page.getChildAt(page.indexOfChild(disclosure) + 1)
             assertEquals("Detailed trust evidence has one contextual home", View.GONE, evidence.visibility)

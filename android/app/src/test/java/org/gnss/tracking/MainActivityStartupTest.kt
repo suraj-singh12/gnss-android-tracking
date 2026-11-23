@@ -165,7 +165,7 @@ class MainActivityStartupTest {
                 nativeViews(activity.get().findViewById(android.R.id.content))
                     .filterIsInstance<TextView>()
                     .single {
-                        it.text == "Custom interval · seconds" &&
+                        it.text == "Seconds" &&
                             it.labelFor != android.view.View.NO_ID &&
                             (it.parent as android.view.View).isShown
                     }

@@ -1,0 +1,4 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+<!-- Party: person outline; same 1.7 outline grammar as the health icons. -->
+<path android:fillColor="@android:color/transparent" android:strokeColor="#FF000000" android:strokeWidth="1.7" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M12,4A3.6,3.6 0,1 0,12 11.2A3.6,3.6 0,1 0,12 4ZM5,20C5,16.5 8,14.3 12,14.3C16,14.3 19,16.5 19,20"/>
+</vector>
