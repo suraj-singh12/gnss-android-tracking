@@ -259,15 +259,33 @@ internal class NativeUi(private val context: Context) {
     fun rowRipple() = RippleDrawable(ColorStateList.valueOf(color(R.color.ripple)), null,
         android.graphics.drawable.ColorDrawable(android.graphics.Color.WHITE))
 
-    /** Bordered list surface; dividers only between peer rows. */
-    fun list(parent: LinearLayout, gap: Int = 0): LinearLayout =
+    /**
+     * Bordered list surface: one rounded group, rows separated by hairlines inset to the
+     * row text ([inset] adds the width of a leading icon). Rows draw no border of their own.
+     */
+    fun list(parent: LinearLayout, gap: Int = 0, inset: Int = 0): LinearLayout =
         column().apply {
+            tag = LIST_TAG
             background = shape(R.color.surface)
+            clipToOutline = true
             showDividers = LinearLayout.SHOW_DIVIDER_MIDDLE
-            dividerDrawable = GradientDrawable().apply {
-                setColor(color(R.color.line)); setSize(1, px(R.dimen.stroke))
-            }
+            dividerDrawable = android.graphics.drawable.InsetDrawable(
+                GradientDrawable().apply { setColor(color(R.color.line)); setSize(1, px(R.dimen.stroke)) },
+                px(R.dimen.list_row_padding_h) + inset, 0, 0, 0,
+            )
             add(parent, this, gap)
+        }
+
+    /** Width a [menu] icon tile adds before the row text, for [list] divider insets. */
+    fun iconInset() = dp(ICON_TILE) + px(R.dimen.space_md)
+
+    /** Rounded tinted tile holding a row's leading icon. */
+    fun iconTile(resource: Int, surface: Int, ink: Int): View =
+        FrameLayout(context).apply {
+            background = shape(surface, R.dimen.radius_button, null)
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            addView(ImageView(context).apply { setImageDrawable(icon(resource, 20, ink)) },
+                FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER))
         }
 
     /** Peer actions in one horizontal row share the tallest action's height (large text wraps). */
@@ -277,14 +295,28 @@ internal class NativeUi(private val context: Context) {
     }
 
     /** One navigation row: title, optional subtitle and a trailing right chevron. */
-    fun menu(parent: LinearLayout, title: String, subtitle: String, status: Pair<String, StatusTone>? = null, value: String? = null, action: () -> Unit) =
+    fun menu(
+        parent: LinearLayout,
+        title: String,
+        subtitle: String,
+        status: Pair<String, StatusTone>? = null,
+        value: String? = null,
+        icon: Triple<Int, Int, Int>? = null,
+        action: () -> Unit,
+    ) =
         LinearLayout(context).apply {
+            val grouped = parent.tag == LIST_TAG
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(px(R.dimen.list_row_padding_h), px(R.dimen.list_row_padding_v), px(R.dimen.list_row_padding_h), px(R.dimen.list_row_padding_v))
             minimumHeight = px(R.dimen.list_row_min_height)
+            // Inside a list the group owns the surface and border; a row only draws its press state.
             background =
-                RippleDrawable(ColorStateList.valueOf(color(R.color.ripple)), shape(R.color.surface), null)
+                if (grouped) rowRipple()
+                else RippleDrawable(ColorStateList.valueOf(color(R.color.ripple)), shape(R.color.surface), null)
+            icon?.let { (resource, surface, ink) ->
+                addView(iconTile(resource, surface, ink), LinearLayout.LayoutParams(dp(ICON_TILE), dp(ICON_TILE)).apply { marginEnd = px(R.dimen.space_md) })
+            }
             isClickable = true
             isFocusable = true
             contentDescription = listOfNotNull(title, subtitle.ifEmpty { null }, value, status?.first).joinToString(". ") + ". Open"
@@ -300,6 +332,8 @@ internal class NativeUi(private val context: Context) {
             value?.let {
                 addView(label(it, TextRole.Value, R.color.muted).apply {
                     importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    // A long value (e.g. party name) never takes the title's width.
+                    maxWidth = (context.resources.displayMetrics.widthPixels * .38).toInt()
                     maxLines = 1
                     ellipsize = android.text.TextUtils.TruncateAt.END
                 }, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = px(R.dimen.space_sm) })
@@ -317,7 +351,7 @@ internal class NativeUi(private val context: Context) {
                 }, LinearLayout.LayoutParams(px(R.dimen.icon_md), px(R.dimen.icon_md)).apply { leftMargin = px(R.dimen.space_sm) }
             )
             setOnClickListener { action() }
-            add(parent, this, 1)
+            add(parent, this, if (grouped) 0 else 1)
         }
 
     /** Draws a field outline inset vertically so a 48dp target looks like a 44dp field. */
@@ -639,7 +673,102 @@ internal class NativeUi(private val context: Context) {
         return host
     }
 
+    /**
+     * Grouped label/value rows over existing bound text (read-only adapter, not a state owner).
+     * Each line becomes one row; [sectionOf] names the section it belongs to. "Key: value",
+     * "Key · value" and "Key • value" split into a title and value; a long value becomes the
+     * row's secondary line, and an upper-case result word (e.g. DETECTED) becomes a status pill.
+     */
+    fun facts(source: TextView, order: List<String> = emptyList(), sectionOf: (key: String, line: String) -> String): LinearLayout {
+        val host = column()
+        val cells = mutableListOf<Triple<TextView, TextView, TextView>>()
+        var signature = emptyList<String>()
+        fun render() {
+            val lines = source.text.toString().lines().map(String::trim).filter(String::isNotEmpty)
+            val parsed = lines.map(::splitFact)
+            val keys = parsed.mapIndexed { i, (key, _) -> "${sectionOf(key, lines[i])}|$key" }
+            if (keys == signature) {
+                parsed.forEachIndexed { i, (_, value) -> bindFact(cells[i], value) }
+                return
+            }
+            signature = keys
+            cells.clear()
+            val cellAt = sortedMapOf<Int, Triple<TextView, TextView, TextView>>()
+            host.removeAllViews()
+            host.addView(source, LinearLayout.LayoutParams(0, 0))
+            val lists = linkedMapOf<String, LinearLayout>()
+            // Sections listed in [order] come first, in that order; others follow as they appear.
+            val rank = { i: Int -> order.indexOf(sectionOf(parsed[i].first, lines[i])).let { if (it < 0) order.size else it } }
+            parsed.indices.sortedBy(rank).forEach { i ->
+                val (key, value) = parsed[i]
+                val name = sectionOf(key, lines[i])
+                val group = lists.getOrPut(name) { section(host, name); list(host) }
+                val title = label(key, TextRole.RowTitle).apply { setTextIsSelectable(true) }
+                val detail = label("", TextRole.Meta).apply { setTextIsSelectable(true); setLineSpacing(dp(1).toFloat(), 1f) }
+                val trailing = label("", TextRole.Value, R.color.muted).apply { setTextIsSelectable(true); gravity = Gravity.END }
+                group.addView(LinearLayout(context).apply {
+                    gravity = Gravity.CENTER_VERTICAL
+                    minimumHeight = px(R.dimen.control_height)
+                    setPadding(px(R.dimen.list_row_padding_h), px(R.dimen.space_sm) + dp(2), px(R.dimen.list_row_padding_h), px(R.dimen.space_sm) + dp(2))
+                    addView(column().apply {
+                        addView(title)
+                        add(this, detail, 2)
+                    }, LinearLayout.LayoutParams(0, -2, 1f))
+                    addView(trailing, LinearLayout.LayoutParams(-2, -2).apply { marginStart = px(R.dimen.space_md) })
+                }, LinearLayout.LayoutParams(-1, -2))
+                cellAt[i] = Triple(title, detail, trailing)
+                bindFact(cellAt.getValue(i), value)
+            }
+            cells.addAll(cellAt.values)
+            if (host.childCount > 1) ((host.getChildAt(1).layoutParams) as LinearLayout.LayoutParams).topMargin = 0
+        }
+        (source.parent as? ViewGroup)?.removeView(source)
+        source.visibility = View.GONE
+        source.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        source.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { render() }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+        render()
+        return host
+    }
+
+    private fun bindFact(cell: Triple<TextView, TextView, TextView>, value: String) {
+        val (title, detail, trailing) = cell
+        val result = Regex("^([A-Z]{3,}(?: [A-Z]{3,})*)(?: — | · |$)(.*)$").find(value)
+        val pill = result?.groupValues?.get(1)
+        var rest = result?.groupValues?.get(2)?.trim() ?: value
+        val short = pill == null && rest.length <= 22 && " · " !in rest && " • " !in rest
+        val shown = if (pill != null) (if ("UNAVAILABLE" in pill) "Unavailable" else pill.lowercase().replaceFirstChar(Char::uppercase)) else if (short) rest else ""
+        if (short) rest = ""
+        if (detail.text.toString() != rest) detail.text = rest
+        detail.visibility = if (rest.isEmpty()) View.GONE else View.VISIBLE
+        if (trailing.text.toString() != shown) trailing.text = shown
+        trailing.visibility = if (shown.isEmpty()) View.GONE else View.VISIBLE
+        if (pill != null)
+            statusPill(trailing, when {
+                "UNAVAILABLE" in pill -> StatusTone.NEUTRAL
+                pill == "DETECTED" -> StatusTone.POSITIVE
+                else -> StatusTone.WARNING
+            })
+        else {
+            text(trailing, TextRole.Value, R.color.muted)
+            trailing.background = null
+            trailing.setPadding(0, 0, 0, 0)
+        }
+        (title.parent.parent as View).contentDescription = listOf(title.text, shown, rest).filter { it.isNotEmpty() }.joinToString(". ")
+    }
+
+    private fun splitFact(line: String): Pair<String, String> {
+        val match = Regex("^([A-Za-z][^:·•]{0,43}?)(?::\\s+| · | • |:$)(.*)$").find(line)
+            ?: return line to ""
+        return match.groupValues[1].trim() to match.groupValues[2].trim()
+    }
+
     companion object {
+        const val LIST_TAG = "ui-list"
+        const val ICON_TILE = 36
         /** Confirmations whose affirmative action stops, disables, retries or discards. */
         val CAUTION_ACTIONS = setOf("Disable", "Stop Tracking", "Stop", "Retry", "Discard edits")
     }

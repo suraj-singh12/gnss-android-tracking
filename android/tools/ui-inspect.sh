@@ -161,7 +161,7 @@ PY
       tap "$row"; shot "${p}settings-$(echo "$row" | tr 'A-Z &' 'a-z--' | tr -s '-')"
       case "$row" in
         "Command access") "$0" scroll; shot "${p}settings-command-access-bottom" ;;
-        "Tracking policy") tap "Reporting interval"; shot "${p}settings-interval-selector-open"; "$0" back ;;
+        "Tracking policy") "$0" scroll; shot "${p}settings-tracking-policy-bottom" ;;
       esac
       "$0" back
     done

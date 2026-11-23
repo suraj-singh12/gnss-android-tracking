@@ -34,7 +34,10 @@ class MainActivity : Activity() {
     private var v46IntervalPicker: Spinner? = null
     private var restoredCustomInterval = false
     private var restoredPartyCustomInterval = false
-    private var v46PartyIntervalPicker: Spinner? = null
+    private var v46PartyIntervalPicker: RadioGroup? = null
+    private var renderPolicyInEffect: (() -> Unit)? = null
+    private var accessLastVerified: TextView? = null
+    private var accessPreviousVerified: TextView? = null
     private var renderReadiness: (() -> Unit)? = null
     private var physicalResults: View? = null
     private val routeScrolls = mutableMapOf<String, Int>()
@@ -2976,6 +2979,11 @@ class MainActivity : Activity() {
                 state?.controlLastSuccess?.takeIf {
                     state.controlLastGeneration != state.endpointGeneration
                 }
+            accessLastVerified?.text = "${last?.let(::utc) ?: "None for this binding"}${age?.let { " · $it s ago" } ?: ""}"
+            accessPreviousVerified?.let { note ->
+                note.text = previousBinding?.let { "Previous binding: ${utc(it)} · historical only" }.orEmpty()
+                note.visibility = if (previousBinding == null) View.GONE else View.VISIBLE
+            }
             contactDetails.text =
                 "Current state: $label\nLast verified response: ${last?.let(::utc) ?: "None for this binding"}${age?.let { " · $it s ago" } ?: ""}${previousBinding?.let { "\nPrevious binding response: ${utc(it)} · historical only" } ?: ""}\nContact is current for 30 s after a verified response, and unconfirmed after restart until a new one. Wi-Fi, enrollment and GNSS delivery do not prove it."
         }
@@ -3741,21 +3749,25 @@ class MainActivity : Activity() {
             if (signature == settingsSignature) return
             settingsSignature = signature
             settingsGroups.removeAllViews()
-            ui.list(settingsGroups).also { g ->
-                ui.menu(g, "Party & Command", if (configured) state!!.endpoint else "Not set up", value = if (configured) state!!.partyName else null) { navigate("Party & Command") }
-                ui.menu(g, "Command access", "", accessStatus) { navigate("Command access") }
+            val teal = Triple(0, R.color.positive_surface, R.color.accent)
+            fun icon(resource: Int, tone: Triple<Int, Int, Int> = teal) = tone.copy(first = resource)
+            val inset = ui.iconInset()
+            ui.list(settingsGroups, inset = inset).also { g ->
+                ui.menu(g, "Party & Command", if (configured) state!!.endpoint else "Not set up", value = if (configured) state!!.partyName else null, icon = icon(R.drawable.ic_person)) { navigate("Party & Command") }
+                ui.menu(g, "Command access", "", accessStatus, icon = icon(R.drawable.ic_health_trust)) { navigate("Command access") }
             }
-            ui.list(settingsGroups, 20).also { g ->
-                ui.menu(g, "Tracking policy", "Reporting interval and storage", value = intervalValue) { navigate("Tracking policy") }
+            ui.list(settingsGroups, 20, inset).also { g ->
+                ui.menu(g, "Tracking policy", "Reporting interval and storage", value = intervalValue, icon = icon(R.drawable.ic_tracking)) { navigate("Tracking policy") }
                 ui.menu(
                     g, "Field readiness", "Location, notifications and battery",
                     if (issues == 0) "Ready" to StatusTone.POSITIVE
                     else "$issues ${if (issues == 1) "issue" else "issues"}" to StatusTone.WARNING,
+                    icon = icon(R.drawable.ic_check, if (issues == 0) teal else Triple(0, R.color.warning_surface, R.color.warning)),
                 ) { navigate("Field readiness") }
             }
-            ui.list(settingsGroups, 20).also { g ->
-                ui.menu(g, "Emergency", "SOS hold and volume shortcut") { navigate("Emergency") }
-                ui.menu(g, "Appearance", "", value = mode) { navigate("Appearance") }
+            ui.list(settingsGroups, 20, inset).also { g ->
+                ui.menu(g, "Emergency", "SOS hold and volume shortcut", icon = icon(R.drawable.ic_warning, Triple(0, R.color.emergency_surface, R.color.danger))) { navigate("Emergency") }
+                ui.menu(g, "Appearance", "", value = mode, icon = icon(R.drawable.ic_appearance, Triple(0, R.color.background, R.color.muted))) { navigate("Appearance") }
             }
         }
         val party = page("Party & Command", "Settings")
@@ -3822,48 +3834,75 @@ class MainActivity : Activity() {
          * preserves valid non-preset values. Both Party & Command and Tracking policy use it
          * over the same mirrored interval draft; no second validation or save path.
          */
-        fun intervalPicker(card: LinearLayout, editor: EditText, restoredCustom: Boolean): Spinner {
-            val choices = listOf("5 seconds", "10 seconds", "30 seconds", "60 seconds", "Custom…")
+        /** Visible interval choice (5 / 10 / 30 / 60 s / Custom) with inline custom validation. */
+        fun intervalPicker(card: LinearLayout, editor: EditText, restoredCustom: Boolean): RadioGroup {
+            val values = listOf("5", "10", "30", "60")
             val picker =
-                Spinner(this).apply {
+                RadioGroup(this).apply {
                     id = View.generateViewId()
+                    orientation = LinearLayout.HORIZONTAL
                     contentDescription = "Reporting interval"
-                    adapter = ui.selectorAdapter(choices)
+                    // Auto-sized labels must not shift their segment down to a shared baseline.
+                    isBaselineAligned = false
+                    background = ui.shape(R.color.secondary_surface, R.dimen.radius_button, null)
+                    setPadding(dp(3), dp(3), dp(3), dp(3))
                 }
-            ui.selector(picker)
-            ui.formField(card, "Reporting interval", picker)
-            val customLabel = ui.formField(card, "Custom interval · seconds", editor)
+            val choices = (values.map { "$it s" } + "Custom").map { label ->
+                RadioButton(this).apply {
+                    id = View.generateViewId()
+                    text = label
+                    buttonDrawable = null
+                    background = null
+                    gravity = android.view.Gravity.CENTER
+                    maxLines = 1
+                    includeFontPadding = false
+                    setPadding(dp(2), 0, dp(2), 0)
+                    minHeight = ui.px(R.dimen.control_height)
+                    minimumHeight = minHeight
+                    // Large text shrinks to fit its segment instead of escaping it.
+                    ui.text(this, TextRole.RowTitle, R.color.muted)
+                    setAutoSizeTextTypeUniformWithConfiguration(
+                        dp(10), textSize.toInt().coerceAtLeast(dp(11)), 1, android.util.TypedValue.COMPLEX_UNIT_PX,
+                    )
+                    picker.addView(this, RadioGroup.LayoutParams(0, ui.px(R.dimen.control_height), 1f))
+                }
+            }
+            add(card, picker)
+            val customLabel = ui.formField(card, "Seconds", editor)
             editor.contentDescription = "Custom interval · seconds"
             val customHint = ui.label("5–86,400 seconds · multiples of 5", TextRole.Meta)
             add(card, customHint, 5)
-            var pickerPosition = -1
             var customSelected = restoredCustom
             fun renderPicker() {
-                val predefined = listOf("5", "10", "30", "60").indexOf(editor.text.toString())
-                val index =
-                    if (customSelected || editor.hasFocus() || predefined < 0) 4 else predefined
-                pickerPosition = index
-                picker.setSelection(index)
-                customLabel.visibility = if (index == 4) View.VISIBLE else View.GONE
+                val predefined = values.indexOf(editor.text.toString())
+                val index = if (customSelected || editor.hasFocus() || predefined < 0) 4 else predefined
+                choices.forEachIndexed { i, choice ->
+                    val on = i == index
+                    if (choice.isChecked != on) choice.isChecked = on
+                    choice.setTextColor(getColor(if (on) R.color.ink else R.color.muted))
+                    choice.setTypeface(null, if (on) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+                    choice.background = if (on) ui.shape(R.color.surface, R.dimen.radius_button, R.color.line) else null
+                }
+                val custom = index == 4
+                customLabel.visibility = if (custom) View.VISIBLE else View.GONE
                 editor.visibility = customLabel.visibility
                 customHint.visibility = customLabel.visibility
+                val raw = editor.text.toString()
+                val invalid = raw.isNotEmpty() && raw.toIntOrNull()?.let { it in 5..86_400 && it % 5 == 0 } != true
+                customHint.text = if (invalid) "Use 5–86,400 seconds in multiples of 5." else "5–86,400 seconds · multiples of 5"
+                customHint.setTextColor(getColor(if (invalid) R.color.danger else R.color.muted))
             }
-            picker.onItemSelectedListener =
-                object : AdapterView.OnItemSelectedListener {
-                    override fun onNothingSelected(p: AdapterView<*>?) {}
-
-                    override fun onItemSelected(p: AdapterView<*>?, v: View?, position: Int, id: Long) {
-                        if (position == pickerPosition) return
-                        pickerPosition = position
-                        customSelected = position == 4
-                        if (position < 4) {
-                            editor.clearFocus()
-                            editor.setText(listOf("5", "10", "30", "60")[position])
-                        }
-                        renderPicker()
-                        if (position == 4) editor.requestFocus()
+            choices.forEachIndexed { i, choice ->
+                choice.setOnClickListener {
+                    customSelected = i == 4
+                    if (i < 4) {
+                        editor.clearFocus()
+                        if (editor.text.toString() != values[i]) editor.setText(values[i])
                     }
+                    renderPicker()
+                    if (i == 4) editor.requestFocus()
                 }
+            }
             watch(editor) { renderPicker() }
             renderPicker()
             return picker
@@ -3896,7 +3935,7 @@ class MainActivity : Activity() {
         // (app.requestAdaptive), so there is no Save button. The canonical `interval`
         // editor stays off-screen as the shared draft mirrored by the Party field.
         detach(interval)
-        section(policy, "Reporting interval")
+        ui.section(policy, "Reporting interval").also { (it.layoutParams as LinearLayout.LayoutParams).topMargin = 0 }
         val intervalCard = ui.card(policy, 0)
         v46PartyIntervalPicker = intervalPicker(intervalCard, partyInterval, restoredPartyCustomInterval)
         footer(policy, "Future observations only. History is unchanged.")
@@ -3913,20 +3952,69 @@ class MainActivity : Activity() {
         }
         listOf(partyId, partyName, endpoint, interval).forEach { watch(it) { renderSaveBars() } }
         renderSaveBarsHook = ::renderSaveBars
-        val policyCard = ui.card(policy, 12)
+        section(policy, "Storage")
+        val policyCard = ui.card(policy, 0)
         ui.switchRow(adaptive)
         ui.text(policyStatus, TextRole.Meta)
         policyStatus.setPadding(0, 0, 0, 0)
         policyStatus.includeFontPadding = false
         add(policyCard, adaptive)
-        add(policyCard, policyStatus, 0)
-        add(policyCard, ui.label("ON keeps fewer future observations when steady or stationary.", TextRole.Meta), 3)
+        add(policyCard, ui.label("Keeps fewer future observations when steady or stationary.", TextRole.Meta), 2)
+        // Plain ON/OFF is already the switch and Applied storage; only saving or fallback shows.
+        add(policyCard, policyStatus, 6)
+        fun renderPolicyStatus() {
+            val text = policyStatus.text.toString()
+            policyStatus.visibility = if (text.isEmpty() || text.startsWith("ON · ") || text.startsWith("OFF · ")) View.GONE else View.VISIBLE
+        }
+        policyStatus.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { renderPolicyStatus() }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+        renderPolicyStatus()
         val policyFeedback = ui.collapsingLabel(TextRole.Caption)
         section(policy, "In effect")
-        // Filled from the retired Policy details page once its facts are bound (below).
-        val policyInEffect = ui.column()
-        add(policy, policyInEffect)
-        footer(policy, "Command can override the phone interval with an authenticated instruction.")
+        // One list for the facts in effect; values come from the saved installation and policy owners.
+        val inEffect = ui.list(policy)
+        fun effectValue() = ui.label("—", TextRole.Value, R.color.muted).apply { setTextIsSelectable(true) }
+        valueRow(inEffect, "Phone interval", plainValue(policyLocal).apply { setTextColor(getColor(R.color.muted)) })
+        val appliedInterval = valueRow(inEffect, "Applied interval", effectValue())
+        valueRow(inEffect, "Command request", plainValue(policyRequested).apply { setTextColor(getColor(R.color.muted)) }, "No retained instruction for this enrollment")
+        val requestNote = ((inEffect.getChildAt(inEffect.childCount - 1) as LinearLayout).getChildAt(0) as LinearLayout).getChildAt(1)
+        val overrideValue = valueRow(inEffect, "Command override", effectValue())
+        val appliedStorage = valueRow(inEffect, "Applied storage", effectValue())
+        val serviceValue = effectValue()
+        valueRow(inEffect, "Start from the app", serviceValue)
+        val serviceTitle = ((inEffect.getChildAt(inEffect.childCount - 1) as LinearLayout).getChildAt(0) as LinearLayout).getChildAt(0) as TextView
+        val configErrorValue = ui.label("", TextRole.Value, R.color.danger).apply { setTextIsSelectable(true) }
+        valueRow(inEffect, "Configuration error", configErrorValue)
+        val configErrorRow = inEffect.getChildAt(inEffect.childCount - 1)
+        fun renderService() {
+            val text = serviceReadiness.text.toString()
+            val split = text.indexOf(" · ")
+            serviceTitle.text = if (split > 0) text.substring(0, split) else "Tracking service"
+            serviceValue.text = if (split > 0) text.substring(split + 3) else text.ifEmpty { "—" }
+        }
+        serviceReadiness.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { renderService() }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+        renderService()
+        renderPolicyInEffect = {
+            savedInstallation?.let { state ->
+                appliedInterval.text = "${state.config().effective_reporting_interval_s} s · rev ${state.version}"
+                overrideValue.text = state.overrideSeconds?.let { "$it s" } ?: "None"
+                val storage = app.persistencePolicy.state
+                // The sampler stores densely while a fallback is active, whatever the saved switch says.
+                val adaptiveInEffect = storage.enabled && storage.error == null && app.observationPersistence.samplingState.fallback == null
+                appliedStorage.text = "${if (adaptiveInEffect) "Adaptive" else "Dense"} · rev ${storage.revision}"
+                requestNote.visibility = if (policyRequested.text.toString() == "Unknown") View.VISIBLE else View.GONE
+                configErrorValue.text = state.configError.orEmpty()
+                configErrorRow.visibility = if (state.configError == null) View.GONE else View.VISIBLE
+            }
+        }
+        footer(policy, "Saving here doesn’t prove Command requested or applied a change; check Diagnostics › Activity. Command can override the phone interval with an authenticated instruction.")
         val ready = page("Field readiness", "Settings")
         // One peer list: each requirement shows its actual state; only a requirement that
         // needs attention offers the existing OS action that resolves it.
@@ -4049,40 +4137,113 @@ class MainActivity : Activity() {
         }
         footer(appearancePage, "System follows the phone's dark theme setting.")
         val access = page("Command access", "Settings")
-        // Not enrolled: the Command-side steps are shown inline instead of in a dialog.
-        val stepsCard = ui.card(access, 0)
+        fun clip(label: String, value: () -> String?) = ui.button(label) {
+            value()?.let { id ->
+                (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager)
+                    .setPrimaryClip(android.content.ClipData.newPlainText(label, id))
+            }
+        }
+        fun mono(view: TextView) = view.apply {
+            ui.text(this, TextRole.Mono, R.color.muted)
+            setTextIsSelectable(true)
+            setLineSpacing(dp(2).toFloat(), 1f)
+        }
+        fun lastRow(list: LinearLayout) = list.getChildAt(list.childCount - 1)
+        // State: enrollment, authenticated contact and trust in one group.
+        val statusList = ui.list(access)
+        val enrollmentState = ui.label("Loading…", TextRole.Pill).also { ui.statusPill(it, StatusTone.NEUTRAL) }
+        valueRow(statusList, "Status", enrollmentState)
+        // Authenticated contact remains owned by CommandControl; this row only presents its label.
+        val contact = ui.label("Not verified", TextRole.Pill).also { ui.statusPill(it, StatusTone.NEUTRAL) }
+        valueRow(statusList, "Authenticated contact", contact)
+        val contactRow = lastRow(statusList)
+        // Long addresses wrap inside half the row so the title never breaks mid-word.
+        fun addressValue() = ui.label("", TextRole.Value, R.color.muted).apply {
+            setTextIsSelectable(true)
+            maxWidth = (resources.displayMetrics.widthPixels * .5).toInt()
+        }
+        val statusAddress = valueRow(statusList, "Saved Command address", addressValue())
+        val statusAddressRow = lastRow(statusList)
+        val lastVerified = ui.label("None for this binding", TextRole.Value, R.color.muted).apply { setTextIsSelectable(true) }
+        accessLastVerified = lastVerified
+        valueRow(statusList, "Last verified response", lastVerified, "Previous binding")
+        val lastVerifiedRow = lastRow(statusList)
+        // A response from an earlier Command address stays readable, marked historical.
+        accessPreviousVerified = (((lastVerifiedRow as LinearLayout).getChildAt(0) as LinearLayout).getChildAt(1) as TextView).apply {
+            setTextIsSelectable(true)
+            visibility = View.GONE
+        }
+        val aboutText = ui.label(
+            "Contact is current for 30 s after a verified response, and unconfirmed after restart until a new one. Wi-Fi, enrollment and GNSS delivery do not prove it.",
+            TextRole.Meta,
+        ).apply {
+            visibility = View.GONE
+            setPadding(ui.px(R.dimen.list_row_padding_h), 0, ui.px(R.dimen.list_row_padding_h), ui.px(R.dimen.space_md))
+        }
+        fun disclosureRow(title: String, ink: Int = R.color.accent, onClick: (Button) -> Unit) = ui.button(title) {}.apply {
+            ui.quiet(this)
+            gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+            setTextColor(getColor(ink))
+            setTypeface(null, android.graphics.Typeface.NORMAL)
+            ui.text(this, TextRole.RowTitle, ink)
+            minHeight = ui.px(R.dimen.list_row_min_height)
+            setPadding(ui.px(R.dimen.list_row_padding_h), 0, ui.px(R.dimen.list_row_padding_h), 0)
+            background = ui.rowRipple()
+            setOnClickListener { onClick(this) }
+        }
+        fun chevron(button: Button, open: Boolean) {
+            button.setCompoundDrawablesRelative(null, null, ui.icon(if (open) R.drawable.ic_chevron_down else R.drawable.ic_chevron_right, 20), null)
+        }
+        val aboutBlock = ui.column().apply {
+            val about = disclosureRow("About trust") { b ->
+                aboutText.visibility = if (aboutText.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+                chevron(b, aboutText.visibility == View.VISIBLE)
+                if (Build.VERSION.SDK_INT >= 30) b.stateDescription = if (aboutText.visibility == View.VISIBLE) "Expanded" else "Collapsed"
+            }
+            chevron(about, false)
+            addView(about, LinearLayout.LayoutParams(-1, -2))
+            addView(aboutText, LinearLayout.LayoutParams(-1, -2))
+        }
+        statusList.addView(aboutBlock, LinearLayout.LayoutParams(-1, -2))
+        val recheckBox = ui.column().apply {
+            setPadding(ui.px(R.dimen.list_row_padding_h), dp(4), ui.px(R.dimen.list_row_padding_h), ui.px(R.dimen.list_row_padding_h))
+        }
+        statusList.addView(recheckBox, LinearLayout.LayoutParams(-1, -2))
+        // Not enrolled: the Command-side steps and the credential are one group.
+        val enrollHeader = ui.section(access, "Enroll this phone")
+        val stepsCard = ui.list(access, inset = dp(28) + ui.px(R.dimen.space_md))
+        val phone = mono(ui.label("", TextRole.Mono))
+        val stepPhone = mono(ui.label("", TextRole.Mono))
         listOf(
-            "On the Command computer" to "Open Phone controls, select this phone and compare its full phone ID.",
-            "Compare this phone ID" to "The IDs below must match exactly before you authorize.",
-            "Paste the private credential" to "Transfer it privately from Phone controls. It is never exported.",
+            "On the Command computer" to "Open Phone controls and select this phone.",
+            "Compare this phone ID" to "",
+            "Paste the private credential" to "Transfer it privately from Phone controls.",
         ).forEachIndexed { n, (title, detail) ->
-            val row = LinearLayout(this).apply { gravity = android.view.Gravity.TOP }
-            row.addView(ui.label("${n + 1}", TextRole.Pill).apply {
+            val row = LinearLayout(this).apply {
+                gravity = android.view.Gravity.TOP
+                val h = ui.px(R.dimen.list_row_padding_h)
+                setPadding(h, ui.px(R.dimen.list_row_padding_v), h, ui.px(R.dimen.list_row_padding_v))
+            }
+            row.addView(ui.label("${n + 1}", TextRole.Pill, android.R.color.white).apply {
                 gravity = android.view.Gravity.CENTER
-                ui.statusPill(this, StatusTone.POSITIVE)
-                setPadding(0, 0, 0, 0)
+                includeFontPadding = false
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    setColor(getColor(R.color.accent))
+                }
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }, LinearLayout.LayoutParams(dp(28), dp(28)).apply { marginEnd = ui.px(R.dimen.space_md) })
             row.addView(ui.column().apply {
                 addView(ui.label(title, TextRole.RowTitle))
-                add(this, ui.label(detail, TextRole.Meta), 2)
+                if (detail.isNotEmpty()) add(this, ui.label(detail, TextRole.Meta), 2)
+                if (n == 1) {
+                    add(this, stepPhone, 3)
+                    addView(clip("Copy phone ID") { savedInstallation?.deviceId }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(8) })
+                }
                 contentDescription = "Step ${n + 1}. $title. $detail"
             }, LinearLayout.LayoutParams(0, -2, 1f))
-            add(stepsCard, row, if (n == 0) 0 else 12)
+            stepsCard.addView(row, LinearLayout.LayoutParams(-1, -2))
         }
-        val accessCard = ui.card(access, 12)
-        val enrollmentState = ui.label("Loading…", TextRole.Value)
-        peerRow(accessCard, "Command enrollment", enrollmentState)
-        // Read-only identities: muted caption + standard sans value (selectable, wrapping),
-        // the same grammar as Manage access & trust. Editable fields below use FieldLabel.
-        val phone = ui.label("", TextRole.Value).apply { setTextIsSelectable(true); setLineSpacing(dp(2).toFloat(), 1f) }
-        val authority = ui.label("", TextRole.Value).apply { setTextIsSelectable(true); setLineSpacing(dp(2).toFloat(), 1f) }
-        add(accessCard, ui.label("This phone ID", TextRole.Section), 14)
-        add(accessCard, phone, 3)
-        add(accessCard, ui.label("Authorized Command ID", TextRole.Section), 10)
-        add(accessCard, authority, 3)
-        // Authenticated contact remains owned by CommandControl and shown on Manage access & trust.
-        val contact = ui.label("Not verified", TextRole.Value)
         val secret =
             EditText(this).apply {
                 id = View.generateViewId()
@@ -4100,14 +4261,16 @@ class MainActivity : Activity() {
             ui.label("Private enrollment credential", TextRole.FieldLabel).apply {
                 labelFor = secret.id
             }
-        add(accessCard, secretLabel, 16)
-        ui.addPx(accessCard, secret, ui.px(R.dimen.field_label_gap))
-        val secretHint =
-            ui.label("Private credential issued by Command; never exported.", TextRole.Meta)
-        add(accessCard, secretHint, 5)
+        val credential = ui.column().apply {
+            val h = ui.px(R.dimen.list_row_padding_h)
+            setPadding(h, ui.px(R.dimen.space_md), h, ui.px(R.dimen.space_md))
+        }
+        stepsCard.addView(credential, LinearLayout.LayoutParams(-1, -2))
+        add(credential, secretLabel)
+        ui.addPx(credential, secret, ui.px(R.dimen.field_label_gap))
+        val secretHint = footer(access, "Issued by Command; never exported.")
         val accessError = ui.collapsingLabel(TextRole.Caption, R.color.danger)
-        add(accessCard, accessError)
-        val accessActions = LinearLayout(this).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
+        add(access, accessError)
         var checking = false
         val authorize =
             ui.button("Authorize") {
@@ -4174,10 +4337,46 @@ class MainActivity : Activity() {
                     secret.requestFocus()
                 }
             }
-        accessActions.addView(authorize)
-        ui.equalHeights(accessActions)
-        add(accessCard, accessActions, 12)
-        // Manage access & trust renders inline below (moved once its evidence is bound).
+        ui.style(authorize, primary = true)
+        add(access, authorize, 16)
+        val recheck = ui.button("Recheck") { authorize.performClick() }
+        add(recheckBox, recheck)
+        // Not enrolled: trust facts follow the enrollment steps; once enrolled they join the status group.
+        val trustHeader = ui.section(access, "Trust")
+        val trustList = ui.list(access)
+        var trustInStatus: Boolean? = null
+        var accessWasEnrolled: Boolean? = null
+        fun placeTrust(inStatus: Boolean) {
+            if (trustInStatus == inStatus) return
+            trustInStatus = inStatus
+            detach(lastVerifiedRow)
+            detach(aboutBlock)
+            val target = if (inStatus) statusList else trustList
+            val at = if (inStatus) statusList.indexOfChild(recheckBox) else trustList.childCount
+            target.addView(aboutBlock, at, LinearLayout.LayoutParams(-1, -2))
+            target.addView(lastVerifiedRow, at, LinearLayout.LayoutParams(-1, -2))
+        }
+        placeTrust(false)
+        // Enrolled: each identity once, full width, with its own copy action.
+        val identityHeader = ui.section(access, "Identity")
+        val identityList = ui.list(access)
+        val authority = mono(ui.label("", TextRole.Mono))
+        fun identityRow(title: String, id: TextView, copyLabel: String, value: () -> String?) {
+            identityList.addView(ui.column().apply {
+                val h = ui.px(R.dimen.list_row_padding_h)
+                setPadding(h, ui.px(R.dimen.space_sm), h, ui.px(R.dimen.list_row_padding_v))
+                addView(LinearLayout(this@MainActivity).apply {
+                    gravity = android.view.Gravity.CENTER_VERTICAL
+                    addView(ui.label(title, TextRole.RowTitle), LinearLayout.LayoutParams(0, -2, 1f))
+                    addView(clip("Copy") { value() }.apply { contentDescription = copyLabel }, LinearLayout.LayoutParams(-2, -2))
+                })
+                add(this, id, 2)
+            }, LinearLayout.LayoutParams(-1, -2))
+        }
+        identityRow("Authorized Command ID", authority, "Copy Command ID") { savedInstallation?.controlAuthority }
+        identityRow("This phone ID", phone, "Copy phone ID") { savedInstallation?.deviceId }
+        val identityAddress = valueRow(identityList, "Saved Command address", addressValue())
+        // Evidence and change access are rendered below once their owners are bound.
         val accessTrust = ui.column()
         add(access, accessTrust)
         val manage = page("Manage Command access", "Command access")
@@ -4767,39 +4966,58 @@ class MainActivity : Activity() {
             .filterIsInstance<LinearLayout>().forEach { panel ->
                 (0 until panel.childCount).map { panel.getChildAt(it) }.filterIsInstance<TextView>().filter { it.visibility != View.GONE }.forEach(::structured)
             }
-        // Manage access & trust renders the read-only identity and contact evidence directly;
-        // the separate "Identity & verification details" destination is retired. The same
-        // bound sources, copy actions and single More-evidence disclosure move unchanged.
+        // Command access shows identity and contact as rows of its own; from the retired
+        // identity page only the single authoritative evidence disclosure is kept.
+        val evidenceList = ui.list(accessTrust, 20)
         run {
             val children = (0 until identityPage.childCount).map { identityPage.getChildAt(it) }
             identityPage.removeAllViews()
-            var at = manage.indexOfChild(managementError) + 1
-            val copies = children.filterIsInstance<Button>().filter { it.text.startsWith("Copy ") }
-            for (child in children) {
-                if (child in copies) continue
-                manage.addView(child, at++, child.layoutParams)
-                if (child === children.firstOrNull { it is LinearLayout }) {
-                    // Public-ID copy actions sit together directly under the identities.
-                    val row = LinearLayout(this).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
-                    copies.forEachIndexed { n, copy ->
-                        row.addView(copy, LinearLayout.LayoutParams(0, -2, 1f).apply { if (n > 0) marginStart = dp(8) })
-                    }
-                    ui.equalHeights(row)
-                    manage.addView(row, at++, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
-                }
+            val disclosure = children.filterIsInstance<Button>().single { it.text == "More evidence & rejection reasons" }
+            val evidence = children[children.indexOf(disclosure) + 1] as LinearLayout
+            disclosure.text = "Evidence & rejection reasons"
+            ui.quiet(disclosure)
+            ui.text(disclosure, TextRole.RowTitle)
+            disclosure.gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+            disclosure.minHeight = ui.px(R.dimen.list_row_min_height)
+            disclosure.setPadding(ui.px(R.dimen.list_row_padding_h), 0, ui.px(R.dimen.list_row_padding_h), 0)
+            disclosure.background = ui.rowRipple()
+            fun chevron() = disclosure.setCompoundDrawablesRelative(null, null,
+                ui.icon(if (evidence.visibility == View.VISIBLE) R.drawable.ic_chevron_down else R.drawable.ic_chevron_right, 20), null)
+            disclosure.setOnClickListener {
+                evidence.visibility = if (evidence.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+                chevron()
             }
-            (manage.getChildAt(manage.indexOfChild(managementError) + 1)?.layoutParams as? LinearLayout.LayoutParams)?.topMargin = 0
+            chevron()
+            evidence.setPadding(ui.px(R.dimen.list_row_padding_h), 0, ui.px(R.dimen.list_row_padding_h), ui.px(R.dimen.space_md))
+            nativeViewsForV46(evidence).filterIsInstance<TextView>().forEach { ui.text(it, TextRole.Meta); it.setTextIsSelectable(true) }
+            evidenceList.addView(disclosure, LinearLayout.LayoutParams(-1, -2))
+            evidenceList.addView(evidence, LinearLayout.LayoutParams(-1, -2))
         }
+        // Re-enroll and Disable are rows of one Change access group, shown only when they apply.
+        detach(managementError)
+        add(accessTrust, managementError, 12)
+        detach(changeAccessHeader)
+        accessTrust.addView(changeAccessHeader, changeAccessHeader.layoutParams)
+        val changeList = ui.list(accessTrust)
+        for ((button, ink) in listOf(reenrollAccess to R.color.accent, disableAccess to R.color.danger)) {
+            detach(button)
+            ui.quiet(button)
+            ui.text(button, TextRole.RowTitle, ink)
+            button.gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+            button.minHeight = ui.px(R.dimen.list_row_min_height)
+            button.setPadding(ui.px(R.dimen.list_row_padding_h), 0, ui.px(R.dimen.list_row_padding_h), 0)
+            button.background = ui.rowRipple()
+            changeList.addView(button, LinearLayout.LayoutParams(-1, -2))
+        }
+        val changeFooter = footer(accessTrust, "Saved data stays on this phone in both cases.")
         // v3: Manage access & trust and Policy details are part of their owner pages.
         run {
-            val trust = (0 until manage.childCount).map { manage.getChildAt(it) }
             manage.removeAllViews()
-            ui.section(accessTrust, "Access & trust")
-            trust.forEach { accessTrust.addView(it, it.layoutParams) }
             val policyPage = routes.getValue("Policy details")
             val details = (0 until policyPage.childCount).map { policyPage.getChildAt(it) }
             policyPage.removeAllViews()
-            details.forEach { policyInEffect.addView(it, it.layoutParams) }
+            // Policy details facts are presented by the In effect list on Tracking policy.
+            details.forEach { detach(it) }
             // Diagnostics: the existing record/recovery/tool owners render inside segments.
             fun embed(target: LinearLayout, page: LinearLayout, header: String?) {
                 detach(page)
@@ -4830,7 +5048,33 @@ class MainActivity : Activity() {
             scroller.isNestedScrollingEnabled = true
             parent.addView(scroller, index, params)
         }
-        listOfNotNull(status, sosDetails, readiness, batterySummary, physicalButtonDetails).forEach(::technical)
+        // Advanced logs: the same bound evidence, presented as grouped label/value rows.
+        fun facts(view: TextView, order: List<String> = emptyList(), sectionOf: (String, String) -> String) {
+            val parent = view.parent as? LinearLayout ?: return
+            val index = parent.indexOfChild(view)
+            val params = view.layoutParams
+            parent.removeView(view)
+            // Each later source keeps a section gap above its first heading.
+            (params as? LinearLayout.LayoutParams)?.topMargin = if (index == 0) 0 else ui.px(R.dimen.section_top)
+            parent.addView(ui.facts(view, order, sectionOf), index, params)
+        }
+        facts(status, listOf("Attention", "Device", "GNSS", "Storage", "Delivery")) { key, line ->
+            when {
+                key in setOf("Device", "Battery") || line.startsWith("Tracking ") || line == "Starting…" -> "Device"
+                key in setOf("Field setup", "Configuration error", "Attention") -> "Attention"
+                key in setOf("Persistence policy", "Boundary candidate in memory", "Storage free", "Persistence") -> "Storage"
+                key == "This process" && "payload bytes" in line -> "Delivery"
+                key in setOf("This Sender", "GNSS durably ACKed", "Sync retry", "History sync", "Oldest pending envelope capture",
+                    "Network", "Transport", "Last ACK age", "Command", "Reporting", "Pending GNSS") ||
+                    "last ACK" in line || line.startsWith("Command override") || "need attention" in line || line.startsWith("Sending paused") -> "Delivery"
+                else -> "GNSS"
+            }
+        }
+        facts(sosDetails) { _, _ -> "SOS" }
+        facts(readiness) { _, _ -> "Readiness" }
+        facts(batterySummary) { _, _ -> "Battery" }
+        physicalButtonDetails?.let { facts(it) { _, _ -> "Physical keys" } }
+        footer(routes.getValue("Advanced logs"), "Values refresh while this page is open. Text is selectable.")
         listOf(settingsFeedback, exportStatus, policyFeedback).forEach(ui::feedback)
         val originalRefresh = refreshTrust
         v46Refresh = {
@@ -4838,13 +5082,34 @@ class MainActivity : Activity() {
             val op = app.operational.value
             renderSettingsLanding()
             renderSaveBars()
+            renderPolicyInEffect?.invoke()
             val enrolled = state?.controlEnrollment != null
             val accessDisabled = state?.controlDisabled == true
-            stepsCard.visibility = if (state != null && !enrolled && !accessDisabled) View.VISIBLE else View.GONE
+            val enrolling = state != null && !enrolled && !accessDisabled
+            // A completed enrollment retires any earlier enrollment-attempt message.
+            if (enrolled && accessWasEnrolled == false) accessError.text = ""
+            if (state != null) accessWasEnrolled = enrolled
+            for (v in listOf(enrollHeader, stepsCard, secretHint, authorize)) v.visibility = if (enrolling) View.VISIBLE else View.GONE
+            contactRow.visibility = if (enrolled || accessDisabled) View.VISIBLE else View.GONE
+            statusAddressRow.visibility = if (enrolled) View.GONE else View.VISIBLE
+            placeTrust(enrolled)
+            trustHeader.visibility = if (enrolled) View.GONE else View.VISIBLE
+            trustList.visibility = trustHeader.visibility
+            recheckBox.visibility = if (enrolled && !accessDisabled) View.VISIBLE else View.GONE
+            recheck.text = if (checking) "Checking…" else "Recheck"
+            recheck.isEnabled = !checking
+            identityHeader.visibility = if (enrolled) View.VISIBLE else View.GONE
+            identityList.visibility = identityHeader.visibility
+            (state?.endpoint?.ifBlank { "Not configured" } ?: "Unknown").let { address ->
+                statusAddress.text = address
+                identityAddress.text = address
+            }
             disableAccess.visibility = if (enrolled && !accessDisabled) View.VISIBLE else View.GONE
             reenrollAccess.visibility = if (enrolled || accessDisabled) View.VISIBLE else View.GONE
             changeAccessHeader.visibility =
                 if (disableAccess.visibility == View.VISIBLE || reenrollAccess.visibility == View.VISIBLE) View.VISIBLE else View.GONE
+            changeList.visibility = changeAccessHeader.visibility
+            changeFooter.visibility = changeAccessHeader.visibility
             v46PartyInterval?.isEnabled = interval.isEnabled
             recoveryFailure.text =
                 op.error?.takeIf { it.startsWith("Saved delivery retry") }.orEmpty()
@@ -4955,7 +5220,13 @@ class MainActivity : Activity() {
             val label =
                 commandContactLabel(state, app.commandControl.contact, SystemClock.elapsedMillis())
             contact.text = label
+            ui.statusPill(contact, when (label) {
+                "Contact verified" -> StatusTone.POSITIVE
+                "Contact unavailable", "Authentication failed" -> StatusTone.WARNING
+                else -> StatusTone.NEUTRAL
+            })
             phone.text = state?.deviceId ?: "Reading identity…"
+            stepPhone.text = phone.text
             authority.text = state?.controlAuthority ?: "Not enrolled"
             // Monospace is for identifiers only; a "Not enrolled" placeholder stays sans.
             enrollmentState.text =
@@ -4965,13 +5236,11 @@ class MainActivity : Activity() {
                     state.controlEnrollment != null -> "Enrolled"
                     else -> "Not enrolled"
                 }
-            secret.visibility = if (state?.controlEnrollment == null) View.VISIBLE else View.GONE
-            secretLabel.visibility = secret.visibility
-            secretHint.visibility = secret.visibility
-            ui.style(
-                authorize,
-                primary = state?.controlEnrollment == null && state?.controlDisabled != true,
-            )
+            ui.statusPill(enrollmentState, when {
+                state?.controlEnrollment != null && !state.controlDisabled -> StatusTone.POSITIVE
+                state?.controlDisabled == true -> StatusTone.WARNING
+                else -> StatusTone.NEUTRAL
+            })
             authorize.text =
                 when {
                     checking -> "Checking…"
@@ -4980,8 +5249,6 @@ class MainActivity : Activity() {
                     else -> "Review & authorize"
                 }
             authorize.isEnabled = state != null && !state.controlDisabled && !checking
-            // Disabled is already stated by the enrollment status; no inert "Disabled" button.
-            authorize.visibility = if (state?.controlDisabled == true) View.GONE else View.VISIBLE
             syncNowButton.isEnabled =
                 initialized && (currentQueueCounts?.gnss ?: 0) > 0 && !op.drainStarting
             syncRow.visibility = if ((currentQueueCounts?.gnss ?: 0) > 0) View.VISIBLE else View.GONE
@@ -5554,7 +5821,7 @@ class MainActivity : Activity() {
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean("consumedNotificationAction", consumedNotificationAction)
         outState.putBoolean("customIntervalChoice", v46IntervalPicker?.selectedItemPosition == 4)
-        outState.putBoolean("partyCustomIntervalChoice", v46PartyIntervalPicker?.selectedItemPosition == 4)
+        outState.putBoolean("partyCustomIntervalChoice", v46PartyIntervalPicker?.let { it.indexOfChild(it.findViewById<View>(it.checkedRadioButtonId)) == 4 } == true)
         outState.putStringArrayList("v46Outcomes", ArrayList(v46Outcomes))
         outState.putStringArrayList("activityOutcomes", ArrayList(activityOutcomes))
         outState.putString("activityQuery", activityQuery)
@@ -5742,7 +6009,7 @@ class MainActivity : Activity() {
         if (::physicalButtonClear.isInitialized)
             physicalButtonClear.isEnabled = history.retainedEvents.isNotEmpty()
         physicalButtonDetails?.text =
-            "Physical-key evidence\n${history.manufacturer?:"Unknown manufacturer"} · ${history.model?:"Unknown model"}\nAndroid ${history.androidVersion?:"Unknown"} / API ${history.androidApi?:"Unknown"}\n${history.activityResult} · ${history.activityReason}\nInterrupted: ${history.activityWasInterrupted} · writer failures ${history.writerIoFailures} · queue dropped ${history.diagnosticQueueDroppedTotal}\n${PhysicalButtonTestController.BACKGROUND_STATUS}\n${PhysicalButtonTestController.LOCKED_SCREEN_STATUS}\n${PhysicalButtonTestController.MEDIA_SESSION_STATUS}"
+            "Device: ${history.manufacturer?:"Unknown manufacturer"} ${history.model?:"Unknown model"}\nAndroid: ${history.androidVersion?:"Unknown"} / API ${history.androidApi?:"Unknown"}\nKey events: ${history.activityResult} · ${history.activityReason}\nInterrupted: ${history.activityWasInterrupted} · writer failures ${history.writerIoFailures} · queue dropped ${history.diagnosticQueueDroppedTotal}\nBackground listener: ${PhysicalButtonTestController.BACKGROUND_STATUS}\nLocked or screen-off: ${PhysicalButtonTestController.LOCKED_SCREEN_STATUS}\nMedia buttons: ${PhysicalButtonTestController.MEDIA_SESSION_STATUS}"
         val last = history.retainedEvents.lastOrNull()
         val localTime = { value: String? ->
             value?.let {

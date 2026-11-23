@@ -182,7 +182,7 @@ class V46RefinementTest {
             @Suppress("UNCHECKED_CAST") val navigate = field(a, "navigateTo") as (String) -> Unit
             for ((old, owner) in listOf("Storage health" to "SAVED DATA & SYNC", "Transfer recovery" to "SAVED DATA & SYNC",
                 "GNSS details" to "Diagnostics", "Command contact" to "Diagnostics",
-                "Identity & verification details" to "This phone ID")) {
+                "Identity & verification details" to "Compare this phone ID")) {
                 navigate(old)
                 settle()
                 assertTrue("$old → $owner", texts(a).contains(owner))
@@ -203,7 +203,7 @@ class V46RefinementTest {
             assertTrue(buttons.toString(), buttons.contains("Copy phone ID"))
             assertFalse("Destructive access actions only after enrollment: $buttons",
                 buttons.any { it == "Disable remote control" || it == "Re-enroll Command" })
-            assertTrue(texts(a).contains("This phone ID"))
+            assertTrue(texts(a).contains("Compare this phone ID"))
             assertEquals("Only the private credential is editable before enrollment", listOf("Paste Command credential"),
                 shown(a).filterIsInstance<android.widget.EditText>().map { it.hint.toString() })
 
@@ -364,7 +364,7 @@ class V46RefinementTest {
             settle()
             val controls = shown(a).filter { it is android.widget.Spinner || it is android.widget.EditText || (it is Button && it !is android.widget.CompoundButton && it.text.isNotEmpty() && it.parent?.parent?.let { p -> p is android.widget.ScrollView || (p as View).id != View.NO_ID } == true) }
             // v3: Tracking policy owns the reporting interval, adaptive storage and the facts in effect.
-            assertTrue("Interval selector", controls.any { it is android.widget.Spinner && it.contentDescription == "Reporting interval" })
+            assertTrue("Interval selector", shown(a).any { it is android.widget.RadioGroup && it.contentDescription == "Reporting interval" })
             assertTrue(shown(a).filterIsInstance<android.widget.Switch>().any { it.text == "Adaptive storage" })
             assertFalse("Save appears only after a change", shown(a).filterIsInstance<Button>().any { it.text == "Save" })
             assertTrue(texts(a).contains("IN EFFECT"))

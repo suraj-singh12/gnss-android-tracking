@@ -1,5 +1,21 @@
 # UI acceptance evidence
 
+## Issue #73 — Android UI polish: Settings groups, Tracking policy, Command access, Advanced logs (23 November 2026, P73-series)
+
+Parent `f08f8c365fe5f28dda2c0b24d1c2b8e3418179fd` (`dev` = `main`). Design authority: the
+proposal screenshots attached to [#73](https://github.com/suraj-singh12/gnss-android-tracking/issues/73),
+approved by the operator ("Yes approved. Go ahead.").
+
+| ID | Surface | Change |
+|---|---|---|
+| P73-01 | Settings | Root cause: `NativeUi.menu` gave every row inside a `NativeUi.list` its own bordered rounded surface plus a 1dp gap, so adjacent rows showed double borders. Rows inside a list now draw only their press ripple; the list clips to its rounded outline and its hairline dividers are inset to the row text. Landing rows gain tinted icon tiles |
+| P73-02 | Tracking policy | Spinner replaced by a segmented 5 / 10 / 30 / 60 s / Custom `RadioGroup` (same editor, Save bar and validation; inline error under Seconds; large text auto-sizes inside its segment). Storage and one In effect list replace the duplicated Policy details evidence (each fact once; configuration error row only when present) |
+| P73-03 | Command access | Status group; Enroll this phone group (steps, phone ID once with Copy, credential); Trust rows that join the status group with Recheck once enrolled; Identity group (each ID once, monospaced, Copy); one Evidence & rejection reasons disclosure; Change access rows only when they apply. `FLAG_SECURE`, parser, review dialog, bind, disable and re-enroll are unchanged |
+| P73-04 | Advanced logs | The same bound evidence sources render through `NativeUi.facts` as selectable grouped rows (Attention, Device, GNSS, Storage, Delivery, SOS, Readiness, Battery, Physical keys); upper-case results (DETECTED, MECHANISM UNAVAILABLE) become status pills. Export text is unchanged |
+
+Not verified: real-device rendering, TalkBack on hardware. Command access was inspected on
+the emulator with a local, uncommitted `FLAG_SECURE` bypass that was reverted before commit.
+
 ## Issue #68 — operator-approved Android v3 simplified UI (22 November 2026, V3-series)
 
 Parent `b59b08340254f9188f0b4d296ed9dab473acb608` (`integration/combined-upgrades`). Design
