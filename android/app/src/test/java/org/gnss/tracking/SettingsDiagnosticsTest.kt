@@ -43,7 +43,7 @@ class SettingsDiagnosticsTest {
                 all().filterIsInstance<TextView>().single {
                     it.text == label && it.labelFor != View.NO_ID &&
                         // Party and Tracking policy share the interval control; pick the visible page's.
-                        (label != "Custom interval · seconds" || (it.parent as View).isShown)
+                        (label != "Seconds" || (it.parent as View).isShown)
                 }
             return controller.get().findViewById(heading.labelFor)
         }
@@ -82,14 +82,14 @@ class SettingsDiagnosticsTest {
             // v3: the reporting interval is owned by Tracking policy with its own Save bar.
             openNativeScreen(controller.get(), "Tracking policy")
             assertTrue(all().filterIsInstance<Button>().none { it.text == "Save" && it.isShown })
-            field("Custom interval · seconds").setText("3")
+            field("Seconds").setText("3")
             button("Save").performClick()
             until {
                 all().filterIsInstance<TextView>().any { it.text.startsWith("Settings not saved") }
             }
             assertEquals(original.localInterval, app.repository.state().localInterval)
             org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()?.dismiss()
-            field("Custom interval · seconds").setText("35")
+            field("Seconds").setText("35")
             button("Save").performClick()
             until {
                 all().filterIsInstance<TextView>().any { it.text.startsWith("Settings saved") }

@@ -296,7 +296,7 @@ class VisualRegressionTest(private val profile: Profile) {
                 dialog("phone-alert") { openNativeScreen(a, "Phone Alerts"); settle(); click("Acknowledge / Stop Alert") }
                 dialog("invalid-interval") {
                     openNativeScreen(a, "Tracking policy"); settle()
-                    val label = nativeViews(root).filterIsInstance<android.widget.TextView>().single { it.text == "Custom interval · seconds" && it.labelFor != View.NO_ID && (it.parent as View).isShown }
+                    val label = nativeViews(root).filterIsInstance<android.widget.TextView>().single { it.text == "Seconds" && it.labelFor != View.NO_ID && (it.parent as View).isShown }
                     a.findViewById<EditText>(label.labelFor).setText("3")
                     click("Save")
                 }

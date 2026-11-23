@@ -138,7 +138,7 @@ class DialogVisualTest {
                     }
                 val intervalLabel =
                     all().filterIsInstance<android.widget.TextView>().single {
-                        it.text == "Custom interval · seconds" && it.labelFor != View.NO_ID && (it.parent as View).isShown
+                        it.text == "Seconds" && it.labelFor != View.NO_ID && (it.parent as View).isShown
                     }
                 a.findViewById<EditText>(intervalLabel.labelFor).setText("3")
                 click("Save")

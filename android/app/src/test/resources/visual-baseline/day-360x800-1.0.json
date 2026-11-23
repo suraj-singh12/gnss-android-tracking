@@ -16,39 +16,33 @@
    17,
    268,
    326,
-   61
-  ],
-  "Surface#3": [
-   17,
-   269,
-   326,
    60
   ],
   "Icon#1": [
    307,
-   288,
+   287,
    22,
    22
   ],
-  "Surface#4": [
+  "Surface#3": [
    17,
-   366,
+   365,
    326,
    243
   ],
-  "Surface#5": [
+  "Surface#4": [
    17,
-   646,
+   645,
    326,
    314
   ],
   "Button:Sync now#1": [
    31,
-   901,
+   900,
    298,
    48
   ],
-  "Surface#6": [
+  "Surface#5": [
    12,
    625,
    336,
@@ -78,7 +72,7 @@
    112,
    49
   ],
-  "_pixels": "022b71e84640b809dcc24f89d9ebfc5f0554bf7d28818f3990a516c25d31ef38"
+  "_pixels": "5aa72dbe7ca882b284fe0d276d0ed949e555823dbedde3d9e5947706c232e5c9"
  },
  "tracking-active": {
   "Surface#1": [
@@ -97,39 +91,33 @@
    17,
    268,
    326,
-   61
-  ],
-  "Surface#3": [
-   17,
-   269,
-   326,
    60
   ],
   "Icon#1": [
    307,
-   288,
+   287,
    22,
    22
   ],
-  "Surface#4": [
+  "Surface#3": [
    17,
-   366,
+   365,
    326,
    243
   ],
-  "Surface#5": [
+  "Surface#4": [
    17,
-   646,
+   645,
    326,
    314
   ],
   "Button:Sync now#1": [
    31,
-   901,
+   900,
    298,
    48
   ],
-  "Surface#6": [
+  "Surface#5": [
    12,
    625,
    336,
@@ -159,7 +147,7 @@
    112,
    49
   ],
-  "_pixels": "25f260ef5cbc22b58cf2f5e72eef7b62b960878d3de0fa55d72ad74012c363a7"
+  "_pixels": "1a5463026bc392b0a65e0ecd9cbad6631001fbdb1b8b1fb0f6932528bb158732"
  },
  "tracking-offline": {
   "Surface#1": [
@@ -178,39 +166,33 @@
    17,
    268,
    326,
-   61
-  ],
-  "Surface#3": [
-   17,
-   269,
-   326,
    60
   ],
   "Icon#1": [
    307,
-   288,
+   287,
    22,
    22
   ],
-  "Surface#4": [
+  "Surface#3": [
    17,
-   366,
+   365,
    326,
    243
   ],
-  "Surface#5": [
+  "Surface#4": [
    17,
-   646,
+   645,
    326,
    314
   ],
   "Button:Sync now#1": [
    31,
-   901,
+   900,
    298,
    48
   ],
-  "Surface#6": [
+  "Surface#5": [
    12,
    625,
    336,
@@ -240,7 +222,7 @@
    112,
    49
   ],
-  "_pixels": "508383eeeb0b26ee20594e1d7656783b95c7b92e5f9a54f4143d096c735e8137"
+  "_pixels": "3a74dcd67e167fd19f285e29ec9fcc39c4af68e1b97a6000dc240a51187abfc2"
  },
  "tracking-error": {
   "Surface#1": [
@@ -259,39 +241,33 @@
    17,
    268,
    326,
-   61
-  ],
-  "Surface#3": [
-   17,
-   269,
-   326,
    60
   ],
   "Icon#1": [
    307,
-   288,
+   287,
    22,
    22
   ],
-  "Surface#4": [
+  "Surface#3": [
    17,
-   366,
+   365,
    326,
    243
   ],
-  "Surface#5": [
+  "Surface#4": [
    17,
-   646,
+   645,
    326,
    314
   ],
   "Button:Sync now#1": [
    31,
-   901,
+   900,
    298,
    48
   ],
-  "Surface#6": [
+  "Surface#5": [
    12,
    625,
    336,
@@ -321,7 +297,7 @@
    112,
    49
   ],
-  "_pixels": "3a5b64fcdfa34684c6eb68104c29e833b23c5fcbae3f02930c6b2dff0dd245a5"
+  "_pixels": "e1501593f88e888e1a3e7d28d25a2dbe4f7cb3598036c47f6e482823a6956b62"
  },
  "tracking-sos-pending": {
   "Surface#1": [
@@ -390,7 +366,7 @@
    112,
    49
   ],
-  "_pixels": "3ab61a41c78405565f9a8fde25c1551b34c56578df6d5a923d3d401056f8a5b9"
+  "_pixels": "84bcd2e93cc565264ed0be4602ace16df1b44fce5aca789ffb1e11f8a57a48e7"
  },
  "tracking-urgent-alert": {
   "Surface#1": [
@@ -471,7 +447,7 @@
    112,
    49
   ],
-  "_pixels": "0b5ee14a6a5479c9db2326957aed93c73a954b56688243e9eb9aa64b160ba6df"
+  "_pixels": "acaaac32d4e793d306747bc67ee6ae12dc97629a33ccc7bf2dfe1fbc540be62e"
  },
  "tracking-urgent-alert-bottom": {
   "Surface#1": [
@@ -552,100 +528,100 @@
    112,
    49
   ],
-  "_pixels": "e7e5fa69b7a5b0b3df333ed270cbc4289ce4ce4474a79ff8db998821e2109e07"
+  "_pixels": "ec210c09e5effd6513f90eb63813c63f43b71cfc5ddd89b5c6458d30571f80ac"
  },
  "settings": {
   "Surface#1": [
    17,
    62,
    326,
-   123
+   121
+  ],
+  "Icon#1": [
+   39,
+   82,
+   20,
+   20
+  ],
+  "Icon#2": [
+   307,
+   81,
+   22,
+   22
+  ],
+  "Icon#3": [
+   39,
+   143,
+   20,
+   20
+  ],
+  "Icon#4": [
+   307,
+   142,
+   22,
+   22
   ],
   "Surface#2": [
    17,
-   63,
+   203,
    326,
-   60
+   126
   ],
-  "Icon#1": [
+  "Icon#5": [
+   39,
+   223,
+   20,
+   20
+  ],
+  "Icon#6": [
    307,
-   82,
+   222,
+   22,
+   22
+  ],
+  "Icon#7": [
+   39,
+   286,
+   20,
+   20
+  ],
+  "Icon#8": [
+   307,
+   285,
    22,
    22
   ],
   "Surface#3": [
    17,
-   125,
-   326,
-   60
-  ],
-  "Icon#2": [
-   307,
-   144,
-   22,
-   22
-  ],
-  "Surface#4": [
-   17,
-   205,
-   326,
-   123
-  ],
-  "Surface#5": [
-   17,
-   206,
-   326,
-   60
-  ],
-  "Icon#3": [
-   307,
-   225,
-   22,
-   22
-  ],
-  "Surface#6": [
-   17,
-   268,
-   326,
-   60
-  ],
-  "Icon#4": [
-   307,
-   287,
-   22,
-   22
-  ],
-  "Surface#7": [
-   17,
-   348,
-   326,
-   123
-  ],
-  "Surface#8": [
-   17,
    349,
    326,
-   60
+   121
   ],
-  "Icon#5": [
+  "Icon#9": [
+   39,
+   369,
+   20,
+   20
+  ],
+  "Icon#10": [
    307,
    368,
    22,
    22
   ],
-  "Surface#9": [
-   17,
-   411,
-   326,
-   60
-  ],
-  "Icon#6": [
-   307,
+  "Icon#11": [
+   39,
    430,
+   20,
+   20
+  ],
+  "Icon#12": [
+   307,
+   429,
    22,
    22
   ],
-  "Surface#10": [
+  "Surface#4": [
    12,
    625,
    336,
@@ -675,7 +651,7 @@
    112,
    49
   ],
-  "_pixels": "e7bd9bba712379002410dc3f4a6402a15a6efec6d173b6c8b40e2faf1bc5048c"
+  "_pixels": "f7078a60346af87eb410fc7867a6829aca2765e91ab1334d4414f13d3fb7c7f2"
  },
  "party-command": {
   "Button:Back to Settings#1": [
@@ -757,55 +733,55 @@
    17,
    91,
    326,
-   174
+   121
   ],
   "Surface#2": [
    17,
-   277,
+   249,
    326,
-   282
+   301
+  ],
+  "Button:Copy phone ID#1": [
+   71,
+   351,
+   116,
+   48
   ],
   "EditText:Paste Command credential#1": [
    31,
-   420,
+   490,
    298,
    48
   ],
   "Button:Review & authorize#1": [
-   31,
-   497,
-   143,
+   17,
+   584,
+   326,
    48
   ],
   "Surface#3": [
    17,
-   596,
+   669,
    326,
-   149
+   121
   ],
-  "Button:Copy Command ID#1": [
+  "Button:About trust#1": [
    17,
-   752,
-   159,
-   48
-  ],
-  "Button:Copy phone ID#1": [
-   184,
-   752,
-   159,
-   48
+   730,
+   326,
+   60
   ],
   "Surface#4": [
    17,
-   812,
+   810,
    326,
-   152
+   60
   ],
-  "Button:More evidence & rejection re#1": [
+  "Button:Evidence & rejection reasons#1": [
    17,
-   972,
+   810,
    326,
-   48
+   60
   ],
   "Surface#5": [
    12,
@@ -837,7 +813,7 @@
    112,
    49
   ],
-  "_pixels": "7df7e050201499a8109d1eb3c8e73756e071542b38743f6106eac2bd69a984ca"
+  "_pixels": "9e8e98c425797862b2c22c3246f89760bd07b26bec230caa38b82933dd8b676d"
  },
  "command-access-bottom": {
   "Button:Back to Settings#1": [
@@ -848,57 +824,57 @@
   ],
   "Surface#1": [
    17,
-   -328,
+   -191,
    326,
-   174
+   121
   ],
   "Surface#2": [
    17,
-   -143,
+   -33,
    326,
-   282
+   301
+  ],
+  "Button:Copy phone ID#1": [
+   71,
+   69,
+   116,
+   48
   ],
   "EditText:Paste Command credential#1": [
    31,
-   0,
+   208,
    298,
    48
   ],
   "Button:Review & authorize#1": [
-   31,
-   77,
-   143,
+   17,
+   302,
+   326,
    48
   ],
   "Surface#3": [
    17,
-   176,
+   387,
    326,
-   149
+   121
   ],
-  "Button:Copy Command ID#1": [
+  "Button:About trust#1": [
    17,
-   333,
-   159,
-   48
-  ],
-  "Button:Copy phone ID#1": [
-   184,
-   333,
-   159,
-   48
+   448,
+   326,
+   60
   ],
   "Surface#4": [
    17,
-   393,
+   528,
    326,
-   152
+   60
   ],
-  "Button:More evidence & rejection re#1": [
+  "Button:Evidence & rejection reasons#1": [
    17,
-   552,
+   528,
    326,
-   48
+   60
   ],
   "Surface#5": [
    12,
@@ -930,7 +906,7 @@
    112,
    49
   ],
-  "_pixels": "2bcffd25023d680819bb192125199b93c0015a0e947105520a4b9203601b6a95"
+  "_pixels": "0c1f3c62288b4e77e3ed95703163a9af3b6b991e398c0784910a5efcc351a327"
  },
  "field-readiness": {
   "Button:Back to Settings#1": [
@@ -993,7 +969,7 @@
    112,
    49
   ],
-  "_pixels": "d352a820f0f63d772b1721a0aab4b8a2d7a44872da871ad2e1219f3590b098e2"
+  "_pixels": "b3f8b6c49c09e2757930e53fe9fc585f6c991d4dd7482ea0c1b28245d5051a48"
  },
  "tracking-policy": {
   "Button:Back to Settings#1": [
@@ -1004,47 +980,65 @@
   ],
   "Surface#1": [
    17,
-   128,
+   110,
    326,
-   96
-  ],
-  "Spinner:Reporting interval#1": [
-   31,
-   158,
-   298,
-   52
+   82
   ],
   "Surface#2": [
-   17,
-   254,
-   326,
-   103
-  ],
-  "Switch:Adaptive storage#1": [
    31,
-   268,
+   124,
    298,
+   54
+  ],
+  "RadioButton:5 s#1": [
+   34,
+   127,
+   58,
+   48
+  ],
+  "RadioButton:10 s#1": [
+   92,
+   127,
+   59,
+   48
+  ],
+  "RadioButton:30 s#1": [
+   151,
+   127,
+   59,
+   48
+  ],
+  "RadioButton:60 s#1": [
+   209,
+   127,
+   59,
+   48
+  ],
+  "RadioButton:Custom#1": [
+   268,
+   127,
+   59,
    48
   ],
   "Surface#3": [
    17,
-   394,
+   247,
    326,
-   292
+   90
+  ],
+  "Switch:Adaptive storage#1": [
+   31,
+   261,
+   298,
+   48
   ],
   "Surface#4": [
    17,
-   697,
+   374,
    326,
-   97
+   365
   ],
   "Surface#5": [
-   17,
-   806,
-   326,
-   58
-  ],
-  "Surface#6": [
    12,
    625,
    336,
@@ -1074,7 +1068,7 @@
    112,
    49
   ],
-  "_pixels": "d727565af219d2076daf08ce006d7b4774418bb980ccaea9302cc76ac3b7da33"
+  "_pixels": "ccbd6b8edd12d892d2640dd779a56b7e21257a63f7e472daf542fbaa3c10f1d9"
  },
  "tracking-policy-bottom": {
   "Button:Back to Settings#1": [
@@ -1085,47 +1079,65 @@
   ],
   "Surface#1": [
    17,
-   -165,
+   -71,
    326,
-   96
-  ],
-  "Spinner:Reporting interval#1": [
-   31,
-   -136,
-   298,
-   52
+   82
   ],
   "Surface#2": [
-   17,
-   -40,
-   326,
-   103
-  ],
-  "Switch:Adaptive storage#1": [
    31,
-   -26,
+   -57,
    298,
+   54
+  ],
+  "RadioButton:5 s#1": [
+   34,
+   -54,
+   58,
+   48
+  ],
+  "RadioButton:10 s#1": [
+   92,
+   -54,
+   59,
+   48
+  ],
+  "RadioButton:30 s#1": [
+   151,
+   -54,
+   59,
+   48
+  ],
+  "RadioButton:60 s#1": [
+   209,
+   -54,
+   59,
+   48
+  ],
+  "RadioButton:Custom#1": [
+   268,
+   -54,
+   59,
    48
   ],
   "Surface#3": [
    17,
-   100,
+   66,
    326,
-   292
+   90
+  ],
+  "Switch:Adaptive storage#1": [
+   31,
+   80,
+   298,
+   48
   ],
   "Surface#4": [
    17,
-   404,
+   193,
    326,
-   97
+   365
   ],
   "Surface#5": [
-   17,
-   513,
-   326,
-   58
-  ],
-  "Surface#6": [
    12,
    625,
    336,
@@ -1155,7 +1167,7 @@
    112,
    49
   ],
-  "_pixels": "02837e7dc723575373d2749dc34612632b8ea1b9c13568fee1ab55c0176e34b1"
+  "_pixels": "3272493b1fedcc79598ff27038ef4f8ad970450791b8ced01c4108a47f6f7714"
  },
  "emergency": {
   "Button:Back to Settings#1": [
@@ -1251,7 +1263,7 @@
    112,
    49
   ],
-  "_pixels": "82b96a2dfdcd09a51ee67c63c0060e72f01f5b8102b420393b001253f013817f"
+  "_pixels": "8d3ad20dbbdc6611dd7f3bc480c81adaaed6c63cfd40817ec04324e41ec388cf"
  },
  "diagnostics": {
   "Surface#1": [
@@ -1509,7 +1521,7 @@
    112,
    49
   ],
-  "_pixels": "5e6afe4c8bac66a41ca0c8d40a47490876f3b4c1c07ec6f44dc1011f4063cdc3"
+  "_pixels": "9115632919ca3d9b7687ce11c7a2d13dae75c38f8743c504516d60dd49f567ac"
  },
  "command-instructions": {
   "Surface#1": [
@@ -1644,7 +1656,7 @@
    112,
    49
   ],
-  "_pixels": "3f302a9ff004da887801d930a05b0b44373b77a544ac1c063ee2e4d6a3a4e960"
+  "_pixels": "0c975c22210c2f23d643956a49754aee27e845420c5f3884e7974a474dee4608"
  },
  "command-instructions-bottom": {
   "Surface#1": [
@@ -1779,7 +1791,7 @@
    112,
    49
   ],
-  "_pixels": "b52ca7c55a5c8e2af4671c91da76c4a5702aaa43319d283a870093872ca1099f"
+  "_pixels": "968d07e11a4b07c20a2a69346c254e477fbf8c805ab05e77c8e49c0087915f07"
  },
  "instruction-details": {
   "Surface#1": [
@@ -1911,7 +1923,7 @@
    112,
    49
   ],
-  "_pixels": "070c0d003a7b1e9ed907f3d7a1e2bf5ee272b7ad4ad7fd0d5071dc2839f5d971"
+  "_pixels": "ed8666bf726485c217d1d0f2d2f2d2eeee2e9a03b45b1d5c89667e90e6e783b8"
  },
  "history-search-filters-bottom": {
   "Button:Back to Diagnostics#1": [
@@ -2004,7 +2016,7 @@
    112,
    49
   ],
-  "_pixels": "94d456f4a9e0d4ea81630cc6220deefe9c2f0e21c7068a6aad3b823f156e287a"
+  "_pixels": "12da86297da6a8a87fa3ede118b7d4b293c10d49e1edf78b3445a366389c46c0"
  },
  "instruction-filters": {
   "Button:Back to History search & filters#1": [
@@ -2430,7 +2442,7 @@
    112,
    49
   ],
-  "_pixels": "5e6afe4c8bac66a41ca0c8d40a47490876f3b4c1c07ec6f44dc1011f4063cdc3"
+  "_pixels": "9115632919ca3d9b7687ce11c7a2d13dae75c38f8743c504516d60dd49f567ac"
  },
  "sos-event-history": {
   "Surface#1": [
@@ -2670,7 +2682,115 @@
    48,
    48
   ],
+  "Button:Copy#1": [
+   289,
+   91,
+   54,
+   48
+  ],
   "Surface#1": [
+   17,
+   139,
+   326,
+   48
+  ],
+  "Button:Copy#2": [
+   289,
+   195,
+   54,
+   48
+  ],
+  "Surface#2": [
+   17,
+   243,
+   326,
+   148
+  ],
+  "Button:Copy#3": [
+   289,
+   399,
+   54,
+   48
+  ],
+  "Surface#3": [
+   17,
+   447,
+   326,
+   258
+  ],
+  "Button:Copy#4": [
+   289,
+   713,
+   54,
+   48
+  ],
+  "Surface#4": [
+   17,
+   761,
+   326,
+   210
+  ],
+  "Button:Copy#5": [
+   289,
+   979,
+   54,
+   48
+  ],
+  "Surface#5": [
+   17,
+   1027,
+   326,
+   519
+  ],
+  "Button:Copy#6": [
+   289,
+   1564,
+   54,
+   48
+  ],
+  "Surface#6": [
+   17,
+   1612,
+   326,
+   147
+  ],
+  "Button:Copy#7": [
+   289,
+   1777,
+   54,
+   48
+  ],
+  "Surface#7": [
+   17,
+   1825,
+   326,
+   245
+  ],
+  "Button:Copy#8": [
+   289,
+   2088,
+   54,
+   48
+  ],
+  "Surface#8": [
+   17,
+   2136,
+   326,
+   48
+  ],
+  "Button:Copy#9": [
+   289,
+   2202,
+   54,
+   48
+  ],
+  "Surface#9": [
+   17,
+   2250,
+   326,
+   423
+  ],
+  "Surface#10": [
    12,
    625,
    336,
@@ -2708,7 +2828,115 @@
    48,
    48
   ],
+  "Button:Copy#1": [
+   289,
+   -1999,
+   54,
+   48
+  ],
   "Surface#1": [
+   17,
+   -1951,
+   326,
+   48
+  ],
+  "Button:Copy#2": [
+   289,
+   -1895,
+   54,
+   48
+  ],
+  "Surface#2": [
+   17,
+   -1847,
+   326,
+   148
+  ],
+  "Button:Copy#3": [
+   289,
+   -1691,
+   54,
+   48
+  ],
+  "Surface#3": [
+   17,
+   -1643,
+   326,
+   258
+  ],
+  "Button:Copy#4": [
+   289,
+   -1377,
+   54,
+   48
+  ],
+  "Surface#4": [
+   17,
+   -1329,
+   326,
+   210
+  ],
+  "Button:Copy#5": [
+   289,
+   -1111,
+   54,
+   48
+  ],
+  "Surface#5": [
+   17,
+   -1063,
+   326,
+   519
+  ],
+  "Button:Copy#6": [
+   289,
+   -526,
+   54,
+   48
+  ],
+  "Surface#6": [
+   17,
+   -478,
+   326,
+   147
+  ],
+  "Button:Copy#7": [
+   289,
+   -313,
+   54,
+   48
+  ],
+  "Surface#7": [
+   17,
+   -265,
+   326,
+   245
+  ],
+  "Button:Copy#8": [
+   289,
+   -3,
+   54,
+   48
+  ],
+  "Surface#8": [
+   17,
+   45,
+   326,
+   48
+  ],
+  "Button:Copy#9": [
+   289,
+   111,
+   54,
+   48
+  ],
+  "Surface#9": [
+   17,
+   159,
+   326,
+   423
+  ],
+  "Surface#10": [
    12,
    625,
    336,
@@ -3015,7 +3243,7 @@
    112,
    49
   ],
-  "_pixels": "c1160a2c787ad6b60d8e142531db98673f8c8bd029af01164b037fc5d0a469ee"
+  "_pixels": "48691bed88b329d3d9a765ccec4c130f767e7f1c2da4358969e8c843f7387329"
  },
  "dialog-stop-tracking": {
   "Button:Keep tracking#1": [

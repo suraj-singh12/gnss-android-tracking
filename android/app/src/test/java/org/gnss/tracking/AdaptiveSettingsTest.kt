@@ -72,4 +72,35 @@ class AdaptiveSettingsTest {
         controller.pause().stop().destroy()
         app.finishForTests()
     }
+
+    @Test
+    fun appliedStorageShowsDenseWhileSamplerFallbackOverridesAnEnabledSwitch() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<TrackingApp>()
+        withContext(Dispatchers.IO) {
+            app.repository.state()
+            app.persistencePolicy.setEnabled(true, utc(System.currentTimeMillis() / 1000 * 1000))
+        }
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        val root = controller.get().findViewById<View>(android.R.id.content)
+        suspend fun shown(): List<String> {
+            repeat(10) {
+                shadowOf(Looper.getMainLooper()).idle()
+                delay(10)
+            }
+            return descendants(root).filterIsInstance<android.widget.TextView>()
+                .filter { it.isShown }.map { it.text.toString() }
+        }
+        openNativeScreen(controller.get(), "Tracking policy")
+        val revision = app.persistencePolicy.state.revision
+        assertTrue(shown().toString(), "Adaptive · rev $revision" in shown())
+        // The sampler stores densely after a failure; the saved switch stays on.
+        ObservationPersistence::class.java.getDeclaredField("sampling").apply { isAccessible = true }
+            .get(app.observationPersistence).let { (it as AdaptivePersistence).failSafe() }
+        controller.pause().resume()
+        val after = shown()
+        assertTrue(after.toString(), "Dense · rev $revision" in after)
+        assertTrue(descendants(root).filterIsInstance<Switch>().single { it.text == "Adaptive storage" }.isChecked)
+        controller.pause().stop().destroy()
+        app.finishForTests()
+    }
 }

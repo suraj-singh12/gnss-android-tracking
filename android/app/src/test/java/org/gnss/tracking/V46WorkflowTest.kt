@@ -7,7 +7,6 @@ import android.view.MotionEvent
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
-import android.widget.Spinner
 import android.widget.Switch
 import android.widget.TextView
 import androidx.test.core.app.ApplicationProvider
@@ -46,7 +45,7 @@ class V46WorkflowTest {
                 it.contentDescription == "Custom interval · seconds" && (it.parent as android.view.View).isShown
             }
         fun picker() =
-            all().filterIsInstance<Spinner>().single {
+            all().filterIsInstance<android.widget.RadioGroup>().single {
                 it.contentDescription == "Reporting interval" && (it.parent as android.view.View).isShown
             }
         try {
@@ -63,10 +62,10 @@ class V46WorkflowTest {
                 all().filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled }
             }
             assertTrue(editor().isShown)
-            assertEquals(4, picker().selectedItemPosition)
+            assertEquals(4, picker().checkedIndex())
             editor().append("0")
             assertEquals("50", editor().text.toString())
-            picker().setSelection(0)
+            picker().choose(0)
             shadowOf(Looper.getMainLooper()).idle()
             assertFalse(editor().isShown)
             assertEquals("5", editor().text.toString())
@@ -92,20 +91,20 @@ class V46WorkflowTest {
             openNativeScreen(controller.get(), "Tracking policy")
             shadowOf(Looper.getMainLooper()).idle()
             val picker =
-                all().filterIsInstance<Spinner>().single {
+                all().filterIsInstance<android.widget.RadioGroup>().single {
                     it.contentDescription == "Reporting interval" && (it.parent as android.view.View).isShown
                 }
             val custom =
                 all().filterIsInstance<EditText>().single {
                     it.contentDescription == "Custom interval · seconds" && (it.parent as android.view.View).isShown
                 }
-            assertEquals(4, picker.selectedItemPosition)
+            assertEquals(4, picker.checkedIndex())
             assertEquals("35", custom.text.toString())
             assertEquals(35, app.repository.state().localInterval)
-            picker.setSelection(0)
+            picker.choose(0)
             shadowOf(Looper.getMainLooper()).idle()
             assertEquals("5", custom.text.toString())
-            picker.setSelection(4)
+            picker.choose(4)
             shadowOf(Looper.getMainLooper()).idle()
             custom.setText("3")
             click("Save")
@@ -125,7 +124,7 @@ class V46WorkflowTest {
             await { all().filterIsInstance<Button>().none { it.isShown && it.text == "Save" } }
             openNativeScreen(controller.get(), "Party & Command")
             shadowOf(Looper.getMainLooper()).idle()
-            assertTrue(all().none { it.isShown && it is Spinner })
+            assertTrue(all().none { it.isShown && it is android.widget.RadioGroup })
             openNativeScreen(controller.get(), "Tracking policy")
             controller.recreate()
             await {
@@ -354,4 +353,10 @@ class V46WorkflowTest {
             app.finishForTests()
         }
     }
+}
+
+private fun android.widget.RadioGroup.checkedIndex() = indexOfChild(findViewById<android.view.View>(checkedRadioButtonId))
+
+private fun android.widget.RadioGroup.choose(index: Int) {
+    getChildAt(index).performClick()
 }

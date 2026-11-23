@@ -12,6 +12,7 @@
 #   tap <label>             Tap the first node whose text or content-desc starts with <label>
 #   back                    Press Back
 #   scroll                  Scroll the main content down one page
+#   bottom                  Scroll until the content stops moving (its end is visible)
 #   font <scale>            Set system font scale (e.g. 1.0, 1.3, 1.5, 2.0)
 #   size <WxH> <dpi>|reset  Override display size and density (e.g. 1080x2400 420)
 #   night                   Toggle Settings › Appearance between Day and Night
@@ -69,18 +70,23 @@ shot() {
   echo "captured $OUT/$name.png (content still changing)" >&2
 }
 
-node_center() { # $1 = xml, $2 = label prefix
-  python3 - "$1" "$2" <<'PY'
+node_center() { # $1 = xml, $2 = label prefix, $3 = "strict" for whole labels only
+  python3 - "$@" <<'PY'
 import re, sys, xml.etree.ElementTree as ET
 xml, label = sys.argv[1], sys.argv[2]
+strict = len(sys.argv) > 3
 nodes = list(ET.parse(xml).iter('node'))
 # Prefer an exact clickable label (e.g. the "Tracking" tab), then a clickable prefix
 # match (rows whose description is "Title. Subtitle. Open"), then any prefix match.
+# STRICT=1 accepts only a whole label ("Emergency" must not hit the "Emergency SOS" bar).
+def whole(v):
+    return v == label or any(v.startswith(label + sep) for sep in (",", ". "))
 def pick():
-    for exact, clickable in ((True, True), (False, True), (False, False)):
+    tiers = ((True, True), (False, True), (False, False))
+    for exact, clickable in tiers[:1] if strict else tiers:
         for n in nodes:
             text, desc = n.get('text', ''), n.get('content-desc', '')
-            hit = label in (text, desc) or desc.startswith(label + ",") if exact else (text.startswith(label) or desc.startswith(label))
+            hit = whole(text) or whole(desc) if exact else (text.startswith(label) or desc.startswith(label))
             if hit and (not clickable or n.get('clickable') == 'true'):
                 return n
 node = pick()
@@ -98,6 +104,17 @@ scroll_down() {
   settle
 }
 
+scroll_bottom() { # One swipe misses the end on short or landscape screens; swipe until nothing moves.
+  local i
+  dump "$OUT/.bottom.xml"
+  for i in 1 2 3 4 5 6 7 8; do
+    scroll_down
+    dump "$OUT/.bottom-next.xml"
+    if cmp -s <(grep -o 'bounds="[^"]*"' "$OUT/.bottom.xml") <(grep -o 'bounds="[^"]*"' "$OUT/.bottom-next.xml"); then break; fi
+    mv "$OUT/.bottom-next.xml" "$OUT/.bottom.xml"
+  done
+}
+
 scroll_top() { # Roots keep their scroll position; swipe back to the top.
   local w h i
   read -r w h < <(adb_ shell wm size | sed -E 's/.*: ([0-9]+)x([0-9]+).*/\1 \2/' | tail -1)
@@ -105,14 +122,17 @@ scroll_top() { # Roots keep their scroll position; swipe back to the top.
   settle
 }
 
-tap() { # Off-screen rows are absent from the dump; scroll down up to three times.
-  local tmp="$OUT/.tap.xml" pos="" i
-  for i in 0 1 2 3; do
+tap() { # Off-screen rows are absent from the dump; scroll down until found or the end.
+  local tmp="$OUT/.tap.xml" prev="$OUT/.tap-prev.xml" pos="" i
+  rm -f "$prev"
+  for i in 0 1 2 3 4 5 6 7 8; do
     dump "$tmp"
-    if pos="$(node_center "$tmp" "$1" 2>/dev/null)"; then break; fi
-    pos=""; scroll_down
+    if pos="$(node_center "$tmp" "$1" strict 2>/dev/null)"; then break; fi
+    pos=""
+    if [[ -f "$prev" ]] && cmp -s <(grep -o 'bounds="[^"]*"' "$prev") <(grep -o 'bounds="[^"]*"' "$tmp"); then break; fi
+    cp "$tmp" "$prev"; scroll_down
   done
-  [[ -n "$pos" ]] || { echo "no visible node labelled '$1'" >&2; return 1; }
+  [[ -n "$pos" ]] || pos="$(node_center "$tmp" "$1")" || return 1
   adb_ shell input tap $pos
   settle
 }
@@ -132,6 +152,7 @@ case "$cmd" in
   tap) tap "${1:?label}" ;;
   back) adb_ shell input keyevent KEYCODE_BACK; settle ;;
   scroll) scroll_down ;;
+  bottom) scroll_bottom ;;
   font) adb_ shell settings put system font_scale "${1:?scale}"; settle ;;
   size)
     if [[ "${1:-}" == reset ]]; then adb_ shell wm size reset; adb_ shell wm density reset
@@ -155,17 +176,17 @@ PY
   tour)
     p="${1:-}"
     "$0" launch
-    shot "${p}tracking"; "$0" scroll; shot "${p}tracking-bottom"
+    shot "${p}tracking"; "$0" bottom; shot "${p}tracking-bottom"
     tap Settings; shot "${p}settings"
     for row in "Party & Command" "Command access" "Tracking policy" "Field readiness" "Emergency" "Appearance"; do
       tap "$row"; shot "${p}settings-$(echo "$row" | tr 'A-Z &' 'a-z--' | tr -s '-')"
       case "$row" in
-        "Command access") "$0" scroll; shot "${p}settings-command-access-bottom" ;;
-        "Tracking policy") tap "Reporting interval"; shot "${p}settings-interval-selector-open"; "$0" back ;;
+        "Command access") "$0" bottom; shot "${p}settings-command-access-bottom" ;;
+        "Tracking policy") "$0" bottom; shot "${p}settings-tracking-policy-bottom" ;;
       esac
       "$0" back
     done
-    tap Diagnostics; tap Health; shot "${p}diagnostics"; "$0" scroll; shot "${p}diagnostics-bottom"
+    tap Diagnostics; tap Health; shot "${p}diagnostics"; "$0" bottom; shot "${p}diagnostics-bottom"
     for seg in Activity Tools; do
       scroll_top; tap "$seg"; shot "${p}diagnostics-$(echo "$seg" | tr 'A-Z' 'a-z')"
     done
