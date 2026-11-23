@@ -375,12 +375,16 @@ class UiNavigationVisualTest {
                             .performClick()
                         settle()
                         capture("instruction-details")
-                        nativeViews(root)
+                        // v3: the record opens in a sheet over Diagnostics.
+                        val sheet = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
+                        nativeViews(sheet.window!!.decorView)
                             .filterIsInstance<Button>()
                             .single { it.text == "Full record" }
                             .performClick()
                         settle()
                         capture("instruction-full-record")
+                        sheet.dismiss()
+                        settle()
                     }
                     // Capture the lower viewport of every nested route at large fonts.
                     val scroller =

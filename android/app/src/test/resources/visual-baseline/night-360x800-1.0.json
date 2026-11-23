@@ -744,7 +744,7 @@
    112,
    49
   ],
-  "_pixels": "6d715e09092b31452ca691ce1bfeafada1b6f473fc7edda2c0db7c3719fe3efe"
+  "_pixels": "15f6cb40a649b11f83c612d779ccfecfc28b5baaa7ac2c77fd61c6f92bd3a3f4"
  },
  "command-access": {
   "Button:Back to Settings#1": [
@@ -1536,85 +1536,85 @@
    107,
    48
   ],
-  "Button:All#1": [
+  "EditText:Search activity#1": [
    17,
    128,
+   326,
+   48
+  ],
+  "Button:All#1": [
+   17,
+   188,
    48,
    48
   ],
   "Button:Instructions#1": [
    71,
-   128,
+   188,
    96,
    48
   ],
   "Button:Alerts#1": [
    173,
-   128,
+   188,
    59,
    48
   ],
   "Button:SOS#1": [
    237,
-   128,
+   188,
    48,
+   48
+  ],
+  "Button:Filters#1": [
+   291,
+   188,
+   60,
    48
   ],
   "Surface#2": [
    17,
-   213,
+   273,
    326,
    304
   ],
   "Icon#1": [
    307,
-   232,
+   292,
    22,
    22
   ],
   "Icon#2": [
    307,
-   293,
+   353,
    22,
    22
   ],
   "Icon#3": [
    307,
-   354,
+   414,
    22,
    22
   ],
   "Icon#4": [
    307,
-   415,
+   475,
    22,
    22
   ],
   "Icon#5": [
    307,
-   476,
+   536,
    22,
    22
   ],
   "Button:Export sanitized journal#1": [
    17,
-   529,
+   589,
    326,
    48
   ],
   "Surface#3": [
-   17,
-   615,
-   326,
-   61
-  ],
-  "Icon#6": [
-   307,
-   635,
-   22,
-   22
-  ],
-  "Surface#4": [
    12,
    625,
    336,
@@ -1644,112 +1644,112 @@
    112,
    49
   ],
-  "_pixels": "ab0c480ab13433c730a8e277f41f7141ed149b1cc78238b442453661412266dd"
+  "_pixels": "2255c48b050c470d7c373451f7fc4aa45aaa852ae830d7bd9a6f3debc88585eb"
  },
  "command-instructions-bottom": {
   "Surface#1": [
    17,
-   -2,
+   37,
    326,
    54
   ],
   "Button:Health#1": [
    20,
-   1,
+   40,
    107,
    48
   ],
   "Button:Activity#1": [
    127,
-   1,
+   40,
    107,
    48
   ],
   "Button:Tools#1": [
    233,
-   1,
+   40,
    107,
+   48
+  ],
+  "EditText:Search activity#1": [
+   17,
+   91,
+   326,
    48
   ],
   "Button:All#1": [
    17,
-   52,
+   151,
    48,
    48
   ],
   "Button:Instructions#1": [
    71,
-   52,
+   151,
    96,
    48
   ],
   "Button:Alerts#1": [
    173,
-   52,
+   151,
    59,
    48
   ],
   "Button:SOS#1": [
    237,
-   52,
+   151,
    48,
+   48
+  ],
+  "Button:Filters#1": [
+   291,
+   151,
+   60,
    48
   ],
   "Surface#2": [
    17,
-   137,
+   236,
    326,
    304
   ],
   "Icon#1": [
    307,
-   156,
+   255,
    22,
    22
   ],
   "Icon#2": [
    307,
-   217,
+   316,
    22,
    22
   ],
   "Icon#3": [
    307,
-   278,
+   377,
    22,
    22
   ],
   "Icon#4": [
    307,
-   339,
+   438,
    22,
    22
   ],
   "Icon#5": [
    307,
-   400,
+   499,
    22,
    22
   ],
   "Button:Export sanitized journal#1": [
    17,
-   453,
+   552,
    326,
    48
   ],
   "Surface#3": [
-   17,
-   539,
-   326,
-   61
-  ],
-  "Icon#6": [
-   307,
-   559,
-   22,
-   22
-  ],
-  "Surface#4": [
    12,
    625,
    336,
@@ -1779,76 +1779,46 @@
    112,
    49
   ],
-  "_pixels": "9b8033ecde567583cf11fe1196e4c4e4cc9f825c2391a8d2bf48cb4fbf63760b"
+  "_pixels": "5f9973537f0a0c2880482503e8d0b8f4cd53e074f7727b13f6922733c0cab30b"
  },
  "instruction-details": {
-  "Button:Back to Command Instructions#1": [
-   8,
-   28,
-   48,
-   48
-  ],
   "Surface#1": [
-   17,
-   91,
-   326,
+   28,
+   63,
+   272,
    175
   ],
   "Surface#2": [
-   17,
-   278,
-   326,
+   28,
+   249,
+   272,
    179
   ],
   "Button:Copy instruction ID#1": [
-   17,
-   468,
-   159,
-   48
+   28,
+   440,
+   132,
+   56
   ],
   "Button:Export evidence#1": [
-   184,
-   468,
-   159,
-   48
+   168,
+   440,
+   132,
+   56
   ],
   "Button:Full record#1": [
-   17,
-   520,
+   28,
+   499,
    86,
    48
   ],
-  "Surface#3": [
-   12,
-   625,
-   336,
-   82
-  ],
-  "Button:Hold to activate SOS#1": [
-   21,
-   652,
-   318,
+  "Button:Close#1": [
+   236,
+   559,
+   64,
    48
   ],
-  "Button:Tracking#1": [
-   12,
-   719,
-   112,
-   49
-  ],
-  "Button:Settings#1": [
-   124,
-   719,
-   112,
-   49
-  ],
-  "Button:Diagnostics#1": [
-   236,
-   719,
-   112,
-   49
-  ],
-  "_pixels": "5496440f5c8d6dd8f134f4d5e4cada46582d0214be55c5c3ed0803502f93e5bc"
+  "_pixels": "5d18fefaa365621d1ca9e2603e9e60396a16a5c712924d7346d96fea3036cab1"
  },
  "history-search-filters": {
   "Button:Back to Diagnostics#1": [
@@ -1867,7 +1837,7 @@
    20,
    182,
    320,
-   242
+   364
   ],
   "Icon#1": [
    304,
@@ -1875,17 +1845,17 @@
    22,
    22
   ],
-  "Button:Acknowledge \/ Stop Alert#1": [
-   34,
-   243,
-   292,
-   48
-  ],
   "Icon#2": [
    304,
-   322,
+   262,
    22,
    22
+  ],
+  "Button:Acknowledge \/ Stop Alert#1": [
+   34,
+   304,
+   292,
+   48
   ],
   "Icon#3": [
    304,
@@ -1893,9 +1863,21 @@
    22,
    22
   ],
+  "Icon#4": [
+   304,
+   444,
+   22,
+   22
+  ],
+  "Icon#5": [
+   304,
+   505,
+   22,
+   22
+  ],
   "Button:Filter history#1": [
    20,
-   436,
+   558,
    320,
    48
   ],
@@ -1929,7 +1911,100 @@
    112,
    49
   ],
-  "_pixels": "a01bbb22b5ee05668438af9929a83ee9880290c49c11421a8b065036ea86edfd"
+  "_pixels": "ff5f15b2468f114427d19cc7c9a9cca3e1d0d98486bddab0fda7448151cdd209"
+ },
+ "history-search-filters-bottom": {
+  "Button:Back to Diagnostics#1": [
+   8,
+   28,
+   48,
+   48
+  ],
+  "EditText:Search instructions#1": [
+   20,
+   71,
+   320,
+   48
+  ],
+  "Surface#1": [
+   20,
+   169,
+   320,
+   364
+  ],
+  "Icon#1": [
+   304,
+   188,
+   22,
+   22
+  ],
+  "Icon#2": [
+   304,
+   249,
+   22,
+   22
+  ],
+  "Button:Acknowledge \/ Stop Alert#1": [
+   34,
+   291,
+   292,
+   48
+  ],
+  "Icon#3": [
+   304,
+   370,
+   22,
+   22
+  ],
+  "Icon#4": [
+   304,
+   431,
+   22,
+   22
+  ],
+  "Icon#5": [
+   304,
+   492,
+   22,
+   22
+  ],
+  "Button:Filter history#1": [
+   20,
+   545,
+   320,
+   48
+  ],
+  "Surface#2": [
+   12,
+   625,
+   336,
+   82
+  ],
+  "Button:Hold to activate SOS#1": [
+   21,
+   652,
+   318,
+   48
+  ],
+  "Button:Tracking#1": [
+   12,
+   719,
+   112,
+   49
+  ],
+  "Button:Settings#1": [
+   124,
+   719,
+   112,
+   49
+  ],
+  "Button:Diagnostics#1": [
+   236,
+   719,
+   112,
+   49
+  ],
+  "_pixels": "c3585f00c3e557cc7bb22ed80db0d6c9ae5bcf1fb3d1d366b2dd0151eee72154"
  },
  "instruction-filters": {
   "Button:Back to History search & filters#1": [
@@ -2013,45 +2088,57 @@
    107,
    48
   ],
-  "Button:All#1": [
+  "EditText:Search activity#1": [
    17,
    128,
+   326,
+   48
+  ],
+  "Button:All#1": [
+   17,
+   188,
    48,
    48
   ],
   "Button:Instructions#1": [
    71,
-   128,
+   188,
    93,
    48
   ],
   "Button:Alerts#1": [
    170,
-   128,
+   188,
    60,
    48
   ],
   "Button:SOS#1": [
    236,
-   128,
+   188,
    48,
+   48
+  ],
+  "Button:Filters#1": [
+   290,
+   188,
+   60,
    48
   ],
   "Surface#2": [
    17,
-   213,
+   273,
    326,
    255
   ],
   "Button:Acknowledge \/ Stop Alert#1": [
    31,
-   346,
+   406,
    298,
    48
   ],
   "Button:Export alert journal#1": [
    31,
-   406,
+   466,
    298,
    48
   ],
@@ -2085,102 +2172,102 @@
    112,
    49
   ],
-  "_pixels": "6f4faab1354b492688c4682c2cb8d7808a60734683e41474892cb5143d20bf13"
+  "_pixels": "188051122a9507e4e420cb8e165e989451b16e16b6ec7567c37e3c006502403b"
  },
  "saved-data-sync": {
   "Surface#1": [
    17,
-   -2,
+   74,
    326,
    54
   ],
   "Button:Health#1": [
    20,
-   1,
+   77,
    107,
    48
   ],
   "Button:Activity#1": [
    127,
-   1,
+   77,
    107,
    48
   ],
   "Button:Tools#1": [
    233,
-   1,
+   77,
    107,
    48
   ],
   "Surface#2": [
    17,
-   90,
+   166,
    326,
    384
   ],
   "Icon#1": [
    31,
-   105,
+   181,
    29,
    24
   ],
   "Icon#2": [
    31,
-   160,
+   236,
    29,
    24
   ],
   "Icon#3": [
    31,
-   215,
+   291,
    29,
    24
   ],
   "Icon#4": [
    31,
-   270,
+   346,
    29,
    24
   ],
   "Icon#5": [
    31,
-   325,
+   401,
    29,
    24
   ],
   "Icon#6": [
    31,
-   380,
+   456,
    29,
    24
   ],
   "Icon#7": [
    31,
-   435,
+   511,
    29,
    24
   ],
   "Surface#3": [
    17,
-   511,
+   587,
    326,
    456
   ],
   "Button:Sync All Now#1": [
    31,
-   792,
+   868,
    298,
    48
   ],
   "Button:Retry saved messages#1": [
    31,
-   848,
+   924,
    298,
    48
   ],
   "Button:Export evidence#1": [
    31,
-   908,
+   984,
    298,
    48
   ],
@@ -2214,7 +2301,7 @@
    112,
    49
   ],
-  "_pixels": "f66a6291300606b6fb77a97ad5a09241515deaaba1b5888ad6b894112e53282e"
+  "_pixels": "949816b44bf4300ad59db6585126166ef186e7889e5877673e482e9207c1a593"
  },
  "saved-data-sync-bottom": {
   "Surface#1": [
@@ -2370,39 +2457,51 @@
    107,
    48
   ],
-  "Button:All#1": [
+  "EditText:Search activity#1": [
    17,
    128,
+   326,
+   48
+  ],
+  "Button:All#1": [
+   17,
+   188,
    48,
    48
   ],
   "Button:Instructions#1": [
    71,
-   128,
+   188,
    93,
    48
   ],
   "Button:Alerts#1": [
    170,
-   128,
+   188,
    59,
    48
   ],
   "Button:SOS#1": [
    234,
-   128,
+   188,
    49,
+   48
+  ],
+  "Button:Filters#1": [
+   289,
+   188,
+   60,
    48
   ],
   "Surface#2": [
    17,
-   213,
+   273,
    326,
    60
   ],
   "Icon#1": [
    307,
-   232,
+   292,
    22,
    22
   ],
@@ -2436,64 +2535,34 @@
    112,
    49
   ],
-  "_pixels": "59f6ec9238762765e7ae7949f4de14454fb2492504abe7af82d24aa1f11c10ab"
+  "_pixels": "b195ce3504500fed9ead8a4581bc7efd21b4440765cc6733c3cfdaab27cd3e55"
  },
  "sos-details": {
-  "Button:Back to SOS event history#1": [
-   8,
-   28,
-   48,
-   48
-  ],
   "Surface#1": [
-   17,
-   91,
-   326,
+   28,
+   63,
+   272,
    86
   ],
   "Surface#2": [
-   17,
-   189,
-   326,
+   28,
+   161,
+   272,
    162
   ],
   "Button:Export evidence#1": [
-   17,
-   363,
-   326,
+   28,
+   334,
+   272,
    48
   ],
-  "Surface#3": [
-   12,
-   625,
-   336,
-   82
-  ],
-  "Button:Hold to activate SOS#1": [
-   21,
-   652,
-   318,
-   48
-  ],
-  "Button:Tracking#1": [
-   12,
-   719,
-   112,
-   49
-  ],
-  "Button:Settings#1": [
-   124,
-   719,
-   112,
-   49
-  ],
-  "Button:Diagnostics#1": [
+  "Button:Close#1": [
    236,
-   719,
-   112,
-   49
+   394,
+   64,
+   48
   ],
-  "_pixels": "aae21ed97d89475dc3f28e40ea8bbd49fc4b92e6eabe4e79c5a0c26d3554d580"
+  "_pixels": "e4e93ec866e4d5d46b341a751ecda3079c00d156c246e8ae6faa5a7a4904b2a1"
  },
  "diagnostic-tools": {
   "Surface#1": [
@@ -2798,7 +2867,7 @@
    17,
    128,
    326,
-   292
+   352
   ],
   "Button:Start Test#1": [
    31,
@@ -2818,27 +2887,33 @@
    97,
    48
   ],
+  "Button:Export test results#1": [
+   31,
+   418,
+   298,
+   48
+  ],
   "Surface#3": [
    17,
-   432,
+   492,
    326,
    124
   ],
   "Button:Export diagnostic ZIP#1": [
    31,
-   494,
+   554,
    298,
    48
   ],
   "Surface#4": [
    17,
-   594,
+   654,
    326,
    61
   ],
   "Icon#1": [
    307,
-   614,
+   674,
    22,
    22
   ],
@@ -2970,7 +3045,7 @@
    102,
    48
   ],
-  "_pixels": "4a6fdbe09674777436784bb439e7583e37581186468b5616570bb0f84017c373"
+  "_pixels": "3e68a40382234798991bbbf19b5427861dece411cd76b3a7f14bdd37ea03d915"
  },
  "dialog-retry": {
   "Button:Cancel#1": [

@@ -35,15 +35,7 @@ class CommandConsoleUiTest {
                 .single { it.text == "Diagnostics" }
                 .performClick()
             openNativeScreen(activity.get(), "History search & filters")
-            // History search excludes Rejected / blocked until the operator includes it.
-            views(root).filterIsInstance<Button>().single { it.isShown && it.text == "Filter history" }.performClick()
-            val outcomes = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
-            views(outcomes.window!!.decorView)
-                .filterIsInstance<android.widget.Switch>()
-                .single { it.text == "Rejected / blocked" }
-                .performClick()
-            outcomes.getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick()
-            shadowOf(Looper.getMainLooper()).idle()
+            // v3: reached through canonical categories, history includes Rejected / blocked.
             val id = Protocol.newId()
             val state = app.repository.state()
             app.repository.dao.insertCommand(

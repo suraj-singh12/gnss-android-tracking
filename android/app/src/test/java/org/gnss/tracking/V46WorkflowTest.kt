@@ -161,14 +161,16 @@ class V46WorkflowTest {
                     it.text.toString() to it.isChecked
                 }
             assertEquals(
-                mapOf("Applied" to true, "Unknown" to true, "Rejected / blocked" to false),
+                // v3: history is reached through canonical categories, which include every outcome.
+                mapOf("Applied" to true, "Unknown" to true, "Rejected / blocked" to true),
                 initial,
             )
             nativeViews(dialog.window!!.decorView).filterIsInstance<Switch>().last().performClick()
             dialog.getButton(AlertDialog.BUTTON_NEGATIVE).performClick()
             click("Filter history")
             dialog = ShadowAlertDialog.getLatestAlertDialog()
-            assertFalse(
+            assertTrue(
+                "Cancel discards the toggle",
                 nativeViews(dialog.window!!.decorView).filterIsInstance<Switch>().last().isChecked
             )
             nativeViews(dialog.window!!.decorView).filterIsInstance<Switch>().last().performClick()
@@ -176,8 +178,8 @@ class V46WorkflowTest {
             shadowOf(Looper.getMainLooper()).idle()
             val saved = android.os.Bundle()
             controller.saveInstanceState(saved)
-            assertTrue(
-                "Applied rejected group saved: ${saved.getStringArrayList("v46Outcomes")}",
+            assertFalse(
+                "Applied exclusion saved: ${saved.getStringArrayList("v46Outcomes")}",
                 saved.getStringArrayList("v46Outcomes")!!.contains("rejected"),
             )
             controller.recreate()
@@ -186,7 +188,7 @@ class V46WorkflowTest {
             }
             click("Filter history")
             dialog = ShadowAlertDialog.getLatestAlertDialog()
-            assertTrue(
+            assertFalse(
                 nativeViews(dialog.window!!.decorView).filterIsInstance<Switch>().last().isChecked
             )
             dialog.dismiss()

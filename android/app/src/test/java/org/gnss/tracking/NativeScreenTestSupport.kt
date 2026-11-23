@@ -12,11 +12,19 @@ internal fun nativeViews(view: View): List<View> =
 
 /** Traverse actual V4.6 affordances; never inject private navigation state. */
 internal fun openNativeScreen(activity: MainActivity, name: String) {
+    // v3: Activity's single Filters control leads to canonical categories; Back from there
+    // is the instruction history search page.
+    if (name == "History search & filters") {
+        openNativeScreen(activity, "Instruction filters")
+        @Suppress("DEPRECATION") activity.onBackPressed()
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        return
+    }
     if (name == "Instruction filters") {
-        openNativeScreen(activity, "History search & filters")
+        openNativeScreen(activity, "Command Instructions")
         nativeViews(activity.findViewById(android.R.id.content))
             .filterIsInstance<Button>()
-            .single { it.isShown && it.text == "Filter history" }
+            .single { it.isShown && it.text.startsWith("Filters") }
             .performClick()
         nativeViews(org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog().window!!.decorView)
             .filterIsInstance<Button>().single { it.isShown && it.text == "Canonical categories" }.performClick()
@@ -68,8 +76,6 @@ internal fun openNativeScreen(activity: MainActivity, name: String) {
             "Field readiness" to "Settings",
             "Emergency" to "Settings",
             "Appearance" to "Settings",
-            "History search & filters" to "Command Instructions",
-            "Instruction filters" to "History search & filters",
             "Advanced logs" to "Diagnostic tools",
         )
     parents[name]?.let { openNativeScreen(activity, it) }

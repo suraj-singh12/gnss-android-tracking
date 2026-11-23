@@ -85,6 +85,13 @@ class MainActivity : Activity() {
     private var v46Records: List<CommandRecord> = emptyList()
     private var v46Header: ((String) -> Unit)? = null
     private val v46Outcomes = linkedSetOf("applied", "unknown")
+    // v3 Activity: one search and outcome filter across instructions, alerts and SOS.
+    private val activityOutcomes = linkedSetOf("applied", "unknown", "rejected")
+    private var activityQuery = ""
+    private var refreshActivity: (() -> Unit)? = null
+    private var sosAll = emptyList<Outbound>()
+    private var recordSheet: AlertDialog? = null
+    private var recordSheetPage: LinearLayout? = null
     private var destination = "Tracking"
     private var route = "Tracking"
     private val routeParents = linkedMapOf<String, String>()
@@ -1478,7 +1485,7 @@ class MainActivity : Activity() {
                         }
                         refreshTrust?.invoke()
                         renderCommands()
-                        if (route == "Instruction details")
+                        if (route == "Instruction details" || sheetShows(instructionDetailsPage))
                             commandHistory
                                 .firstOrNull { row -> row.id == selectedInstruction }
                                 ?.let { showInstruction(it, false) }
@@ -2095,8 +2102,10 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun renderSosHistory(rows: List<Outbound>) {
+    private fun renderSosHistory(all: List<Outbound>) {
         if (!::sosHistoryPage.isInitialized) return
+        sosAll = all
+        val rows = all.filter(::sosMatches)
         if (sosRows != rows || sosHistoryPage.childCount <= 2) {
             sosRows = rows
             while (sosHistoryPage.childCount > 2) sosHistoryPage.removeViewAt(2)
@@ -2104,7 +2113,11 @@ class MainActivity : Activity() {
             val pages = maxOf(1, (rows.size + 19) / 20)
             sosPage = sosPage.coerceIn(0, pages - 1)
             if (rows.isEmpty())
-                ui.add(sosHistoryPage, ui.label("No SOS events saved", TextRole.RowTitle, R.color.muted), if (v46Layout) 4 else 18)
+                ui.add(
+                    sosHistoryPage,
+                    ui.label(if (all.isEmpty()) "No SOS events saved" else "No matching SOS events", TextRole.RowTitle, R.color.muted),
+                    if (v46Layout) 4 else 18,
+                )
             for ((n, row) in rows.drop(sosPage * 20).take(20).withIndex()) {
                 ui.menu(
                     sosHistoryPage,
@@ -2128,15 +2141,88 @@ class MainActivity : Activity() {
                     ui.button(label) {
                             sosPage += delta
                             sosRows = emptyList()
-                            renderSosHistory(rows)
+                            renderSosHistory(all)
                         }
                         .apply { isEnabled = sosPage + delta in 0 until pages },
                     8,
                 )
             }
         }
-        if (route == "SOS details")
-            rows.firstOrNull { it.messageId == selectedSos }?.let { showSos(it, false) }
+        if (route == "SOS details" || sheetShows(sosDetailPage))
+            all.firstOrNull { it.messageId == selectedSos }?.let { showSos(it, false) }
+    }
+
+    private fun sosMatches(row: Outbound): Boolean {
+        if (!v46Layout) return true
+        val outcome = when {
+            row.deliveredAt != null -> "applied"
+            row.quarantined -> "rejected"
+            else -> "unknown"
+        }
+        val query = activityQuery.trim()
+        return outcome in activityOutcomes &&
+            (query.isEmpty() ||
+                listOf(
+                    "SOS",
+                    if (row.deliveredAt != null) "Command received" else "Delivery pending",
+                    shortCommandTime(row.capturedMillis),
+                    sosReference(row.messageId),
+                    row.messageId,
+                ).any { it.contains(query, ignoreCase = true) })
+    }
+
+    private fun activityMatches(row: CommandRecord): Boolean {
+        val query = activityQuery.trim()
+        return instructionOutcomeGroup(row) in activityOutcomes &&
+            (query.isEmpty() ||
+                listOf(
+                    commandTypeLabel(row.operation),
+                    commandStateLabel(row.state),
+                    shortCommandTime(row.received),
+                    row.id,
+                    row.reason,
+                    row.requested,
+                ).any { it.contains(query, ignoreCase = true) })
+    }
+
+    private fun sheetShows(page: LinearLayout) = recordSheet?.isShowing == true && recordSheetPage === page
+
+    /** v3: Activity records open in a sheet over Diagnostics; the route remains for deep links. */
+    private fun presentRecord(page: LinearLayout, name: String) {
+        if (!v46Layout || route != "Diagnostics") {
+            navigateTo?.invoke(name)
+            return
+        }
+        if (sheetShows(page)) return
+        recordSheet?.dismiss()
+        val host = page.parent as? ViewGroup ?: return navigateTo?.invoke(name) ?: Unit
+        val index = host.indexOfChild(page)
+        val params = page.layoutParams
+        val shown = page.visibility
+        val padding = intArrayOf(page.paddingLeft, page.paddingTop, page.paddingRight, page.paddingBottom)
+        host.removeView(page)
+        page.visibility = View.VISIBLE
+        page.setPadding(0, 0, 0, 0)
+        val ui = NativeUi(this)
+        // Record cards carry their own padding; a narrower inset keeps values unbroken at large text.
+        val inset = ui.px(R.dimen.space_md)
+        val body = ui.column().apply { setPadding(inset, dp(4), inset, dp(8)) }
+        body.addView(page, LinearLayout.LayoutParams(-1, -2))
+        recordSheetPage = page
+        recordSheet =
+            AlertDialog.Builder(this)
+                .setTitle(name)
+                .setView(ui.dialogContent(body))
+                .setPositiveButton("Close", null)
+                .setOnDismissListener {
+                    body.removeView(page)
+                    page.setPadding(padding[0], padding[1], padding[2], padding[3])
+                    page.visibility = shown
+                    host.addView(page, index.coerceIn(0, host.childCount), params)
+                    recordSheet = null
+                    recordSheetPage = null
+                }
+                .showRefined()
     }
 
     private fun showSos(row: Outbound, navigate: Boolean = true) {
@@ -2147,7 +2233,7 @@ class MainActivity : Activity() {
                 app.activityVisible || app.operational.value.tracking,
             )
         if (renderedSosEvidence == evidence) {
-            if (navigate) navigateTo?.invoke("SOS details")
+            if (navigate) presentRecord(sosDetailPage, "SOS details")
             return
         }
         renderedSosEvidence = evidence
@@ -2210,7 +2296,7 @@ class MainActivity : Activity() {
             10,
         )
         ui.add(sosDetailPage, ui.button("Export evidence") { exportEvidence?.invoke() }, 12)
-        if (navigate) navigateTo?.invoke("SOS details")
+        if (navigate) presentRecord(sosDetailPage, "SOS details")
     }
 
     private lateinit var instructionDetailsPage: LinearLayout
@@ -2348,7 +2434,7 @@ class MainActivity : Activity() {
             instructionDetailsPage.addView(toggle, instructionDetailsPage.indexOfChild(full),
                 LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(4) })
         }
-        if (navigate) navigateTo?.invoke("Instruction details")
+        if (navigate) presentRecord(instructionDetailsPage, "Instruction details")
     }
 
     /** Compose the PDF's native destinations around the existing operational controls. */
@@ -3676,7 +3762,7 @@ class MainActivity : Activity() {
         partyId.hint = "e.g. alpha-2"
         partyName.hint = "e.g. Field team"
         endpoint.hint = "e.g. http://192.168.1.10:8080"
-        footer(party, "Saved on this phone. Tracking works offline without Command.")
+        footer(party, "Saved on this phone. Required before tracking can start; then data saves here when Command can't be reached.")
         val partyInterval =
             EditText(this)
                 .also { v46PartyInterval = it }
@@ -4207,7 +4293,29 @@ class MainActivity : Activity() {
             isHorizontalScrollBarEnabled = false
             addView(activityChips)
         }
-        add(activitySeg, activityChipScroll)
+        val activitySearch =
+            EditText(this).apply {
+                hint = "Search activity"
+                isSingleLine = true
+                imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+                setText(activityQuery)
+            }
+        ui.input(activitySearch)
+        add(activitySeg, activitySearch)
+        activitySearch.addTextChangedListener(
+            object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                override fun afterTextChanged(s: android.text.Editable?) {
+                    if (activityQuery == s.toString()) return
+                    activityQuery = s.toString()
+                    refreshActivity?.invoke()
+                }
+            }
+        )
+        add(activitySeg, activityChipScroll, 12)
+        var openActivityFilter: () -> Unit = {}
+        lateinit var activityFilterChip: Button
         val activityBoxes = linkedMapOf("Instructions" to ui.column(), "Alerts" to ui.column(), "SOS" to ui.column())
         activityBoxes.values.forEach { add(activitySeg, it) }
         val chipButtons = linkedMapOf<String, Button>()
@@ -4225,11 +4333,26 @@ class MainActivity : Activity() {
                 chip.contentDescription = "$key${if (key == kind) ", selected" else ""}"
             }
         }
+        fun styleFilterChip() {
+            val off = 3 - activityOutcomes.size
+            styleChoice(activityFilterChip, false)
+            activityFilterChip.text = if (off == 0) "Filters" else "Filters · $off off"
+            activityFilterChip.setPadding(dp(12), 0, dp(12), 0)
+            activityFilterChip.minWidth = ui.px(R.dimen.control_height)
+            activityFilterChip.minimumWidth = ui.px(R.dimen.control_height)
+            activityFilterChip.maxLines = 1
+            activityFilterChip.background = ui.shape(R.color.surface, R.dimen.radius_pill, R.color.line)
+            activityFilterChip.setTextColor(getColor(R.color.ink))
+            activityFilterChip.contentDescription = "${activityFilterChip.text}. Filter activity by outcome"
+        }
         for (kind in listOf("All", "Instructions", "Alerts", "SOS")) {
             val chip = ui.button(kind) { selectActivity(kind) }
             chipButtons[kind] = chip
             activityChips.addView(chip, LinearLayout.LayoutParams(-2, -2).apply { if (kind != "All") marginStart = dp(6) })
         }
+        activityFilterChip = ui.button("Filters") { openActivityFilter() }
+        activityChips.addView(activityFilterChip, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(6) })
+        styleFilterChip()
         v3Segment = { target ->
             when (target) {
                 "Instructions", "Alerts", "SOS" -> { selectSegment("Activity"); selectActivity(target) }
@@ -4324,6 +4447,7 @@ class MainActivity : Activity() {
         add(results, physicalButtonPanel, 8)
         physicalButtonPanel.background = null
         physicalButtonPanel.setPadding(0, 0, 0, 0)
+        add(results, ui.button("Export test results") { exportButton.performClick() }.also { ui.style(it) }, 12)
         ui.text(physicalButtonEvents, TextRole.Mono)
         physicalButtonEvents.setLineSpacing(dp(3).toFloat(), 1f)
         add(physicalCard, results, 14)
@@ -4361,16 +4485,10 @@ class MainActivity : Activity() {
         routeParents["History search & filters"] = "Command Instructions"
         val recentPage = routes.getValue("Command Instructions")
         pagePadding(recentPage)
-        // One list surface (no card around the list), then the page action, then Advanced.
+        // One list surface (no card around the list), then the page action. Activity owns search/filters.
         val recent = ui.column().apply { tag = "v46-records" }
         add(recentPage, recent)
         export(recentPage, "Export sanitized journal")
-        section(recentPage, "Advanced")
-        menu(
-            recentPage,
-            "History search & filters",
-            "Search, preserved categories and detailed evidence",
-        )
         // The app bar owns Back/title. Superseded outcome shortcuts must not compete
         // with the approved single transactional Filter history action.
         (console.getChildAt(0) as? Button)
@@ -4395,7 +4513,7 @@ class MainActivity : Activity() {
                 .filterIsInstance<Button>()
                 .filter { it.text == "Filters" }
         existingFilters.forEach { console.removeView(it) }
-        action(console, "Filter history") {
+        fun outcomeFilter(outcomes: MutableSet<String>, onApply: () -> Unit) {
             val inset = ui.px(R.dimen.dialog_padding)
             val body = ui.column().apply { setPadding(inset, dp(4), inset, dp(8)) }
             val switches = linkedMapOf<String, Switch>()
@@ -4408,7 +4526,7 @@ class MainActivity : Activity() {
                 val choice =
                     Switch(this).apply {
                         text = label
-                        isChecked = key in v46Outcomes
+                        isChecked = key in outcomes
                     }
                 ui.switchRow(choice)
                 switches[key] = choice
@@ -4425,16 +4543,18 @@ class MainActivity : Activity() {
                 setPadding(0, paddingTop, 0, paddingBottom)
             }, 4)
             filterDialog = AlertDialog.Builder(this)
-                .setTitle("Instruction filter")
+                .setTitle("Filter history")
                 .setView(ui.dialogContent(body))
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Apply filters") { _, _ ->
-                    v46Outcomes.clear()
-                    switches.filterValues { it.isChecked }.keys.forEach { v46Outcomes.add(it) }
-                    refreshConsole?.invoke()
+                    outcomes.clear()
+                    switches.filterValues { it.isChecked }.keys.forEach { outcomes.add(it) }
+                    onApply()
                 }
                 .showRefined()
         }
+        action(console, "Filter history") { outcomeFilter(v46Outcomes) { refreshConsole?.invoke() } }
+        openActivityFilter = { outcomeFilter(activityOutcomes) { refreshActivity?.invoke() } }
         ui.input(instructionFilter)
         consoleFilters.values.forEach { ui.selector(it) }
         // Canonical selector captions use the shared form-field label grammar.
@@ -4512,18 +4632,26 @@ class MainActivity : Activity() {
                     .showRefined()
             }
         export(alertCard, "Export alert journal")
-        fun records(rows: List<CommandRecord>) {
-            if (v46Records == rows && recent.childCount > 0) return
-            v46Records = rows
+        val alertNoMatch = ui.label("No matching phone alerts", TextRole.RowTitle, R.color.muted).apply { visibility = View.GONE }
+        add(alertsPage, alertNoMatch, 4)
+        fun records(all: List<CommandRecord>, force: Boolean = false) {
+            if (!force && v46Records == all && recent.childCount > 0) return
+            v46Records = all
+            val rows = all.filter(::activityMatches)
             recent.removeAllViews()
             recent.background = null
-            if (rows.isEmpty()) {
+            if (all.isEmpty() || rows.isEmpty()) {
                 // Empty state: one quiet card, same surface as a populated list.
                 recent.background = ui.shape(R.color.surface)
                 val pad = ui.px(R.dimen.card_padding)
                 recent.setPadding(pad, pad, pad, pad)
-                add(recent, ui.label("No received instructions", TextRole.RowTitle))
-                add(recent, ui.label("Instructions from Command appear here with their outcome.", TextRole.Meta), 3)
+                if (all.isEmpty()) {
+                    add(recent, ui.label("No received instructions", TextRole.RowTitle))
+                    add(recent, ui.label("Instructions from Command appear here with their outcome.", TextRole.Meta), 3)
+                } else {
+                    add(recent, ui.label("No matching instructions", TextRole.RowTitle))
+                    add(recent, ui.label("Change the search or filters to see more.", TextRole.Meta), 3)
+                }
             } else recent.setPadding(0, 0, 0, 0)
             val list = if (rows.isEmpty()) null else ui.list(recent)
             rows.take(20).forEach { row ->
@@ -4542,12 +4670,16 @@ class MainActivity : Activity() {
                     }
             }
             val active =
-                rows.firstOrNull {
+                all.firstOrNull {
                     it.trusted &&
                         it.operation == "alert" &&
                         it.state in listOf("output_attempted", "alert_blocked", "unknown")
                 }
-            val latestAlert = active ?: rows.firstOrNull { it.trusted && it.operation == "alert" }
+            val latestAlert = active ?: all.firstOrNull { it.trusted && it.operation == "alert" }
+            val alertShown =
+                if (latestAlert == null) activityQuery.isBlank() else activityMatches(latestAlert)
+            alertCard.visibility = if (alertShown) View.VISIBLE else View.GONE
+            alertNoMatch.visibility = if (alertShown) View.GONE else View.VISIBLE
             val latestSpec =
                 latestAlert?.let {
                     runCatching { PhoneAlertSpec.parse(Protocol.parse(it.requested)) }.getOrNull()
@@ -4593,6 +4725,12 @@ class MainActivity : Activity() {
                 .observeCommands()
                 .catch { alertSummary.text = "Alert history unavailable" }
                 .collect { records(it) }
+        }
+        refreshActivity = {
+            records(v46Records, force = true)
+            while (sosHistoryPage.childCount > 2) sosHistoryPage.removeViewAt(2)
+            renderSosHistory(sosAll)
+            styleFilterChip()
         }
         for (name in listOf("Policy details", "Storage health", "Identity & verification details", "Advanced logs", "Instruction filters")) {
             val destination = routes.getValue(name)
@@ -4790,7 +4928,7 @@ class MainActivity : Activity() {
             val attention =
                 when {
                     sosBlocked -> Triple("SOS not delivered", "Delivery needs attention. Open Saved data & sync.", "Saved data & sync")
-                    !configured -> Triple("Add a Command address", "Tracking works offline; nothing can be delivered yet.", "Party & Command")
+                    !configured -> Triple("Add a Command address", "Required before tracking can start. After that, data saves on the phone when Command can't be reached.", "Party & Command")
                     !setup.precise -> Triple("Precise location required", "Allow precise location so fixes are accurate.", "Field readiness")
                     setup.gps == false -> Triple("Location (GPS) is off", "Turn on location to collect GNSS fixes.", "Field readiness")
                     setup.notifications != true -> Triple("Notifications blocked", "Tracking and phone alerts need notifications.", "Field readiness")
@@ -5673,6 +5811,7 @@ class MainActivity : Activity() {
         resumed = false
         if (::sosHold.isInitialized) sosHold.dispose()
         sosCardTimer.removeCallbacksAndMessages(null)
+        recordSheet?.dismiss()
         if (pendingStart && (!isChangingConfigurations || savingStart))
             app.operational.update { it.copy(starting = false) }
         physicalButtonRefresh?.cancel()

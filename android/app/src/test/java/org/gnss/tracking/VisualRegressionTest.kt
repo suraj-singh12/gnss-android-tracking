@@ -154,6 +154,20 @@ class VisualRegressionTest(private val profile: Profile) {
                 if (sos != null && sos.isShown)
                     audit.safeArea(content, sos, name, px(24), root.height - root.paddingBottom)?.let { findings += it }
             }
+            // v3: Activity records open in a sheet; audit the sheet window, then close it.
+            fun checkSheet(name: String, screen: String) {
+                val sheet = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
+                assertTrue("$screen opens as a sheet", sheet != null && sheet.isShowing)
+                val view = sheet.window!!.decorView
+                view.measure(View.MeasureSpec.makeMeasureSpec(w - px(32), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.AT_MOST))
+                view.layout(0, 0, view.measuredWidth, view.measuredHeight)
+                findings += audit.audit(view, screen, false, ::allow)
+                val pixels = capture.write(name, view)
+                geometry.put(name, audit.geometry(view).apply {
+                    if (name !in VisualBaseline.hostDependent) put(VisualBaseline.PIXELS, pixels)
+                })
+                sheet.dismiss()
+            }
             suspend fun scrollBottom(): Boolean {
                 val scroll = nativeViews(root).filterIsInstance<ScrollView>().first()
                 val max = scroll.getChildAt(0).height - scroll.height
@@ -202,12 +216,14 @@ class VisualRegressionTest(private val profile: Profile) {
                 openNativeScreen(a, screen)
                 settle()
                 val slug = screen.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
+                if (screen == "SOS details") { checkSheet(slug, screen); settle(); continue }
                 check(slug, screen)
                 if (scrollBottom()) check("$slug-bottom", screen)
                 if (screen == "Command Instructions") {
                     nativeViews(root).first { it.isShown && it.contentDescription?.contains("Open instruction details") == true }.performClick()
                     settle()
-                    check("instruction-details", "Instruction details")
+                    checkSheet("instruction-details", "Instruction details")
+                    settle()
                 }
             }
             // Interaction states.

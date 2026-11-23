@@ -5,6 +5,7 @@ import android.os.Looper
 import android.view.KeyEvent
 import android.view.View
 import android.widget.Button
+import android.widget.EditText
 import android.widget.TextView
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.*
@@ -16,6 +17,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowAlertDialog
 
 /** 20 Nov 2026 refinement: real-state presentation, retired routes and consolidated screens. */
 @RunWith(RobolectricTestRunner::class)
@@ -213,6 +215,7 @@ class V46RefinementTest {
             a.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_UP))
             settle()
             until { texts(a).contains("Detected key events") }
+            assertTrue("Key results keep their own export", shown(a).filterIsInstance<Button>().any { it.text == "Export test results" })
             shown(a).filterIsInstance<Button>().single { it.text == "Stop Test" }.performClick()
             settle()
 
@@ -220,6 +223,56 @@ class V46RefinementTest {
             settle()
             assertFalse("Granted permission offers no fix action", shown(a).filterIsInstance<Button>().any { it.contentDescription == "Allow precise location · Precise location" })
             assertTrue(texts(a).contains("Precise location"))
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test
+    fun activitySearchAndFiltersSpanEveryRecordTypeAndRecordsOpenInASheet() = runBlocking {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            val a = controller.get()
+            // Fresh install: the address is required before Start; no promise that tracking already works.
+            until { texts(a).any { it.startsWith("Required before tracking can start.") } }
+            assertFalse(texts(a).any { it.contains("Tracking works offline") })
+            val device = withContext(Dispatchers.IO) { app.repository.state().deviceId }
+            withContext(Dispatchers.IO) {
+                app.repository.dao.insertCommand(
+                    CommandRecord(Protocol.newId(), "authority", device, "enrollment", "alert", 1, System.currentTimeMillis(),
+                        state = "unknown",
+                        requested = """{"mode":"urgent","message":"Check in at ridge","duration_s":60,"repeat_s":10}"""))
+                app.repository.saveSos(Protocol.newId(), System.currentTimeMillis(), System.currentTimeMillis(), null, Health())
+            }
+            openNativeScreen(a, "Diagnostics")
+            shown(a).filterIsInstance<Button>().single { it.text == "Activity" }.performClick()
+            settle()
+            fun instruction() = shown(a).firstOrNull { it.isClickable && it.contentDescription?.contains("Open instruction details") == true }
+            fun sos() = shown(a).firstOrNull { it.isClickable && it.contentDescription?.startsWith("Delivery pending.") == true }
+            until { instruction() != null && sos() != null }
+            assertTrue("One Filters control beside the type chips", shown(a).filterIsInstance<Button>().any { it.text == "Filters" })
+            assertFalse("No nested history entry in Activity", texts(a).contains("History search & filters"))
+            val search = shown(a).filterIsInstance<EditText>().single { it.hint == "Search activity" }
+            search.setText("ridge")
+            settle()
+            assertNotNull("Search matches the alert instruction", instruction())
+            assertNull(sos())
+            assertTrue(texts(a).contains("No matching SOS events"))
+            search.setText("SOS")
+            settle()
+            assertNotNull("The same search reaches SOS records", sos())
+            assertNull(instruction())
+            assertTrue(texts(a).contains("No matching instructions"))
+            assertTrue(texts(a).contains("No matching phone alerts"))
+            search.setText("")
+            settle()
+            instruction()!!.performClick()
+            settle()
+            val sheet = ShadowAlertDialog.getLatestAlertDialog()
+            assertTrue("Records open in a sheet", sheet.isShowing)
+            assertTrue(nativeViews(sheet.window!!.decorView).filterIsInstance<TextView>().any { it.text == "Instruction details" })
+            assertEquals("Diagnostics stays underneath the sheet", "Diagnostics", field(a, "route"))
+            sheet.dismiss()
+            settle()
+            assertNotNull("Closing the sheet returns to the list", instruction())
         } finally { controller.pause().stop().destroy() }
     }
 
