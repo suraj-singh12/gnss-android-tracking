@@ -236,7 +236,7 @@ node test-tools/integration/<suite>.cjs             # Playwright; env GNSS_COMMA
 
 - **Artifacts** from one SHA: the Android debug APK; Command macOS-arm64, Windows-x64 and Linux-x64 binaries; acceptance evidence (manifest, checksums, screenshots); test reports.
 - **Known CI behaviour:**
-  - `dem-provider` fails persistently because the providers refuse connections, return HTTP 502 or exceed the 30 MB CI transfer budget. This is external and has been seen on many PRs.
+  - `dem-provider` fails persistently because the providers refuse connections, return HTTP 502 or exceed the 30 MB CI transfer budget. This is external and has been seen on many PRs. Its steps are now non-blocking: a failed live check is reported as a workflow warning (and in the job summary) and the evidence artifact is still uploaded; `map-software-acceptance` remains the required map gate.
   - Android `SosActivityTest.protectedAccessibilityAttemptCancelsOnPauseButCommittedActivationSurvivesDestroy` has timed out intermittently in CI.
   - #55 tracks a different SOS retry-jitter test.
 
@@ -302,7 +302,7 @@ None. Stale PRs #17–#20, #32, #33, #58 and #63 were closed as superseded on 20
 
 1. **Release readiness:** v1.1.0 is a pre-release. Next: release signing (APK keystore, macOS notarisation, Windows code signing), installers and a tag-driven release workflow (#7). Decide the gating set: native Windows/macOS runs, physical phone runs, 20+1 endurance.
 2. **Acceptance tracking:** turn the #7 umbrella into a concrete, scripted field test plan (see theme 4).
-3. **CI health:** make `dem-provider` non-blocking or replace it with a scheduled job. Fix the flaky `SosActivityTest`.
+3. **CI health:** `dem-provider` is now a non-blocking warning; decide whether to replace the failing live sources (Geofabrik regional size, overpass-api.de 502) or move it to a scheduled job. Fix the flaky `SosActivityTest`.
 4. **Field acceptance campaign:** a scripted physical test plan from `DEVICE-ACCEPTANCE.md` covering #24/#25/#26/#22/#5, plus a Windows native 20+1 run (#23).
 5. **#38 portable recording packages:** the next evidence feature (export/import of saved recordings with pinned map assets, plus encryption).
 6. **Storage lifecycle:** retention/export policy for raw, evidence and maps; disk monitoring on both sides (currently "future work").

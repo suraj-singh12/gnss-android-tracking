@@ -26,4 +26,6 @@
     <color name="stop_surface">#F9E9ED</color>
     <color name="stop_line">#E9BEC8</color>
     <color name="stop_ink">#8C3449</color>
+    <!-- Text and numerals drawn on an accent fill. -->
+    <color name="on_accent">#FFFFFF</color>
 </resources>

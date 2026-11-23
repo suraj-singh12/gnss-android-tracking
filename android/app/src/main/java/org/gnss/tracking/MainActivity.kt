@@ -3624,7 +3624,7 @@ class MainActivity : Activity() {
                 gravity = android.view.Gravity.CENTER
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }
-            row.addView(mark, LinearLayout.LayoutParams(dp(28), dp(28)).apply { marginEnd = ui.px(R.dimen.space_md) })
+            row.addView(mark, LinearLayout.LayoutParams(ui.px(R.dimen.step_badge), ui.px(R.dimen.step_badge)).apply { marginEnd = ui.px(R.dimen.space_md) })
             val detail = ui.label("", TextRole.Meta)
             row.addView(ui.column().apply {
                 addView(ui.label(title, TextRole.RowTitle))
@@ -3845,7 +3845,7 @@ class MainActivity : Activity() {
                     // Auto-sized labels must not shift their segment down to a shared baseline.
                     isBaselineAligned = false
                     background = ui.shape(R.color.secondary_surface, R.dimen.radius_button, null)
-                    setPadding(dp(3), dp(3), dp(3), dp(3))
+                    ui.px(R.dimen.segment_inset).let { setPadding(it, it, it, it) }
                 }
             val choices = (values.map { "$it s" } + "Custom").map { label ->
                 RadioButton(this).apply {
@@ -3856,13 +3856,13 @@ class MainActivity : Activity() {
                     gravity = android.view.Gravity.CENTER
                     maxLines = 1
                     includeFontPadding = false
-                    setPadding(dp(2), 0, dp(2), 0)
+                    setPadding(ui.px(R.dimen.segment_label_padding), 0, ui.px(R.dimen.segment_label_padding), 0)
                     minHeight = ui.px(R.dimen.control_height)
                     minimumHeight = minHeight
                     // Large text shrinks to fit its segment instead of escaping it.
                     ui.text(this, TextRole.RowTitle, R.color.muted)
                     setAutoSizeTextTypeUniformWithConfiguration(
-                        dp(10), textSize.toInt().coerceAtLeast(dp(11)), 1, android.util.TypedValue.COMPLEX_UNIT_PX,
+                        ui.px(R.dimen.segment_text_min), textSize.toInt().coerceAtLeast(ui.px(R.dimen.segment_text_max_floor)), 1, android.util.TypedValue.COMPLEX_UNIT_PX,
                     )
                     picker.addView(this, RadioGroup.LayoutParams(0, ui.px(R.dimen.control_height), 1f))
                 }
@@ -4211,7 +4211,7 @@ class MainActivity : Activity() {
         statusList.addView(recheckBox, LinearLayout.LayoutParams(-1, -2))
         // Not enrolled: the Command-side steps and the credential are one group.
         val enrollHeader = ui.section(access, "Enroll this phone")
-        val stepsCard = ui.list(access, inset = dp(28) + ui.px(R.dimen.space_md))
+        val stepsCard = ui.list(access, inset = ui.px(R.dimen.step_badge) + ui.px(R.dimen.space_md))
         val phone = mono(ui.label("", TextRole.Mono))
         val stepPhone = mono(ui.label("", TextRole.Mono))
         listOf(
@@ -4224,7 +4224,7 @@ class MainActivity : Activity() {
                 val h = ui.px(R.dimen.list_row_padding_h)
                 setPadding(h, ui.px(R.dimen.list_row_padding_v), h, ui.px(R.dimen.list_row_padding_v))
             }
-            row.addView(ui.label("${n + 1}", TextRole.Pill, android.R.color.white).apply {
+            row.addView(ui.label("${n + 1}", TextRole.Pill, R.color.on_accent).apply {
                 gravity = android.view.Gravity.CENTER
                 includeFontPadding = false
                 background = android.graphics.drawable.GradientDrawable().apply {
@@ -4232,7 +4232,7 @@ class MainActivity : Activity() {
                     setColor(getColor(R.color.accent))
                 }
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }, LinearLayout.LayoutParams(dp(28), dp(28)).apply { marginEnd = ui.px(R.dimen.space_md) })
+            }, LinearLayout.LayoutParams(ui.px(R.dimen.step_badge), ui.px(R.dimen.step_badge)).apply { marginEnd = ui.px(R.dimen.space_md) })
             row.addView(ui.column().apply {
                 addView(ui.label(title, TextRole.RowTitle))
                 if (detail.isNotEmpty()) add(this, ui.label(detail, TextRole.Meta), 2)
@@ -4443,7 +4443,7 @@ class MainActivity : Activity() {
         // v3: one Diagnostics page with Health / Activity / Tools segments.
         val segmentBar = LinearLayout(this).apply {
             background = ui.shape(R.color.secondary_surface, R.dimen.radius_button, null)
-            setPadding(dp(3), dp(3), dp(3), dp(3))
+            ui.px(R.dimen.segment_inset).let { setPadding(it, it, it, it) }
         }
         add(diagnostics, segmentBar, 12)
         val healthSeg = ui.column()
