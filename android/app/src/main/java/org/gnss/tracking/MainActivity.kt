@@ -37,6 +37,7 @@ class MainActivity : Activity() {
     private var v46PartyIntervalPicker: RadioGroup? = null
     private var renderPolicyInEffect: (() -> Unit)? = null
     private var accessLastVerified: TextView? = null
+    private var accessPreviousVerified: TextView? = null
     private var renderReadiness: (() -> Unit)? = null
     private var physicalResults: View? = null
     private val routeScrolls = mutableMapOf<String, Int>()
@@ -2979,6 +2980,10 @@ class MainActivity : Activity() {
                     state.controlLastGeneration != state.endpointGeneration
                 }
             accessLastVerified?.text = "${last?.let(::utc) ?: "None for this binding"}${age?.let { " · $it s ago" } ?: ""}"
+            accessPreviousVerified?.let { note ->
+                note.text = previousBinding?.let { "Previous binding: ${utc(it)} · historical only" }.orEmpty()
+                note.visibility = if (previousBinding == null) View.GONE else View.VISIBLE
+            }
             contactDetails.text =
                 "Current state: $label\nLast verified response: ${last?.let(::utc) ?: "None for this binding"}${age?.let { " · $it s ago" } ?: ""}${previousBinding?.let { "\nPrevious binding response: ${utc(it)} · historical only" } ?: ""}\nContact is current for 30 s after a verified response, and unconfirmed after restart until a new one. Wi-Fi, enrollment and GNSS delivery do not prove it."
         }
@@ -4001,7 +4006,9 @@ class MainActivity : Activity() {
                 appliedInterval.text = "${state.config().effective_reporting_interval_s} s · rev ${state.version}"
                 overrideValue.text = state.overrideSeconds?.let { "$it s" } ?: "None"
                 val storage = app.persistencePolicy.state
-                appliedStorage.text = "${if (storage.enabled) "Adaptive" else "Dense"} · rev ${storage.revision}"
+                // The sampler stores densely while a fallback is active, whatever the saved switch says.
+                val adaptiveInEffect = storage.enabled && storage.error == null && app.observationPersistence.samplingState.fallback == null
+                appliedStorage.text = "${if (adaptiveInEffect) "Adaptive" else "Dense"} · rev ${storage.revision}"
                 requestNote.visibility = if (policyRequested.text.toString() == "Unknown") View.VISIBLE else View.GONE
                 configErrorValue.text = state.configError.orEmpty()
                 configErrorRow.visibility = if (state.configError == null) View.GONE else View.VISIBLE
@@ -4159,8 +4166,13 @@ class MainActivity : Activity() {
         val statusAddressRow = lastRow(statusList)
         val lastVerified = ui.label("None for this binding", TextRole.Value, R.color.muted).apply { setTextIsSelectable(true) }
         accessLastVerified = lastVerified
-        valueRow(statusList, "Last verified response", lastVerified)
+        valueRow(statusList, "Last verified response", lastVerified, "Previous binding")
         val lastVerifiedRow = lastRow(statusList)
+        // A response from an earlier Command address stays readable, marked historical.
+        accessPreviousVerified = (((lastVerifiedRow as LinearLayout).getChildAt(0) as LinearLayout).getChildAt(1) as TextView).apply {
+            setTextIsSelectable(true)
+            visibility = View.GONE
+        }
         val aboutText = ui.label(
             "Contact is current for 30 s after a verified response, and unconfirmed after restart until a new one. Wi-Fi, enrollment and GNSS delivery do not prove it.",
             TextRole.Meta,

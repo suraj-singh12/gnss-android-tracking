@@ -332,6 +332,8 @@ internal class NativeUi(private val context: Context) {
             value?.let {
                 addView(label(it, TextRole.Value, R.color.muted).apply {
                     importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    // A long value (e.g. party name) never takes the title's width.
+                    maxWidth = (context.resources.displayMetrics.widthPixels * .38).toInt()
                     maxLines = 1
                     ellipsize = android.text.TextUtils.TruncateAt.END
                 }, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = px(R.dimen.space_sm) })
