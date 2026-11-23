@@ -23,6 +23,17 @@ android {
         }.getOrNull()?.takeIf { it.matches(Regex("[0-9a-f]{40}")) } ?: "unknown"
         buildConfigField("String", "SOURCE_REVISION", "\"$revision\"")
     }
+    // Permanent field signing key (CI secrets) so builds install over each other as updates.
+    val fieldKeystore = System.getenv("GNSS_KEYSTORE_FILE")?.let(::file)?.takeIf { it.isFile }
+    if (fieldKeystore != null) {
+        signingConfigs.create("field") {
+            storeFile = fieldKeystore
+            storePassword = System.getenv("GNSS_KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("GNSS_KEY_ALIAS")
+            keyPassword = System.getenv("GNSS_KEY_PASSWORD")
+        }
+        buildTypes.getByName("debug").signingConfig = signingConfigs.getByName("field")
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

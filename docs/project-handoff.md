@@ -287,7 +287,7 @@ None. Stale PRs #17–#20, #32, #33, #58 and #63 were closed as superseded on 20
 3. **Physical SOS speaker** output on the Command laptop.
 4. **Live map-provider downloads** (`dem-provider`).
 5. **Sustained 20+1 fleet / multi-day endurance and storage growth** (no retention policy; evidence journal growth unmeasured at multi-day scale).
-6. No signing, installers or release automation; v1.1.0 ships a debug-signed APK (`versionName 1.1.0`, `versionCode 2`) and unsigned Command binaries.
+6. No installers or release automation; v1.1.0 ships a debuggable APK (`versionName 1.1.0`, `versionCode 2`) signed with the permanent field key from CI secrets (`ANDROID_KEYSTORE_*`, required on `main` and `release/**`), and unsigned Command binaries. v1.0.0 used a temporary key and cannot be updated in place.
 
 ### 12.4 Small known UI items (Command V5.14)
 - At ≤520 px the map toolbar wraps to two rows.

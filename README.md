@@ -37,7 +37,7 @@ Each release publishes assets built by CI from the same `main` commit:
 
 | Asset | Platform |
 | --- | --- |
-| `GNSS-Tracker-debug.apk` | Android 8.0 (API 26) or newer, debug-signed |
+| `GNSS-Tracker-debug.apk` | Android 8.0 (API 26) or newer, debuggable build signed with the permanent field key (from 1.1.0) |
 | `GNSS-Command-macos-arm64` | macOS on Apple silicon, unsigned |
 | `GNSS-Command-windows-x64.exe` | Windows x64, unsigned |
 | `GNSS-Command-linux-x64` | Linux x64 |
@@ -107,7 +107,8 @@ but these are not yet verified:
   sync, enrollment, alerts and SOS volume key ([#7](https://github.com/suraj-singh12/gnss-android-tracking/issues/7))
 - Physical SOS speaker output on the Command laptop
 - Live map-provider downloads (the `dem-provider` CI job fails on provider refusals and limits)
-- Builds are unsigned (Command) and debug-signed (Android); there is no installer
+- Command builds are unsigned; there is no installer. Android 1.0.0 used a temporary key, so it must be
+  synced and uninstalled once before installing 1.1.0; later versions update in place
 
 Physical-key SOS works only while the Android app is in the foreground; locked-screen
 activation is unsupported.
