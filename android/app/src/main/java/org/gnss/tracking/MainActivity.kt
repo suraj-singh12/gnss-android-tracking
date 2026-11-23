@@ -6,6 +6,8 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.view.KeyEvent
 import android.view.View
@@ -16,6 +18,8 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
+
+private const val SOS_TRACKING_CARD_MILLIS = 30 * 60_000L
 
 class MainActivity : Activity() {
     private val app
@@ -75,9 +79,19 @@ class MainActivity : Activity() {
     private lateinit var cancelStartButton: Button
     private var v46Layout = false
     private var v46Refresh: (() -> Unit)? = null
+    private var v3Segment: ((String) -> Unit)? = null
+    private var diagnosticsSegment = "Health"
+    private var diagnosticsActivity = "All"
     private var v46Records: List<CommandRecord> = emptyList()
     private var v46Header: ((String) -> Unit)? = null
     private val v46Outcomes = linkedSetOf("applied", "unknown")
+    // v3 Activity: one search and outcome filter across instructions, alerts and SOS.
+    private val activityOutcomes = linkedSetOf("applied", "unknown", "rejected")
+    private var activityQuery = ""
+    private var refreshActivity: (() -> Unit)? = null
+    private var sosAll = emptyList<Outbound>()
+    private var recordSheet: AlertDialog? = null
+    private var recordSheetPage: LinearLayout? = null
     private var destination = "Tracking"
     private var route = "Tracking"
     private val routeParents = linkedMapOf<String, String>()
@@ -133,6 +147,9 @@ class MainActivity : Activity() {
     private lateinit var instructionFilter: EditText
     private var instructionPage = 0
     private var refreshConsole: (() -> Unit)? = null
+    private var renderSaveBarsHook: (() -> Unit)? = null
+    private var sosCardExpiry = Runnable {}
+    private val sosCardTimer = Handler(Looper.getMainLooper())
     private var refreshTrust: (() -> Unit)? = null
     private val consoleFilters = linkedMapOf<String, Spinner>()
     private var consumedNotificationAction = false
@@ -174,8 +191,7 @@ class MainActivity : Activity() {
     }
 
     override fun attachBaseContext(newBase: android.content.Context) {
-        val night =
-            newBase.getSharedPreferences("appearance", MODE_PRIVATE).getBoolean("night", false)
+        val night = Appearance.isNight(newBase)
         val appearanceConfiguration =
             android.content.res.Configuration(newBase.resources.configuration)
         appearanceConfiguration.uiMode =
@@ -187,7 +203,9 @@ class MainActivity : Activity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        val night = getSharedPreferences("appearance", MODE_PRIVATE).getBoolean("night", false)
+        val night =
+            (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                android.content.res.Configuration.UI_MODE_NIGHT_YES
         setTheme(if (night) R.style.AppThemeNight else R.style.AppTheme)
         super.onCreate(savedInstanceState)
         consumedNotificationAction =
@@ -201,6 +219,13 @@ class MainActivity : Activity() {
             v46Outcomes.clear()
             v46Outcomes.addAll(it)
         }
+        savedInstanceState?.getStringArrayList("activityOutcomes")?.let {
+            activityOutcomes.clear()
+            activityOutcomes.addAll(it)
+        }
+        activityQuery = savedInstanceState?.getString("activityQuery") ?: ""
+        diagnosticsSegment = savedInstanceState?.getString("diagnosticsSegment") ?: diagnosticsSegment
+        diagnosticsActivity = savedInstanceState?.getString("diagnosticsActivity") ?: diagnosticsActivity
         restoredCustomInterval = savedInstanceState?.getBoolean("customIntervalChoice") ?: false
         restoredPartyCustomInterval = savedInstanceState?.getBoolean("partyCustomIntervalChoice") ?: false
         draftState = savedInstanceState?.getBundle("settingsDraft")
@@ -260,16 +285,19 @@ class MainActivity : Activity() {
                     when (requested) {
                         "Physical Button Test" -> "Diagnostic tools"
                         "Command trust",
-                        "Identity & verification details" -> "Manage Command access"
+                        "Manage Command access",
+                        "Identity & verification details" -> "Command access"
                         "Storage health",
                         "Transfer recovery" -> "Saved data & sync"
                         "GNSS details",
                         "Command contact" -> "Diagnostics"
-                        "Change trusted Command" -> "Manage Command access"
+                        "Change trusted Command" -> "Command access"
+                        "Policy details" -> "Tracking policy"
+                        "Emergency controls" -> "Emergency"
                         "Edit connection" -> "Party & Command"
                         "Tracking & GNSS",
                         "Reporting interval" -> "Tracking policy"
-                        "Appearance & SOS" -> "Emergency controls"
+                        "Appearance & SOS" -> "Emergency"
                         "Advanced settings",
                         "Compare this phone",
                         "Enter credential",
@@ -277,11 +305,22 @@ class MainActivity : Activity() {
                         else -> requested
                     }
                 else requested
-            val name = normalized.takeIf { routes.containsKey(it) } ?: "Tracking"
+            val segment =
+                if (v46Layout)
+                    when (normalized) {
+                        "Saved data & sync" -> "Health"
+                        "Diagnostic tools" -> "Tools"
+                        "Command Instructions" -> "Instructions"
+                        "Phone Alerts" -> "Alerts"
+                        "SOS event history" -> "SOS"
+                        else -> null
+                    }
+                else null
+            val name = (if (segment != null) "Diagnostics" else normalized).takeIf { routes.containsKey(it) } ?: "Tracking"
             if (route != name) routeScrolls[route] = scroll.scrollY
             if (name == "Instruction filters")
                 v46Outcomes.addAll(listOf("applied", "unknown", "rejected"))
-            if (v46Layout && route == "Diagnostic tools" && name != route)
+            if (v46Layout && route == "Diagnostics" && diagnosticsSegment == "Tools" && name != route)
                 app.physicalButtonTest.activityPaused()
             if (::sosHold.isInitialized) sosHold.cancel()
             if (route != name) {
@@ -311,8 +350,10 @@ class MainActivity : Activity() {
             if (::trackingActions.isInitialized)
                 trackingActions.visibility =
                     if (destination == "Tracking") View.VISIBLE else View.GONE
+            val pageHost = routes.getValue("Tracking").parent
             routes.forEach { (key, page) ->
-                page.visibility = if (key == name) View.VISIBLE else View.GONE
+                // Pages embedded in a Diagnostics segment stay owned by that segment.
+                if (page.parent === pageHost) page.visibility = if (key == name) View.VISIBLE else View.GONE
             }
             tabButtons.forEach { (key, tab) ->
                 tab.isSelected = key == destination
@@ -323,6 +364,7 @@ class MainActivity : Activity() {
             }
             scroll.post { scroll.scrollTo(0, routeScrolls[name] ?: 0) }
             if (destination == "Diagnostics") refreshConsole?.invoke()
+            segment?.let { v3Segment?.invoke(it) }
             if (name == "Physical Button Test" || name == "Diagnostic tools")
                 refreshPhysicalButtonHistory()
             refreshTrackingBanners()
@@ -438,10 +480,7 @@ class MainActivity : Activity() {
                         minHeight = dp(48)
                         minWidth = dp(48)
                         setOnClickListener {
-                            getSharedPreferences("appearance", MODE_PRIVATE)
-                                .edit()
-                                .putBoolean("night", !night)
-                                .apply()
+                            Appearance.set(this@MainActivity, if (night) Appearance.DAY else Appearance.NIGHT)
                             NotificationAppearance.refresh(this@MainActivity)
                             recreate()
                         }
@@ -888,10 +927,7 @@ class MainActivity : Activity() {
                         dialog,
                         choice ->
                         if ((choice == 1) != night) {
-                            getSharedPreferences("appearance", MODE_PRIVATE)
-                                .edit()
-                                .putBoolean("night", choice == 1)
-                                .apply()
+                            Appearance.set(this@MainActivity, if (choice == 1) Appearance.NIGHT else Appearance.DAY)
                             NotificationAppearance.refresh(this@MainActivity)
                             recreate()
                         }
@@ -1411,10 +1447,22 @@ class MainActivity : Activity() {
             healthRows
                 .getValue("Remote control")
                 .update(
-                    trustState,
-                    if (binding?.controlEnrollment == null) "Enrollment required"
-                    else "Authority bound",
-                    if (trustState == "Contact verified") R.color.accent else R.color.muted,
+                    when (trustState) {
+                        "Not enrolled", "Loading…" -> trustState
+                        "Disabled on this phone" -> "Disabled"
+                        "Authentication failed", "Contact unavailable" -> "Unconfirmed"
+                        else -> "Enrolled"
+                    },
+                    when (trustState) {
+                        "Not enrolled" -> "Enrollment required"
+                        "Credential enrolled" -> "Contact not checked yet"
+                        else -> trustState
+                    },
+                    when (trustState) {
+                        "Contact verified", "Credential enrolled" -> R.color.accent
+                        "Disabled on this phone", "Authentication failed", "Contact unavailable" -> R.color.warning
+                        else -> R.color.muted
+                    },
                 )
         }
         scope.launch {
@@ -1444,7 +1492,7 @@ class MainActivity : Activity() {
                         }
                         refreshTrust?.invoke()
                         renderCommands()
-                        if (route == "Instruction details")
+                        if (route == "Instruction details" || sheetShows(instructionDetailsPage))
                             commandHistory
                                 .firstOrNull { row -> row.id == selectedInstruction }
                                 ?.let { showInstruction(it, false) }
@@ -1562,7 +1610,7 @@ class MainActivity : Activity() {
             } ?: savedInstanceState?.getString("destination") ?: "Tracking"
         )
         savedInstanceState?.getBundle("settingsDraft")?.let { draft ->
-            if (route == "Party & Command" && draft.getString("focus") == "interval")
+            if (route == "Tracking policy" && draft.getString("focus") == "interval")
                 v46PartyInterval?.apply {
                     requestFocus()
                     setSelection(draft.getInt("intervalSelection", length()).coerceIn(0, length()))
@@ -1605,6 +1653,7 @@ class MainActivity : Activity() {
                         // afterwards, so the fix, Tracking pill and controls describe one instant.
                         val op = app.operational.value
                         savedInstallation = state
+                        renderSaveBarsHook?.invoke()
                         // Present this emission's counts in every refresh below. A stale value
                         // made Sync controls flip disabled/enabled within one emission, which
                         // can move focus and cancel a protected accessibility SOS attempt.
@@ -1694,7 +1743,7 @@ class MainActivity : Activity() {
                         unresolvedDetail.text = queues.blocked.toString()
                         lastAckLabel.text =
                             "Last ACK · ${state.lastAck?.let { shortUtcTime(it) } ?: "None"}"
-                        ackDetail.text = state.lastAck ?: "No message ACK recorded"
+                        ackDetail.text = state.lastAck ?: "—"
                         // V4.6: the Command indicator owns connectivity and the SOS collector
                         // owns pending-SOS context (see the observeSos combine).
                         if (!v46Layout) {
@@ -1765,13 +1814,13 @@ class MainActivity : Activity() {
                             op.tracking &&
                                 op.gnss == "fix" &&
                                 op.ageMillis != null &&
-                                op.ageMillis in 0..30000
+                                op.ageMillis in 0..maxOf(30_000L, (state.overrideSeconds ?: state.localInterval) * 2_000L)
                         healthRows
                             .getValue("GNSS")
                             .update(
                                 if (!op.tracking) "Stopped"
-                                else if (fresh) "Fresh fix"
-                                else if (op.ageMillis != null) "Stale / unknown" else "No fix",
+                                else if (fresh) "Fresh"
+                                else if (op.ageMillis != null) "Stale" else "No fix",
                                 listOfNotNull(
                                         op.accuracy?.let {
                                             "%.1f m".format(java.util.Locale.ROOT, it)
@@ -1783,7 +1832,7 @@ class MainActivity : Activity() {
                                     )
                                     .joinToString(" · ")
                                     .ifEmpty { "Accuracy unavailable" },
-                                if (fresh) R.color.accent else R.color.muted,
+                                if (!op.tracking) R.color.muted else if (fresh) R.color.accent else R.color.warning,
                             )
                         healthRows
                             .getValue("Storage")
@@ -1791,7 +1840,7 @@ class MainActivity : Activity() {
                                 if (collectionHealth.writeFailures > 0) "Write error"
                                 else if (state.knownCollectionLoss > 0) "Needs attention"
                                 else if (collectionHealth.awaitingCommit > 0) "Writing"
-                                else "Ready",
+                                else "OK",
                                 "${queues.gnss} queued" +
                                     if (state.knownCollectionLoss > 0)
                                         " · ${state.knownCollectionLoss} lost"
@@ -1807,43 +1856,56 @@ class MainActivity : Activity() {
                             .getValue("Command")
                             .update(
                                 // Same vocabulary and authority as the Tracking indicator.
-                                if (app.sender.commandReachable == true) "Online"
-                                else "Offline",
+                                when {
+                                    state.endpoint.isBlank() -> "Not set up"
+                                    app.sender.commandReachable == true -> "Reachable"
+                                    app.sender.commandReachable == false -> "Unreachable"
+                                    else -> "Not checked yet"
+                                },
                                 "Message ACK · ${state.lastAck?.let { shortUtcTime(it) } ?: "None"}",
-                                if (app.sender.commandReachable == true) R.color.accent
-                                else R.color.muted,
+                                when {
+                                    state.endpoint.isBlank() -> R.color.muted
+                                    app.sender.commandReachable == true -> R.color.accent
+                                    app.sender.commandReachable == false -> R.color.warning
+                                    else -> R.color.muted
+                                },
                             )
                         healthRows
                             .getValue("Sync")
                             .update(
                                 if (queues.blocked > 0 || state.deliveryPaused) "Needs attention"
                                 else if (op.historyPaused) "Paused"
-                                else if (queues.gnss == 0) "Queue clear" else "Pending",
+                                else if (queues.gnss > 0) "${queues.gnss} waiting"
+                                else if (queues.deliveredGnss == 0) "Nothing saved" else "Up to date",
                                 "${queues.gnss} pending" +
                                     if (queues.blocked > 0) " · ${queues.blocked} unresolved"
                                     else "",
-                                if (queues.blocked > 0 || state.deliveryPaused) R.color.warning
+                                if (queues.blocked > 0 || state.deliveryPaused ||
+                                    (queues.gnss > 0 && app.sender.commandReachable == false)) R.color.warning
+                                else if (queues.gnss == 0 && queues.deliveredGnss > 0) R.color.accent
                                 else R.color.muted,
                             )
                         healthRows
                             .getValue("SOS")
                             .update(
-                                if (queues.sos > 0) "${queues.sos} pending" else "No pending",
-                                "Operator ACK · Command only",
+                                if (queues.sos > 0) "Active" else "None",
+                                if (queues.sos > 0) "${queues.sos} awaiting Command receipt"
+                                else "Operator ACK · Command only",
                                 if (queues.sos > 0) R.color.warning else R.color.muted,
                             )
-                        val freeSpace = filesDir.usableSpace
+                        val freeSpace = freeSpaceForTests ?: filesDir.usableSpace
                         healthRows
                             .getValue("Device space")
                             .update(
-                                if (freeSpace < 64L * 1024 * 1024) "Low" else "Available",
-                                if (freeSpace >= 1024L * 1024 * 1024)
-                                    "%.1f GB free"
-                                        .format(
-                                            java.util.Locale.ROOT,
-                                            freeSpace.toDouble() / (1024L * 1024 * 1024),
-                                        )
-                                else "${freeSpace / (1024 * 1024)} MB free",
+                                (if (freeSpace < 64L * 1024 * 1024) "Low · " else "") +
+                                    if (freeSpace >= 1024L * 1024 * 1024)
+                                        "%.1f GB free"
+                                            .format(
+                                                java.util.Locale.ROOT,
+                                                freeSpace.toDouble() / (1024L * 1024 * 1024),
+                                            )
+                                    else "${freeSpace / (1024 * 1024)} MB free",
+                                "",
                                 if (freeSpace < 64L * 1024 * 1024) R.color.warning
                                 else R.color.muted,
                             )
@@ -2047,8 +2109,10 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun renderSosHistory(rows: List<Outbound>) {
+    private fun renderSosHistory(all: List<Outbound>) {
         if (!::sosHistoryPage.isInitialized) return
+        sosAll = all
+        val rows = all.filter(::sosMatches)
         if (sosRows != rows || sosHistoryPage.childCount <= 2) {
             sosRows = rows
             while (sosHistoryPage.childCount > 2) sosHistoryPage.removeViewAt(2)
@@ -2056,7 +2120,11 @@ class MainActivity : Activity() {
             val pages = maxOf(1, (rows.size + 19) / 20)
             sosPage = sosPage.coerceIn(0, pages - 1)
             if (rows.isEmpty())
-                ui.add(sosHistoryPage, ui.label("No SOS events saved", TextRole.RowTitle, R.color.muted), if (v46Layout) 4 else 18)
+                ui.add(
+                    sosHistoryPage,
+                    ui.label(if (all.isEmpty()) "No SOS events saved" else "No matching SOS events", TextRole.RowTitle, R.color.muted),
+                    if (v46Layout) 4 else 18,
+                )
             for ((n, row) in rows.drop(sosPage * 20).take(20).withIndex()) {
                 ui.menu(
                     sosHistoryPage,
@@ -2080,15 +2148,88 @@ class MainActivity : Activity() {
                     ui.button(label) {
                             sosPage += delta
                             sosRows = emptyList()
-                            renderSosHistory(rows)
+                            renderSosHistory(all)
                         }
                         .apply { isEnabled = sosPage + delta in 0 until pages },
                     8,
                 )
             }
         }
-        if (route == "SOS details")
-            rows.firstOrNull { it.messageId == selectedSos }?.let { showSos(it, false) }
+        if (route == "SOS details" || sheetShows(sosDetailPage))
+            all.firstOrNull { it.messageId == selectedSos }?.let { showSos(it, false) }
+    }
+
+    private fun sosMatches(row: Outbound): Boolean {
+        if (!v46Layout) return true
+        val outcome = when {
+            row.deliveredAt != null -> "applied"
+            row.quarantined -> "rejected"
+            else -> "unknown"
+        }
+        val query = activityQuery.trim()
+        return outcome in activityOutcomes &&
+            (query.isEmpty() ||
+                listOf(
+                    "SOS",
+                    if (row.deliveredAt != null) "Command received" else "Delivery pending",
+                    shortCommandTime(row.capturedMillis),
+                    sosReference(row.messageId),
+                    row.messageId,
+                ).any { it.contains(query, ignoreCase = true) })
+    }
+
+    private fun activityMatches(row: CommandRecord): Boolean {
+        val query = activityQuery.trim()
+        return instructionOutcomeGroup(row) in activityOutcomes &&
+            (query.isEmpty() ||
+                listOf(
+                    commandTypeLabel(row.operation),
+                    commandStateLabel(row.state),
+                    shortCommandTime(row.received),
+                    row.id,
+                    row.reason,
+                    row.requested,
+                ).any { it.contains(query, ignoreCase = true) })
+    }
+
+    private fun sheetShows(page: LinearLayout) = recordSheet?.isShowing == true && recordSheetPage === page
+
+    /** v3: Activity records open in a sheet over Diagnostics; the route remains for deep links. */
+    private fun presentRecord(page: LinearLayout, name: String) {
+        if (!v46Layout || route != "Diagnostics") {
+            navigateTo?.invoke(name)
+            return
+        }
+        if (sheetShows(page)) return
+        recordSheet?.dismiss()
+        val host = page.parent as? ViewGroup ?: return navigateTo?.invoke(name) ?: Unit
+        val index = host.indexOfChild(page)
+        val params = page.layoutParams
+        val shown = page.visibility
+        val padding = intArrayOf(page.paddingLeft, page.paddingTop, page.paddingRight, page.paddingBottom)
+        host.removeView(page)
+        page.visibility = View.VISIBLE
+        page.setPadding(0, 0, 0, 0)
+        val ui = NativeUi(this)
+        // Record cards carry their own padding; a narrower inset keeps values unbroken at large text.
+        val inset = ui.px(R.dimen.space_md)
+        val body = ui.column().apply { setPadding(inset, dp(4), inset, dp(8)) }
+        body.addView(page, LinearLayout.LayoutParams(-1, -2))
+        recordSheetPage = page
+        recordSheet =
+            AlertDialog.Builder(this)
+                .setTitle(name)
+                .setView(ui.dialogContent(body))
+                .setPositiveButton("Close", null)
+                .setOnDismissListener {
+                    body.removeView(page)
+                    page.setPadding(padding[0], padding[1], padding[2], padding[3])
+                    page.visibility = shown
+                    host.addView(page, index.coerceIn(0, host.childCount), params)
+                    recordSheet = null
+                    recordSheetPage = null
+                }
+                .showRefined()
     }
 
     private fun showSos(row: Outbound, navigate: Boolean = true) {
@@ -2099,7 +2240,7 @@ class MainActivity : Activity() {
                 app.activityVisible || app.operational.value.tracking,
             )
         if (renderedSosEvidence == evidence) {
-            if (navigate) navigateTo?.invoke("SOS details")
+            if (navigate) presentRecord(sosDetailPage, "SOS details")
             return
         }
         renderedSosEvidence = evidence
@@ -2162,7 +2303,7 @@ class MainActivity : Activity() {
             10,
         )
         ui.add(sosDetailPage, ui.button("Export evidence") { exportEvidence?.invoke() }, 12)
-        if (navigate) navigateTo?.invoke("SOS details")
+        if (navigate) presentRecord(sosDetailPage, "SOS details")
     }
 
     private lateinit var instructionDetailsPage: LinearLayout
@@ -2300,7 +2441,7 @@ class MainActivity : Activity() {
             instructionDetailsPage.addView(toggle, instructionDetailsPage.indexOfChild(full),
                 LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(4) })
         }
-        if (navigate) navigateTo?.invoke("Instruction details")
+        if (navigate) presentRecord(instructionDetailsPage, "Instruction details")
     }
 
     /** Compose the PDF's native destinations around the existing operational controls. */
@@ -3376,12 +3517,6 @@ class MainActivity : Activity() {
                     id = R.id.appbar_back
                     ui.iconButton(this, R.drawable.ic_back, "Back")
                 }
-        val brand =
-            ui.label("G", TextRole.AppBarTitle, R.color.accent).apply {
-                gravity = android.view.Gravity.CENTER
-                background = ui.shape(R.color.positive_surface, R.dimen.radius_brand, null)
-                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }
         val heading = ui.label("GNSS Tracker", TextRole.AppBarTitle).apply {
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
@@ -3392,61 +3527,119 @@ class MainActivity : Activity() {
         }
         appbar.addView(back, LinearLayout.LayoutParams(ui.px(R.dimen.control_height), ui.px(R.dimen.control_height)).apply { rightMargin = dp(4) })
         appbar.addView(
-            brand,
-            LinearLayout.LayoutParams(ui.px(R.dimen.brand_size), ui.px(R.dimen.brand_size)).apply {
-                leftMargin = ui.px(R.dimen.page_margin) - ui.px(R.dimen.appbar_padding_start)
-                rightMargin = dp(10)
-            },
-        )
-        appbar.addView(
             ui.column().apply {
                 addView(heading)
                 addView(subtitle)
             },
             LinearLayout.LayoutParams(0, -2, 1f),
         )
-        headerThemeToggle?.let {
-            detach(it)
-            appbar.addView(it, LinearLayout.LayoutParams(dp(48), dp(48)))
-        }
+        // v3: Day/Night lives in Settings › Appearance; no app-bar theme control.
+        headerThemeToggle?.let { detach(it) }
+        headerThemeToggle = null
+        // v3: root tabs use a large in-page title; nested pages show Back, title and parent.
         v46Header = { name ->
-            brand.visibility = if (routeParents.containsKey(name)) View.GONE else View.VISIBLE
-            back.visibility = if (routeParents.containsKey(name)) View.VISIBLE else View.GONE
-            heading.text =
-                if (!routeParents.containsKey(name)) "GNSS Tracker"
-                else if (name == "Manage Command access") "Manage access & trust" // matches its entry row
-                else name
-            subtitle.text =
-                when (name) {
-                    "Party & Command" -> "Identity, Command address and reporting"
-                    "Command access" -> "Enrollment and verified authority"
-                    "Tracking policy" -> "Local adaptive storage"
-                    "Emergency controls" -> "Protected SOS and safety"
-                    else ->
-                        if (routeParents.containsKey(name)) "${routeParents[name]}"
-                        else "Operator device"
-                }
+            val nested = routeParents.containsKey(name)
+            appbar.visibility = if (nested) View.VISIBLE else View.GONE
+            back.visibility = if (nested) View.VISIBLE else View.GONE
+            heading.text = name
+            subtitle.text = routeParents[name].orEmpty()
+            back.contentDescription = "Back to ${routeParents[name].orEmpty()}"
         }
-        fun rootTitle(p: LinearLayout, title: String, lead: String) {
+        fun rootTitle(p: LinearLayout, title: String, lead: String = ""): TextView {
             p.removeAllViews()
             pagePadding(p)
             add(p, ui.label(title, TextRole.Display).apply {
                 if (Build.VERSION.SDK_INT >= 28) isAccessibilityHeading = true
             })
-            add(p, ui.label(lead, TextRole.Caption), 4)
+            return ui.label(lead, TextRole.Caption).also {
+                add(p, it, 4)
+                it.visibility = if (lead.isEmpty()) View.GONE else View.VISIBLE
+            }
         }
+        fun statusDot(view: TextView, tone: Int) {
+            val size = dp(10)
+            view.setCompoundDrawablesRelative(
+                android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    setColor(getColor(tone))
+                    setBounds(0, 0, size, size)
+                },
+                null, null, null,
+            )
+            view.compoundDrawablePadding = dp(10)
+            view.gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+        }
+        /** Grouped-list row: title at the start, an existing owner value at the end. */
+        fun valueRow(list: LinearLayout, title: String, value: TextView, note: String = ""): TextView {
+            val row = LinearLayout(this).apply {
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                minimumHeight = ui.px(R.dimen.list_row_min_height)
+                setPadding(ui.px(R.dimen.list_row_padding_h), ui.px(R.dimen.list_row_padding_v), ui.px(R.dimen.list_row_padding_h), ui.px(R.dimen.list_row_padding_v))
+            }
+            row.addView(ui.column().apply {
+                addView(ui.label(title, TextRole.RowTitle))
+                if (note.isNotEmpty()) add(this, ui.label(note, TextRole.Meta), 3)
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+            detach(value)
+            value.gravity = android.view.Gravity.END or android.view.Gravity.CENTER_VERTICAL
+            row.addView(value, LinearLayout.LayoutParams(-2, -2).apply { marginStart = ui.px(R.dimen.space_md) })
+            list.addView(row, LinearLayout.LayoutParams(-1, -2))
+            return value
+        }
+        fun plainValue(view: TextView, text: String = "—"): TextView = view.apply {
+            ui.text(this, TextRole.Value)
+            background = null
+            setPadding(0, 0, 0, 0)
+            setCompoundDrawablesRelative(null, null, null, null)
+            if (text.isNotEmpty() && this.text.isNullOrEmpty()) this.text = text
+        }
+        fun footer(p: LinearLayout, text: String) =
+            ui.label(text, TextRole.Meta).also {
+                add(p, it, 6)
+                (it.layoutParams as LinearLayout.LayoutParams).marginStart = dp(2)
+            }
         val tracking = routes.getValue("Tracking")
-        rootTitle(tracking, "Tracking", "Your phone's collection and delivery status.")
+        val partyLine = rootTitle(tracking, "Tracking")
+        // SOS active: three separate checkpoints; transport delivery is never shown as
+        // a human acknowledgement.
+        val sosCard = ui.card(tracking, 15, R.color.emergency_surface).apply { visibility = View.GONE }
+        val sosTitle = ui.label("SOS active", TextRole.Hero, R.color.danger).apply {
+            accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+        }
+        statusDot(sosTitle, R.color.danger)
+        add(sosCard, sosTitle)
+        val sosRaised = ui.label("", TextRole.Caption)
+        add(sosCard, sosRaised, 4)
+        fun sosStep(title: String): Pair<TextView, TextView> {
+            val row = LinearLayout(this).apply { gravity = android.view.Gravity.TOP }
+            val mark = ui.label("…", TextRole.Pill).apply {
+                gravity = android.view.Gravity.CENTER
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }
+            row.addView(mark, LinearLayout.LayoutParams(dp(28), dp(28)).apply { marginEnd = ui.px(R.dimen.space_md) })
+            val detail = ui.label("", TextRole.Meta)
+            row.addView(ui.column().apply {
+                addView(ui.label(title, TextRole.RowTitle))
+                add(this, detail, 2)
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+            add(sosCard, row, 10)
+            return mark to detail
+        }
+        val sosSaved = sosStep("Saved on phone")
+        val sosDelivered = sosStep("Delivered to Command")
+        val sosOperator = sosStep("Acknowledged by an operator")
+        fun markStep(step: Pair<TextView, TextView>, done: Boolean, detail: String) {
+            step.first.text = if (done) "✓" else "…"
+            ui.statusPill(step.first, if (done) StatusTone.POSITIVE else StatusTone.NEUTRAL)
+            step.first.setPadding(0, 0, 0, 0)
+            step.first.background = ui.shape(if (done) R.color.positive_surface else R.color.surface, R.dimen.radius_pill, null)
+            step.second.text = detail
+        }
         val hero = ui.card(tracking, 15)
-        val trackingBadge = ui.label("…", TextRole.Pill)
-        val heroTop = LinearLayout(this).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
         detach(trackingSummary)
-        // The legacy owner carried text()/pill padding; the hero title aligns with the card edge.
         trackingSummary.setPadding(0, 0, 0, 0)
         trackingSummary.includeFontPadding = false
-        heroTop.addView(trackingSummary, LinearLayout.LayoutParams(0, -2, 1f))
-        heroTop.addView(trackingBadge, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8) })
-        add(hero, heroTop)
+        add(hero, trackingSummary)
         val trackingCopy =
             ui.label("Reading collection state", TextRole.Caption).apply {
                 minLines = if (resources.configuration.fontScale > 1.25f) 2 else 1
@@ -3455,38 +3648,30 @@ class MainActivity : Activity() {
         detach(startButton)
         add(hero, startButton, 12)
         add(tracking, cancelStartButton)
-        val fix = ui.card(tracking)
-        peerRow(fix, "GNSS position", gnssSummary, heading = true)
-        val fixValues = LinearLayout(this)
-        for ((view, caption) in listOf(fixAccuracy to "Accuracy", fixAge to "Fix age")) {
-            ui.metric(fixValues, view, caption)
+        val attentionHeader = ui.section(tracking, "Needs attention")
+        val attentionList = ui.list(tracking)
+        var attentionShown: Triple<String, String, String>? = null
+        section(tracking, "GNSS")
+        val gnssList = ui.list(tracking)
+        valueRow(gnssList, "Position fix", gnssSummary)
+        valueRow(gnssList, "Accuracy", plainValue(fixAccuracy))
+        valueRow(gnssList, "Fix age", plainValue(fixAge))
+        val batteryValue = valueRow(gnssList, "Battery", plainValue(ui.label("—", TextRole.Value)))
+        section(tracking, "Delivery to Command")
+        val deliveryList = ui.list(tracking)
+        valueRow(deliveryList, "Command", commandSummary)
+        valueRow(deliveryList, "Waiting on phone", plainValue(pendingMetric))
+        valueRow(deliveryList, "Delivered to Command", plainValue(deliveredMetric))
+        val lastAckValue = valueRow(deliveryList, "Last Command ACK", plainValue(ui.label("—", TextRole.Value)))
+        val syncRow = ui.column().apply {
+            setPadding(ui.px(R.dimen.list_row_padding_h), ui.px(R.dimen.list_row_padding_v), ui.px(R.dimen.list_row_padding_h), ui.px(R.dimen.list_row_padding_v))
         }
-        add(fix, fixValues, 10)
-        val delivery = ui.card(tracking)
-        peerRow(delivery, "Delivery to Command", commandSummary, heading = true)
-        val countValues = LinearLayout(this)
-        for ((view, caption) in listOf(pendingMetric to "Pending locally", deliveredMetric to "Durably ACKed")) {
-            ui.metric(countValues, view, caption)
-        }
-        add(delivery, countValues, 10)
-        val deliveryFoot =
-            LinearLayout(this).apply {
-                gravity = android.view.Gravity.CENTER_VERTICAL or android.view.Gravity.END
-                isBaselineAligned = false
-            }
-        val retentionCaption =
-            ui.collapsingLabel(TextRole.Caption, gap = 0).apply {
-                accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_NONE
-                gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
-            }
-        deliveryFoot.addView(retentionCaption, LinearLayout.LayoutParams(0, -2, 1f))
         detach(syncNowButton)
-        ui.style(syncNowButton, primary = true)
-        deliveryFoot.addView(syncNowButton, LinearLayout.LayoutParams(-2, -2))
-        // With the retention sentence removed, the action row sits inside the card body:
-        // an optional truthful state caption at the start, Sync Now at the end.
-        add(delivery, deliveryFoot, 12)
-        (syncNowButton.layoutParams as LinearLayout.LayoutParams).marginStart = dp(10)
+        ui.style(syncNowButton)
+        syncNowButton.text = "Sync now"
+        syncRow.addView(syncNowButton, LinearLayout.LayoutParams(-1, -2))
+        deliveryList.addView(syncRow, LinearLayout.LayoutParams(-1, -2))
+        footer(tracking, "Delivered means Command stored the observation and acknowledged it. Waiting observations stay on this phone until then.")
         add(tracking, trackingContext, 12)
         add(tracking, trackingError, 12)
         add(tracking, trackingAlerts, 12)
@@ -3494,20 +3679,97 @@ class MainActivity : Activity() {
             ui.text(banner, TextRole.Value, if (banner === trackingError) R.color.danger else R.color.ink)
             banner.setPadding(ui.px(R.dimen.space_md), dp(10), ui.px(R.dimen.space_md), dp(10))
         }
+        var latestSos: List<Outbound> = emptyList()
+        fun renderSosCard() {
+            val latest = latestSos.maxByOrNull { it.capturedMillis }
+            val now = System.currentTimeMillis()
+            val active = latest != null &&
+                (latest.deliveredAt == null || now - latest.capturedMillis < SOS_TRACKING_CARD_MILLIS)
+            sosCard.visibility = if (active) View.VISIBLE else View.GONE
+            hero.visibility = View.VISIBLE
+            sosCardTimer.removeCallbacks(sosCardExpiry)
+            if (latest == null || !active) return
+            // Room only emits on outbox writes; re-evaluate when the delivered card's window ends.
+            if (latest.deliveredAt != null)
+                sosCardTimer.postDelayed(sosCardExpiry, latest.capturedMillis + SOS_TRACKING_CARD_MILLIS - now + 1_000L)
+            val installation = savedInstallation
+            val raised = shortCommandTime(latest.capturedMillis)
+            sosRaised.text = "Raised $raised on this phone"
+            markStep(sosSaved, true, raised)
+            markStep(
+                sosDelivered,
+                latest.deliveredAt != null,
+                latest.deliveredAt?.let { shortUtcTime(it) } ?: when {
+                    latest.quarantined -> "Delivery rejected · fix the error, then Retry saved messages"
+                    installation != null && installation.endpoint.isBlank() -> "Not sent · add a Command address"
+                    installation?.deliveryPaused == true -> "Not sent · delivery paused; check Saved data & sync"
+                    else -> "Waiting for Command receipt · retries automatically"
+                },
+            )
+            markStep(sosOperator, false, "Check Command. Delivery is not a human acknowledgement.")
+        }
+        sosCardExpiry = Runnable { renderSosCard(); v46Refresh?.invoke() }
+        scope.launch {
+            app.repository.dao.observeSos().collect { rows ->
+                latestSos = rows
+                renderSosCard()
+                v46Refresh?.invoke()
+            }
+        }
         val settings = routes.getValue("Settings")
-        rootTitle(settings, "Settings", "Set up the device, reporting and operational readiness.")
-        section(settings, "Device & Command")
-        menu(settings, "Party & Command", "Identity, address and reporting interval")
-        menu(settings, "Command access", "Enrollment and authenticated contact")
-        menu(settings, "Field readiness", "Location, notifications and battery")
-        menu(settings, "Tracking policy", "Adaptive storage and policy details")
-        section(settings, "Safety")
-        menu(settings, "Emergency controls", "SOS configuration and optional volume-key shortcut")
+        rootTitle(settings, "Settings")
+        // v3: a short grouped list; each row shows its current value and opens one page.
+        val settingsGroups = ui.column()
+        add(settings, settingsGroups)
+        var settingsSignature = ""
+        fun readinessIssues(setup: FieldReadiness) =
+            listOf(!setup.precise, setup.gps != true, setup.notifications != true, setup.powerSave != false, setup.optimizationExemption != true).count { it }
+        fun renderSettingsLanding() {
+            val state = savedInstallation
+            val configured = !state?.endpoint.isNullOrBlank()
+            val issues = readinessIssues(preflight.snapshot())
+            val accessStatus =
+                when {
+                    state == null -> "Loading" to StatusTone.NEUTRAL
+                    state.controlDisabled -> "Disabled" to StatusTone.WARNING
+                    state.controlEnrollment != null -> "Enrolled" to StatusTone.POSITIVE
+                    else -> "Not enrolled" to StatusTone.NEUTRAL
+                }
+            val intervalValue = state?.localInterval?.let { "$it s" } ?: "—"
+            val mode = Appearance.mode(this)
+            val signature = listOf(configured, state?.endpoint, state?.partyName, accessStatus.first, intervalValue, issues, mode).joinToString("|")
+            if (signature == settingsSignature) return
+            settingsSignature = signature
+            settingsGroups.removeAllViews()
+            ui.list(settingsGroups).also { g ->
+                ui.menu(g, "Party & Command", if (configured) state!!.endpoint else "Not set up", value = if (configured) state!!.partyName else null) { navigate("Party & Command") }
+                ui.menu(g, "Command access", "", accessStatus) { navigate("Command access") }
+            }
+            ui.list(settingsGroups, 20).also { g ->
+                ui.menu(g, "Tracking policy", "Reporting interval and storage", value = intervalValue) { navigate("Tracking policy") }
+                ui.menu(
+                    g, "Field readiness", "Location, notifications and battery",
+                    if (issues == 0) "Ready" to StatusTone.POSITIVE
+                    else "$issues ${if (issues == 1) "issue" else "issues"}" to StatusTone.WARNING,
+                ) { navigate("Field readiness") }
+            }
+            ui.list(settingsGroups, 20).also { g ->
+                ui.menu(g, "Emergency", "SOS hold and volume shortcut") { navigate("Emergency") }
+                ui.menu(g, "Appearance", "", value = mode) { navigate("Appearance") }
+            }
+        }
         val party = page("Party & Command", "Settings")
+        section(party, "Party")
         val form = ui.card(party, 0)
         field(form, "Party ID", partyId)
         field(form, "Party name", partyName)
-        field(form, "Command address", endpoint)
+        section(party, "Command")
+        val commandForm = ui.card(party, 0)
+        field(commandForm, "Address", endpoint)
+        partyId.hint = "e.g. alpha-2"
+        partyName.hint = "e.g. Field team"
+        endpoint.hint = "e.g. http://192.168.1.10:8080"
+        footer(party, "Saved on this phone. Required before tracking can start; then data saves here when Command can't be reached.")
         val partyInterval =
             EditText(this)
                 .also { v46PartyInterval = it }
@@ -3606,22 +3868,27 @@ class MainActivity : Activity() {
             renderPicker()
             return picker
         }
-        v46PartyIntervalPicker = intervalPicker(form, partyInterval, restoredPartyCustomInterval)
-        val partyActions = LinearLayout(this)
-        partyActions.addView(
-            ui.button("Cancel") {
-                cancelButton.performClick()
-                navigate("Settings")
-            },
-            LinearLayout.LayoutParams(0, -2, 1f),
-        )
-        partyActions.addView(
-            ui.button("Save settings") { saveButton.performClick() }
-                .apply { ui.style(this, primary = true) },
-            LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(8) },
-        )
-        ui.equalHeights(partyActions)
-        add(form, partyActions, 16)
+        /** Save / Cancel appear only while the page has unsaved changes. */
+        fun saveBar(page: LinearLayout, commit: () -> Unit, cancel: () -> Unit): LinearLayout {
+            val bar = LinearLayout(this)
+            bar.addView(ui.label("Unsaved changes", TextRole.Caption), LinearLayout.LayoutParams(0, -2, 1f))
+            bar.addView(ui.button("Cancel") { cancel() }, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(8) })
+            bar.addView(
+                ui.button("Save") { commit() }.apply { ui.style(this, primary = true) },
+                LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(8) },
+            )
+            ui.equalHeights(bar)
+            add(page, bar, 16)
+            bar.visibility = View.GONE
+            return bar
+        }
+        // Each bar saves only its own page; the other page's draft is neither saved nor validated.
+        val partyActions = saveBar(party, { save(partyOnly = true) }) {
+            val state = savedInstallation ?: return@saveBar
+            partyId.setText(state.partyId)
+            partyName.setText(state.partyName)
+            endpoint.setText(state.endpoint)
+        }
         add(party, settingsFeedback)
         val policy = page("Tracking policy", "Settings")
         // Tracking policy owns only Adaptive storage; the reporting interval lives in
@@ -3629,7 +3896,24 @@ class MainActivity : Activity() {
         // (app.requestAdaptive), so there is no Save button. The canonical `interval`
         // editor stays off-screen as the shared draft mirrored by the Party field.
         detach(interval)
-        val policyCard = ui.card(policy, 0)
+        section(policy, "Reporting interval")
+        val intervalCard = ui.card(policy, 0)
+        v46PartyIntervalPicker = intervalPicker(intervalCard, partyInterval, restoredPartyCustomInterval)
+        footer(policy, "Future observations only. History is unchanged.")
+        val policyActions = saveBar(policy, { save(policyOnly = true) }) {
+            savedInstallation?.let { interval.setText(it.localInterval.toString()) }
+        }
+        fun renderSaveBars() {
+            val state = savedInstallation
+            partyActions.visibility =
+                if (state != null && (partyId.text.toString() != state.partyId || partyName.text.toString() != state.partyName ||
+                        endpoint.text.toString() != state.endpoint)) View.VISIBLE else View.GONE
+            policyActions.visibility =
+                if (state != null && interval.text.toString() != state.localInterval.toString()) View.VISIBLE else View.GONE
+        }
+        listOf(partyId, partyName, endpoint, interval).forEach { watch(it) { renderSaveBars() } }
+        renderSaveBarsHook = ::renderSaveBars
+        val policyCard = ui.card(policy, 12)
         ui.switchRow(adaptive)
         ui.text(policyStatus, TextRole.Meta)
         policyStatus.setPadding(0, 0, 0, 0)
@@ -3638,59 +3922,62 @@ class MainActivity : Activity() {
         add(policyCard, policyStatus, 0)
         add(policyCard, ui.label("ON keeps fewer future observations when steady or stationary.", TextRole.Meta), 3)
         val policyFeedback = ui.collapsingLabel(TextRole.Caption)
-        menu(policy, "Policy details", "Phone setting, requested/effective interval and revision")
-            .also { row ->
-                // Standard 12dp card gap between the Adaptive storage card and its details row.
-                ((row.parent as View).layoutParams as LinearLayout.LayoutParams).topMargin = ui.px(R.dimen.space_md)
-            }
+        section(policy, "In effect")
+        // Filled from the retired Policy details page once its facts are bound (below).
+        val policyInEffect = ui.column()
+        add(policy, policyInEffect)
+        footer(policy, "Command can override the phone interval with an authenticated instruction.")
         val ready = page("Field readiness", "Settings")
         // One peer list: each requirement shows its actual state; only a requirement that
         // needs attention offers the existing OS action that resolves it.
-        val readinessList = ui.column().apply {
-            background = ui.shape(R.color.surface)
-            showDividers = LinearLayout.SHOW_DIVIDER_MIDDLE
-            dividerDrawable = android.graphics.drawable.GradientDrawable().apply {
-                setColor(getColor(R.color.line))
-                setSize(1, ui.px(R.dimen.stroke))
-            }
-        }
-        add(ready, readinessList)
-        class ReadinessRow(val state: TextView, val action: Button)
-        fun readinessRow(title: String, owner: Button, actionLabel: String): ReadinessRow {
+        val readinessAttentionHeader = ui.section(ready, "Needs attention")
+        val readinessAttention = ui.list(ready)
+        val readinessOkHeader = ui.section(ready, "Ready")
+        val readinessList = ui.list(ready)
+        class ReadinessRow(val view: LinearLayout, val state: TextView, val action: Button, val detail: TextView, val issue: String)
+        val readinessRows = mutableListOf<ReadinessRow>()
+        fun readinessRow(title: String, owner: Button, actionLabel: String, issue: String): ReadinessRow {
             val row = LinearLayout(this).apply {
                 gravity = android.view.Gravity.CENTER_VERTICAL
                 minimumHeight = ui.px(R.dimen.list_row_min_height)
                 val h = ui.px(R.dimen.list_row_padding_h)
-                setPadding(h, dp(6), h, dp(6))
+                setPadding(h, ui.px(R.dimen.list_row_padding_v), h, ui.px(R.dimen.list_row_padding_v))
             }
             val text = ui.column()
             text.addView(ui.label(title, TextRole.RowTitle))
-            val fix = ui.button(actionLabel) { owner.performClick() }.apply {
-                ui.quiet(this)
-                gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
-                setPadding(0, 0, 0, 0)
-                visibility = View.GONE
-            }
-            text.addView(fix, LinearLayout.LayoutParams(-2, -2))
+            val detail = ui.label("", TextRole.Meta).apply { visibility = View.GONE }
+            add(text, detail, 3)
             row.addView(text, LinearLayout.LayoutParams(0, -2, 1f))
             val state = ui.label("Checking", TextRole.Pill)
-            ui.pill(state)
+            ui.statusPill(state, StatusTone.NEUTRAL)
             row.addView(state, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8) })
-            readinessList.addView(row, LinearLayout.LayoutParams(-1, -2))
-            return ReadinessRow(state, fix)
+            val fix = ui.button("Fix") { owner.performClick() }.apply {
+                ui.style(this)
+                contentDescription = "$actionLabel · $title"
+                visibility = View.GONE
+            }
+            row.addView(fix, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8) })
+            return ReadinessRow(row, state, fix, detail, issue).also { readinessRows += it }
         }
-        val preciseRow = readinessRow("Precise location", locationAction, "Allow precise location")
-        val gpsRow = readinessRow("Location (GPS)", gpsAction, "Open Location settings")
-        val notifyRow = readinessRow("Notifications", notificationAction, "Allow notifications")
-        val saverRow = readinessRow("Battery Saver", saverAction, "Open Battery Saver settings")
-        val backgroundRow = readinessRow("Background activity", backgroundAction, "Open battery settings")
-        add(ready, ui.label("Some phones also require Unrestricted battery use for GNSS Tracking.", TextRole.Meta).apply {
-            setPadding(dp(2), 0, dp(2), 0)
-        }, 8)
+        val preciseRow = readinessRow("Precise location", locationAction, "Allow precise location", "Allow precise location so fixes are accurate.")
+        val gpsRow = readinessRow("Location (GPS)", gpsAction, "Open Location settings", "Turn on location to collect GNSS fixes.")
+        val notifyRow = readinessRow("Notifications", notificationAction, "Allow notifications", "Tracking and phone alerts need notifications.")
+        val saverRow = readinessRow("Battery Saver", saverAction, "Open Battery Saver settings", "Battery Saver can stop background tracking.")
+        val backgroundRow = readinessRow("Background activity", backgroundAction, "Open battery settings", "Android may limit background tracking and alerts.")
+        footer(ready, "Some phones also require Unrestricted battery use for GNSS Tracking.")
+        action(ready, "Recheck") {
+            renderReadiness?.invoke()
+            v46Refresh?.invoke()
+        }
+        val readinessOk = mutableMapOf<ReadinessRow, Boolean>()
         fun showReadiness(row: ReadinessRow, ok: Boolean, value: String) {
             row.state.text = value
-            ui.pill(row.state, ok)
+            ui.statusPill(row.state, StatusTone.POSITIVE)
+            row.state.visibility = if (ok) View.VISIBLE else View.GONE
             row.action.visibility = if (ok) View.GONE else View.VISIBLE
+            row.detail.text = "$value · ${row.issue}"
+            row.detail.visibility = if (ok) View.GONE else View.VISIBLE
+            readinessOk[row] = ok
         }
         renderReadiness = {
             val setup = preflight.snapshot()
@@ -3703,11 +3990,22 @@ class MainActivity : Activity() {
                 setup.optimizationExemption == true,
                 if (setup.optimizationExemption == true) "Exempt" else "May be limited",
             )
+            // Issues sort to the top; every row keeps its place inside its group.
+            readinessAttention.removeAllViews()
+            readinessList.removeAllViews()
+            for (row in readinessRows) {
+                detach(row.view)
+                (if (readinessOk[row] == true) readinessList else readinessAttention).addView(row.view, LinearLayout.LayoutParams(-1, -2))
+            }
+            readinessAttentionHeader.visibility = if (readinessAttention.childCount > 0) View.VISIBLE else View.GONE
+            readinessAttention.visibility = readinessAttentionHeader.visibility
+            readinessOkHeader.visibility = if (readinessList.childCount > 0) View.VISIBLE else View.GONE
+            readinessList.visibility = readinessOkHeader.visibility
         }
         add(routes.getValue("Policy details"), serviceReadiness)
-        val emergency = page("Emergency controls", "Settings")
+        val emergency = page("Emergency", "Settings")
         val safety = ui.card(emergency, 0)
-        peerRow(safety, "Protected SOS hold", ui.label("Always on", TextRole.Value))
+        peerRow(safety, "Protected SOS hold", ui.label("Always on", TextRole.Pill).also { ui.statusPill(it, StatusTone.NEUTRAL) })
         note(safety, "Hold continuously for 1.2 seconds. Release early to cancel.")
         keyOption.visibility = View.GONE
         val shortcut =
@@ -3719,17 +4017,69 @@ class MainActivity : Activity() {
         ui.switchRow(shortcut)
         add(safety, shortcut, 12)
         add(safety, ui.label("Optional · 3 Volume + presses within 1.5 seconds · app open and unlocked", TextRole.Meta), 2)
+        footer(emergency, "Test the keys in Diagnostics › Tools.")
+        val appearancePage = page("Appearance", "Settings")
+        val appearanceList = ui.list(appearancePage)
+        val currentMode = Appearance.mode(this)
+        for (mode in Appearance.modes) {
+            val selected = mode == currentMode
+            appearanceList.addView(
+                LinearLayout(this).apply {
+                    gravity = android.view.Gravity.CENTER_VERTICAL
+                    minimumHeight = ui.px(R.dimen.list_row_min_height)
+                    setPadding(ui.px(R.dimen.list_row_padding_h), ui.px(R.dimen.list_row_padding_v), ui.px(R.dimen.list_row_padding_h), ui.px(R.dimen.list_row_padding_v))
+                    background = ui.rowRipple()
+                    isClickable = true
+                    isFocusable = true
+                    isSelected = selected
+                    contentDescription = "$mode${if (selected) ", selected" else ""}"
+                    addView(ui.label(mode, TextRole.RowTitle), LinearLayout.LayoutParams(0, -2, 1f))
+                    addView(ui.label(if (selected) "✓" else "", TextRole.RowTitle, R.color.accent).apply {
+                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    })
+                    setOnClickListener {
+                        if (mode == Appearance.mode(this@MainActivity)) return@setOnClickListener
+                        Appearance.set(this@MainActivity, mode)
+                        NotificationAppearance.refresh(this@MainActivity)
+                        recreate()
+                    }
+                },
+                LinearLayout.LayoutParams(-1, -2),
+            )
+        }
+        footer(appearancePage, "System follows the phone's dark theme setting.")
         val access = page("Command access", "Settings")
-        val accessCard = ui.card(access, 0)
+        // Not enrolled: the Command-side steps are shown inline instead of in a dialog.
+        val stepsCard = ui.card(access, 0)
+        listOf(
+            "On the Command computer" to "Open Phone controls, select this phone and compare its full phone ID.",
+            "Compare this phone ID" to "The IDs below must match exactly before you authorize.",
+            "Paste the private credential" to "Transfer it privately from Phone controls. It is never exported.",
+        ).forEachIndexed { n, (title, detail) ->
+            val row = LinearLayout(this).apply { gravity = android.view.Gravity.TOP }
+            row.addView(ui.label("${n + 1}", TextRole.Pill).apply {
+                gravity = android.view.Gravity.CENTER
+                ui.statusPill(this, StatusTone.POSITIVE)
+                setPadding(0, 0, 0, 0)
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }, LinearLayout.LayoutParams(dp(28), dp(28)).apply { marginEnd = ui.px(R.dimen.space_md) })
+            row.addView(ui.column().apply {
+                addView(ui.label(title, TextRole.RowTitle))
+                add(this, ui.label(detail, TextRole.Meta), 2)
+                contentDescription = "Step ${n + 1}. $title. $detail"
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+            add(stepsCard, row, if (n == 0) 0 else 12)
+        }
+        val accessCard = ui.card(access, 12)
         val enrollmentState = ui.label("Loading…", TextRole.Value)
         peerRow(accessCard, "Command enrollment", enrollmentState)
         // Read-only identities: muted caption + standard sans value (selectable, wrapping),
         // the same grammar as Manage access & trust. Editable fields below use FieldLabel.
         val phone = ui.label("", TextRole.Value).apply { setTextIsSelectable(true); setLineSpacing(dp(2).toFloat(), 1f) }
         val authority = ui.label("", TextRole.Value).apply { setTextIsSelectable(true); setLineSpacing(dp(2).toFloat(), 1f) }
-        add(accessCard, ui.label("This phone UUID", TextRole.Section), 14)
+        add(accessCard, ui.label("This phone ID", TextRole.Section), 14)
         add(accessCard, phone, 3)
-        add(accessCard, ui.label("Command authority UUID", TextRole.Section), 10)
+        add(accessCard, ui.label("Authorized Command ID", TextRole.Section), 10)
         add(accessCard, authority, 3)
         // Authenticated contact remains owned by CommandControl and shown on Manage access & trust.
         val contact = ui.label("Not verified", TextRole.Value)
@@ -3825,28 +4175,11 @@ class MainActivity : Activity() {
                 }
             }
         accessActions.addView(authorize)
-        accessActions.addView(
-            ui.button("Enrollment steps ›") {
-                    AlertDialog.Builder(this)
-                        .setTitle("Authorize Command")
-                        .setMessage(
-                            "1. Open Phone controls on Command.\n2. Compare phone and Command UUIDs.\n3. Transfer the per-phone credential privately.\n4. Confirm fresh authenticated contact."
-                        )
-                        .setPositiveButton("Done", null)
-                        .showRefined()
-                }
-                .apply { ui.quiet(this) },
-            LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8) },
-        )
         ui.equalHeights(accessActions)
         add(accessCard, accessActions, 12)
-        section(access, "Advanced")
-        menu(
-            access,
-            "Manage access & trust",
-            "Identity, disable and re-enrollment",
-            "Manage Command access",
-        )
+        // Manage access & trust renders inline below (moved once its evidence is bound).
+        val accessTrust = ui.column()
+        add(access, accessTrust)
         val manage = page("Manage Command access", "Command access")
         val managementError = ui.collapsingLabel(TextRole.Caption, R.color.danger, gap = 0)
         add(manage, managementError)
@@ -3864,7 +4197,7 @@ class MainActivity : Activity() {
                 }
             }
         }
-        section(manage, "Change access")
+        val changeAccessHeader = ui.section(manage, "Change access")
         val disableAccess = action(manage, "Disable remote control") {
             AlertDialog.Builder(this)
                 .setTitle("Disable remote control?")
@@ -3878,7 +4211,7 @@ class MainActivity : Activity() {
                 .showRefined()
         }
         ui.style(disableAccess, danger = true)
-        action(manage, "Re-enroll Command") {
+        val reenrollAccess = action(manage, "Re-enroll Command") {
             AlertDialog.Builder(this)
                 .setTitle("Start re-enrollment?")
                 .setMessage("The current authority must not be silently replaced.")
@@ -3907,16 +4240,49 @@ class MainActivity : Activity() {
         val diagnostics = routes.getValue("Diagnostics")
         val healthPanel = healthRows.getValue("GNSS").parent as LinearLayout
         detach(healthPanel)
-        // Sync/SOS/device-space rows belonged to the retired Storage health page. Their
-        // owners keep running; the facts stay in the diagnostic ZIP and Saved data & sync.
-        listOf("Sync", "SOS", "Device space").map { healthRows.getValue(it) }.forEach(::detach)
-        rootTitle(diagnostics, "Diagnostics", "Readiness, evidence and tools for troubleshooting.")
+        rootTitle(diagnostics, "Diagnostics")
+        // v3: one Diagnostics page with Health / Activity / Tools segments.
+        val segmentBar = LinearLayout(this).apply {
+            background = ui.shape(R.color.secondary_surface, R.dimen.radius_button, null)
+            setPadding(dp(3), dp(3), dp(3), dp(3))
+        }
+        add(diagnostics, segmentBar, 12)
+        val healthSeg = ui.column()
+        val activitySeg = ui.column()
+        val toolsSeg = ui.column()
+        val segments = linkedMapOf("Health" to healthSeg, "Activity" to activitySeg, "Tools" to toolsSeg)
+        segments.values.forEach { add(diagnostics, it) }
+        val segmentButtons = linkedMapOf<String, Button>()
+        fun styleChoice(button: Button, selected: Boolean) {
+            ui.quiet(button)
+            button.isSelected = selected
+            button.gravity = android.view.Gravity.CENTER
+            button.minHeight = ui.px(R.dimen.control_height)
+            button.setTextColor(getColor(if (selected) R.color.ink else R.color.muted))
+            button.setTypeface(null, if (selected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+            button.background = if (selected) ui.shape(R.color.surface, R.dimen.radius_button, R.color.line) else null
+        }
+        fun selectSegment(name: String) {
+            if (diagnosticsSegment == "Tools" && name != "Tools") app.physicalButtonTest.activityPaused()
+            diagnosticsSegment = name
+            segments.forEach { (key, seg) -> seg.visibility = if (key == name) View.VISIBLE else View.GONE }
+            segmentButtons.forEach { (key, button) ->
+                styleChoice(button, key == name)
+                button.contentDescription = "$key${if (key == name) ", selected" else ""}"
+            }
+            if (name == "Tools") refreshPhysicalButtonHistory()
+        }
+        for (name in segments.keys) {
+            val button = ui.button(name) { selectSegment(name) }
+            segmentButtons[name] = button
+            segmentBar.addView(button, LinearLayout.LayoutParams(0, -2, 1f))
+        }
         val overviewRows =
-            listOf("GNSS", "Command", "Storage", "Remote control").map { healthRows.getValue(it) }
+            listOf("GNSS", "Storage", "Command", "Sync", "SOS", "Device space", "Remote control").map { healthRows.getValue(it) }
         healthPanel.removeAllViews()
-        overviewRows.forEach { healthPanel.addView(it) }
-        section(diagnostics, "Current device health")
-        add(diagnostics, healthPanel, 1)
+        overviewRows.forEach { detach(it); healthPanel.addView(it) }
+        section(healthSeg, "Health")
+        add(healthSeg, healthPanel, 1)
         // Same bordered list surface as every other grouped list; dividers only between peers.
         healthPanel.background = ui.shape(R.color.surface)
         healthPanel.setPadding(dp(4), 0, dp(4), 0)
@@ -3927,11 +4293,79 @@ class MainActivity : Activity() {
                 setColor(getColor(R.color.line))
                 setSize(1, ui.px(R.dimen.stroke))
             }
-        section(diagnostics, "Operational records")
-        menu(diagnostics, "Command Instructions", "Requested, applied and unknown outcomes")
-        menu(diagnostics, "Phone alerts", "Output, ACK and alert history", "Phone Alerts")
-        menu(diagnostics, "Saved data & sync", "Backlog, retry and receipts")
-        menu(diagnostics, "SOS history", "Local, Command and human ACKs", "SOS event history")
+        // Activity: type chips over the existing record owners (instructions, alerts, SOS).
+        val activityChips = LinearLayout(this)
+        // Chips scroll sideways instead of wrapping or shrinking below 48dp at large text.
+        val activityChipScroll = android.widget.HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(activityChips)
+        }
+        val activitySearch =
+            EditText(this).apply {
+                hint = "Search activity"
+                isSingleLine = true
+                imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+                setText(activityQuery)
+            }
+        ui.input(activitySearch)
+        add(activitySeg, activitySearch)
+        activitySearch.addTextChangedListener(
+            object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                override fun afterTextChanged(s: android.text.Editable?) {
+                    if (activityQuery == s.toString()) return
+                    activityQuery = s.toString()
+                    refreshActivity?.invoke()
+                }
+            }
+        )
+        add(activitySeg, activityChipScroll, 12)
+        var openActivityFilter: () -> Unit = {}
+        lateinit var activityFilterChip: Button
+        val activityBoxes = linkedMapOf("Instructions" to ui.column(), "Alerts" to ui.column(), "SOS" to ui.column())
+        activityBoxes.values.forEach { add(activitySeg, it) }
+        val chipButtons = linkedMapOf<String, Button>()
+        fun selectActivity(kind: String) {
+            diagnosticsActivity = kind
+            activityBoxes.forEach { (key, box) -> box.visibility = if (kind == "All" || kind == key) View.VISIBLE else View.GONE }
+            chipButtons.forEach { (key, chip) ->
+                styleChoice(chip, key == kind)
+                chip.setPadding(dp(12), 0, dp(12), 0)
+                chip.minWidth = ui.px(R.dimen.control_height)
+                chip.minimumWidth = ui.px(R.dimen.control_height)
+                chip.maxLines = 1
+                chip.background = ui.shape(if (key == kind) R.color.positive_surface else R.color.surface, R.dimen.radius_pill, if (key == kind) null else R.color.line)
+                chip.setTextColor(getColor(if (key == kind) R.color.accent else R.color.ink))
+                chip.contentDescription = "$key${if (key == kind) ", selected" else ""}"
+            }
+        }
+        fun styleFilterChip() {
+            val off = 3 - activityOutcomes.size
+            styleChoice(activityFilterChip, false)
+            activityFilterChip.text = if (off == 0) "Filters" else "Filters · $off off"
+            activityFilterChip.setPadding(dp(12), 0, dp(12), 0)
+            activityFilterChip.minWidth = ui.px(R.dimen.control_height)
+            activityFilterChip.minimumWidth = ui.px(R.dimen.control_height)
+            activityFilterChip.maxLines = 1
+            activityFilterChip.background = ui.shape(R.color.surface, R.dimen.radius_pill, R.color.line)
+            activityFilterChip.setTextColor(getColor(R.color.ink))
+            activityFilterChip.contentDescription = "${activityFilterChip.text}. Filter activity by outcome"
+        }
+        for (kind in listOf("All", "Instructions", "Alerts", "SOS")) {
+            val chip = ui.button(kind) { selectActivity(kind) }
+            chipButtons[kind] = chip
+            activityChips.addView(chip, LinearLayout.LayoutParams(-2, -2).apply { if (kind != "All") marginStart = dp(6) })
+        }
+        activityFilterChip = ui.button("Filters") { openActivityFilter() }
+        activityChips.addView(activityFilterChip, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(6) })
+        styleFilterChip()
+        v3Segment = { target ->
+            when (target) {
+                "Instructions", "Alerts", "SOS" -> { selectSegment("Activity"); selectActivity(target) }
+                else -> selectSegment(target)
+            }
+        }
         routeParents["SOS event history"] = "Diagnostics"
         // The reference layer's in-page "‹ parent" link and title duplicate the app bar (and
         // named the superseded parent). Keep the two indexed header slots, but hide them.
@@ -3940,22 +4374,21 @@ class MainActivity : Activity() {
         // Re-present rows already rendered by the reference layer with the V4.6 spacing.
         while (sosHistoryPage.childCount > 2) sosHistoryPage.removeViewAt(2)
         renderSosHistory(sosRows)
-        section(diagnostics, "Troubleshooting")
-        menu(diagnostics, "Diagnostic tools", "Physical-key test and diagnostic export")
         // Saved data & sync is the single recovery destination: real Room counts, unresolved
         // rows, last durable ACK, Sync All Now, the existing confirmed Retry and export.
         val saved = page("Saved data & sync", "Diagnostics")
-        val savedCard = ui.card(saved, 0)
-        val savedMetrics = LinearLayout(this)
-        for ((view, caption) in listOf(pendingDetail to "Pending observations", deliveredDetail to "Command ACKed")) {
-            ui.metric(savedMetrics, view, caption)
+        // v3: one grouped list (Waiting on phone, Delivered to Command, Unresolved, Last
+        // Command ACK) over the same Room-count owners, then sync progress and actions.
+        val savedList = ui.list(saved)
+        valueRow(savedList, "Waiting on phone", plainValue(pendingDetail))
+        valueRow(savedList, "Delivered to Command", plainValue(deliveredDetail))
+        valueRow(savedList, "Unresolved", plainValue(unresolvedDetail))
+        valueRow(savedList, "Last Command ACK", plainValue(ackDetail))
+        val savedCard = ui.column().apply {
+            setPadding(ui.px(R.dimen.list_row_padding_h), ui.px(R.dimen.list_row_padding_v), ui.px(R.dimen.list_row_padding_h), ui.px(R.dimen.list_row_padding_v))
         }
-        add(savedCard, savedMetrics)
-        peerRow(savedCard, "Unresolved observations", value(unresolvedDetail))
-        peerRow(savedCard, "Last message ACK", value(ackDetail))
-        (unresolvedDetail.parent as View).let { (it.layoutParams as LinearLayout.LayoutParams).topMargin = dp(14) }
-        // Saved-GNSS sync state and progress (formerly on the retired Storage health page):
-        // the same Room-count based summary/percentage owners, now beside Sync All Now.
+        savedList.addView(savedCard, LinearLayout.LayoutParams(-1, -2))
+        // Saved-GNSS sync state and progress: the same Room-count based summary/percentage owners.
         val syncState = LinearLayout(this).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
         for (v in listOf(historySummary, historyProgressLabel)) {
             detach(v)
@@ -3965,11 +4398,9 @@ class MainActivity : Activity() {
         ui.text(historySummary, TextRole.Label)
         ui.text(historyProgressLabel, TextRole.Meta)
         syncState.addView(historySummary, LinearLayout.LayoutParams(0, -2, 1f))
-        syncState.addView(historyProgressLabel, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8) })
-        add(savedCard, syncState, 14)
+        add(savedCard, syncState)
+        // v3: the rows above carry the counts; a 0/0 "Queue clear" bar read as delivered.
         detach(historyProgressBar)
-        add(savedCard, historyProgressBar, 6)
-        historyProgressBar.layoutParams.height = dp(4)
         val savedSync = action(savedCard, "Sync All Now", true) { syncNowButton.performClick() }
         detach(retryButton)
         ui.style(retryButton)
@@ -3980,7 +4411,8 @@ class MainActivity : Activity() {
                 visibility = View.GONE
             }
         add(savedCard, recoveryFailure, 6)
-        export(savedCard, "Export transfer evidence")
+        export(savedCard, "Export evidence")
+        footer(saved, "Message receipt and Command reconstruction are separate.")
         val tools = routes.getValue("Diagnostic tools")
         tools.removeAllViews()
         pagePadding(tools)
@@ -4022,6 +4454,7 @@ class MainActivity : Activity() {
         add(results, physicalButtonPanel, 8)
         physicalButtonPanel.background = null
         physicalButtonPanel.setPadding(0, 0, 0, 0)
+        add(results, ui.button("Export test results") { exportButton.performClick() }.also { ui.style(it) }, 12)
         ui.text(physicalButtonEvents, TextRole.Mono)
         physicalButtonEvents.setLineSpacing(dp(3).toFloat(), 1f)
         add(physicalCard, results, 14)
@@ -4059,16 +4492,10 @@ class MainActivity : Activity() {
         routeParents["History search & filters"] = "Command Instructions"
         val recentPage = routes.getValue("Command Instructions")
         pagePadding(recentPage)
-        // One list surface (no card around the list), then the page action, then Advanced.
+        // One list surface (no card around the list), then the page action. Activity owns search/filters.
         val recent = ui.column().apply { tag = "v46-records" }
         add(recentPage, recent)
         export(recentPage, "Export sanitized journal")
-        section(recentPage, "Advanced")
-        menu(
-            recentPage,
-            "History search & filters",
-            "Search, preserved categories and detailed evidence",
-        )
         // The app bar owns Back/title. Superseded outcome shortcuts must not compete
         // with the approved single transactional Filter history action.
         (console.getChildAt(0) as? Button)
@@ -4093,7 +4520,7 @@ class MainActivity : Activity() {
                 .filterIsInstance<Button>()
                 .filter { it.text == "Filters" }
         existingFilters.forEach { console.removeView(it) }
-        action(console, "Filter history") {
+        fun outcomeFilter(outcomes: MutableSet<String>, onApply: () -> Unit) {
             val inset = ui.px(R.dimen.dialog_padding)
             val body = ui.column().apply { setPadding(inset, dp(4), inset, dp(8)) }
             val switches = linkedMapOf<String, Switch>()
@@ -4106,7 +4533,7 @@ class MainActivity : Activity() {
                 val choice =
                     Switch(this).apply {
                         text = label
-                        isChecked = key in v46Outcomes
+                        isChecked = key in outcomes
                     }
                 ui.switchRow(choice)
                 switches[key] = choice
@@ -4123,16 +4550,18 @@ class MainActivity : Activity() {
                 setPadding(0, paddingTop, 0, paddingBottom)
             }, 4)
             filterDialog = AlertDialog.Builder(this)
-                .setTitle("Instruction filter")
+                .setTitle("Filter history")
                 .setView(ui.dialogContent(body))
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Apply filters") { _, _ ->
-                    v46Outcomes.clear()
-                    switches.filterValues { it.isChecked }.keys.forEach { v46Outcomes.add(it) }
-                    refreshConsole?.invoke()
+                    outcomes.clear()
+                    switches.filterValues { it.isChecked }.keys.forEach { outcomes.add(it) }
+                    onApply()
                 }
                 .showRefined()
         }
+        action(console, "Filter history") { outcomeFilter(v46Outcomes) { refreshConsole?.invoke() } }
+        openActivityFilter = { outcomeFilter(activityOutcomes) { refreshActivity?.invoke() } }
         ui.input(instructionFilter)
         consoleFilters.values.forEach { ui.selector(it) }
         // Canonical selector captions use the shared form-field label grammar.
@@ -4172,14 +4601,11 @@ class MainActivity : Activity() {
             }
         add(alertCard, alertFailure, 6)
         lateinit var alertAction: Button
+        // The alert the card currently asks the recipient to act on; null when filters hide it.
+        var cardActiveAlert: CommandRecord? = null
         alertAction =
-            action(alertCard, "View alert & acknowledge", true) {
-                val row =
-                    v46Records.firstOrNull {
-                        it.trusted &&
-                            it.operation == "alert" &&
-                            it.state in listOf("output_attempted", "alert_blocked", "unknown")
-                    }
+            action(alertCard, "Acknowledge / Stop Alert", true) {
+                val row = cardActiveAlert
                 if (row == null) {
                     instructionFilter.setText("")
                     consoleFilters.getValue("Command type").setSelection(6)
@@ -4210,18 +4636,26 @@ class MainActivity : Activity() {
                     .showRefined()
             }
         export(alertCard, "Export alert journal")
-        fun records(rows: List<CommandRecord>) {
-            if (v46Records == rows && recent.childCount > 0) return
-            v46Records = rows
+        val alertNoMatch = ui.label("No matching phone alerts", TextRole.RowTitle, R.color.muted).apply { visibility = View.GONE }
+        add(alertsPage, alertNoMatch, 4)
+        fun records(all: List<CommandRecord>, force: Boolean = false) {
+            if (!force && v46Records == all && recent.childCount > 0) return
+            v46Records = all
+            val rows = all.filter(::activityMatches)
             recent.removeAllViews()
             recent.background = null
-            if (rows.isEmpty()) {
+            if (all.isEmpty() || rows.isEmpty()) {
                 // Empty state: one quiet card, same surface as a populated list.
                 recent.background = ui.shape(R.color.surface)
                 val pad = ui.px(R.dimen.card_padding)
                 recent.setPadding(pad, pad, pad, pad)
-                add(recent, ui.label("No received instructions", TextRole.RowTitle))
-                add(recent, ui.label("Instructions from Command appear here with their outcome.", TextRole.Meta), 3)
+                if (all.isEmpty()) {
+                    add(recent, ui.label("No received instructions", TextRole.RowTitle))
+                    add(recent, ui.label("Instructions from Command appear here with their outcome.", TextRole.Meta), 3)
+                } else {
+                    add(recent, ui.label("No matching instructions", TextRole.RowTitle))
+                    add(recent, ui.label("Change the search or filters to see more.", TextRole.Meta), 3)
+                }
             } else recent.setPadding(0, 0, 0, 0)
             val list = if (rows.isEmpty()) null else ui.list(recent)
             rows.take(20).forEach { row ->
@@ -4239,13 +4673,18 @@ class MainActivity : Activity() {
                         setOnClickListener { showInstruction(row) }
                     }
             }
-            val active =
-                rows.firstOrNull {
-                    it.trusted &&
-                        it.operation == "alert" &&
-                        it.state in listOf("output_attempted", "alert_blocked", "unknown")
-                }
-            val latestAlert = active ?: rows.firstOrNull { it.trusted && it.operation == "alert" }
+            // The journal lists unconfirmed results first; the card wants the most recently received alert.
+            val alerts = all.filter { it.trusted && it.operation == "alert" }.sortedByDescending { it.received }
+            val activeAlert =
+                alerts.firstOrNull { it.state in listOf("output_attempted", "alert_blocked", "unknown") }
+            // Search and outcome filters pick the newest matching alert, preferring the active one.
+            val latestAlert =
+                activeAlert?.takeIf(::activityMatches) ?: alerts.firstOrNull(::activityMatches)
+            val active = activeAlert?.takeIf { it === latestAlert }
+            cardActiveAlert = active
+            val alertShown = latestAlert != null || (alerts.isEmpty() && activityQuery.isBlank())
+            alertCard.visibility = if (alertShown) View.VISIBLE else View.GONE
+            alertNoMatch.visibility = if (alertShown) View.GONE else View.VISIBLE
             val latestSpec =
                 latestAlert?.let {
                     runCatching { PhoneAlertSpec.parse(Protocol.parse(it.requested)) }.getOrNull()
@@ -4281,7 +4720,7 @@ class MainActivity : Activity() {
                 alertCustody.text = if (row.confirmed) "Confirmed" else "Unconfirmed"
             }
             alertAction.text =
-                if (active != null) "View alert & acknowledge" else "View alert history"
+                if (active != null) "Acknowledge / Stop Alert" else "View alert history"
             // Primary only while the recipient has something to do.
             ui.style(alertAction, primary = active != null)
             alertAction.isEnabled = true
@@ -4291,6 +4730,12 @@ class MainActivity : Activity() {
                 .observeCommands()
                 .catch { alertSummary.text = "Alert history unavailable" }
                 .collect { records(it) }
+        }
+        refreshActivity = {
+            records(v46Records, force = true)
+            while (sosHistoryPage.childCount > 2) sosHistoryPage.removeViewAt(2)
+            renderSosHistory(sosAll)
+            styleFilterChip()
         }
         for (name in listOf("Policy details", "Storage health", "Identity & verification details", "Advanced logs", "Instruction filters")) {
             val destination = routes.getValue(name)
@@ -4345,6 +4790,33 @@ class MainActivity : Activity() {
             }
             (manage.getChildAt(manage.indexOfChild(managementError) + 1)?.layoutParams as? LinearLayout.LayoutParams)?.topMargin = 0
         }
+        // v3: Manage access & trust and Policy details are part of their owner pages.
+        run {
+            val trust = (0 until manage.childCount).map { manage.getChildAt(it) }
+            manage.removeAllViews()
+            ui.section(accessTrust, "Access & trust")
+            trust.forEach { accessTrust.addView(it, it.layoutParams) }
+            val policyPage = routes.getValue("Policy details")
+            val details = (0 until policyPage.childCount).map { policyPage.getChildAt(it) }
+            policyPage.removeAllViews()
+            details.forEach { policyInEffect.addView(it, it.layoutParams) }
+            // Diagnostics: the existing record/recovery/tool owners render inside segments.
+            fun embed(target: LinearLayout, page: LinearLayout, header: String?) {
+                detach(page)
+                page.setPadding(0, 0, 0, 0)
+                page.visibility = View.VISIBLE
+                header?.let { section(target, it) }
+                add(target, page)
+            }
+            embed(healthSeg, saved, "Saved data & sync")
+            embed(toolsSeg, tools, null)
+            embed(activityBoxes.getValue("Instructions"), recentPage, "Command instructions")
+            embed(activityBoxes.getValue("Alerts"), alertsPage, "Phone alerts")
+            embed(activityBoxes.getValue("SOS"), sosHistoryPage, "SOS records")
+            routeParents["History search & filters"] = "Diagnostics"
+            selectActivity(diagnosticsActivity)
+            selectSegment(diagnosticsSegment)
+        }
                 fun technical(view: TextView) {
             val parent = view.parent as? LinearLayout ?: return
             val index = parent.indexOfChild(view)
@@ -4364,6 +4836,15 @@ class MainActivity : Activity() {
         v46Refresh = {
             val state = savedInstallation
             val op = app.operational.value
+            renderSettingsLanding()
+            renderSaveBars()
+            val enrolled = state?.controlEnrollment != null
+            val accessDisabled = state?.controlDisabled == true
+            stepsCard.visibility = if (state != null && !enrolled && !accessDisabled) View.VISIBLE else View.GONE
+            disableAccess.visibility = if (enrolled && !accessDisabled) View.VISIBLE else View.GONE
+            reenrollAccess.visibility = if (enrolled || accessDisabled) View.VISIBLE else View.GONE
+            changeAccessHeader.visibility =
+                if (disableAccess.visibility == View.VISIBLE || reenrollAccess.visibility == View.VISIBLE) View.VISIBLE else View.GONE
             v46PartyInterval?.isEnabled = interval.isEnabled
             recoveryFailure.text =
                 op.error?.takeIf { it.startsWith("Saved delivery retry") }.orEmpty()
@@ -4373,61 +4854,104 @@ class MainActivity : Activity() {
             alertFailure.visibility = if (alertFailure.text.isEmpty()) View.GONE else View.VISIBLE
             renderReadiness?.invoke()
             val collection = app.observationPersistence.state
+            val configured = !state?.endpoint.isNullOrBlank()
+            val reachable = app.sender.commandReachable
+            val unreachable = configured && reachable == false
+            partyLine.text = if (configured && state != null) "${state.partyName} · ${state.partyId}" else ""
+            partyLine.visibility = if (partyLine.text.isEmpty()) View.GONE else View.VISIBLE
+            val intervalSeconds = state?.overrideSeconds ?: state?.localInterval ?: 10
             trackingCopy.text =
                 when {
-                    op.stopping -> "Stopping GNSS collection"
-                    op.starting -> "Preparing GNSS collection"
-                    !op.tracking -> "No new GNSS collection in progress"
+                    op.stopping -> "Stopping GNSS collection."
+                    op.starting -> "Preparing GNSS collection."
+                    !op.tracking -> "Observations are saved on this phone first, then delivered to Command."
                     collection.writeFailures > 0 ||
                         collection.overflow > 0 ||
                         (state?.knownCollectionLoss ?: 0) > 0 ->
-                        "Collection active · storage needs attention"
-                    collection.awaitingCommit > 0 -> "Collecting GNSS · saving on phone"
-                    collection.committedObservations > 0 -> "GNSS observations saved locally"
-                    else -> "Collecting GNSS · awaiting first saved observation"
+                        "Collection active · storage needs attention. See Diagnostics."
+                    unreachable -> "Saving on phone. Command unreachable; waiting observations send automatically."
+                    !configured -> "Saving on phone. Add a Command address to deliver observations."
+                    else -> "Reporting every $intervalSeconds s"
                 }
-            trackingBadge.text =
-                when {
-                    op.starting -> "Starting"
-                    op.stopping -> "Stopping"
-                    op.tracking -> "ON"
-                    else -> "OFF"
-                }
-            ui.pill(trackingBadge, op.tracking)
-            // The legacy refresh re-applies its pill to this owner; V4.6 shows a plain hero title.
+            ui.text(trackingSummary, TextRole.Hero)
             trackingSummary.background = null
             trackingSummary.setPadding(0, 0, 0, 0)
-            ui.text(trackingSummary, TextRole.Hero)
             trackingSummary.text =
                 when {
                     op.starting -> "Starting tracking"
                     op.stopping -> "Stopping tracking"
-                    op.tracking -> "Tracking active"
-                    else -> "Tracking stopped"
+                    op.tracking -> "Tracking"
+                    else -> "Not tracking"
                 }
+            statusDot(
+                trackingSummary,
+                when {
+                    !op.tracking || op.starting || op.stopping -> R.color.muted
+                    unreachable || !configured || collection.writeFailures > 0 -> R.color.warning
+                    else -> R.color.accent
+                },
+            )
+            // Fresh within two reporting intervals (never less than 30 s), so a healthy
+            // 60 s phone is not called stale between fixes.
+            val freshLimit = maxOf(30_000L, intervalSeconds * 2_000L)
+            val fresh = op.tracking && op.gnss == "fix" && op.ageMillis != null && op.ageMillis in 0..freshLimit
             gnssSummary.text =
                 when {
                     !op.tracking -> "Stopped"
-                    op.gnss == "fix" && op.ageMillis != null && op.ageMillis in 0..30000 -> "Fresh"
+                    fresh -> "Fresh"
                     op.ageMillis != null -> "Stale"
                     else -> "Unavailable"
                 }
-            ui.pill(
-                gnssSummary,
-                op.tracking && op.gnss == "fix" && op.ageMillis != null && op.ageMillis in 0..30000,
-            )
+            if (op.tracking) ui.statusPill(gnssSummary, if (fresh) StatusTone.POSITIVE else StatusTone.WARNING)
+            else plainValue(gnssSummary, "")
             fixAccuracy.text =
                 if (op.tracking)
-                    op.accuracy?.let { "%.1f m".format(java.util.Locale.ROOT, it) } ?: "—"
+                    op.accuracy?.let { "±%.1f m".format(java.util.Locale.ROOT, it) } ?: "—"
                 else "—"
             fixAge.text = if (op.tracking) op.ageMillis?.let { "${it/1000} s" } ?: "—" else "—"
-            // Persistent Command indicator: online only after a real Command response
-            // (Sender.commandReachable == true); unknown and failed both stay offline.
-            val commandOnline = app.sender.commandReachable == true
-            commandSummary.text = if (commandOnline) "Command online" else "Command offline"
-            ui.iconPill(commandSummary, R.drawable.ic_command, commandOnline)
+            batteryValue.text =
+                (op.health.battery_percent?.let { "$it%" } ?: "Unavailable") +
+                    if (op.health.charging == true) " · Charging" else ""
+            // Reachable only after a real Command response; unknown is never "offline".
+            val (commandText, commandTone) =
+                when {
+                    !configured -> "Not set up" to StatusTone.NEUTRAL
+                    reachable == true -> "Reachable" to StatusTone.POSITIVE
+                    reachable == false -> "Unreachable" to StatusTone.WARNING
+                    else -> "Not checked yet" to StatusTone.NEUTRAL
+                }
+            commandSummary.text = commandText
+            commandSummary.setCompoundDrawablesRelative(null, null, null, null)
+            ui.statusPill(commandSummary, commandTone)
             commandSummary.contentDescription =
-                if (commandOnline) "Command online" else "Command offline; saved data retries automatically"
+                "Command, $commandText" + if (unreachable) "; saved data retries automatically" else ""
+            lastAckValue.text = state?.lastAck?.let { shortUtcTime(it) } ?: "—"
+            renderSosCard()
+            val setup = preflight.snapshot()
+            val sosBlocked = sosCard.visibility == View.VISIBLE &&
+                latestSos.maxByOrNull { it.capturedMillis }?.let { it.deliveredAt == null && (it.quarantined || state?.deliveryPaused == true) } == true
+            val attention =
+                when {
+                    sosBlocked -> Triple("SOS not delivered", "Delivery needs attention. Open Saved data & sync.", "Saved data & sync")
+                    !configured -> Triple("Add a Command address", "Required before tracking can start. After that, data saves on the phone when Command can't be reached.", "Party & Command")
+                    !setup.precise -> Triple("Precise location required", "Allow precise location so fixes are accurate.", "Field readiness")
+                    setup.gps == false -> Triple("Location (GPS) is off", "Turn on location to collect GNSS fixes.", "Field readiness")
+                    setup.notifications != true -> Triple("Notifications blocked", "Tracking and phone alerts need notifications.", "Field readiness")
+                    setup.powerSave == true -> Triple("Battery Saver is on", "Turn it off for field tracking.", "Field readiness")
+                    setup.optimizationExemption != true -> Triple("Background activity may be limited", "Android may pause tracking with the screen off.", "Field readiness")
+                    else -> null
+                }
+            // During SOS only actions that unblock its delivery stay visible.
+            val showAttention = attention != null && (sosCard.visibility != View.VISIBLE || sosBlocked || !configured)
+            if (attention != attentionShown) {
+                attentionShown = attention
+                attentionList.removeAllViews()
+                attention?.let { (title, detail, route) ->
+                    ui.menu(attentionList, title, detail, "Fix" to StatusTone.WARNING) { navigate(route) }
+                }
+            }
+            attentionHeader.visibility = if (showAttention) View.VISIBLE else View.GONE
+            attentionList.visibility = attentionHeader.visibility
             val label =
                 commandContactLabel(state, app.commandControl.contact, SystemClock.elapsedMillis())
             contact.text = label
@@ -4453,20 +4977,14 @@ class MainActivity : Activity() {
                     checking -> "Checking…"
                     state?.controlDisabled == true -> "Disabled"
                     state?.controlEnrollment != null -> "Recheck"
-                    else -> "Authorize"
+                    else -> "Review & authorize"
                 }
             authorize.isEnabled = state != null && !state.controlDisabled && !checking
             // Disabled is already stated by the enrollment status; no inert "Disabled" button.
             authorize.visibility = if (state?.controlDisabled == true) View.GONE else View.VISIBLE
             syncNowButton.isEnabled =
                 initialized && (currentQueueCounts?.gnss ?: 0) > 0 && !op.drainStarting
-            retentionCaption.text =
-                when {
-                    currentQueueCounts == null -> "Observation counts unavailable"
-                    currentQueueCounts!!.gnss == 0 -> "No pending observations"
-                    else -> ""
-                }
-            retentionCaption.visibility = if (retentionCaption.text.isEmpty()) View.GONE else View.VISIBLE
+            syncRow.visibility = if ((currentQueueCounts?.gnss ?: 0) > 0) View.VISIBLE else View.GONE
             savedSync.isEnabled = syncNowButton.isEnabled
         }
         refreshTrust = {
@@ -4495,10 +5013,11 @@ class MainActivity : Activity() {
             dock.setPadding(dp(9), dp(7), dp(9), dp(7))
             sosStatus.minHeight = 0
             sosStatus.minLines = 1
-            sosStatus.maxLines = 1
+            // Safety caption wraps at large text instead of truncating ("Release to can…").
+            sosStatus.maxLines = 2
             ui.text(sosStatus, TextRole.Micro, R.color.danger)
             sosStatus.setPadding(0, 0, 0, 0)
-            sosStatus.ellipsize = android.text.TextUtils.TruncateAt.END
+            sosStatus.ellipsize = null
             peerRow(dock, "Emergency SOS", sosStatus)
             (dock.getChildAt(0).layoutParams as LinearLayout.LayoutParams).topMargin = 0
             ((dock.getChildAt(0) as LinearLayout).getChildAt(0) as TextView).let {
@@ -4727,6 +5246,7 @@ class MainActivity : Activity() {
         start: Boolean = false,
         reenroll: Boolean = false,
         policyOnly: Boolean = false,
+        partyOnly: Boolean = false,
     ) {
         if (!initialized && !start) {
             settingsFeedback.text = "Settings not saved · storage unavailable"
@@ -4749,7 +5269,8 @@ class MainActivity : Activity() {
         val id = partyId.text.toString().trim()
         val name = partyName.text.toString().trim()
         val url = endpoint.text.toString().trim()
-        val seconds = interval.text.toString().toIntOrNull()
+        val seconds =
+            if (partyOnly) savedInstallation?.localInterval else interval.text.toString().toIntOrNull()
         val saveJob =
             scope.launch {
                 try {
@@ -4998,6 +5519,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         resumed = true
+        v46Refresh?.invoke()
         app.physicalButtonTest.activityResumed()
         if (::physicalButtonPanel.isInitialized && physicalButtonPanel.visibility == View.VISIBLE)
             refreshPhysicalButtonHistory()
@@ -5034,6 +5556,10 @@ class MainActivity : Activity() {
         outState.putBoolean("customIntervalChoice", v46IntervalPicker?.selectedItemPosition == 4)
         outState.putBoolean("partyCustomIntervalChoice", v46PartyIntervalPicker?.selectedItemPosition == 4)
         outState.putStringArrayList("v46Outcomes", ArrayList(v46Outcomes))
+        outState.putStringArrayList("activityOutcomes", ArrayList(activityOutcomes))
+        outState.putString("activityQuery", activityQuery)
+        outState.putString("diagnosticsSegment", diagnosticsSegment)
+        outState.putString("diagnosticsActivity", diagnosticsActivity)
         mainScroll?.let { routeScrolls[route] = it.scrollY }
         outState.putBundle(
             "routeScrolls",
@@ -5127,6 +5653,8 @@ class MainActivity : Activity() {
 
     companion object {
         internal const val EXPORT_DIAGNOSTICS = 40
+        /** Test-only fixed free space so visual baselines do not follow the host disk. */
+        internal var freeSpaceForTests: Long? = null
     }
 
     override fun dispatchTouchEvent(event: android.view.MotionEvent): Boolean {
@@ -5291,6 +5819,8 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         resumed = false
         if (::sosHold.isInitialized) sosHold.dispose()
+        sosCardTimer.removeCallbacksAndMessages(null)
+        recordSheet?.dismiss()
         if (pendingStart && (!isChangingConfigurations || savingStart))
             app.operational.update { it.copy(starting = false) }
         physicalButtonRefresh?.cancel()

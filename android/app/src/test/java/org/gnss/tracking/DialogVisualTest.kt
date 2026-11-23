@@ -99,8 +99,6 @@ class DialogVisualTest {
                 }
                 settle()
                 openNativeScreen(a, "Command access")
-                click("Enrollment steps ›")
-                capture("enrollment-steps")
                 openNativeScreen(a, "Saved data & sync")
                 click("Retry saved messages")
                 capture("retry")
@@ -117,7 +115,7 @@ class DialogVisualTest {
                     .filterIsInstance<EditText>()
                     .single { it.hint == "Paste Command credential" }
                     .setText("gnss1:$authority:${initial.deviceId}:$enrollment:${"01".repeat(32)}")
-                click("Authorize")
+                click("Review & authorize")
                 capture("authorize")
                 assertNull(app.repository.state().controlEnrollment)
                 app.repository.edit {
@@ -133,7 +131,7 @@ class DialogVisualTest {
                 assertTrue(app.operational.value.tracking)
                 app.operational.value = Operational()
                 settle()
-                openNativeScreen(a, "Party & Command")
+                openNativeScreen(a, "Tracking policy")
                 val field =
                     all().filterIsInstance<EditText>().single {
                         it.contentDescription == "Custom interval · seconds" && (it.parent as android.view.View).isShown
@@ -143,7 +141,7 @@ class DialogVisualTest {
                         it.text == "Custom interval · seconds" && it.labelFor != View.NO_ID && (it.parent as View).isShown
                     }
                 a.findViewById<EditText>(intervalLabel.labelFor).setText("3")
-                click("Save settings")
+                click("Save")
                 capture("invalid-interval")
                 @Suppress("DEPRECATION") a.onBackPressed()
                 openNativeScreen(a, "Tracking")
@@ -171,7 +169,7 @@ class DialogVisualTest {
                 settle()
                 openNativeScreen(a, "Phone Alerts")
                 settle()
-                click("View alert & acknowledge")
+                click("Acknowledge / Stop Alert")
                 capture("phone-alert")
                 assertEquals("unknown", app.repository.dao.command(alertId)!!.state)
                 openNativeScreen(a, "Diagnostic tools")

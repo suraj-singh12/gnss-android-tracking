@@ -111,7 +111,7 @@ class CommandEnrollmentUiTest {
                         }
                     assertFalse(input.isSaveEnabled)
                     input.setText("invalid")
-                    click("Authorize")
+                    click("Review & authorize")
                     assertTrue(visible("Enter a valid gnss1 credential for this phone UUID."))
                     val authority = Protocol.newId()
                     val enrollment = Protocol.newId()
@@ -119,10 +119,10 @@ class CommandEnrollmentUiTest {
                     input.setText(
                         "gnss1:$authority:${Protocol.newId()}:$enrollment:${"01".repeat(32)}"
                     )
-                    click("Authorize")
+                    click("Review & authorize")
                     assertNull(app.repository.state().controlEnrollment)
                     input.setText("gnss1:$authority:$phone:$enrollment:${"01".repeat(32)}")
-                    click("Authorize")
+                    click("Review & authorize")
                     assertEquals("", input.text.toString())
                     val review = ShadowAlertDialog.getLatestAlertDialog()
                     assertEquals("Authorize Command?", shadowOf(review).title.toString())
@@ -132,7 +132,7 @@ class CommandEnrollmentUiTest {
                     review.getButton(AlertDialog.BUTTON_NEGATIVE).performClick()
                     assertNull(app.repository.state().controlEnrollment)
                     input.setText("gnss1:$authority:$phone:$enrollment:${"01".repeat(32)}")
-                    click("Authorize")
+                    click("Review & authorize")
                     val interruptedReview = ShadowAlertDialog.getLatestAlertDialog()
                     controller.pause()
                     controller.resume()
@@ -145,11 +145,9 @@ class CommandEnrollmentUiTest {
                         }
                     )
 
-                    click("Enrollment steps ›")
-                    assertTrue(ShadowAlertDialog.getLatestAlertDialog().isShowing)
-                    ShadowAlertDialog.getLatestAlertDialog()
-                        .getButton(AlertDialog.BUTTON_POSITIVE)
-                        .performClick()
+                    // v3: Command-side enrollment steps are inline while not enrolled.
+                    assertTrue(visible("On the Command computer"))
+                    assertTrue(visible("Paste the private credential"))
                     // Contact state is shown on Manage access & trust (removed from Command access).
                     openNativeScreen(activity, "Manage Command access")
                     settle()
@@ -220,16 +218,8 @@ class CommandEnrollmentUiTest {
                     }
                     openNativeScreen(activity, "Manage Command access")
                     settle()
-                    click("Copy Command ID")
-                    assertEquals(
-                        authority,
-                        activity
-                            .getSystemService(ClipboardManager::class.java)
-                            .primaryClip!!
-                            .getItemAt(0)
-                            .text
-                            .toString(),
-                    )
+                    // v3: the authorized Command ID is shown as selectable text on Command access.
+                    assertTrue(nativeViews(root).filterIsInstance<TextView>().any { it.isShown && it.text.toString().contains(authority) })
                     capture(root, activity, 360, 800, "$night-identity")
                     assertFalse(app.operational.value.tracking)
                 } finally {

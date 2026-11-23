@@ -277,7 +277,7 @@ internal class NativeUi(private val context: Context) {
     }
 
     /** One navigation row: title, optional subtitle and a trailing right chevron. */
-    fun menu(parent: LinearLayout, title: String, subtitle: String, status: Pair<String, StatusTone>? = null, action: () -> Unit) =
+    fun menu(parent: LinearLayout, title: String, subtitle: String, status: Pair<String, StatusTone>? = null, value: String? = null, action: () -> Unit) =
         LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -287,7 +287,7 @@ internal class NativeUi(private val context: Context) {
                 RippleDrawable(ColorStateList.valueOf(color(R.color.ripple)), shape(R.color.surface), null)
             isClickable = true
             isFocusable = true
-            contentDescription = listOfNotNull(title, subtitle.ifEmpty { null }, status?.first).joinToString(". ") + ". Open"
+            contentDescription = listOfNotNull(title, subtitle.ifEmpty { null }, value, status?.first).joinToString(". ") + ". Open"
             if (android.os.Build.VERSION.SDK_INT >= 28) isScreenReaderFocusable = true
             addView(
                 column().apply {
@@ -297,6 +297,13 @@ internal class NativeUi(private val context: Context) {
                 },
                 LinearLayout.LayoutParams(0, -2, 1f),
             )
+            value?.let {
+                addView(label(it, TextRole.Value, R.color.muted).apply {
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                }, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = px(R.dimen.space_sm) })
+            }
             status?.let { (statusText, tone) ->
                 addView(label(statusText, TextRole.Pill).apply {
                     statusPill(this, tone)

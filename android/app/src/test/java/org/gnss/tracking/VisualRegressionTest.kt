@@ -87,6 +87,7 @@ class VisualRegressionTest(private val profile: Profile) {
     @Test
     fun everyScreenPassesLayoutAuditAndMatchesApprovedGeometry() = runBlocking {
         TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
+        MainActivity.freeSpaceForTests = 28L * 1024 * 1024 * 1024
         // Test-only fixed identity before any message exists: a random UUID in a
         // proportional font can wrap differently and move the identity screens.
         val state = withContext(Dispatchers.IO) {
@@ -153,6 +154,20 @@ class VisualRegressionTest(private val profile: Profile) {
                 if (sos != null && sos.isShown)
                     audit.safeArea(content, sos, name, px(24), root.height - root.paddingBottom)?.let { findings += it }
             }
+            // v3: Activity records open in a sheet; audit the sheet window, then close it.
+            fun checkSheet(name: String, screen: String) {
+                val sheet = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
+                assertTrue("$screen opens as a sheet", sheet != null && sheet.isShowing)
+                val view = sheet.window!!.decorView
+                view.measure(View.MeasureSpec.makeMeasureSpec(w - px(32), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.AT_MOST))
+                view.layout(0, 0, view.measuredWidth, view.measuredHeight)
+                findings += audit.audit(view, screen, false, ::allow)
+                val pixels = capture.write(name, view)
+                geometry.put(name, audit.geometry(view).apply {
+                    if (name !in VisualBaseline.hostDependent) put(VisualBaseline.PIXELS, pixels)
+                })
+                sheet.dismiss()
+            }
             suspend fun scrollBottom(): Boolean {
                 val scroll = nativeViews(root).filterIsInstance<ScrollView>().first()
                 val max = scroll.getChildAt(0).height - scroll.height
@@ -192,8 +207,8 @@ class VisualRegressionTest(private val profile: Profile) {
             if (scrollBottom()) check("tracking-urgent-alert-bottom", "Tracking")
             // Every destination, top and scrolled end.
             for (screen in listOf(
-                "Settings", "Party & Command", "Command access", "Manage Command access",
-                "Field readiness", "Tracking policy", "Policy details", "Emergency controls",
+                "Settings", "Party & Command", "Command access",
+                "Field readiness", "Tracking policy", "Emergency", "Appearance",
                 "Diagnostics", "Command Instructions", "History search & filters", "Instruction filters", "Phone Alerts",
                 "Saved data & sync", "SOS event history", "SOS details",
                 "Diagnostic tools", "Advanced logs",
@@ -201,12 +216,14 @@ class VisualRegressionTest(private val profile: Profile) {
                 openNativeScreen(a, screen)
                 settle()
                 val slug = screen.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
+                if (screen == "SOS details") { checkSheet(slug, screen); settle(); continue }
                 check(slug, screen)
                 if (scrollBottom()) check("$slug-bottom", screen)
                 if (screen == "Command Instructions") {
                     nativeViews(root).first { it.isShown && it.contentDescription?.contains("Open instruction details") == true }.performClick()
                     settle()
-                    check("instruction-details", "Instruction details")
+                    checkSheet("instruction-details", "Instruction details")
+                    settle()
                 }
             }
             // Interaction states.
@@ -256,17 +273,32 @@ class VisualRegressionTest(private val profile: Profile) {
                     openNativeScreen(a, "Tracking"); app.operational.value = Operational(tracking = true); settle(); click("Stop Tracking")
                 }
                 app.operational.value = Operational(); settle()
-                dialog("enrollment-steps") { openNativeScreen(a, "Command access"); settle(); click("Enrollment steps ›") }
-                dialog("disable-remote-control") { openNativeScreen(a, "Manage Command access"); settle(); click("Disable remote control") }
-                dialog("re-enroll") { openNativeScreen(a, "Manage Command access"); settle(); click("Re-enroll Command") }
+                val fixture = withContext(Dispatchers.IO) { app.repository.state() }
+                val authority = "11111111-1111-4111-8111-111111111111"
+                val enrollment = "22222222-2222-4222-8222-222222222222"
+                dialog("review-authorization") {
+                    openNativeScreen(a, "Command access"); settle()
+                    nativeViews(content).filterIsInstance<EditText>().single { it.isShown && it.hint == "Paste Command credential" }
+                        .setText("gnss1:$authority:${fixture.deviceId}:$enrollment:${"01".repeat(32)}")
+                    click("Review & authorize")
+                }
+                // Disable and Re-enroll exist only once an enrollment does.
+                withContext(Dispatchers.IO) { app.repository.edit { it.copy(controlAuthority = authority, controlEnrollment = enrollment) } }
+                settle()
+                dialog("disable-remote-control") { openNativeScreen(a, "Command access"); settle(); click("Disable remote control") }
+                dialog("re-enroll") { openNativeScreen(a, "Command access"); settle(); click("Re-enroll Command") }
+                withContext(Dispatchers.IO) {
+                    app.repository.edit { it.copy(controlAuthority = fixture.controlAuthority, controlEnrollment = fixture.controlEnrollment) }
+                }
+                settle()
                 dialog("instruction-filter") { openNativeScreen(a, "History search & filters"); settle(); click("Filter history") }
                 dialog("retry") { openNativeScreen(a, "Saved data & sync"); settle(); click("Retry saved messages") }
-                dialog("phone-alert") { openNativeScreen(a, "Phone Alerts"); settle(); click("View alert & acknowledge") }
+                dialog("phone-alert") { openNativeScreen(a, "Phone Alerts"); settle(); click("Acknowledge / Stop Alert") }
                 dialog("invalid-interval") {
-                    openNativeScreen(a, "Party & Command"); settle()
+                    openNativeScreen(a, "Tracking policy"); settle()
                     val label = nativeViews(root).filterIsInstance<android.widget.TextView>().single { it.text == "Custom interval · seconds" && it.labelFor != View.NO_ID && (it.parent as View).isShown }
                     a.findViewById<EditText>(label.labelFor).setText("3")
-                    click("Save settings")
+                    click("Save")
                 }
                 dialog("unsaved-edits") {
                     @Suppress("DEPRECATION") a.onBackPressed()
@@ -280,6 +312,7 @@ class VisualRegressionTest(private val profile: Profile) {
             assertTrue("Geometry differs from the approved baseline for ${profile.name}. Review captures, then record a justified baseline:\n" + diffs.joinToString("\n"), diffs.isEmpty())
         } finally {
             controller.pause().stop().destroy()
+            MainActivity.freeSpaceForTests = null
             app.finishForTests()
         }
     }

@@ -5,7 +5,75 @@ Issue #6 builds on combined GNSS + SOS source
 service/backend state. Typography and semantics are shared; Android uses native
 controls and Command uses accessible HTML controls.
 
+## Current Android v3 contract — Issue #68, operator approval 22 November 2026
+
+Android follows the operator-approved
+[Proposed v3 prototype](design/approved/android-v3-simplified-interactive.html) recorded in
+[Issue #68](https://github.com/suraj-singh12/gnss-android-tracking/issues/68). This section
+supersedes the V4.6 Android contract below wherever they differ; V4.6 tokens, colours,
+`NativeUi` components, the protected SOS hold and Stop Tracking treatment are unchanged.
+Command's approved design is unchanged.
+
+Approved overrides of earlier #39/V4.6 rules:
+
+- **Appearance** moves from the app-bar icon to **Settings › Appearance** with
+  System / Day / Night (`Appearance.kt`). System follows the phone; the legacy `night`
+  preference is honoured until a mode is chosen. Notifications use the same resolved mode.
+- **Titles:** root destinations show a large page title (no "GNSS Tracker" brand bar,
+  "G" badge or "Operator device" line). Nested pages keep Back plus the page title.
+- **Bottom navigation** uses icon + label tabs: Tracking · Settings · Diagnostics.
+- **Sync now** lives in the Delivery list and is shown only while data is waiting.
+- **Diagnostics** sub-pages become the Health / Activity / Tools segments. Old routes
+  (Saved data & sync, Diagnostic tools, Command Instructions, Phone Alerts, SOS event
+  history) open the owning segment.
+
+**Tracking** answers "Am I tracked and is it reaching Command?": one status card
+(`Not tracking`, `Tracking`, or `Tracking · saving on phone` when Command does not
+respond), one sentence and one action (Start Tracking, or the approved Stop with
+confirmation). A **Needs attention** row appears only for a real issue and opens the owning
+Settings page. Plain lists follow: **GNSS** (Position fix, Accuracy, Fix age, Battery) and
+**Delivery to Command** (Command: `Not set up` / `Not checked yet` / `Reachable` /
+`Unreachable` from `Sender.commandReachable` only; Waiting on phone; Delivered to Command;
+Last Command ACK; Sync now). While SOS is active, a card shows three separate checkpoints:
+Saved on phone, Delivered to Command, Acknowledged by an operator. Delivery is never shown
+as human acknowledgement. Fresh/Stale uses `max(30 s, 2 × interval)`.
+
+**Settings** is a short grouped list with current values: Party & Command (address,
+party name) · Command access (Not enrolled / Enrolled / Disabled) · Tracking policy
+(interval) · Field readiness (Ready / n issues) · Emergency · Appearance (mode). Each page
+is one tap from Settings:
+
+- *Party & Command*: Party ID, Party name, Command address (example hints in empty
+  fields); Save / Cancel appear only when a field differs from the saved value.
+- *Command access* (`FLAG_SECURE`): inline enrollment steps, phone ID with Copy, private
+  credential, **Review & authorize** → review dialog → Authorize; when enrolled:
+  authenticated contact, Recheck, identity IDs, saved address, About trust, evidence
+  disclosure, Re-enroll and Disable, each confirmed. Disable and Re-enroll are hidden
+  until an enrollment exists.
+- *Tracking policy*: reporting interval 5 / 10 / 30 / 60 / Custom (5–86 400 s in
+  multiples of 5, inline error) with its own Save bar; Adaptive storage; phone interval,
+  applied interval and Command request.
+- *Field readiness*: one status row per requirement, a **Fix** action only where needed,
+  Recheck.
+- *Emergency*: mandatory protected SOS hold (Always on) and the optional volume-up
+  shortcut. Physical-key testing is **not** here; it lives only in Diagnostics › Tools.
+- *Appearance*: System / Day / Night.
+
+**Diagnostics** segments:
+
+- *Health*: seven rows (GNSS, Storage, Command, Sync, SOS, Device space, Remote control),
+  then Saved data & sync (Waiting on phone, Delivered to Command, Unresolved, Last
+  Command ACK, Sync All Now, Retry saved messages, Export evidence).
+- *Activity*: chips All / Instructions / Alerts / SOS over the existing Command
+  instructions, Phone alerts and SOS records owners, with search, the Applied / Unknown /
+  Rejected-blocked filter, Canonical categories and the existing detail sheets and
+  exports.
+- *Tools*: Physical-key test (Start/Stop, detected events, Clear results, Export test
+  results), diagnostic ZIP export and Advanced logs.
+
 ## Current Android V4.6 contract — operator refinement, 9 November 2026
+
+*Superseded by the v3 contract above wherever they differ (Issue #68).*
 
 Android follows the [immutable V4.6 reference](https://github.com/suraj-singh12/gnss-android-tracking/blob/8d95eafe6fdcd1423027194ea128ae7a8b91236d/docs/design/approved/android-v4.6-interactive.html)
 and current Issue #39 decisions. This Android-specific section supersedes older
@@ -228,6 +296,8 @@ Original observation, capture, receipt and human acknowledgement times remain se
 Backend contact grace periods follow each device's effective reporting interval.
 
 ## Android navigation and flows
+
+*Issue #68 v3 placement (above) supersedes the destination layout in this section; the lifecycle, Start/Stop, interval and SOS rules still apply.*
 
 Three persistent destinations: **Tracking · Settings · Diagnostics**. Tracking shows
 large lifecycle state, one Start/Stop control, GNSS accuracy/age, application contact

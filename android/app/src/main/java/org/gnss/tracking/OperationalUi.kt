@@ -17,13 +17,7 @@ internal class HealthRow(
     private val ui = NativeUi(context)
     private val state = ui.label("Checking", TextRole.Pill)
     private val metadata = ui.label("", TextRole.Meta)
-    private val displayLabel =
-        when (label) {
-            "Command" -> "Command delivery"
-            "Storage" -> "Local storage"
-            "Remote control" -> "Trusted control"
-            else -> label
-        }
+    private val displayLabel = label
 
     init {
         orientation = HORIZONTAL
@@ -59,7 +53,14 @@ internal class HealthRow(
 
     fun update(value: String, detail: String = "", tone: Int = R.color.muted) {
         state.text = value
-        ui.pill(state, tone == R.color.accent)
+        ui.statusPill(
+            state,
+            when (tone) {
+                R.color.accent -> StatusTone.POSITIVE
+                R.color.warning -> StatusTone.WARNING
+                else -> StatusTone.NEUTRAL
+            },
+        )
         metadata.text = detail
         metadata.visibility = if (detail.isEmpty()) View.GONE else View.VISIBLE
         contentDescription =

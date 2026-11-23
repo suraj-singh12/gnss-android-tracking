@@ -163,7 +163,7 @@ class TrackingNotificationTest {
     }
 
     @Test
-    fun iconOnlyThemeToggleAndEmergencyPaletteHaveAccessibleContrast() = runBlocking {
+    fun emergencyPaletteHasAccessibleContrastWithoutAnAppBarThemeToggle() = runBlocking {
         val app = ApplicationProvider.getApplicationContext<TrackingApp>()
         fun luminance(c: Int): Double {
             fun channel(v: Int): Double {
@@ -185,19 +185,7 @@ class TrackingNotificationTest {
                 val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
                 try {
                     val activity = controller.get()
-                    val toggle = activity.findViewById<Button>(R.id.tracking_appearance)
-                    assertEquals("Appearance is artwork, not a font glyph", "", toggle.text.toString())
-                    val artwork = toggle.compoundDrawables[0]
-                    assertTrue("Both themes use the approved native vector", artwork is android.graphics.drawable.VectorDrawable)
-                    val ui = NativeUi(activity)
-                    assertEquals(ui.dp(24), artwork.bounds.width())
-                    assertEquals(ui.dp(24), artwork.bounds.height())
-                    assertEquals(ui.dp(48), toggle.layoutParams.width)
-                    assertEquals(
-                        if (night) "Switch to Day mode" else "Switch to Night mode",
-                        toggle.contentDescription,
-                    )
-                    assertTrue(toggle.minimumHeight >= NativeUi(activity).dp(48))
+                    assertNull("Appearance lives in Settings, not the app bar", activity.findViewById<Button>(R.id.tracking_appearance))
                     assertTrue(
                         contrast(
                             activity.getColor(R.color.danger),
@@ -211,12 +199,6 @@ class TrackingNotificationTest {
                         views(activity.findViewById(android.R.id.content))
                             .filterIsInstance<Button>()
                             .none { it.text.contains("Pause", true) }
-                    )
-                    toggle.performClick()
-                    shadowOf(Looper.getMainLooper()).idle()
-                    assertEquals(
-                        !night,
-                        app.getSharedPreferences("appearance", 0).getBoolean("night", night),
                     )
                 } finally {
                     controller.pause().stop().destroy()

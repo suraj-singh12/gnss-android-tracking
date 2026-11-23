@@ -1,3 +1,29 @@
+# Issue #68 — Android v3 placement (operator-approved 22 November 2026)
+
+Parent: `b59b08340254f9188f0b4d296ed9dab473acb608` (latest `integration/combined-upgrades`
+when `feature/issue-68-devX-android-v3-ui` was created). Design authority:
+[approved v3 prototype](design/approved/android-v3-simplified-interactive.html). v3 changes
+**placement and hierarchy only**: every ID 01–60 below keeps its owner, authority and
+states. The v2 information-loss audit (Issue #68) defines the items that must stay visible.
+
+| IDs (below) | v3 home | Preserved items |
+|---|---|---|
+| Global shell, appearance | Root large titles; nested Back + title; icon + label tabs; Settings › Appearance (System / Day / Night) | Independent appearance preference (legacy `night` still honoured), notifications follow it |
+| Tracking lifecycle, live facts, queue (01–12, 59) | Tracking: status card, Needs attention, GNSS list, Delivery to Command list | Not tracking / Tracking / saving on phone; Start, confirmed Stop; Position fix, Accuracy, Fix age, Battery; Command Not set up / Not checked yet / Reachable / Unreachable (`Sender.commandReachable` only); Waiting on phone, Delivered to Command, Last Command ACK; Sync now only while data waits |
+| SOS (43, 44, 60) | Tracking SOS card; global SOS dock; Settings › Emergency | Saved on phone, Delivered to Command, Acknowledged by an operator as separate checkpoints; protected 1.2 s hold and accessibility action; Always on; optional volume-up shortcut |
+| Party & Command (configuration) | Settings › Party & Command | Party ID, Party name, Command address; Save / Cancel only when changed; example hints in empty fields |
+| Enrollment and trust (29–36) | Settings › Command access (`FLAG_SECURE`) | Command-side steps inline, phone ID + Copy, private credential, Review & authorize → review dialog → Authorize, authenticated contact, Recheck, identity IDs, saved address, About trust, More evidence & rejection reasons, Re-enroll and Disable (each confirmed, shown only when enrolled/disabled) |
+| Readiness (37, 38) | Settings › Field readiness | One status row per requirement, Fix only where needed, Recheck |
+| Reporting and policy (39–42) | Settings › Tracking policy | 5 / 10 / 30 / 60 / Custom; Custom 5–86 400 s in steps of 5 with inline error; own Save bar; Adaptive storage; phone interval, applied interval, Command request (Policy details) |
+| Diagnostics health (45) | Diagnostics › Health | Seven rows: GNSS, Storage, Command, Sync, SOS, Device space, Remote control |
+| Saved data (55, 56) | Diagnostics › Health › Saved data & sync | Waiting on phone, Delivered to Command, Unresolved, Last Command ACK, saved-GNSS sync progress, Sync All Now, Retry saved messages, Export evidence |
+| Instructions, history, alerts, SOS records (46–54, 59) | Diagnostics › Activity (All / Instructions / Alerts / SOS) | One search and Applied / Unknown / Rejected-blocked filter across all record types; records open as sheets; Canonical categories, instruction details (received, verification, execution, result ACK, authority, reason), journal export; alert output, recipient ACK, Command custody, Acknowledge / Stop output, alert history; SOS created, fix age, saved, message ACK, operator ACK, evidence export |
+| Tools (57, 58) | Diagnostics › Tools | Physical-key Start/Stop, detected events, Clear results (confirmed), Export test results, diagnostic ZIP, Advanced logs. Not in Settings › Emergency |
+
+Legacy route names (Saved data & sync, Diagnostic tools, Command Instructions, Phone
+Alerts, SOS event history, Manage Command access, Policy details, Emergency controls)
+remain valid and open the v3 owner.
+
 # Issue #66 — Command V5.14 production workspace preservation matrix
 
 Visual authority: the approved [Command V5.14 interactive design](https://github.com/suraj-singh12/gnss-android-tracking/blob/docs/approved-command-v5-14-issue-34/docs/design/approved/command-v5.14-interactive.html)

@@ -5,6 +5,9 @@ import android.os.Looper
 import android.view.KeyEvent
 import android.view.View
 import android.widget.Button
+import android.widget.EditText
+import android.app.AlertDialog
+import android.widget.Switch
 import android.widget.TextView
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.*
@@ -16,6 +19,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowAlertDialog
 
 /** 20 Nov 2026 refinement: real-state presentation, retired routes and consolidated screens. */
 @RunWith(RobolectricTestRunner::class)
@@ -66,7 +70,8 @@ class V46RefinementTest {
             assertNull("No Command receipt is implied", row.deliveredAt)
             assertEquals("Wi-Fi unavailable", withContext(Dispatchers.IO) { app.repository.state().operationalError })
             assertFalse("A retryable attempt is not shown as a Tracking failure", texts(a).any { it.contains("Wi-Fi unavailable") })
-            assertTrue(texts(a).contains("Command offline"))
+            assertFalse(texts(a).contains("Command offline"))
+            assertTrue(texts(a).contains("Not set up") || texts(a).contains("Unreachable"))
             assertFalse(texts(a).any { it.contains("Received") })
             // A paused receiver is a genuine problem and stays visible.
             withContext(Dispatchers.IO) { app.repository.pauseReceiver("Receiver rejected configuration", app.repository.state().endpointGeneration) }
@@ -80,17 +85,84 @@ class V46RefinementTest {
         try {
             val a = controller.get()
             until { shown(a).filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled } }
-            setReachable(null)
-            app.operational.value = Operational(health = Health(wifi_connected = true))
-            until { texts(a).contains("Command offline") }
-            assertFalse("Wi-Fi alone is not Command contact", texts(a).contains("Command online"))
-            setReachable(true)
-            app.operational.value = Operational(health = Health(wifi_connected = true), link = "changed")
-            until { texts(a).contains("Command online") }
-            setReachable(false)
-            app.operational.value = Operational(health = Health(wifi_connected = true))
-            until { texts(a).contains("Command offline") }
+            withContext(Dispatchers.IO) { app.repository.settings("A", "Alpha", "http://192.168.1.2:8080", 10) }
+            // The live Sender may reset its own contact state (endpoint generation,
+            // connectivity callbacks) while the test runs; re-apply the state under test
+            // with a fresh Operational emission until the Tracking row renders it.
+            var tick = 0
+            suspend fun shows(reachable: Boolean?, text: String) = until {
+                setReachable(reachable)
+                app.operational.value = Operational(health = Health(wifi_connected = true, battery_percent = 50 + tick++ % 2))
+                texts(a).contains(text)
+            }
+            shows(null, "Not checked yet")
+            assertFalse("Unknown is not offline", texts(a).contains("Unreachable"))
+            assertFalse("Wi-Fi alone is not Command contact", texts(a).contains("Reachable"))
+            shows(true, "Reachable")
+            shows(false, "Unreachable")
             assertFalse(texts(a).any { it.contains("Saved data will retry") || it.contains("Observations retained until received") })
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test
+    fun eachSaveBarSavesOnlyItsOwnPageAndIgnoresTheOtherDraft() = runBlocking {
+        withContext(Dispatchers.IO) { app.repository.settings("A", "Alpha", "http://192.168.1.2:8080", 10) }
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            val a = controller.get()
+            until { shown(a).filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled } }
+            until { (field(a, "endpoint") as TextView).text.toString() == "http://192.168.1.2:8080" }
+            fun save() = shown(a).filterIsInstance<Button>().single { it.text == "Save" }.performClick()
+            openNativeScreen(a, "Party & Command"); settle()
+            (field(a, "endpoint") as TextView).text = "http://192.168.1.9:8080"
+            openNativeScreen(a, "Tracking policy"); settle()
+            (field(a, "interval") as TextView).text = "30"
+            settle()
+            save()
+            until { kotlinx.coroutines.runBlocking(Dispatchers.IO) { app.repository.state() }.localInterval == 30 }
+            assertEquals("Unsaved address draft is not committed by Tracking policy",
+                "http://192.168.1.2:8080", withContext(Dispatchers.IO) { app.repository.state() }.endpoint)
+            (field(a, "interval") as TextView).text = "3"
+            openNativeScreen(a, "Party & Command"); settle()
+            save()
+            until { kotlinx.coroutines.runBlocking(Dispatchers.IO) { app.repository.state() }.endpoint == "http://192.168.1.9:8080" }
+            assertEquals("Invalid interval draft neither blocks nor rides along", 30,
+                withContext(Dispatchers.IO) { app.repository.state() }.localInterval)
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test
+    fun deliveredSosCardExpiresOnItsDeadlineWithoutADatabaseEmission() = runBlocking {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            val a = controller.get()
+            until { shown(a).filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled } }
+            val captured = System.currentTimeMillis() - 30 * 60_000L + 3_000L
+            withContext(Dispatchers.IO) {
+                val row = app.repository.saveSos(Protocol.newId(), captured, captured, null, Health()).row
+                app.repository.dao.updateRow(app.repository.dao.row(row.sequence)!!.copy(deliveredAt = "2026-11-22T00:00:00Z"))
+            }
+            until { texts(a).any { it.startsWith("Raised ") } }
+            // No further outbox write: only the scheduled deadline can hide the card.
+            until { texts(a).none { it.startsWith("Raised ") } }
+            assertTrue("Needs attention returns once the card is gone", texts(a).contains("Add a Command address"))
+        } finally {
+            controller.pause().stop().destroy()
+        }
+    }
+
+    @Test
+    fun undeliverableSosSaysWhyAndKeepsTheUnblockingAction() = runBlocking {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            val a = controller.get()
+            until { shown(a).filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled } }
+            withContext(Dispatchers.IO) {
+                app.repository.saveSos(Protocol.newId(), System.currentTimeMillis(), System.currentTimeMillis(), null, Health())
+            }
+            until { texts(a).contains("Not sent · add a Command address") }
+            assertFalse(texts(a).contains("Waiting for Command receipt · retries automatically"))
+            assertTrue("Setup stays reachable during SOS", texts(a).contains("Add a Command address"))
         } finally { controller.pause().stop().destroy() }
     }
 
@@ -108,9 +180,9 @@ class V46RefinementTest {
                 for (name in retired) assertFalse("$name entry on $screen", labels.any { it.startsWith(name) })
             }
             @Suppress("UNCHECKED_CAST") val navigate = field(a, "navigateTo") as (String) -> Unit
-            for ((old, owner) in listOf("Storage health" to "Saved data & sync", "Transfer recovery" to "Saved data & sync",
+            for ((old, owner) in listOf("Storage health" to "SAVED DATA & SYNC", "Transfer recovery" to "SAVED DATA & SYNC",
                 "GNSS details" to "Diagnostics", "Command contact" to "Diagnostics",
-                "Identity & verification details" to "Manage access & trust")) {
+                "Identity & verification details" to "This phone ID")) {
                 navigate(old)
                 settle()
                 assertTrue("$old → $owner", texts(a).contains(owner))
@@ -128,9 +200,12 @@ class V46RefinementTest {
             openNativeScreen(a, "Manage Command access")
             settle()
             val buttons = shown(a).filterIsInstance<Button>().map { it.text.toString() }
-            assertTrue(buttons.containsAll(listOf("Copy Command ID", "Copy phone ID", "More evidence & rejection reasons", "Disable remote control", "Re-enroll Command")))
-            assertTrue(texts(a).containsAll(listOf("This phone ID", "Saved Command address")))
-            assertEquals("Read-only identities, not editable fields", 0, shown(a).count { it is android.widget.EditText })
+            assertTrue(buttons.toString(), buttons.contains("Copy phone ID"))
+            assertFalse("Destructive access actions only after enrollment: $buttons",
+                buttons.any { it == "Disable remote control" || it == "Re-enroll Command" })
+            assertTrue(texts(a).contains("This phone ID"))
+            assertEquals("Only the private credential is editable before enrollment", listOf("Paste Command credential"),
+                shown(a).filterIsInstance<android.widget.EditText>().map { it.hint.toString() })
 
             openNativeScreen(a, "Diagnostic tools")
             settle()
@@ -142,13 +217,119 @@ class V46RefinementTest {
             a.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_UP))
             settle()
             until { texts(a).contains("Detected key events") }
+            assertTrue("Key results keep their own export", shown(a).filterIsInstance<Button>().any { it.text == "Export test results" })
             shown(a).filterIsInstance<Button>().single { it.text == "Stop Test" }.performClick()
             settle()
 
             openNativeScreen(a, "Field readiness")
             settle()
-            assertFalse("Granted permission offers no fix action", shown(a).filterIsInstance<Button>().any { it.text == "Allow precise location" })
+            assertFalse("Granted permission offers no fix action", shown(a).filterIsInstance<Button>().any { it.contentDescription == "Allow precise location · Precise location" })
             assertTrue(texts(a).contains("Precise location"))
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test
+    fun activitySearchAndFiltersSpanEveryRecordTypeAndRecordsOpenInASheet() = runBlocking {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            val a = controller.get()
+            // Fresh install: the address is required before Start; no promise that tracking already works.
+            until { texts(a).any { it.startsWith("Required before tracking can start.") } }
+            assertFalse(texts(a).any { it.contains("Tracking works offline") })
+            val device = withContext(Dispatchers.IO) { app.repository.state().deviceId }
+            withContext(Dispatchers.IO) {
+                app.repository.dao.insertCommand(
+                    CommandRecord(Protocol.newId(), "authority", device, "enrollment", "alert", 1, System.currentTimeMillis(),
+                        state = "unknown",
+                        requested = """{"mode":"urgent","message":"Check in at ridge","duration_s":60,"repeat_s":10}"""))
+                app.repository.saveSos(Protocol.newId(), System.currentTimeMillis(), System.currentTimeMillis(), null, Health())
+            }
+            openNativeScreen(a, "Diagnostics")
+            shown(a).filterIsInstance<Button>().single { it.text == "Activity" }.performClick()
+            settle()
+            fun instruction() = shown(a).firstOrNull { it.isClickable && it.contentDescription?.contains("Open instruction details") == true }
+            fun sos() = shown(a).firstOrNull { it.isClickable && it.contentDescription?.startsWith("Delivery pending.") == true }
+            until { instruction() != null && sos() != null }
+            assertTrue("One Filters control beside the type chips", shown(a).filterIsInstance<Button>().any { it.text == "Filters" })
+            assertFalse("No nested history entry in Activity", texts(a).contains("History search & filters"))
+            val search = shown(a).filterIsInstance<EditText>().single { it.hint == "Search activity" }
+            search.setText("ridge")
+            settle()
+            assertNotNull("Search matches the alert instruction", instruction())
+            assertNull(sos())
+            assertTrue(texts(a).contains("No matching SOS events"))
+            search.setText("SOS")
+            settle()
+            assertNotNull("The same search reaches SOS records", sos())
+            assertNull(instruction())
+            assertTrue(texts(a).contains("No matching instructions"))
+            assertTrue(texts(a).contains("No matching phone alerts"))
+            search.setText("")
+            settle()
+            instruction()!!.performClick()
+            settle()
+            val sheet = ShadowAlertDialog.getLatestAlertDialog()
+            assertTrue("Records open in a sheet", sheet.isShowing)
+            assertTrue(nativeViews(sheet.window!!.decorView).filterIsInstance<TextView>().any { it.text == "Instruction details" })
+            assertEquals("Diagnostics stays underneath the sheet", "Diagnostics", field(a, "route"))
+            sheet.dismiss()
+            settle()
+            assertNotNull("Closing the sheet returns to the list", instruction())
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test
+    fun alertCardFollowsActivityFiltersToTheNewestMatchingAlert() = runBlocking {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            val a = controller.get()
+            val device = withContext(Dispatchers.IO) { app.repository.state().deviceId }
+            val now = System.currentTimeMillis()
+            withContext(Dispatchers.IO) {
+                app.repository.dao.insertCommand(
+                    CommandRecord(Protocol.newId(), "authority", device, "enrollment", "alert", 1, now - 60_000,
+                        state = "recipient_acknowledged", confirmed = true,
+                        requested = """{"mode":"normal","message":"Old regroup call","duration_s":5,"repeat_s":5}"""))
+                // Unconfirmed results sort first in the journal; the card must still pick the newest match.
+                app.repository.dao.insertCommand(
+                    CommandRecord(Protocol.newId(), "authority", device, "enrollment", "alert", 0, now - 120_000,
+                        state = "recipient_acknowledged",
+                        requested = """{"mode":"normal","message":"Older regroup drill","duration_s":5,"repeat_s":5}"""))
+                app.repository.dao.insertCommand(
+                    CommandRecord(Protocol.newId(), "authority", device, "enrollment", "alert", 2, now,
+                        state = "unknown",
+                        requested = """{"mode":"urgent","message":"Check in at ridge","duration_s":60,"repeat_s":10}"""))
+            }
+            openNativeScreen(a, "Diagnostics")
+            shown(a).filterIsInstance<Button>().single { it.text == "Activity" }.performClick()
+            settle()
+            until { texts(a).contains("Check in at ridge") }
+            assertTrue(shown(a).filterIsInstance<Button>().any { it.text == "Acknowledge / Stop Alert" })
+            shown(a).filterIsInstance<Button>().single { it.text == "Filters" }.performClick()
+            settle()
+            val filter = ShadowAlertDialog.getLatestAlertDialog()
+            nativeViews(filter.window!!.decorView).filterIsInstance<Switch>().single { it.text == "Unknown" }.performClick()
+            filter.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+            settle()
+            until { texts(a).contains("Old regroup call") }
+            assertFalse("Hidden active alert is not shown", texts(a).contains("Check in at ridge"))
+            assertFalse("The newest matching alert wins over older unconfirmed ones", texts(a).contains("Older regroup drill"))
+            assertFalse(texts(a).contains("No matching phone alerts"))
+            assertFalse("The older alert's card cannot acknowledge the hidden one",
+                shown(a).filterIsInstance<Button>().any { it.text == "Acknowledge / Stop Alert" })
+            assertTrue(shown(a).filterIsInstance<Button>().any { it.text == "View alert history" })
+            shown(a).filterIsInstance<EditText>().single { it.hint == "Search activity" }.setText("regroup")
+            shown(a).filterIsInstance<Button>().single { it.text == "Alerts" }.performClick()
+            settle()
+            controller.recreate()
+            settle()
+            val b = controller.get()
+            until { texts(b).contains("Old regroup call") }
+            assertTrue("Diagnostics stays on Activity › Alerts",
+                shown(b).filterIsInstance<Button>().any { it.text == "Alerts" && it.contentDescription == "Alerts, selected" })
+            assertTrue("Filters survive recreation", shown(b).filterIsInstance<Button>().any { it.text == "Filters · 1 off" })
+            assertEquals("Search survives recreation", "regroup",
+                shown(b).filterIsInstance<EditText>().single { it.hint == "Search activity" }.text.toString())
         } finally { controller.pause().stop().destroy() }
     }
 
@@ -182,10 +363,12 @@ class V46RefinementTest {
             openNativeScreen(a, "Tracking policy")
             settle()
             val controls = shown(a).filter { it is android.widget.Spinner || it is android.widget.EditText || (it is Button && it !is android.widget.CompoundButton && it.text.isNotEmpty() && it.parent?.parent?.let { p -> p is android.widget.ScrollView || (p as View).id != View.NO_ID } == true) }
-            assertTrue("No interval selector or editor", controls.none { it is android.widget.Spinner || it is android.widget.EditText })
+            // v3: Tracking policy owns the reporting interval, adaptive storage and the facts in effect.
+            assertTrue("Interval selector", controls.any { it is android.widget.Spinner && it.contentDescription == "Reporting interval" })
             assertTrue(shown(a).filterIsInstance<android.widget.Switch>().any { it.text == "Adaptive storage" })
-            assertFalse(shown(a).filterIsInstance<Button>().any { it.text == "Save policy" })
-            assertTrue(shown(a).any { it.contentDescription?.startsWith("Policy details. ") == true })
+            assertFalse("Save appears only after a change", shown(a).filterIsInstance<Button>().any { it.text == "Save" })
+            assertTrue(texts(a).contains("IN EFFECT"))
+            assertFalse("Policy details merged into this page", shown(a).any { it.contentDescription?.startsWith("Policy details. ") == true })
         } finally { controller.pause().stop().destroy() }
     }
 
@@ -197,9 +380,10 @@ class V46RefinementTest {
             settle()
             openNativeScreen(a, "Field readiness")
             settle()
-            val allow = shown(a).filterIsInstance<Button>().single { it.text == "Allow precise location" }
+            val allow = shown(a).filterIsInstance<Button>().single { it.contentDescription == "Allow precise location · Precise location" }
             assertEquals(View.VISIBLE, allow.visibility)
-            assertTrue(texts(a).contains("Required"))
+            assertEquals("Fix", allow.text.toString())
+            assertTrue(texts(a).any { it.startsWith("Required") })
         } finally { controller.pause().stop().destroy() }
     }
 }

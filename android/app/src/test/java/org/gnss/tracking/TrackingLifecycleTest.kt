@@ -485,7 +485,7 @@ class TrackingLifecycleTest {
             // Internal pause remains a lifecycle/recovery mechanism, not a UI action.
             app.pauseHistory()
             assertTrue(app.operational.value.historyPaused)
-            buttons.single { it.text == "Sync Now" }.performClick()
+            buttons.single { it.text == "Sync now" }.performClick()
             assertFalse(app.operational.value.historyPaused)
             repeat(20) {
                 shadowOf(Looper.getMainLooper()).idle()

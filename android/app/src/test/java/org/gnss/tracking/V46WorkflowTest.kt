@@ -53,8 +53,8 @@ class V46WorkflowTest {
             await {
                 all().filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled }
             }
-            // The reporting interval is edited only on Party & Command (20 Nov 2026 operator scope).
-            openNativeScreen(controller.get(), "Party & Command")
+            // v3 (#68): the reporting interval is edited on Tracking policy.
+            openNativeScreen(controller.get(), "Tracking policy")
             editor().requestFocus()
             editor().setText("5")
             assertTrue("Typing the first digit of 50 must not hide Custom", editor().isShown)
@@ -89,7 +89,7 @@ class V46WorkflowTest {
             await {
                 all().filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled }
             }
-            openNativeScreen(controller.get(), "Party & Command")
+            openNativeScreen(controller.get(), "Tracking policy")
             shadowOf(Looper.getMainLooper()).idle()
             val picker =
                 all().filterIsInstance<Spinner>().single {
@@ -108,25 +108,25 @@ class V46WorkflowTest {
             picker.setSelection(4)
             shadowOf(Looper.getMainLooper()).idle()
             custom.setText("3")
-            click("Save settings")
+            click("Save")
             await {
                 all().filterIsInstance<TextView>().any { it.text.startsWith("Settings not saved") }
             }
             assertEquals(35, app.repository.state().localInterval)
             ShadowAlertDialog.getLatestAlertDialog()?.dismiss()
             custom.setText("45")
-            click("Save settings")
+            click("Save")
             await {
                 all().filterIsInstance<TextView>().any { it.text.startsWith("Settings saved") }
             }
             assertEquals(45, app.repository.state().localInterval)
             assertEquals("Alpha", app.repository.state().partyName)
-            // Tracking policy no longer carries a second interval editor or a Save button.
-            openNativeScreen(controller.get(), "Tracking policy")
+            // Party & Command no longer carries a second interval editor; Save hides once saved.
+            await { all().filterIsInstance<Button>().none { it.isShown && it.text == "Save" } }
+            openNativeScreen(controller.get(), "Party & Command")
             shadowOf(Looper.getMainLooper()).idle()
             assertTrue(all().none { it.isShown && it is Spinner })
-            assertTrue(all().filterIsInstance<Button>().none { it.isShown && it.text == "Save policy" })
-            openNativeScreen(controller.get(), "Party & Command")
+            openNativeScreen(controller.get(), "Tracking policy")
             controller.recreate()
             await {
                 all().filterIsInstance<Button>().any { it.text == "Start Tracking" && it.isEnabled }
@@ -161,14 +161,16 @@ class V46WorkflowTest {
                     it.text.toString() to it.isChecked
                 }
             assertEquals(
-                mapOf("Applied" to true, "Unknown" to true, "Rejected / blocked" to false),
+                // v3: history is reached through canonical categories, which include every outcome.
+                mapOf("Applied" to true, "Unknown" to true, "Rejected / blocked" to true),
                 initial,
             )
             nativeViews(dialog.window!!.decorView).filterIsInstance<Switch>().last().performClick()
             dialog.getButton(AlertDialog.BUTTON_NEGATIVE).performClick()
             click("Filter history")
             dialog = ShadowAlertDialog.getLatestAlertDialog()
-            assertFalse(
+            assertTrue(
+                "Cancel discards the toggle",
                 nativeViews(dialog.window!!.decorView).filterIsInstance<Switch>().last().isChecked
             )
             nativeViews(dialog.window!!.decorView).filterIsInstance<Switch>().last().performClick()
@@ -176,8 +178,8 @@ class V46WorkflowTest {
             shadowOf(Looper.getMainLooper()).idle()
             val saved = android.os.Bundle()
             controller.saveInstanceState(saved)
-            assertTrue(
-                "Applied rejected group saved: ${saved.getStringArrayList("v46Outcomes")}",
+            assertFalse(
+                "Applied exclusion saved: ${saved.getStringArrayList("v46Outcomes")}",
                 saved.getStringArrayList("v46Outcomes")!!.contains("rejected"),
             )
             controller.recreate()
@@ -186,7 +188,7 @@ class V46WorkflowTest {
             }
             click("Filter history")
             dialog = ShadowAlertDialog.getLatestAlertDialog()
-            assertTrue(
+            assertFalse(
                 nativeViews(dialog.window!!.decorView).filterIsInstance<Switch>().last().isChecked
             )
             dialog.dismiss()
@@ -227,10 +229,10 @@ class V46WorkflowTest {
             openNativeScreen(controller.get(), "Phone Alerts")
             await {
                 all().filterIsInstance<Button>().any {
-                    it.isShown && it.text == "View alert & acknowledge"
+                    it.isShown && it.text == "Acknowledge / Stop Alert"
                 }
             }
-            click("View alert & acknowledge")
+            click("Acknowledge / Stop Alert")
             ShadowAlertDialog.getLatestAlertDialog()
                 .getButton(AlertDialog.BUTTON_NEUTRAL)
                 .performClick()
@@ -240,7 +242,7 @@ class V46WorkflowTest {
                 }
             }
             assertEquals("unknown", app.repository.dao.command(id)!!.state)
-            click("View alert & acknowledge")
+            click("Acknowledge / Stop Alert")
             ShadowAlertDialog.getLatestAlertDialog()
                 .getButton(AlertDialog.BUTTON_POSITIVE)
                 .performClick()

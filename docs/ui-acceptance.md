@@ -1,5 +1,34 @@
 # UI acceptance evidence
 
+## Issue #68 — operator-approved Android v3 simplified UI (22 November 2026, V3-series)
+
+Parent `b59b08340254f9188f0b4d296ed9dab473acb608` (`integration/combined-upgrades`). Design
+authority: [android-v3-simplified-interactive.html](design/approved/android-v3-simplified-interactive.html)
+(approved "exactly this design"). Placement is recorded in `ui-preservation-matrix.md`; the
+contract in `design-system.md`.
+
+| ID | Surface | Change |
+|---|---|---|
+| V3-01 | Shell | Large root titles (Tracking / Settings / Diagnostics) replace the app bar brand and Day/Night icon; nested pages show back + title + parent. System / Day / Night in Settings › Appearance (legacy `night` preference migrates); notifications follow it |
+| V3-02 | Tracking | One status card (Not tracking / Tracking + one sentence + Start or confirmed Stop), Needs attention row routed to its Settings owner, GNSS list (fix, accuracy, age, battery), Delivery list (Command: Not set up / Not checked yet / Reachable / Unreachable, Waiting on phone, Delivered to Command, Last Command ACK, Sync now only while data waits). Fresh = within two reporting intervals (≥ 30 s) |
+| V3-03 | SOS | Active card has three separate checkpoints: saved on phone, delivered to Command, acknowledged by an operator. Dock caption wraps instead of truncating at large text. Hold gesture, engine and cancellation unchanged |
+| V3-04 | Settings | Six grouped rows with current values; Party & Command (Save/Cancel only when changed); Command access holds enrollment, review, trust and evidence disclosures; Disable / Re-enroll only after enrollment (`FLAG_SECURE` kept); Tracking policy holds interval (5/10/30/60/Custom 5–86400 in steps of 5), adaptive storage and in-effect details; Emergency has no physical-key test |
+| V3-05 | Diagnostics | Health / Activity / Tools. Health: seven rows (GNSS, Storage, Command, Sync, SOS, Device space, Remote control) in the Tracking vocabulary — Command is never "Offline" before a response — plus Saved data & sync (Waiting on phone, Delivered to Command, Unresolved, Last Command ACK, Sync All Now, Retry saved messages, Export evidence); the 0/0 "Queue clear" bar is gone. Activity: All / Instructions / Alerts / SOS chips (48dp, scroll at large text) over the existing record owners, search, filters and detail sheets; alert action "Acknowledge / Stop Alert". Tools: physical-key test, diagnostic ZIP, Advanced logs |
+| V3-06 | Routes | Legacy route names (Manage Command access, Policy details, Emergency controls, Saved data & sync, Diagnostic tools, Command Instructions, Phone Alerts, SOS event history) remain aliases of their v3 owners |
+| V3-07 | Review fixes | Each Settings Save bar commits only its own page (Party & Command vs Tracking policy); the other page's draft is neither saved nor validated. An undelivered SOS says why (no Command address, delivery paused, delivery rejected) instead of promising automatic retries, and the unblocking Needs attention row stays visible. A delivered SOS card is re-evaluated at its 30-minute deadline and on resume, not only on outbox writes. Covered in `V46RefinementTest`. |
+| V3-08 | Emulator follow-up | Fresh install without a Command address says the address is "Required before tracking can start" (Start already required it; wording only). Diagnostics › Tools shows "Export test results" under detected key events. Activity has one "Search activity" field and one "Filters" chip (Applied / Unknown / Rejected-blocked, all on by default) across instructions, alerts and SOS; the "History search & filters" row is gone (its route stays a deep-link alias). Instruction and SOS records open as sheets over Diagnostics and return to the list on Close. The Alerts card shows the newest alert that matches the search and filters (preferring the active one, whose Acknowledge action is only offered while it is shown); Activity search, filters, the Diagnostics segment and the Activity chip survive recreation. Covered in `V46RefinementTest`, `CommandConsoleUiTest`, `V46WorkflowTest`, `UiNavigationVisualTest`, `VisualRegressionTest`; baselines re-recorded after reviewing all six profiles. |
+
+Tests: route/ownership and wording assertions moved to the v3 owners
+(`NativeScreenTestSupport`, V46/visual/dialog suites); `VisualRegressionTest` covers the v3
+screen list and a `review-authorization` dialog (Disable / Re-enroll captured with an
+enrollment present). Baselines re-recorded only after reviewing the captures; hashes and
+reason in `visual-baseline/APPROVALS.md`. Device space is pinned to a test-only 28 GB free value
+(`MainActivity.freeSpaceForTests`) so the Diagnostics/Saved data pixel digests do not follow
+the host disk; that re-record changed pixel digests only, not geometry.
+
+Not verified: real-device rendering, TalkBack on hardware, physical volume keys and real
+Command reachability on a LAN. Command access captures are black by design (`FLAG_SECURE`).
+
 ## Issue #66 — Command V5.14 production workspace (22 November 2026)
 
 Design authority: `docs/design/approved/command-v5.14-interactive.html` (SHA-256 `5594847d65a10dabd066941930fae5fbe01aa007a71407b0f1d2127298faec81`). The production UI follows its geometry, tokens and interaction semantics. Every control drives existing Command state. `docs/ui-preservation-matrix.md` maps each control to its owner.
