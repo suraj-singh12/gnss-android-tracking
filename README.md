@@ -7,7 +7,7 @@ fixes are credible, builds tracks and travelled distance, records operator evide
 presents a local map dashboard with recording, playback, Travel Back, SOS and phone
 controls. Field operation needs no internet, SIM, cloud service or online map.
 
-**Current release:** v1.0.0 (pre-release). See [Releases](https://github.com/suraj-singh12/gnss-android-tracking/releases)
+**Current release:** v1.1.0 (pre-release). See [Releases](https://github.com/suraj-singh12/gnss-android-tracking/releases)
 and the known limitations below.
 
 ## Components
@@ -99,7 +99,7 @@ Work is issue-first, one `devX` branch per approved issue. See [AGENTS.md](AGENT
 
 ## Known limitations
 
-v1.0.0 is a pre-release. CI verifies software behaviour on Linux and an Android emulator,
+v1.1.0 is a pre-release. CI verifies software behaviour on Linux and an Android emulator,
 but these are not yet verified:
 
 - Native macOS and Windows Command runtime, including the 20+1 phone Windows run ([#23](https://github.com/suraj-singh12/gnss-android-tracking/issues/23))
