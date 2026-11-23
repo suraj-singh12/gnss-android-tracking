@@ -580,15 +580,16 @@ and verification. Command V5.14, protocol and approved artifacts are unchanged.
   movement, navigation and pause cancel unfinished attempts. Repeated actions cannot
   bypass protection. Enter/Space/DPAD-center use the same full-duration hold. Actual
   TalkBack/Switch Access remains a physical acceptance item.
-- **Settings:** Party & Command, Command access, Field readiness, Tracking policy,
-  Emergency controls. Party & Command owns the reporting interval (5/10/30/60 and
-  Custom preserve valid existing values); Tracking policy holds only Adaptive storage
-  and Policy details (no Save policy since 21 Nov 2026). Save/Cancel retain
+- **Settings:** Party & Command, Command access, Tracking policy, Field readiness,
+  Emergency, Appearance. Tracking policy owns the segmented reporting interval
+  (5/10/30/60 s and Custom preserve valid existing values) with its own Save bar,
+  Adaptive storage and one In effect list (the former Policy details). Save/Cancel retain
   existing validation/transactions; failed writes preserve drafts. Adaptive storage
   persists immediately through its existing owner and remains OFF by default.
 - **Access:** read-only phone/authority UUIDs, private credential, public-ID comparison,
   explicit authorization and compact Recheck using the existing authenticated owner.
-  Manage access retains public-ID copy/proof details, confirmed disable and reenrollment.
+  Command access keeps an Identity group (each public ID once, with Copy), the Evidence &
+  rejection reasons disclosure and Change access rows (confirmed Re-enroll and Disable).
   Enrollment is distinct from fresh contact. Secrets never enter saved state or exports.
 - **Diagnostics:** four independent health facts and seven task destinations. Recent
   instructions and full paginated/searchable journal share Room; Filter history has
@@ -638,15 +639,15 @@ UUID as read-only values. Generate the per-phone private credential on Command, 
 it, choose **Authorize**, compare both public UUIDs in the review dialog, then confirm.
 **Enrollment steps** explains private transfer; it performs no automatic pairing.
 **Recheck** requests one opportunity through the existing authenticated control owner.
-Manage access & trust shows the public identities, copy actions and proof history
-directly. A LAN address, ordinary GNSS ACK or enrollment does not establish current trust.
+The **Identity** group shows each public ID once with Copy, and **Evidence & rejection
+reasons** holds the proof history. A LAN address, ordinary GNSS ACK or enrollment does not establish current trust.
 Never share credentials in screenshots, logs or diagnostic ZIPs.
 
 **Credential enrolled** means local authorization only. **Contact verified** requires an
 actual verified response (an empty poll also qualifies) for the current binding, less than
 30 monotonic seconds old with no subsequent failed exchange. **Contact unavailable**
 keeps historical evidence separate from current contact; **Authentication failed** does
-not by itself establish remote revocation. Details shows exact UTC receipt, process age,
+not by itself establish remote revocation. Evidence & rejection reasons shows exact UTC receipt, process age,
 identity and rejection context. Restart requires fresh contact; stored history and ordinary
 GNSS ACKs cannot establish it. **Disabled on this phone** survives restart; re-enrollment
 requires consent. Credential rotation/revocation semantics and pending results are unchanged.
