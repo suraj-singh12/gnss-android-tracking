@@ -3669,7 +3669,7 @@ class MainActivity : Activity() {
         val tilesBottom = ui.tileRow(tracking, 8)
         ui.tile(tilesBottom, "Last fix", fixAge)
         val batteryValue = ui.label("—", TextRole.Tile)
-        ui.tile(tilesBottom, "Battery", batteryValue)
+        val batteryCaption = ui.tile(tilesBottom, "Battery", batteryValue).getChildAt(0) as TextView
         // Delivery: Command status, then real Room counts on phone → delivered (Command ACK).
         section(tracking, "Delivery")
         val deliveryCard = ui.card(tracking, 0)
@@ -5210,9 +5210,8 @@ class MainActivity : Activity() {
                     op.accuracy?.let { "±%.1f m".format(java.util.Locale.ROOT, it) } ?: "—"
                 else "—"
             fixAge.text = if (op.tracking) op.ageMillis?.let { "${it/1000} s ago" } ?: "—" else "—"
-            batteryValue.text =
-                (op.health.battery_percent?.let { "$it%" } ?: "Unavailable") +
-                    if (op.health.charging == true) " · Charging" else ""
+            batteryValue.text = op.health.battery_percent?.let { "$it%" } ?: "Unavailable"
+            batteryCaption.text = if (op.health.charging == true) "Battery · Charging" else "Battery"
             // Reachable only after a real Command response; unknown is never "offline".
             val (commandText, commandTone) =
                 when {
@@ -5228,6 +5227,8 @@ class MainActivity : Activity() {
                 "Command, $commandText" + if (unreachable) "; saved data retries automatically" else ""
             lastAckValue.text =
                 when {
+                    (currentQueueCounts?.blocked ?: 0) > 0 || state?.deliveryPaused == true ->
+                        "Delivery needs attention · see Saved data"
                     unreachable && (currentQueueCounts?.gnss ?: 0) > 0 -> "Sends automatically when reachable"
                     state?.lastAck != null -> "Last ACK ${shortUtcTime(state.lastAck)}"
                     else -> "No ACK yet"
