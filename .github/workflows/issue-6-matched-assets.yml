@@ -185,6 +185,8 @@ jobs:
           git merge-base --is-ancestor d78ef85e689ca43281127599e814b04cb99aefc8 HEAD
           test -z "$(git status --porcelain)"
       - name: Install permanent APK signing key
+        # Never expose the key to pull-request code; only reviewed branch pushes sign.
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' || startsWith(github.ref, 'refs/heads/release/'))
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -321,13 +323,18 @@ jobs:
           grep -F "package: name='org.gnss.tracking'" "$ASSET_DIR/android-package.txt"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$ASSET_DIR/GNSS-Tracker-debug.apk" | tee "$ASSET_DIR/android-signing.txt"
           cp docs/ui-acceptance.md "$ASSET_DIR/SETUP.md"
+          if [ -n "${GNSS_KEYSTORE_FILE:-}" ]; then
+            SIGNING_NOTE="Signed with the permanent field key (see android-signing.txt), so it installs over earlier builds signed with the same key."
+          else
+            SIGNING_NOTE="Signed with a temporary CI debug key (see android-signing.txt); it cannot update an installed field build."
+          fi
           cat > "$ASSET_DIR/INSTALL.md" <<EOF
           # GNSS acceptance assets for $SOURCE_REVISION
 
           Every application below is built from the same source revision \`$SOURCE_REVISION\`.
           Verify downloads against SHA256SUMS before use.
 
-          - GNSS-Tracker-debug.apk: Android debug build. Install with \`adb install -r GNSS-Tracker-debug.apk\`. Signed with the permanent field key (see android-signing.txt), so it installs over earlier builds signed with the same key.
+          - GNSS-Tracker-debug.apk: Android debug build. Install with \`adb install -r GNSS-Tracker-debug.apk\`. $SIGNING_NOTE
           - GNSS-Command-macos-arm64: macOS Apple Silicon. Run \`chmod +x GNSS-Command-macos-arm64 && ./GNSS-Command-macos-arm64\`.
           - GNSS-Command-windows-x64.exe: Windows x64. Run it from a terminal or by double-clicking it.
           - GNSS-Command-linux-x64: Linux x64. Run \`chmod +x GNSS-Command-linux-x64 && ./GNSS-Command-linux-x64\`.
