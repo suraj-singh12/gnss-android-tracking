@@ -224,6 +224,8 @@ class MainActivity : Activity() {
             activityOutcomes.addAll(it)
         }
         activityQuery = savedInstanceState?.getString("activityQuery") ?: ""
+        diagnosticsSegment = savedInstanceState?.getString("diagnosticsSegment") ?: diagnosticsSegment
+        diagnosticsActivity = savedInstanceState?.getString("diagnosticsActivity") ?: diagnosticsActivity
         restoredCustomInterval = savedInstanceState?.getBoolean("customIntervalChoice") ?: false
         restoredPartyCustomInterval = savedInstanceState?.getBoolean("partyCustomIntervalChoice") ?: false
         draftState = savedInstanceState?.getBundle("settingsDraft")
@@ -5556,6 +5558,8 @@ class MainActivity : Activity() {
         outState.putStringArrayList("v46Outcomes", ArrayList(v46Outcomes))
         outState.putStringArrayList("activityOutcomes", ArrayList(activityOutcomes))
         outState.putString("activityQuery", activityQuery)
+        outState.putString("diagnosticsSegment", diagnosticsSegment)
+        outState.putString("diagnosticsActivity", diagnosticsActivity)
         mainScroll?.let { routeScrolls[route] = it.scrollY }
         outState.putBundle(
             "routeScrolls",

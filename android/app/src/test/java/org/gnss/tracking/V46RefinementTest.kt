@@ -319,14 +319,14 @@ class V46RefinementTest {
                 shown(a).filterIsInstance<Button>().any { it.text == "Acknowledge / Stop Alert" })
             assertTrue(shown(a).filterIsInstance<Button>().any { it.text == "View alert history" })
             shown(a).filterIsInstance<EditText>().single { it.hint == "Search activity" }.setText("regroup")
+            shown(a).filterIsInstance<Button>().single { it.text == "Alerts" }.performClick()
             settle()
             controller.recreate()
             settle()
             val b = controller.get()
-            openNativeScreen(b, "Diagnostics")
-            shown(b).filterIsInstance<Button>().single { it.text == "Activity" }.performClick()
-            settle()
             until { texts(b).contains("Old regroup call") }
+            assertTrue("Diagnostics stays on Activity › Alerts",
+                shown(b).filterIsInstance<Button>().any { it.text == "Alerts" && it.contentDescription == "Alerts, selected" })
             assertTrue("Filters survive recreation", shown(b).filterIsInstance<Button>().any { it.text == "Filters · 1 off" })
             assertEquals("Search survives recreation", "regroup",
                 shown(b).filterIsInstance<EditText>().single { it.hint == "Search activity" }.text.toString())
