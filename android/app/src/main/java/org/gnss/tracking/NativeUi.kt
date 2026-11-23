@@ -169,6 +169,20 @@ internal class NativeUi(private val context: Context) {
             })
         }
 
+    /** Section header with one trailing text action (for example Copy); the action keeps a 48dp target. */
+    fun section(parent: LinearLayout, title: String, action: String, description: String, onAction: () -> Unit): Button {
+        val row = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL }
+        parent.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(R.dimen.space_sm) })
+        section(row, title).layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(2) }
+        return Button(context).apply {
+            text = action
+            quiet(this)
+            contentDescription = description
+            setOnClickListener { onAction() }
+            row.addView(this, LinearLayout.LayoutParams(-2, -2))
+        }
+    }
+
     fun button(value: String, action: () -> Unit) =
         Button(context).apply {
             text = value
@@ -277,7 +291,7 @@ internal class NativeUi(private val context: Context) {
         }
 
     /** Width a [menu] icon tile adds before the row text, for [list] divider insets. */
-    fun iconInset() = dp(ICON_TILE) + px(R.dimen.space_md)
+    fun iconInset() = px(R.dimen.icon_tile) + px(R.dimen.space_md)
 
     /** Rounded tinted tile holding a row's leading icon. */
     fun iconTile(resource: Int, surface: Int, ink: Int): View =
@@ -285,7 +299,7 @@ internal class NativeUi(private val context: Context) {
             background = shape(surface, R.dimen.radius_button, null)
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             addView(ImageView(context).apply { setImageDrawable(icon(resource, 20, ink)) },
-                FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER))
+                FrameLayout.LayoutParams(px(R.dimen.icon_sm), px(R.dimen.icon_sm), Gravity.CENTER))
         }
 
     /** Peer actions in one horizontal row share the tallest action's height (large text wraps). */
@@ -315,7 +329,7 @@ internal class NativeUi(private val context: Context) {
                 if (grouped) rowRipple()
                 else RippleDrawable(ColorStateList.valueOf(color(R.color.ripple)), shape(R.color.surface), null)
             icon?.let { (resource, surface, ink) ->
-                addView(iconTile(resource, surface, ink), LinearLayout.LayoutParams(dp(ICON_TILE), dp(ICON_TILE)).apply { marginEnd = px(R.dimen.space_md) })
+                addView(iconTile(resource, surface, ink), LinearLayout.LayoutParams(px(R.dimen.icon_tile), px(R.dimen.icon_tile)).apply { marginEnd = px(R.dimen.space_md) })
             }
             isClickable = true
             isFocusable = true
@@ -702,7 +716,10 @@ internal class NativeUi(private val context: Context) {
             parsed.indices.sortedBy(rank).forEach { i ->
                 val (key, value) = parsed[i]
                 val name = sectionOf(key, lines[i])
-                val group = lists.getOrPut(name) { section(host, name); list(host) }
+                val group = lists.getOrPut(name) {
+                    section(host, name, "Copy", "Copy $name section") { copySection(source, name, sectionOf) }
+                    list(host)
+                }
                 val title = label(key, TextRole.RowTitle).apply { setTextIsSelectable(true) }
                 val detail = label("", TextRole.Meta).apply { setTextIsSelectable(true); setLineSpacing(dp(1).toFloat(), 1f) }
                 val trailing = label("", TextRole.Value, R.color.muted).apply { setTextIsSelectable(true); gravity = Gravity.END }
@@ -760,6 +777,18 @@ internal class NativeUi(private val context: Context) {
         (title.parent.parent as View).contentDescription = listOf(title.text, shown, rest).filter { it.isNotEmpty() }.joinToString(". ")
     }
 
+    /** Copies one whole section as plain text from the bound source, so it matches the rows exactly. */
+    private fun copySection(source: TextView, name: String, sectionOf: (key: String, line: String) -> String) {
+        val lines = source.text.toString().lines().map(String::trim).filter(String::isNotEmpty)
+            .filter { sectionOf(splitFact(it).first, it) == name }
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("$name log", (listOf(name) + lines).joinToString("\n")))
+        // Android 13+ confirms clipboard writes itself.
+        if (android.os.Build.VERSION.SDK_INT < 33) {
+            Toast.makeText(context, "$name section copied", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun splitFact(line: String): Pair<String, String> {
         val match = Regex("^([A-Za-z][^:·•]{0,43}?)(?::\\s+| · | • |:$)(.*)$").find(line)
             ?: return line to ""
@@ -768,7 +797,6 @@ internal class NativeUi(private val context: Context) {
 
     companion object {
         const val LIST_TAG = "ui-list"
-        const val ICON_TILE = 36
         /** Confirmations whose affirmative action stops, disables, retries or discards. */
         val CAUTION_ACTIONS = setOf("Disable", "Stop Tracking", "Stop", "Retry", "Discard edits")
     }
