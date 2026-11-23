@@ -1,9 +1,9 @@
 name: Integrated validation and matched acceptance assets
 on:
   push:
-    branches: [main]
+    branches: [main, dev, 'release/**']
   pull_request:
-    branches: [integration/combined-upgrades]
+    branches: [dev]
     types: [opened, synchronize, reopened]
   workflow_dispatch:
 concurrency:

@@ -1,10 +1,10 @@
-# GNSS Android Tracking — Project Handoff (state of `integration/combined-upgrades`)
+# GNSS Android Tracking — Project Handoff (state at v1.0.0)
 
 > Prepared 23 Nov 2026 for a planning / brainstorming agent. The source of truth is always the repository at the SHA below, the current GitHub issues and `AGENTS.md`; this document is a map, not an authority. Verify any specific before acting on it.
 
 - **Repository:** `suraj-singh12/gnss-android-tracking`
 - **`main`:** latest released code. On 2026-11-23 `integration/combined-upgrades` was fast-forwarded into `main` and published as the **v1.0.0 pre-release**. The architecture below describes source at `bb0a056` (plus docs, licence and version updates after it).
-- **`integration/combined-upgrades`:** combined testing branch. New work branches from `main`, PRs target integration, and the operator promotes integration to `main`. All other branches were deleted on 2026-11-23.
+- **Branches (2026-11-23):** `dev` (development; issue branches start here and PRs target it), `main` (promoted from `dev` by PR on operator instruction), `release/v1.0.0` (cut from `main`, carries the `v1.0.0` tag) and `integration/combined-upgrades` (kept for history, no longer a PR target). All other branches were deleted.
 - **Licence:** proprietary, all rights reserved (`LICENSE`).
 - **Owner/operator:** suraj-singh12. Operator approval gates design, merges, issue closure and releases.
 
@@ -224,7 +224,7 @@ test-tools/integration/run.sh --console=plain       # real Android Room/Sender �
 node test-tools/integration/<suite>.cjs             # Playwright; env GNSS_COMMAND_BINARY, GNSS_PLAYWRIGHT_MODULE, GNSS_AXE_MODULE, GNSS_CHROMIUM, GNSS_SCREENSHOT_DIR
 ```
 
-**CI** (`issue-6-matched-assets.yml`, on pushes and PRs to `integration/combined-upgrades`):
+**CI** (`issue-6-matched-assets.yml`, on pushes to `main`, `dev` and `release/**`, and on PRs into `dev`):
 
 | Job | What it proves |
 |---|---|
@@ -258,7 +258,7 @@ node test-tools/integration/<suite>.cjs             # Playwright; env GNSS_COMMA
 
 ## 11. Working rules any agent must follow (from `AGENTS.md`)
 
-- Branch per issue from the **latest** `integration/combined-upgrades`. PRs target that branch, **never `main`**.
+- Branch per issue from the **latest** `dev`. PRs target `dev`, **never `main`**. `dev` → `main` only by PR on the operator's explicit instruction; release branches are cut from `main` only when told to release.
 - **No merges, issue closures, releases, force-pushes or branch deletions without the operator's explicit, specific authorisation.** "Proceed" or green CI is not authorisation for `main`.
 - **UI:** design first, show it, get operator visual approval, then implement. Update the owning docs (`design-system`, `ui-acceptance`, `ui-preservation-matrix`) rather than creating parallel docs.
 - **Reporting:** keep native/physical/field limitations explicit. A Linux cross-build or browser run is not macOS, Windows or Android field proof. A skipped bridge test is not a pass.

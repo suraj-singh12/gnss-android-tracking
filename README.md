@@ -70,8 +70,8 @@ test-tools/integration/run.sh --console=plain   # real Android Room/Sender → C
 ```
 
 Browser suites (Playwright) are described in [integration tests](test-tools/integration/README.md).
-CI ([workflow](.github/workflows/issue-6-matched-assets.yml)) runs on pushes to `main` and on
-pull requests to `integration/combined-upgrades`, and uploads the release assets above.
+CI ([workflow](.github/workflows/issue-6-matched-assets.yml)) runs on pushes to `main`, `dev` and
+`release/**` branches and on pull requests into `dev`, and uploads the release assets above.
 
 ## Documentation
 
@@ -90,9 +90,10 @@ Settings, Diagnostics).
 
 ## Branches and contributions
 
-- `main`: latest released code. New work branches from `main`.
-- `integration/combined-upgrades`: combined testing branch. Feature PRs target it; the
-  operator promotes it to `main` after validation.
+- `dev`: development branch. Issue branches start from `dev` and PRs target `dev`.
+- `main`: promoted from `dev` by a `dev` → `main` PR when the operator approves.
+- `release/vX.Y.Z`: cut from `main` for each release; the `vX.Y.Z` tag is on this branch.
+- `integration/combined-upgrades`: kept for history; no longer a PR target.
 
 Work is issue-first, one `devX` branch per approved issue. See [AGENTS.md](AGENTS.md).
 
