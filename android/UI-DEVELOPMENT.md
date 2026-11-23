@@ -86,6 +86,7 @@ To restyle the whole app, change a token or a `NativeUi` component. Examples:
 | `switchRow(switch)` | Binary settings | Label start, Switch end, 48dp. Use a Switch, never a CheckBox, for a binary setting. |
 | `intervalPicker(card, editor, …)` (in `installV46Screens`) | Reporting interval | One selector + Custom field; v3 shows it on Tracking policy with its own Save bar over the same canonical draft. |
 | `metric(parent, value, caption)` | Large counts | 26sp autosizing value with caption. |
+| `tileRow(parent, gap)` + `tile(row, caption, value)` | Tracking home values | Equal-width bordered tiles (12dp radius, `tile_padding_v`), caption over a 20sp `Tile` value; each tile is one TalkBack item. Used for Position (Fix, Accuracy, Last fix, Battery). |
 | `feedback(view)`, `collapsingLabel(role)` | Status/error text | A collapsing label measures 0 height while empty, so an idle slot leaves no gap. |
 | `dialog(alertDialog)`, `dialogContent`, `dialogListAdapter` | App-owned dialogs | 18dp radius, 18sp title, 14sp body, quiet negative, primary or caution positive (`CAUTION_ACTIONS`), 12dp bottom inset, 64dp minimum action width. |
 | `evidence(source)` | Structured read-only evidence | Presentation adapter over an existing bound TextView. |

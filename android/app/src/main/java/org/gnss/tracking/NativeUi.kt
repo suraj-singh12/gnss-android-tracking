@@ -41,6 +41,7 @@ internal enum class TextRole(val size: Int, val weight: Int, val muted: Boolean 
     Section(R.dimen.text_meta, TextWeight.BOLD, muted = true),
     Micro(R.dimen.text_micro, TextWeight.REGULAR, muted = true),
     Metric(R.dimen.text_metric, TextWeight.BOLD),
+    Tile(R.dimen.text_tile, TextWeight.BOLD),
     Mono(R.dimen.text_mono, TextWeight.REGULAR, mono = true),
 }
 
@@ -288,6 +289,37 @@ internal class NativeUi(private val context: Context) {
                 px(R.dimen.list_row_padding_h) + inset, 0, 0, 0,
             )
             add(parent, this, gap)
+        }
+
+    /** Row of equal-width value tiles; add tiles with [tile]. */
+    fun tileRow(parent: LinearLayout, gap: Int = 0): LinearLayout =
+        LinearLayout(context).apply { add(parent, this, gap) }
+
+    /** Bordered tile: a caption over a large value. TalkBack reads it as one item. */
+    fun tile(row: LinearLayout, caption: String, value: TextView): LinearLayout =
+        column().apply {
+            background = shape(R.color.surface, R.dimen.radius_button)
+            val h = px(R.dimen.space_md)
+            val v = px(R.dimen.tile_padding_v)
+            setPadding(h, v, h, v)
+            isFocusable = true
+            if (android.os.Build.VERSION.SDK_INT >= 28) isScreenReaderFocusable = true
+            addView(label(caption, TextRole.Caption))
+            (value.parent as? ViewGroup)?.removeView(value)
+            text(value, TextRole.Tile)
+            value.background = null
+            value.includeFontPadding = false
+            value.setPadding(0, 0, 0, 0)
+            value.setCompoundDrawablesRelative(null, null, null, null)
+            // One line that shrinks to fit (e.g. "Unavailable" at large text) instead of breaking mid-word.
+            val max = value.textSize.toInt()
+            val line = value.paint.fontMetricsInt.let { it.descent - it.ascent }
+            value.maxLines = 1
+            value.setAutoSizeTextTypeUniformWithConfiguration(px(R.dimen.text_value).coerceAtMost(max), max, 1, TypedValue.COMPLEX_UNIT_PX)
+            addView(value, LinearLayout.LayoutParams(-1, line).apply { topMargin = dp(3) })
+            row.addView(this, LinearLayout.LayoutParams(0, -1, 1f).apply {
+                if (row.childCount > 0) marginStart = px(R.dimen.space_sm)
+            })
         }
 
     /** Width a [menu] icon tile adds before the row text, for [list] divider insets. */

@@ -3643,7 +3643,12 @@ class MainActivity : Activity() {
             step.first.background = ui.shape(if (done) R.color.positive_surface else R.color.surface, R.dimen.radius_pill, null)
             step.second.text = detail
         }
-        val hero = ui.card(tracking, 15)
+        // Needs attention: one tinted row above the status card.
+        val attentionList = ui.list(tracking, 12).apply {
+            background = ui.shape(R.color.warning_surface, R.dimen.radius_card, null)
+        }
+        var attentionShown: Triple<String, String, String>? = null
+        val hero = ui.card(tracking, 12)
         detach(trackingSummary)
         trackingSummary.setPadding(0, 0, 0, 0)
         trackingSummary.includeFontPadding = false
@@ -3656,29 +3661,64 @@ class MainActivity : Activity() {
         detach(startButton)
         add(hero, startButton, 12)
         add(tracking, cancelStartButton)
-        val attentionHeader = ui.section(tracking, "Needs attention")
-        val attentionList = ui.list(tracking)
-        var attentionShown: Triple<String, String, String>? = null
-        section(tracking, "GNSS")
-        val gnssList = ui.list(tracking)
-        valueRow(gnssList, "Position fix", gnssSummary)
-        valueRow(gnssList, "Accuracy", plainValue(fixAccuracy))
-        valueRow(gnssList, "Fix age", plainValue(fixAge))
-        val batteryValue = valueRow(gnssList, "Battery", plainValue(ui.label("—", TextRole.Value)))
-        section(tracking, "Delivery to Command")
-        val deliveryList = ui.list(tracking)
-        valueRow(deliveryList, "Command", commandSummary)
-        valueRow(deliveryList, "Waiting on phone", plainValue(pendingMetric))
-        valueRow(deliveryList, "Delivered to Command", plainValue(deliveredMetric))
-        val lastAckValue = valueRow(deliveryList, "Last Command ACK", plainValue(ui.label("—", TextRole.Value)))
-        val syncRow = ui.column().apply {
-            setPadding(ui.px(R.dimen.list_row_padding_h), ui.px(R.dimen.list_row_padding_v), ui.px(R.dimen.list_row_padding_h), ui.px(R.dimen.list_row_padding_v))
+        // Position: four value tiles over the existing GNSS owners.
+        section(tracking, "Position")
+        val tilesTop = ui.tileRow(tracking)
+        ui.tile(tilesTop, "Fix", gnssSummary)
+        ui.tile(tilesTop, "Accuracy", fixAccuracy)
+        val tilesBottom = ui.tileRow(tracking, 8)
+        ui.tile(tilesBottom, "Last fix", fixAge)
+        val batteryValue = ui.label("—", TextRole.Tile)
+        ui.tile(tilesBottom, "Battery", batteryValue)
+        // Delivery: Command status, then real Room counts on phone → delivered (Command ACK).
+        section(tracking, "Delivery")
+        val deliveryCard = ui.card(tracking, 0)
+        val commandRow = LinearLayout(this).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
+        commandRow.addView(ui.label("Command", TextRole.RowTitle), LinearLayout.LayoutParams(0, -2, 1f))
+        detach(commandSummary)
+        commandRow.addView(commandSummary, LinearLayout.LayoutParams(-2, -2))
+        deliveryCard.addView(commandRow, LinearLayout.LayoutParams(-1, -2))
+        deliveryCard.addView(
+            View(this).apply { setBackgroundColor(getColor(R.color.line)) },
+            LinearLayout.LayoutParams(-1, ui.px(R.dimen.stroke)).apply {
+                topMargin = ui.px(R.dimen.space_md)
+                bottomMargin = ui.px(R.dimen.space_md)
+            },
+        )
+        val flow = LinearLayout(this).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
+        fun deliveryCount(value: TextView, caption: String) {
+            val node = ui.column().apply {
+                gravity = android.view.Gravity.CENTER_HORIZONTAL
+                isFocusable = true
+                if (Build.VERSION.SDK_INT >= 28) isScreenReaderFocusable = true
+            }
+            detach(value)
+            if (Build.VERSION.SDK_INT >= 26) value.setAutoSizeTextTypeWithDefaults(TextView.AUTO_SIZE_TEXT_TYPE_NONE)
+            ui.text(value, TextRole.Tile)
+            value.background = null
+            value.includeFontPadding = false
+            value.setPadding(0, 0, 0, 0)
+            value.gravity = android.view.Gravity.CENTER
+            node.addView(value, LinearLayout.LayoutParams(-1, -2))
+            node.addView(
+                ui.label(caption, TextRole.Caption).apply { gravity = android.view.Gravity.CENTER },
+                LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(2) },
+            )
+            flow.addView(node, LinearLayout.LayoutParams(0, -2, 1f))
         }
+        deliveryCount(pendingMetric, "On phone")
+        flow.addView(ui.label("→", TextRole.Heading, R.color.muted).apply {
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        })
+        deliveryCount(deliveredMetric, "Delivered")
+        deliveryCard.addView(flow, LinearLayout.LayoutParams(-1, -2))
+        val lastAckValue = ui.label("", TextRole.Caption).apply { gravity = android.view.Gravity.CENTER }
+        add(deliveryCard, lastAckValue, 8)
         detach(syncNowButton)
         ui.style(syncNowButton)
         syncNowButton.text = "Sync now"
-        syncRow.addView(syncNowButton, LinearLayout.LayoutParams(-1, -2))
-        deliveryList.addView(syncRow, LinearLayout.LayoutParams(-1, -2))
+        add(deliveryCard, syncNowButton, 12)
+        val syncRow: View = syncNowButton
         add(tracking, trackingContext, 12)
         add(tracking, trackingError, 12)
         add(tracking, trackingAlerts, 12)
@@ -5164,13 +5204,12 @@ class MainActivity : Activity() {
                     op.ageMillis != null -> "Stale"
                     else -> "Unavailable"
                 }
-            if (op.tracking) ui.statusPill(gnssSummary, if (fresh) StatusTone.POSITIVE else StatusTone.WARNING)
-            else plainValue(gnssSummary, "")
+            ui.text(gnssSummary, TextRole.Tile, if (!op.tracking) null else if (fresh) R.color.accent else R.color.warning)
             fixAccuracy.text =
                 if (op.tracking)
                     op.accuracy?.let { "±%.1f m".format(java.util.Locale.ROOT, it) } ?: "—"
                 else "—"
-            fixAge.text = if (op.tracking) op.ageMillis?.let { "${it/1000} s" } ?: "—" else "—"
+            fixAge.text = if (op.tracking) op.ageMillis?.let { "${it/1000} s ago" } ?: "—" else "—"
             batteryValue.text =
                 (op.health.battery_percent?.let { "$it%" } ?: "Unavailable") +
                     if (op.health.charging == true) " · Charging" else ""
@@ -5187,7 +5226,12 @@ class MainActivity : Activity() {
             ui.statusPill(commandSummary, commandTone)
             commandSummary.contentDescription =
                 "Command, $commandText" + if (unreachable) "; saved data retries automatically" else ""
-            lastAckValue.text = state?.lastAck?.let { shortUtcTime(it) } ?: "—"
+            lastAckValue.text =
+                when {
+                    unreachable && (currentQueueCounts?.gnss ?: 0) > 0 -> "Sends automatically when reachable"
+                    state?.lastAck != null -> "Last ACK ${shortUtcTime(state.lastAck)}"
+                    else -> "No ACK yet"
+                }
             renderSosCard()
             val setup = preflight.snapshot()
             val sosBlocked = sosCard.visibility == View.VISIBLE &&
@@ -5212,8 +5256,7 @@ class MainActivity : Activity() {
                     ui.menu(attentionList, title, detail, "Fix" to StatusTone.WARNING) { navigate(route) }
                 }
             }
-            attentionHeader.visibility = if (showAttention) View.VISIBLE else View.GONE
-            attentionList.visibility = attentionHeader.visibility
+            attentionList.visibility = if (showAttention) View.VISIBLE else View.GONE
             val label =
                 commandContactLabel(state, app.commandControl.contact, SystemClock.elapsedMillis())
             contact.text = label
