@@ -56,6 +56,17 @@ to the foreground Android Activity; locked-screen activation is unsupported.
 Issue #4 remains under physical acceptance on its frozen candidate; do not install
 SOS builds during that testing or merge either branch automatically.
 
+## Command V5.14 workspace (#66)
+
+Command's dashboard follows the approved V5.14 design. It has a header mode picker
+(Live / Record / View Recording / Travel Back), a Parties panel, the map, a Details
+inspector and a bottom recording/playback rail. Records, Tools, Maps & Layers, SOS
+emergencies, Event history and Phone controls open as centred windows. History and
+Recording facts are read-only sheets. Every control keeps its existing Command owner. See the
+[V5.14 contract](docs/design-system.md), [preservation matrix](docs/ui-preservation-matrix.md)
+and [acceptance evidence](docs/ui-acceptance.md). Native macOS/Windows runtime, physical
+SOS speaker output and live map-provider downloads are not verified by CI.
+
 ## Issue #6 operational interface
 
 See [UI setup and acceptance](docs/ui-acceptance.md) and [shared design system](docs/design-system.md) for the three-destination Android interface, Diagnostics Physical Button Test, Command workspace, recording/quality controls, protected SOS and exactly two offline canvas/map modes. The existing tracking and SOS engines remain authoritative.

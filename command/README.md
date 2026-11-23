@@ -7,13 +7,14 @@ No Node, Python, Docker, external WebAssembly runtime or database service is nee
 
 ## Custom-radius maps (Issue #28)
 
-In **Map & layers → Get a Map**, choose a centre by exact WGS84 coordinates,
+In **Maps & Layers → Get a Map**, choose a centre by exact WGS84 coordinates,
 existing place search, or **Pick centre on current map**. Enter any finite positive
 radius in metres or kilometres; the value is preserved. The old rectangle controls
 remain an explicitly selected compatibility option. Preview is local and displays
 an ellipsoidal WGS84 geodesic circle, centre, radius, conservative geographic/source
 envelope, source tile count and resource bounds. The circle is not a Mercator pixel
-circle. Longitude wraps at the antimeridian. A request reaching the poles or outside
+circle. Before a plan exists the preview shows a labelled *Map preview* empty state;
+a failed or unsupported plan shows its reason instead of a blank canvas. Longitude wraps at the antimeridian. A request reaching the poles or outside
 Web Mercator coverage receives a specific refusal, without truncation.
 
 Acknowledge the initial 5 MB allowance, then **Preview & Download**. The primary action validates the local geographic plan before acquisition; Preview remains available in coverage details. The cumulative network allowance starts at **5,000,000 bytes per logical job**, across vectors, DEM, source discovery, errors, retries and fallback. Actual sizes may be unknown; an oversized announced response stops before its body is read, and unknown responses stop at the allowance. Additional explicit approval is required before escalation. Preparation automatically reuses verified exact geographic chunks and covering indexed sources, then tries bounded Overpass (OSM ways only) and independent Skadi/HGT terrain. A valid empty OSM response is successfully acquired sparse
@@ -330,7 +331,10 @@ identity, the mode picker, Maps / Records / Tools, Day/Night and SOS. The Partie
 (search; All / Online / Attention), map, Details inspector and bottom rail sit below it.
 Recording controls appear in Record mode, and in LIVE whenever a recording exists.
 Panels become drawers at ≤1190 px (Details) and ≤800 px (Parties). The SOS audio switch
-is in **SOS emergencies** (Tools → SOS sound opens it).
+is in **SOS emergencies** (Tools → SOS sound opens it). Records, Tools, Maps & Layers,
+SOS emergencies, Event history and Phone controls open as centred V5.14 windows with
+tabs, a subtitle and a footer. The Day/Night control is an SVG sun/crescent icon, not a
+text glyph.
 
 Day/Night persists per browser. The header's **Command Connected/Disconnected** is
 browser-to-local-server contact; **connected/total Parties** uses existing Android
@@ -622,7 +626,7 @@ build, so its workflow commit does not become the APK's reported source revision
 ## SOS alerts and human acknowledgement
 
 SOS reception works with Recording stopped, active, resumed or cleared. The persistent
-**SOS emergencies** drawer (header SOS counter) identifies the Device/Party and specific event, original
+**SOS emergencies** window (header SOS counter) identifies the Device/Party and specific event, original
 activation time, first Command receipt, location and accuracy when supplied, GNSS
 status and freshness at activation. Coordinates are an event observation, never a
 promise of a current position. Missing, stale/last-known and clock-anomalous observations
@@ -647,7 +651,7 @@ permissions may block playback until a user gesture, after suspension or on relo
 the panel explicitly shows blocked/unavailable audio. When enabled, a short audible
 cue repeats every **one second** from one shared scheduler while any event is
 unacknowledged. Multiple events do not create overlapping loops. Dismissing the
-arrival notice, closing a drawer, filtering history and acknowledging only some
+arrival notice, closing a window, filtering history and acknowledging only some
 events do not silence remaining emergencies. The final durable operator ACK stops
 the tone/timer immediately after the updated state is received. Refresh/restart
 restores the pending condition from Command, but browser audio may need enabling again. Visible alerts
@@ -655,7 +659,7 @@ remain authoritative, including when the browser/network is unavailable. No inte
 or external audio asset is used. Use keyboard Tab/Enter for each event's labelled
 acknowledgement button; polling preserves that button and its captured identity.
 
-**Events** opens a separate history drawer containing all retained SOS events,
+**Events** opens a separate Event history window containing all retained SOS events,
 including acknowledged events, and the latest 500 entries of the existing operation/
 receipt journal. Expand an event for original occurrence, first receipt and operator
 ACK details; full retained diagnostic evidence remains available through export.
@@ -902,8 +906,14 @@ points and decisions, pinned to a published generation. A generation or policy/w
 change returns 409; restart inspection. `layer=raw` returns up to 16 original retained
 envelopes with capture/measurement/receipt times, in original transport-sequence order.
 The History dialog (map toolbar) shows both layers as tabs with structured, paginated
-entries; the raw page JSON stays available under Page data. Recording facts opens a
-read-only sheet for live recording, saved playback and Travel Back. Raw diagnostic map
+entries: qualified points with sequence, accuracy, segment changes and cumulative distance,
+quality decisions (only non-accepted reasons are tagged Excluded), or original observations
+with capture/receipt times and SOS/no-fix tags. The raw page JSON stays under **Page data**.
+**Recording facts** opens one read-only sheet for live recording (refreshing while open),
+saved playback and Travel Back. Folded raw sections show the live recording record
+(**Recording state**), the Travel Back policy/projection/decision counts (**Diagnostics**)
+or the saved recording's event journal (**Underlying facts**). Presentation evidence is
+called confirmed only when capture health reports a confirmed display state. Raw diagnostic map
 mode is bounded too; authoritative geometry and raw originals are never decimated
 in SQLite. Queue reports retain freshness and unresolved-count distinctions.
 
@@ -1171,7 +1181,7 @@ reported explicitly. Descriptive changes have an append-only revision history.
 
 **Open** reuses Command's map, Parties and Details panels. A single timeline inside
 the central map offers Play/Pause, beginning/end, seek, 1×/5×/20×, presentation clock
-and inspectable recording facts. It resizes with the actual map grid and cannot extend
+and a **Recording facts** sheet. It resizes with the actual map grid and cannot extend
 across either side panel. **Exit playback** restores the current live dashboard.
 
 **Follow Original**, initially ON, reproduces the recorded map geometry, layers,
@@ -1220,8 +1230,11 @@ GNSS receipt, synchronization or SOS. Saved playback retains #37's sealed source
 presentation clock, Follow Original and original visibility gates.
 
 Travel Back reads retained original GNSS in a read-only SQLite snapshot, independently
-of evidence recording windows. Choose capture-time boundaries in **Capture range &
-diagnostics**, then **Refresh View**. This reads Command storage and never requests
+of evidence recording windows. Entering Travel Back opens **Capture range**: From/To each
+have a date picker and a 24-hour time, plus Exclude offline and Show all observations;
+an invalid time or an end before the start is reported inline, and Cancel leaves the
+current mode unchanged. **Apply range** builds the snapshot; **Range** reopens the window
+and **Refresh** rereads storage. This reads Command storage and never requests
 Android synchronization. Later receipt only changes the pending indication. Refresh
 retains the playhead, speed, party preferences and viewport where possible. The
 current quality policy is disclosed and applied using the existing GNSS derivation;

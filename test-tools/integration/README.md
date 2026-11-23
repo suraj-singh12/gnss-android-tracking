@@ -1002,6 +1002,17 @@ software acceptance. `map-software-acceptance`, `dem-provider` and `integrated`
 are independent jobs in the existing matched-assets workflow; the live-provider
 job retains failures and uploads reports even when another acquisition fails.
 
+## Command V5.14 workspace (#66)
+
+`command-v514-workspace.cjs` starts a production Command binary with its own SQLite and
+checks the V5.14 shell: geometry, mode menu and keyboard focus, party search/filters,
+Details, panel collapse/restore, Day/Night persistence, seven viewports in both themes,
+the recording lifecycle, provider failure, the SOS sound switch, Recording facts, History
+layers, the Get a Map preview state and axe WCAG 2.1 AA. Set `GNSS_COMMAND_BINARY`,
+`GNSS_PLAYWRIGHT_MODULE`, `GNSS_AXE_MODULE` and optionally `GNSS_CHROMIUM` /
+`GNSS_SCREENSHOT_DIR`. `issue59-layout.cjs` instead targets an already running Command at
+`GNSS_COMMAND_URL` (default `http://127.0.0.1:8081`).
+
 ## Saved recording playback (#37)
 
 `recording-playback.cjs` requires `GNSS_COMMAND_BINARY`, Playwright and optionally
