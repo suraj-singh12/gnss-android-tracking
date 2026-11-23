@@ -1,5 +1,6 @@
 /* Real persisted #27 browser evidence, SQLite, Command and Chromium. */
 "use strict";
+const { menuAction } = require("./menu-actions.cjs");
 const assert = require("node:assert/strict"),
   fs = require("node:fs"),
   path = require("node:path"),
@@ -31,13 +32,19 @@ async function headerAction(id) {
   // A new/reopened real SOS notification can cover the mobile header menu.
   // Dismiss only the toast; the outstanding emergency remains unacknowledged.
   if(await page.locator("#sos-toast-dismiss").isVisible()) await page.locator("#sos-toast-dismiss").click();
+  if (["open-travel", "open-library", "open-history", "open-quality", "open-about"].includes(id)) {
+    await menuAction(page, id);
+    if (id === 'open-library') await page.waitForFunction(() => !document.querySelector('#library-status').textContent.includes('Loading'));
+    return;
+  }
   const target = page.locator(`#${id}`);
   const root = page.locator(".header-menu-root");
   const mobileSummary = root.locator(":scope > summary");
   // Desktop exposes the menu groups directly and hides the mobile summary.
-  if (await mobileSummary.isVisible() && !(await root.evaluate(e => e.open))) await mobileSummary.click();
+  const inRoot = await target.evaluate(e => !!e.closest(".header-menu-root"));
+  if (inRoot && await mobileSummary.isVisible() && !(await root.evaluate(e => e.open))) await mobileSummary.click();
   const group = target.locator("xpath=ancestor::details[contains(@class, 'menu')][1]");
-  if (!(await group.evaluate(e => e.open))) await group.locator(":scope > summary").click();
+  if (await group.count() && !(await group.evaluate(e => e.open))) await group.locator(":scope > summary").click();
   await target.click();
   if (id === 'open-library') await page.waitForFunction(() => !document.querySelector('#library-status').textContent.includes('Loading'));
 }
@@ -47,6 +54,11 @@ async function openDetails() {
   if (await page.locator('#collapse-parties').isVisible() === false) await page.locator('#toggle-parties').click();
   await page.locator('.historical-party-name:not(:disabled)').first().click();
 }
+// The narrow Details drawer overlays the rail; close it like an operator would.
+async function exitPlayback() {
+  if (await page.locator("#close-details").isVisible()) await page.locator("#close-details").click();
+  await page.locator("#exit-playback").click();
+}
 const panelMeasurements = [];
 async function inspectPanel(selector, mode, width, theme) {
   if (await page.locator('#follow-label').isVisible()) {
@@ -54,9 +66,9 @@ async function inspectPanel(selector, mode, width, theme) {
       const name=document.querySelector('#playback-name'),follow=document.querySelector('#follow-label');
       if(getComputedStyle(name).display==='none') return false;
       const a=name.getBoundingClientRect(),b=follow.getBoundingClientRect();
-      return a.width>0 && a.left<b.right && a.right>b.left && a.top<b.bottom && a.bottom>b.top;
+      return a.width>0 && a.left<b.right && a.right>b.left && a.top<b.bottom && a.bottom>b.top && JSON.stringify({name:a,follow:b,parent:name.parentElement.getBoundingClientRect(),w:innerWidth});
     });
-    assert(!overlaps,'recording name must not overlap Follow Original');
+    assert(!overlaps,'recording name must not overlap Follow Original '+overlaps);
   }
   await page.waitForTimeout(120);
   const facts = await page.locator(selector).evaluate(panel => {
@@ -64,10 +76,11 @@ async function inspectPanel(selector, mode, width, theme) {
     return {width:r.width, right:r.right, bottom:r.bottom, dockTop:dock.top, scrollWidth:panel.scrollWidth, clientWidth:panel.clientWidth, font:parseFloat(getComputedStyle(panel.querySelector('small, .historical-values') || panel).fontSize), padding:parseFloat(getComputedStyle(panel).paddingTop)};
   });
   assert(facts.width > 0 && facts.scrollWidth <= facts.clientWidth+1, `${selector} overflow: ${JSON.stringify(facts)}`);
-  if (width <= 1100) {
-    assert(facts.bottom <= facts.dockTop-10, `${selector} covers dock`);
-    assert(facts.font >= 12 && facts.font <= 13, 'panel text stays readable');
-    assert.equal(facts.padding,8);
+  if (width <= 1190) {
+    // V5.14 drawers overlay the workspace below the header and stay within the viewport.
+    const bounds = await page.locator(selector).boundingBox();
+    assert(bounds.y >= 58 && bounds.y + bounds.height <= page.viewportSize().height + 1 && bounds.x + bounds.width <= width + 1, `${selector} drawer bounds ${JSON.stringify(bounds)}`);
+    assert(facts.font >= 10 && facts.font <= 13, 'panel text stays readable');
   }
   panelMeasurements.push({mode,width,theme,selector,...facts});
   fs.writeFileSync(path.join(out,'panel-measurements.json'),JSON.stringify(panelMeasurements,null,2));
@@ -168,7 +181,8 @@ async function wait(fn) {
       await inspectPanel('.party-overview','live',width,theme);
       await page.screenshot({path:path.join(out,`live-${theme}-parties-${width}.png`)});
       const party=page.locator('.party-select').first();
-      await wait(async () => (await party.boundingBox())?.height >= 40);
+      // The whole party card is the selection target, as in the approved design.
+      await wait(async () => (await party.locator('xpath=ancestor::*[contains(concat(" ",@class," ")," device ")][1]').boundingBox())?.height >= 40);
       await party.click();
       await inspectPanel('.party-detail','live',width,theme);
       await page.screenshot({path:path.join(out,`live-${theme}-details-${width}.png`)});
@@ -180,8 +194,9 @@ async function wait(fn) {
     await headerAction("appearance");
   }
   await page.setViewportSize({width:1440,height:900});
+  await page.waitForFunction(() => document.querySelector(".party-overview").getBoundingClientRect().width > 0);
   if (await page.locator("#toggle-parties").getAttribute("aria-expanded") === "false") await page.locator("#toggle-parties").click();
-  await page.locator("#start").click();
+  await menuAction(page, "mode-recording");
   await page
     .locator("#session-mode")
     .check()
@@ -371,10 +386,10 @@ async function wait(fn) {
   );
   assert(await page.locator("#open-travel").isDisabled());
   const ongoing=await page.evaluate(()=>window.recordingLiveState().recording.recording_id);
-  await page.locator('#mode-live').click();
+  await menuAction(page, 'mode-live');
   assert.equal(await page.evaluate(()=>window.OperationalModes.showRecording),false);
   assert.equal(await page.evaluate(()=>window.recordingLiveState().recording.active),true);
-  await page.locator('#mode-recording').click();
+  await menuAction(page, 'mode-recording');
   assert.equal(await page.evaluate(()=>window.recordingLiveState().recording.recording_id),ongoing);
   await page.locator("#pause").click();
   assert(
@@ -419,14 +434,14 @@ async function wait(fn) {
     if (!(await page.locator('#collapse-parties').isVisible())) await page.locator('#toggle-parties').click();
     await page.locator('.party-select').first().click();
     const detailWidth=(await page.locator('.party-detail').boundingBox()).width;
-    assert(Math.abs(libraryWidth-detailWidth)<1, `library ${libraryWidth} != Details ${detailWidth} at ${width}`);
+    // Saved recordings is a centered V5.14 modal bounded by the viewport.
+    assert(detailWidth > 0 && libraryWidth > 0 && libraryWidth <= Math.min(720, width - 32) + 1, `library ${libraryWidth} unbounded at ${width}`);
     await headerAction('open-library');
     for (const theme of ['day','night']) {
       const overflow=await page.locator('#saved-library').evaluate(root=>[root,...root.querySelectorAll('#library-rows, .library-row, #library-selected, .library-sortline')].filter(e=>e.scrollWidth>e.clientWidth+1).map(e=>e.id || e.className));
       assert.deepEqual(overflow,[], `library overflow ${width} ${theme}`);
       const r=await page.locator('#saved-library').boundingBox();
-      assert(Math.abs(r.x+r.width-width)<1, 'library aligned right');
-      assert(Math.abs(r.width-detailWidth)<1);
+      assert(r.x >= 0 && r.x + r.width <= width && Math.abs(r.x + r.width / 2 - width / 2) < 2, 'library centered within viewport');
       panelMeasurements.push({mode:'library',width,theme,selector:'#saved-library',widthMeasured:r.width,detailWidth});
       fs.writeFileSync(path.join(out,'panel-measurements.json'),JSON.stringify(panelMeasurements,null,2));
       await page.locator('#library-search').fill('no-such-recording');
@@ -464,7 +479,7 @@ async function wait(fn) {
   assert.equal(realSOS.status,200,await realSOS.text());
   await page.evaluate(()=>poll());
   await page.locator('#open-sos').click();
-  await page.locator('.sos-alert').last().getByRole('button',{name:'Locate'}).click();
+  await page.locator(`.sos-alert[data-event$="/${emergency.sos.event_id}"]`).getByRole('button',{name:'Locate'}).click();
   assert.equal(await page.evaluate(()=>window.HistoricalPlayback.active),false);
   await page.locator('#historical-return').click();
   assert.equal(await page.evaluate(()=>window.HistoricalPlayback.position),returnPosition);
@@ -474,6 +489,12 @@ async function wait(fn) {
   await page.locator('#follow-original').check();
   await page.locator('#playback-speed').selectOption('1');
   await page.locator('#sos-toast-dismiss').click();
+  // Tools stays reachable during playback even though Quality is historical there.
+  await page.locator('#open-tools').click();
+  assert(await page.locator('#diagnostics').isVisible(), 'playback Tools opens a Tools tab');
+  await page.locator('#open-about').click();
+  assert(await page.locator('#about').isVisible(), 'playback Tools › About reachable');
+  await page.evaluate(() => document.querySelector('#about').close());
 
   assert.equal(await page.locator("#follow-original").isChecked(), true);
   const timeline = await (
@@ -644,7 +665,7 @@ async function wait(fn) {
     await seek(timeline.duration);
     // Follow Original first restores recorded state; inspect through the sidebar afterwards.
     await openDetails();
-    if (width > 1100) await page.evaluate(() => document.querySelector("main").classList.remove("details-closed", "parties-closed"));
+    if (width > 1190) await page.evaluate(() => document.querySelector("main").classList.remove("details-closed", "parties-closed"));
     await page.waitForTimeout(100);
     const boxes = await page.evaluate(() => {
       const b = (s) => {
@@ -661,8 +682,11 @@ async function wait(fn) {
     assert(boxes.timeline.x >= boxes.map.x);
     assert(boxes.timeline.right <= boxes.map.right);
     const overlap = (a,b) => a.x < b.right && a.right > b.x && a.y < b.bottom && a.bottom > b.y;
-    assert(!overlap(boxes.timeline, boxes.left));
-    assert(!overlap(boxes.timeline, boxes.right));
+    // At 1190 px and below the panels are V5.14 overlay drawers, so they may cover the rail.
+    if (width > 1190) {
+      assert(!overlap(boxes.timeline, boxes.left));
+      assert(!overlap(boxes.timeline, boxes.right));
+    }
     async function assertPlaybackLayout() {
       const problems = await page.evaluate(() => {
         const map = document.querySelector('.canvas').getBoundingClientRect();
@@ -678,7 +702,9 @@ async function wait(fn) {
         }
         const layers=document.querySelector('#open-layers').getBoundingClientRect();
         const tools=toolbar.getBoundingClientRect();
-        if (Math.abs(layers.right-tools.right)>2 || Math.abs(layers.top-tools.top)>2) errors.push('Layers not top-right');
+        // V5.14: Layers ends the top row of map tools; only the panel toggles may follow it.
+        const mapTools=['zoom-in','zoom-out','fit','focus-party','inspect-history'].map(id=>document.getElementById(id).getBoundingClientRect());
+        if (Math.abs(layers.top-tools.top)>2 || mapTools.some(r=>Math.abs(r.top-layers.top)<=2 && r.left>layers.left)) errors.push('Layers not top-right '+JSON.stringify({layers,tools,w:innerWidth}));
         const status=document.querySelector('#playback-status').getBoundingClientRect();
         const evidence=document.querySelector('#playback-evidence');
         if (!evidence.hidden && evidence.getBoundingClientRect().top < status.bottom) errors.push('evidence overlaps status');
@@ -688,11 +714,13 @@ async function wait(fn) {
         });
         for (const e of document.querySelectorAll('#playback-timeline > *')) {
           const r = e.getBoundingClientRect();
-          if (r.width && (r.left < timeline.left - 1 || r.right > timeline.right + 1 || r.bottom > timeline.bottom + 1)) errors.push('timeline child outside');
+          if (r.width && (r.left < timeline.left - 1 || r.right > timeline.right + 1 || r.bottom > timeline.bottom + 1)) errors.push('timeline child outside '+JSON.stringify({id:e.id||e.className,r,timeline,w:innerWidth,h:innerHeight}));
         }
         const sos = document.querySelector('#playback-sos');
         if (!sos.hidden && overlap(sos.getBoundingClientRect(), timeline)) errors.push('SOS overlaps timeline');
-        if (timeline.left < map.left - 1 || timeline.right > map.right + 1 || timeline.bottom > map.bottom + 1) errors.push('timeline outside map');
+        // V5.14 docks the rail below the map inside the same workspace column.
+        const column = document.querySelector('.canvas').parentElement.getBoundingClientRect();
+        if (timeline.left < map.left - 1 || timeline.right > map.right + 1 || timeline.top < map.bottom - 1 || timeline.bottom > column.bottom + 1) errors.push('timeline outside map column');
         return errors;
       });
       assert.deepEqual(problems, []);
@@ -742,7 +770,7 @@ async function wait(fn) {
     for (const theme of ['day','night']) {
       await headerAction('open-library');
       const measured=await page.locator('#saved-library').evaluate(e=>({width:e.getBoundingClientRect().width,overflow:e.scrollWidth>e.clientWidth+1}));
-      assert(Math.abs(measured.width-inspectedDetails.width)<1, 'playback library must match Details');
+      assert(measured.width > 0 && measured.width <= Math.min(720, width - 32) + 1, 'playback library is a viewport-bounded modal');
       assert.equal(measured.overflow,false);
       assert(await page.evaluate(()=>window.HistoricalPlayback.active), 'library does not exit playback');
       panelMeasurements.push({mode:'playback-library',width,theme,selector:'#saved-library',widthMeasured:measured.width,detailWidth:inspectedDetails.width});
@@ -753,6 +781,8 @@ async function wait(fn) {
     }
     await page.evaluate(() => document.querySelector("main").classList.remove("details-closed", "parties-closed"));
   }
+  // V5.14 drawers cover the workspace at narrow widths; close them before using map controls.
+  await page.evaluate(() => { if (innerWidth <= 1190) document.querySelector("main").classList.add("details-closed", "parties-closed"); });
   await page.locator("#follow-original").uncheck();
   await mapAction("zoom-in");
   await mapAction("open-layers");
@@ -819,7 +849,7 @@ async function wait(fn) {
   await seek(timeline.duration);
   assert(await page.locator("#playback-sos").isVisible());
   assert.equal(await page.locator("#playback-sos button").count(), 0);
-  await page.locator("#exit-playback").click();
+  await exitPlayback();
   await headerAction("appearance");
   await headerAction("open-library");
   await page.screenshot({ path: path.join(out, "library-night-after-playback.png") });
@@ -829,7 +859,7 @@ async function wait(fn) {
   await page.getByRole("button", { name: "Open", exact: true }).click();
   await page.waitForFunction(() => window.HistoricalPlayback?.active);
   await seek(timeline.duration);
-  await page.locator("#exit-playback").click();
+  await exitPlayback();
   await headerAction("open-library");
   await page.locator(".library-more summary").click();
   await page
@@ -838,7 +868,7 @@ async function wait(fn) {
   await page.locator("#library-name").fill("Renamed persisted recording");
   await page.locator("#library-date").fill("27 Oct 2026 · Asia/Calcutta");
   await page.locator("#library-description").fill("Historical metadata only");
-  await page.locator('#library-edit-form button[type="submit"]').click();
+  await page.locator('#library-edit button[type="submit"]').click();
   await page.locator('[data-close="saved-library"]').click();
   command.kill();
   await once(command, "exit");
@@ -852,7 +882,7 @@ async function wait(fn) {
   await page.waitForFunction(() => window.HistoricalPlayback?.active);
   await seek(timeline.duration);
   assert(await page.locator("#playback-sos").isVisible());
-  await page.locator("#exit-playback").click();
+  await exitPlayback();
   const operationalBefore = await (await fetch(local + "/local/state")).json();
   await headerAction("open-library");
   await page.locator(".library-more summary").click();
@@ -879,13 +909,13 @@ async function wait(fn) {
   await page.locator('[data-close="saved-library"]').click();
   await page.setViewportSize({ width: 1440, height: 900 });
   await headerAction("open-travel");
+  await page.locator("#travel-apply").click();
   await wait(() => page.evaluate(() => window.HistoricalPlayback.active));
   assert.equal(await page.locator("#follow-label").isVisible(), false);
   const travelPosition = await page.evaluate(
     () => window.HistoricalPlayback.position,
   );
   await page.locator("#playback-last").click();
-  await page.locator("#travel-settings > summary").click();
   assert(
     (await page.locator("#travel-diagnostics").textContent()).includes(
       "maximum_accuracy_m",
@@ -929,7 +959,7 @@ async function wait(fn) {
   );
   await page.locator("#travel-refresh").click();
   assert.equal(await page.locator("#follow-label").isVisible(), false);
-  await page.locator("#exit-playback").click();
+  await exitPlayback();
   assert.deepEqual(errors, []);
   report.passed = true;
   report.parties = 21;

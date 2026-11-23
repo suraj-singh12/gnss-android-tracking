@@ -1,5 +1,24 @@
 const { menuAction } = require("./menu-actions.cjs");
 const crypto = require("node:crypto");
+
+// Get a Map exposes the prototype surface (search, radius, terrain switch, Download).
+// Engine-level fields kept behind it are driven directly where a test needs them.
+const setCentre = async (page, lat, lon) => {
+  await page.locator("#map-search").fill(`${lat}, ${lon}`);
+  await page.locator("#search-map").click();
+};
+const setHidden = (page, sel, value) =>
+  page.locator(sel).evaluate((e, v) => {
+    if (e.type === "checkbox") e.checked = v;
+    else e.value = v;
+    e.dispatchEvent(new Event("input", { bubbles: true }));
+    e.dispatchEvent(new Event("change", { bubbles: true }));
+  }, value);
+const clickHidden = async (page, sel) => {
+  await page.waitForFunction((s) => !document.querySelector(s).disabled, sel);
+  await page.locator(sel).evaluate((e) => e.click());
+};
+
 /* Deterministic georeferenced fixture, real SQLite/server, offline Chromium restart. */
 const assert = require("node:assert/strict"),
   fs = require("node:fs"),
@@ -107,16 +126,11 @@ async function wait(f) {
   await page.goto(local);
   await menuAction(page, "open-map");
   await page.locator("#tab-map-preparation").click();
-  await page.locator(".map-precise").evaluate((e) => (e.open = true));
   await page.getByRole("button", { name: "Custom", exact: true }).click();
-  await page.locator("#map-lat").fill("27.3739");
-  await page.locator("#map-lon").fill("88.7618");
+  await setCentre(page, "27.3739", "88.7618");
   await page.locator("#map-radius").fill("0.373");
   await page.locator("#radius-unit").selectOption("1000");
-  await page
-    .locator("#preview-map")
-    .evaluate((e) => (e.closest("details").open = true));
-  await page.locator("#preview-map").click();
+  await clickHidden(page, "#preview-map");
   await page.locator("[data-requested-circle]").waitFor();
   assert.match(
     await page.locator("#map-preparation-status").textContent(),
@@ -127,7 +141,6 @@ async function wait(f) {
     path: path.join(out, "radius-requested-circle-fixture.png"),
     fullPage: true,
   });
-  await page.locator("#confirm-map-cost").check();
   await page.locator("#download-map").click();
   // This fixture intentionally contains source voids. Acquired grids are usable,
   // but the application must disclose partial coverage instead of success.
@@ -144,23 +157,19 @@ async function wait(f) {
   const maps = await (await fetch(local + "/local/maps")).json();
   assert.equal(maps.length, 1);
   await page.locator("#tab-maps-library").click();
-  await page.locator("#saved-maps").selectOption(maps[0].id);
+  await page.locator(`.saved-map-row[data-map-id="${maps[0].id}"] .map-row-main`).click();
   await wait(async () => !(await page.locator("#layer-contours").isDisabled()));
   await page.locator("#tab-map-preparation").click();
-  await page.locator(".map-precise").evaluate((e) => (e.open = true));
   await page.getByRole("button", { name: "Custom", exact: true }).click();
-  await page.locator("#map-lat").fill("90");
-  await page
-    .locator("#preview-map")
-    .evaluate((e) => (e.closest("details").open = true));
-  await page.locator("#preview-map").click();
+  await setHidden(page, "#map-lat", "90");
+  await clickHidden(page, "#preview-map");
   await wait(async () =>
     (await page.locator("#map-preparation-status").textContent()).includes(
       "pole",
     ),
   );
   assert.equal(await page.locator("#download-map").isDisabled(), true);
-  await page.locator("#pick-map-center").click();
+  await clickHidden(page, "#pick-map-center");
   await page.locator("#tracks").click({ position: { x: 500, y: 300 } });
   assert.ok(
     Number.isFinite(Number(await page.locator("#map-lat").inputValue())),
@@ -446,7 +455,7 @@ async function wait(f) {
   );
   report.portable_package_and_full_pbf = "PASS (local fixture, no providers)";
   await page.locator("#tab-maps-library").click();
-  await page.locator("#saved-maps").selectOption(maps[0].id);
+  await page.locator(`.saved-map-row[data-map-id="${maps[0].id}"] .map-row-main`).click();
   assert.deepEqual(errors, []);
   report.browser_render = await page.evaluate(() => terrainGeneration);
   report.manifest = await (
@@ -461,12 +470,12 @@ async function wait(f) {
   assert.equal(report.manifest.transfer.approved_bytes, 5000000);
   assert.equal(report.manifest.transfer.received_bytes, 0);
   report.elapsed_browser_ms = await page.evaluate(() => performance.now());
-  await page.locator("#saved-maps").selectOption(maps[0].id);
+  await page.locator(`.saved-map-row[data-map-id="${maps[0].id}"] .map-row-main`).click();
   page.once("dialog", (d) => d.dismiss());
-  await page.locator("#delete-map").click();
+  await page.locator(`.saved-map-row[data-map-id="${maps[0].id}"] .map-row-actions .danger`).click();
   assert.equal((await (await fetch(local + "/local/maps")).json()).length, 4);
   page.once("dialog", (d) => d.accept());
-  await page.locator("#delete-map").click();
+  await page.locator(`.saved-map-row[data-map-id="${maps[0].id}"] .map-row-actions .danger`).click();
   await wait(
     async () =>
       (await (await fetch(local + "/local/maps")).json()).length === 3,

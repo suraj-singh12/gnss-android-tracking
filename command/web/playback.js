@@ -4,6 +4,7 @@
     ns = "http://www.w3.org/2000/svg";
   let travelRequest = 0,
     recordingContext = true,
+    recordIntent = false,
     recordingIdentity;
   window.OperationalModes = {
     update: updateMode,
@@ -385,7 +386,7 @@
   function responsivePanels() {
     const main = document.querySelector("main");
     if (
-      innerWidth <= 1100 &&
+      innerWidth <= 800 &&
       !main.classList.contains("parties-closed") &&
       !main.classList.contains("details-closed")
     )
@@ -458,18 +459,18 @@
         repaint();
       };
       row.append(check);
+      // Workspace search/filters: Online = a qualified position in this view
+      // (Travel Back: at the playhead; saved recording: in the frozen state).
+      const located =
+        p.visible && !!(travel ? p.device?.location?.fix : p.device?.current_position);
+      card.dataset.search = `${identity(p, id)} ${p.device?.snapshot?.party?.name || ""} ${id}`.toLowerCase();
+      card.dataset.contact = located ? "healthy" : "historical";
+      card.dataset.attention = String(p.visible && !located);
       if (id === selected) card.classList.add("historical-selected");
       if (p.device?.track_color)
-        card.style.borderLeftColor = p.device.track_color;
-      card.append(
-        row,
-        label(
-          "small",
-          p.visible
-            ? "Historical · read only"
-            : "Unselected · locked by original visibility",
-        ),
-      );
+        card.style.setProperty("--track", p.device.track_color);
+      const meta = p.visible ? [] : ["Unselected · locked by original visibility"];
+      card.append(row);
       const choose = label("button", identity(p, id), "historical-party-name");
       choose.setAttribute("aria-label", `Details for ${identity(p, id)}`);
       choose.disabled = !p.visible;
@@ -486,17 +487,14 @@
       };
       row.firstChild?.remove();
       row.prepend(choose);
-      if (p.device?.snapshot?.party?.name)
-        card.append(label("small", p.device.snapshot.party.name));
+      if (p.device?.snapshot?.party?.name) meta.push(p.device.snapshot.party.name);
       if (p.visible)
-        card.append(
-          label(
-            "small",
-            travel && !p.device?.location?.fix
-              ? "No qualified observation at this playhead"
-              : `Historic position · ${new Date(frame.presentation_at).toLocaleTimeString()}`,
-          ),
+        meta.push(
+          travel && !p.device?.location?.fix
+            ? "No qualified fix yet"
+            : `Historic position · ${new Date(frame.presentation_at).toLocaleTimeString()}`,
         );
+      card.append(label("small", meta.join(" · "), "party-meta"));
       $("devices").append(card);
       if (permitted(id)) {
         const g = geometry(p.svg);
@@ -551,7 +549,7 @@
         )
         .toFixed(
           1,
-        )} m · Original GNSS capture time · READ ONLY reconstruction · gaps are not interpolated`;
+        )} m · Unknown gaps preserved`;
       return;
     }
     const trailing = session.metadata.trailing_unverified_interval;
@@ -815,26 +813,87 @@
     }
     repaint();
   };
-  $("playback-facts").onclick = () =>
-    travel
-      ? inspection(
-          "Travel Back facts · READ ONLY",
-          $("travel-diagnostics").textContent,
-        )
-      : inspection(
-          "Recording facts · READ ONLY",
-          JSON.stringify(
+  const factTime = (value) =>
+    value && Number.isFinite(Date.parse(value))
+      ? new Date(value).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
+      : "—";
+  const factWords = (text) => {
+    const value = String(text || "").replaceAll("_", " ").trim();
+    return value ? value[0].toUpperCase() + value.slice(1) : "";
+  };
+  function travelFacts() {
+    let diagnostics = {};
+    try {
+      diagnostics = JSON.parse($("travel-diagnostics").textContent || "{}");
+    } catch {}
+    const decisions = Object.entries(diagnostics.decisions || {}).sort((a, b) => b[1] - a[1]);
+    const excluded = decisions.reduce((sum, [reason, n]) => (reason === "accepted" ? sum : sum + n), 0);
+    return {
+      title: "Travel Back facts",
+      subtitle: `${$("context-title").textContent || "Capture range"} · Read only`,
+      stats: [
+        ["From", factTime(travel.start)],
+        ["To", factTime(travel.end)],
+        ["Excluded", String(excluded)],
+      ],
+      sections: [
+        {
+          title: "History",
+          rows: [
             {
-              actual_start: session.metadata.started_at,
-              cutoff: session.metadata.cutoff_at,
-              interruptions: session.groups,
-              underlying_facts: session.facts,
-              limitations: session.metadata.limitations,
+              title: diagnostics.background_projection_error
+                ? "Qualification error"
+                : diagnostics.background_projection_pending
+                  ? "Qualifying newer observations"
+                  : "Qualified history up to date",
+              detail: diagnostics.background_projection_error || "Snapshot is fixed until Refresh.",
+              tone: diagnostics.background_projection_error ? "danger" : diagnostics.background_projection_pending ? "warn" : "",
             },
-            null,
-            2,
-          ),
-        );
+          ],
+        },
+        {
+          title: "Quality decisions",
+          rows: decisions.map(([reason, n]) => ({ title: factWords(reason), aside: String(n) })),
+          empty: "No observations were excluded in this range.",
+        },
+      ],
+      raw: { label: "Diagnostics", text: $("travel-diagnostics").textContent },
+    };
+  }
+  function recordingFacts() {
+    const meta = session.metadata,
+      groups = session.groups || [];
+    return {
+      title: "Recording facts",
+      subtitle: `${meta.name || "Saved recording"} · Read only`,
+      stats: [
+        ["Started", factTime(meta.started_at)],
+        ["Cut off", factTime(meta.cutoff_at)],
+        ["Parties", `${(meta.included || []).length} of ${meta.total_parties ?? "—"}`],
+      ],
+      sections: [
+        {
+          title: "Interruptions",
+          rows: groups.map((g) => ({
+            title: `${factTime(g.From)} – ${factTime(g.Until)}`,
+            detail: factWords(g.Kind),
+            aside: interruptionDuration(g.Duration || 0),
+          })),
+          empty: "Recorded without interruption.",
+        },
+        {
+          title: "Limitations",
+          rows: (meta.limitations || []).map((text) => ({ title: text })),
+          empty: "None recorded.",
+        },
+      ],
+      raw: {
+        label: `Underlying facts · ${(session.facts || []).length}`,
+        text: JSON.stringify(session.facts || [], null, 2),
+      },
+    };
+  }
+  $("playback-facts").onclick = () => (travel || session) && window.showFacts(travel ? travelFacts() : recordingFacts());
   function addRecordedLayer(kind) {
     const c = frame.checkpoint.common,
       source = geometry(c.map_svg),
@@ -977,7 +1036,7 @@
         menu;
         menu = menu.parentElement?.closest(".menu")
       ) {
-        if (!menu.classList.contains("header-menu-root") || innerWidth <= 1100)
+        if (!menu.classList.contains("header-menu-root") || innerWidth <= 1250)
           menu.open = false;
       }
       if (
@@ -993,29 +1052,43 @@
           key = left ? "parties-closed" : "details-closed";
         if (id === "close-details") main.classList.add(key);
         else main.classList.toggle(key);
-        if (innerWidth <= 1100 && !main.classList.contains(key))
+        if (innerWidth <= 800 && !main.classList.contains(key))
           main.classList.add(left ? "details-closed" : "parties-closed");
         repaint();
       } else if (id === "open-quality") showQuality();
-      else if (id === "inspect-history")
-        inspection(
-          "Historical party · READ ONLY",
-          JSON.stringify(
-            travel
-              ? {
-                  capture_range: { start: travel.start, end: travel.end },
-                  original_observations: travel.originals.filter(
-                    (o) => o.message.device_id === selected,
-                  ),
-                  quality_decisions: travel.decisions.filter(
-                    (d) => d.device_id === selected,
-                  ),
-                }
-              : frame?.checkpoint?.parties?.[selected] || {},
-            null,
-            2,
-          ),
-        );
+      else if (id === "inspect-history") {
+        if (!selected) return;
+        const device = frame?.checkpoint?.parties?.[selected]?.device;
+        const name = device?.snapshot?.party?.id || "Selected party";
+        if (travel)
+          window.showHistorySnapshot(`${name} · Capture range`, {
+            points: (travel.points || []).filter((p) => p.device_id === selected),
+            decisions: travel.decisions.filter((d) => d.device_id === selected),
+            original_observations: travel.originals.filter((o) => o.message.device_id === selected),
+          });
+        else {
+          const fix = device?.location?.fix;
+          window.showFacts({
+            title: "History",
+            subtitle: `${name} · At this moment · Read only`,
+            stats: [
+              ["Contact", factWords(device?.contact_condition) || "—"],
+              ["GNSS", factWords(device?.gnss_condition) || "—"],
+              ["Distance", Number.isFinite(device?.total_m) ? distance(device.total_m) : "—"],
+            ],
+            sections: [
+              {
+                title: "Last position",
+                rows: fix
+                  ? [{ title: `${fix.latitude.toFixed(5)}, ${fix.longitude.toFixed(5)}`, detail: [fix.horizontal_accuracy_m != null ? `±${fix.horizontal_accuracy_m} m` : "", factTime(fix.observed_at)].filter(Boolean).join(" · ") }]
+                  : [],
+                empty: "No qualified position at this moment.",
+              },
+            ],
+            raw: { label: "Party snapshot", text: JSON.stringify(frame?.checkpoint?.parties?.[selected] || {}, null, 2) },
+          });
+        }
+      }
       else if (id === "open-control")
         inspection(
           "Historical · READ ONLY",
@@ -1371,25 +1444,154 @@
     $("playback-seek").max = session.duration;
     await seek((oldWall - Date.parse(start)) / 1000);
   }
-  $("open-travel").onclick = async () => {
-    const local = (t) =>
-      new Date(t - new Date(t).getTimezoneOffset() * 60000)
-        .toISOString()
-        .slice(0, 19);
-    if (!travel) {
-      $("travel-end").value = local(Date.now());
-      $("travel-start").value = local(Date.now() - 3600000);
-    }
-    try {
-      await refreshTravel();
-    } catch (e) {
-      alert(e.message);
-    }
+  // Capture range dialog (V5.14): date popover plus 24-hour time per bound. The
+  // hidden #travel-start/#travel-end hold the applied local range.
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const localStamp = (d) =>
+    `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}:00`;
+  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const formatDay = (iso) => {
+    const [y, m, d] = iso.split("-").map(Number);
+    return `${d} ${months[m - 1].slice(0, 3)} ${y}`;
   };
-  $("travel-offline").onchange = () => seek(position);
-  $("travel-raw").onchange = () => seek(position);
+  const travelRangeFields = ["travel-start", "travel-end", "travel-offline", "travel-raw"];
+  let travelRangeSaved = null, picker = null;
+  function closeCalendar() {
+    $("travel-calendar").hidden = true;
+    if (picker) picker.open = null;
+    for (const w of ["from", "to"]) $(`travel-${w}-date`).setAttribute("aria-expanded", "false");
+  }
+  function renderCalendar(which) {
+    const [y, m] = picker[which + "Month"].split("-").map(Number);
+    const offset = (new Date(y, m - 1, 1).getDay() + 6) % 7;
+    const cells = Math.ceil((offset + new Date(y, m, 0).getDate()) / 7) * 7;
+    const today = localStamp(new Date()).slice(0, 10);
+    const days = [];
+    for (let i = 0; i < cells; i++) {
+      const d = new Date(y, m - 1, i - offset + 1), iso = localStamp(d).slice(0, 10);
+      const cls = ["calendar-day", iso.slice(0, 7) !== picker[which + "Month"] && "other-month", iso === picker[which] && "selected", iso === today && "today"].filter(Boolean).join(" ");
+      days.push(`<button type="button" class="${cls}" data-date="${iso}" aria-pressed="${iso === picker[which]}" aria-label="${formatDay(iso)}">${d.getDate()}</button>`);
+    }
+    $("travel-calendar").innerHTML =
+      `<div class="calendar-toolbar"><span class="calendar-month">${months[m - 1]} ${y}</span><div class="calendar-nav"><button type="button" class="calendar-arrow" data-shift="-1" aria-label="Previous month">‹</button><button type="button" class="calendar-arrow" data-shift="1" aria-label="Next month">›</button></div></div>` +
+      `<div class="calendar-weekdays" aria-hidden="true">${["M", "T", "W", "T", "F", "S", "S"].map((x) => `<span>${x}</span>`).join("")}</div>` +
+      `<div class="calendar-days">${days.join("")}</div>` +
+      `<div class="calendar-bottom"><span class="calendar-guidance">${which === "from" ? "Start" : "End"} date</span><button type="button" data-date="${today}">Today</button></div>`;
+  }
+  function positionCalendar(which) {
+    const pop = $("travel-calendar"), box = $("travel-range").getBoundingClientRect();
+    const anchor = $(`travel-${which}-date`).getBoundingClientRect();
+    const width = Math.min(300, box.width - 20);
+    pop.style.width = width + "px";
+    const h = pop.offsetHeight;
+    let top = anchor.bottom + 8 - box.top;
+    if (anchor.bottom + 8 + h > innerHeight - 10) top = Math.max(10 - box.top, anchor.top - 8 - h - box.top);
+    pop.style.left = Math.min(Math.max(anchor.left, box.left + 10), box.right - 10 - width) - box.left + "px";
+    pop.style.top = top + "px";
+  }
+  function toggleCalendar(which) {
+    const next = picker.open === which ? null : which;
+    closeCalendar();
+    if (!next) return;
+    picker.open = next;
+    $("travel-calendar").hidden = false;
+    $(`travel-${next}-date`).setAttribute("aria-expanded", "true");
+    renderCalendar(next);
+    positionCalendar(next);
+    $("travel-calendar").querySelector(".calendar-day.selected")?.focus();
+  }
+  for (const w of ["from", "to"]) $(`travel-${w}-date`).onclick = () => toggleCalendar(w);
+  $("travel-calendar").onclick = (event) => {
+    // Re-rendering detaches the clicked button, so keep the outside-click check away.
+    event.stopPropagation();
+    const button = event.target.closest("button"), which = picker?.open;
+    if (!button || !which) return;
+    if (button.dataset.shift) {
+      const [y, m] = picker[which + "Month"].split("-").map(Number);
+      picker[which + "Month"] = localStamp(new Date(y, m - 1 + Number(button.dataset.shift), 1)).slice(0, 7);
+      renderCalendar(which);
+      positionCalendar(which);
+      return;
+    }
+    picker[which] = button.dataset.date;
+    picker[which + "Month"] = button.dataset.date.slice(0, 7);
+    $(`travel-${which}-date-text`).textContent = formatDay(button.dataset.date);
+    $("travel-range-error").textContent = "";
+    closeCalendar();
+    $(`travel-${which}-date`).focus();
+  };
+  $("travel-range").addEventListener("click", (event) => {
+    if (picker?.open && !event.target.closest("#travel-calendar, .capture-date-button")) closeCalendar();
+  });
+  $("travel-range").addEventListener("cancel", (event) => {
+    if (!picker?.open) return;
+    event.preventDefault();
+    const which = picker.open;
+    closeCalendar();
+    $(`travel-${which}-date`).focus();
+  });
+  function openTravelRange() {
+    $("travel-range-error").textContent = "";
+    travelRangeSaved = travelRangeFields.map((id) => [id, $(id).value, $(id).checked]);
+    picker = { open: null };
+    for (const [w, id] of [["from", "travel-start"], ["to", "travel-end"]]) {
+      const value = $(id).value;
+      picker[w] = value.slice(0, 10);
+      picker[w + "Month"] = value.slice(0, 7);
+      $(`travel-${w}-date-text`).textContent = formatDay(picker[w]);
+      $(`travel-${w}-time`).value = value.slice(11, 16);
+    }
+    closeCalendar();
+    $("travel-range").showModal();
+  }
+  // Entering Travel Back asks for the capture range first, as in the design;
+  // Cancel leaves the current mode untouched.
+  $("open-travel").onclick = () => {
+    if (locked()) return;
+    if (!$("travel-start").value) {
+      const end = new Date();
+      end.setSeconds(0, 0);
+      end.setMinutes(end.getMinutes() + 1);
+      $("travel-end").value = localStamp(end);
+      $("travel-start").value = localStamp(new Date(end - 3600000));
+    }
+    openTravelRange();
+  };
   $("travel-refresh").onclick = () =>
     refreshTravel().catch((e) => alert(e.message));
+  $("travel-range-open").onclick = openTravelRange;
+  // Range and filter edits apply only through Apply range; Cancel restores them.
+  $("travel-range").addEventListener("close", () => {
+    closeCalendar();
+    for (const [id, value, checked] of travelRangeSaved || []) {
+      $(id).value = value;
+      $(id).checked = checked;
+    }
+    travelRangeSaved = null;
+  });
+  $("travel-range-form").onsubmit = async (event) => {
+    event.preventDefault();
+    const time = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+    const from = $("travel-from-time").value.trim(), to = $("travel-to-time").value.trim();
+    if (!time.test(from) || !time.test(to)) {
+      $("travel-range-error").textContent = "Use a valid 24-hour time in HH:MM format (for example, 11:21).";
+      return;
+    }
+    const start = `${picker.from}T${from}:00`, end = `${picker.to}T${to}:00`;
+    if (start >= end) {
+      $("travel-range-error").textContent = "The end must be later than the start.";
+      return;
+    }
+    $("travel-start").value = start;
+    $("travel-end").value = end;
+    try {
+      await refreshTravel();
+      travelRangeSaved = null;
+      $("travel-range").close();
+    } catch (e) {
+      $("travel-range-error").textContent = e.message;
+    }
+  };
   function updateMode() {
     if (travel) {
       const count = Object.values(
@@ -1409,7 +1611,7 @@
       ? travel
         ? "TRAVEL BACK"
         : "VIEWING RECORDING"
-      : recordingInProgress() && recordingContext
+      : (recordingInProgress() && recordingContext) || recordIntent
         ? "RECORDING LIVE"
         : "LIVE";
     const current = $("operational-mode").textContent;
@@ -1434,22 +1636,28 @@
   setInterval(updateMode, 500);
   $("mode-live").onclick = () => {
     recordingContext = false;
+    recordIntent = false;
     updateMode();
     if (active) exit();
     else window.restoreLiveDashboard();
   };
   $("mode-recording").onclick = () => {
     recordingContext = true;
+    recordIntent = true;
     updateMode();
     if (active) exit();
     else window.restoreLiveDashboard();
     if (!locked()) $("start").click();
   };
   $("mode-library").onclick = () => {
-    if (!locked()) $("open-library").click();
+    if (locked()) return;
+    recordIntent = false;
+    $("open-library").click();
   };
   $("mode-travel").onclick = () => {
-    if (!locked()) $("open-travel").click();
+    if (locked()) return;
+    recordIntent = false;
+    $("open-travel").click();
   };
   $("historical-return").onclick = () => {
     if (!suspended || locked()) return;

@@ -306,7 +306,7 @@ async function port() {
             c.id,
           );
           await page.locator("#tab-maps-library").click();
-          await page.locator("#saved-maps").selectOption(c.id);
+          await page.locator(`.saved-map-row[data-map-id="${c.id}"] .map-row-main`).click();
           await page.locator('[data-close="map-settings"]').click();
           const prefix = c.name.replaceAll(" ", "-");
           for (const asset of c.vector_assets || []) {

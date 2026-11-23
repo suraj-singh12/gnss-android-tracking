@@ -1,4 +1,5 @@
 /* Production Command/SQLite/Chromium regression for capture-time reconstruction. */
+const { menuAction } = require("./menu-actions.cjs");
 const { chromium } = require(
   process.env.GNSS_PLAYWRIGHT_MODULE || "playwright",
 );
@@ -108,8 +109,34 @@ const report = { physical_acceptance: false };
   });
   assert.match(unverified, /Stop or discard/);
 
-  await page.locator("#mode-travel").click();
+  // Entering Travel Back asks for the capture range first; Cancel stays live.
+  await menuAction(page, "mode-travel");
+  await page.locator("#travel-range").waitFor();
+  assert(!(await page.evaluate(() => window.HistoricalPlayback.active)));
+  await page.locator('#travel-range [data-close="travel-range"]').last().click();
+  assert(!(await page.evaluate(() => window.HistoricalPlayback.active)));
+  await menuAction(page, "mode-travel");
+  await page.locator("#travel-range").waitFor();
+  assert.match(await page.locator("#travel-from-time").inputValue(), /^\d\d:\d\d$/);
+  await page.locator("#travel-from-date").click();
+  assert.equal(await page.locator("#travel-from-date").getAttribute("aria-expanded"), "true");
+  assert(await page.locator("#travel-calendar .calendar-day.selected").isVisible());
+  const month = await page.locator("#travel-calendar .calendar-month").textContent();
+  await page.locator('#travel-calendar [data-shift="-1"]').click();
+  assert(await page.locator("#travel-calendar").isVisible(), "month navigation keeps the calendar open");
+  assert.notEqual(await page.locator("#travel-calendar .calendar-month").textContent(), month);
+  await page.locator('#travel-calendar [data-shift="1"]').click();
+  await page.keyboard.press("Escape");
+  assert(await page.locator("#travel-calendar").isHidden());
+  assert(await page.locator("#travel-range").isVisible(), "Escape closes the calendar before the dialog");
+  const fromTime = await page.locator("#travel-from-time").inputValue();
+  await page.locator("#travel-from-time").fill("25:00");
+  await page.locator("#travel-apply").click();
+  assert.match(await page.locator("#travel-range-error").textContent(), /24-hour time/);
+  await page.locator("#travel-from-time").fill(fromTime);
+  await page.locator("#travel-apply").click();
   await page.waitForFunction(() => window.HistoricalPlayback.active);
+  assert(await page.locator("#travel-range").isHidden());
   assert(!(await page.locator("#follow-label").isVisible()));
   assert.match(
     await page.locator("#playback-seek").getAttribute("aria-label"),
@@ -123,6 +150,17 @@ const report = { physical_acceptance: false };
   );
   await page.locator("#playback-last").click();
   assert.equal(await page.locator(".historical-party-name").count(), 20);
+  // Workspace search applies to historical rows as well as live rows.
+  const historicalShown = (q) => page.evaluate((query) => {
+    $("party-search").value = query;
+    $("party-search").dispatchEvent(new Event("input"));
+    return [...document.querySelectorAll("#devices .historical-party")].filter((c) => !c.hidden).length;
+  }, q);
+  const firstName = (await page.locator(".historical-party-name").first().innerText()).trim();
+  const matched = await historicalShown(firstName);
+  assert(matched >= 1 && matched < 20, `historical search matched ${matched}`);
+  assert.equal(await historicalShown("no-such-party-zz"), 0);
+  assert.equal(await historicalShown(""), 20);
   const before = await page.locator("#tracks").innerHTML();
   await ingest(0, 2);
   await ingest(20, 1);
@@ -133,7 +171,6 @@ const report = { physical_acceptance: false };
     await page.locator("#travel-pending").textContent(),
     /New stored observations/,
   );
-  await page.locator("#travel-settings > summary").click();
   await page.locator("#travel-refresh").click();
   await page.waitForTimeout(200);
   assert.equal(await page.locator(".historical-party-name").count(), 21);
@@ -165,7 +202,7 @@ const report = { physical_acceptance: false };
     false,
   );
   // Starting a new recording while temporarily in LIVE also locks Go Back.
-  await page.locator("#start").click();
+  await menuAction(page, "mode-recording");
   await page.locator("#confirm-recording").click();
   await page.waitForFunction(
     () => window.recordingLiveState().recording?.active,
@@ -197,8 +234,8 @@ const report = { physical_acceptance: false };
     await page.locator("#playback-play").getAttribute("aria-label"),
     "Play",
   );
-  await page.locator("#travel-settings > summary").click();
-  await page.locator("#sos-toast-dismiss").click();
+  // The shared menu helper may already have dismissed the notification (never the SOS).
+  if (await page.locator("#sos-toast-dismiss").isVisible()) await page.locator("#sos-toast-dismiss").click();
   await page.locator(".historical-party-name").first().click();
   assert(
     (await page.locator("[data-historical-party] circle").count()) > 0,
@@ -210,6 +247,26 @@ const report = { physical_acceptance: false };
     [1440, 900],
   ]) {
     await page.setViewportSize({ width, height });
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    // Travel Back settings must not cover map tools; timeline controls stay inside the viewport.
+    const blocked = await page.evaluate(() =>
+      ["zoom-in", "zoom-out", "open-layers", "playback-speed", "exit-playback"]
+        .map((id) => {
+          const e = document.getElementById(id), r = e.getBoundingClientRect();
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return r.left < 0 || r.right > innerWidth || !e.contains(hit) ? id : null;
+        })
+        .concat(
+          [...document.querySelectorAll("#playback-timeline > *")]
+            .filter((e) => e.getClientRects().length)
+            .map((e) => e.getBoundingClientRect())
+            .some((r) => r.left < 0 || r.right > innerWidth + 0.5)
+            ? ["timeline child outside viewport"]
+            : [],
+        )
+        .filter(Boolean),
+    );
+    assert.deepEqual(blocked, [], `Travel Back controls blocked at ${width}x${height}`);
     for (const theme of ["day", "night"]) {
       await page.evaluate(
         (t) => (document.documentElement.dataset.appearance = t),
@@ -220,12 +277,12 @@ const report = { physical_acceptance: false };
       });
     }
   }
-  await page.locator("#mode-live").click();
+  await menuAction(page, "mode-live");
   assert.equal(
     await page.evaluate(() => window.HistoricalPlayback.active),
     false,
   );
-  await page.locator("#mode-recording").click();
+  await menuAction(page, "mode-recording");
   await page.locator("#confirm-recording").click();
   await page.waitForFunction(
     () => window.recordingLiveState().recording?.active,
@@ -250,12 +307,12 @@ const report = { physical_acceptance: false };
   const recordingId = await page.evaluate(
     () => window.recordingLiveState().recording.recording_id,
   );
-  await page.locator("#mode-live").click();
+  await menuAction(page, "mode-live");
   assert.equal(
     await page.evaluate(() => window.recordingLiveState().recording.active),
     true,
   );
-  await page.locator("#mode-recording").click();
+  await menuAction(page, "mode-recording");
   assert.equal(
     await page.evaluate(
       () => window.recordingLiveState().recording.recording_id,

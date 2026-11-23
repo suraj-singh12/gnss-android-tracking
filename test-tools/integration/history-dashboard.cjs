@@ -104,7 +104,7 @@ async function wait(check) {
     fullPage: true,
   });
 
-  await page.locator("#start").click();
+  await menuAction(page, "mode-recording");
   // Issue6's current Start modal must allow all-history with no known phones.
   assert.equal(await page.locator("#session-mode").isEnabled(), true);
   await page.locator("#session-mode").check();
@@ -158,7 +158,7 @@ async function wait(check) {
   assert.equal(drawn,st.points.length);
   await page.getByRole("button",{name:"Charlie",exact:true}).click();
   await page.waitForFunction(()=>document.body.textContent.includes("All eligible history rejected by quality rules"));
-  await page.getByText("Diagnostics & significant events",{exact:true}).click();
+  await page.getByText("Observation evidence & quality",{exact:true}).click();
   assert.match(await page.locator("body").innerText(),/poor accuracy: 10/);
   assert.doesNotMatch(await page.locator("body").innerText(),/Fully synchronized/);
   await page.getByText("poor accuracy: 10",{exact:true}).scrollIntoViewIfNeeded();

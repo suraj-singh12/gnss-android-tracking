@@ -2,6 +2,25 @@
  * controlled runs explicitly identify the verified real SRTM replay sample. */
 "use strict";
 const { menuAction } = require("./menu-actions.cjs");
+
+// Get a Map exposes the prototype surface (search, radius, terrain switch, Download).
+// Engine-level fields kept behind it are driven directly where a test needs them.
+const setCentre = async (page, lat, lon) => {
+  await page.locator("#map-search").fill(`${lat}, ${lon}`);
+  await page.locator("#search-map").click();
+};
+const setHidden = (page, sel, value) =>
+  page.locator(sel).evaluate((e, v) => {
+    if (e.type === "checkbox") e.checked = v;
+    else e.value = v;
+    e.dispatchEvent(new Event("input", { bubbles: true }));
+    e.dispatchEvent(new Event("change", { bubbles: true }));
+  }, value);
+const clickHidden = async (page, sel) => {
+  await page.waitForFunction((s) => !document.querySelector(s).disabled, sel);
+  await page.locator(sel).evaluate((e) => e.click());
+};
+
 const {
   waitForAcquisition,
   transferBudget,
@@ -110,25 +129,17 @@ async function wait(f) {
   await page.goto(local);
   await menuAction(page, "open-map");
   await page.locator("#tab-map-preparation").click();
-  await page.locator(".map-precise").evaluate((e) => (e.open = true));
   await page.getByRole("button", { name: "Custom", exact: true }).click();
   const lat = Number(process.env.GNSS_DEM_LAT || 30.4598),
     lon = Number(process.env.GNSS_DEM_LON || 78.061),
     radius = Number(process.env.GNSS_DEM_RADIUS || 373);
-  await page.locator("#map-lat").fill(String(lat));
-  await page.locator("#map-lon").fill(String(lon));
+  await setCentre(page, String(lat), String(lon));
   await page.locator("#map-radius").fill(String(radius));
   await page.locator("#radius-unit").selectOption("1");
   await page.locator("#include-map-terrain").check();
-  await page
-    .locator("#download-hillshade")
-    .evaluate((e) => (e.closest("details").open = true));
   for (const k of ["hillshade", "contours", "elevation"])
-    await page.locator("#download-" + k).check();
-  await page
-    .locator("#preview-map")
-    .evaluate((e) => (e.closest("details").open = true));
-  await page.locator("#preview-map").click();
+    await setHidden(page, "#download-" + k, true);
+  await clickHidden(page, "#preview-map");
   await page.waitForFunction(() => !!preparedMap);
   const out = process.env.GNSS_SCREENSHOT_DIR || work;
   fs.mkdirSync(out, { recursive: true });
@@ -136,7 +147,6 @@ async function wait(f) {
     path: path.join(out, "real-dem-area-preview.png"),
     fullPage: true,
   });
-  await page.locator("#confirm-map-cost").check();
   await page.locator("#download-map").click();
   if (process.env.GNSS_ACCEPTANCE_LOCAL) {
     await page
