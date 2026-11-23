@@ -8,7 +8,7 @@ presents a local map dashboard with recording, playback, Travel Back, SOS and ph
 controls. Field operation needs no internet, SIM, cloud service or online map.
 
 **Current release:** v1.0.0 (pre-release). See [Releases](https://github.com/suraj-singh12/gnss-android-tracking/releases)
-and [Known limitations](#known-limitations).
+and the known limitations below.
 
 ## Components
 
@@ -55,7 +55,7 @@ Verify downloads with `sha256sum -c SHA256SUMS` (or `shasum -a 256 -c` on macOS)
    location and notifications, then tap **Start Tracking**.
 3. Parties appear in Command's Parties panel as observations arrive.
 
-Command flags and storage locations are in the [Command guide](command/README.md#build-and-run).
+Command flags and storage locations are in the [Command guide](command/README.md).
 For a first real phone → Command run, follow [device acceptance](android/DEVICE-ACCEPTANCE.md).
 
 ## Build and test from source
