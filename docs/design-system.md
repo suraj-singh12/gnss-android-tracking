@@ -68,7 +68,10 @@ The production implementation lives in `command/web`: `index.html`, the V5.14 la
 - **Shell:** a 58 px header (identity, centred mode picker, then Maps / Records / Tools, Day/Night and SOS). The workspace is a three-column grid: Parties 242 px, map, Details 270 px. The centre column holds the context bar, the map and the bottom rail.
 - **Breakpoints:** at ≤1250 px the header actions move into the ☰ menu; at ≤1190 px Details becomes a drawer; at ≤800 px Parties becomes a drawer; at ≤520 px the identity text and map tag are hidden.
 - **Tokens:** the V5.14 palette (`--panel`, `--soft`, `--green`, `--amber`, `--red` plus their washes) is mapped onto the existing Command variable names. Day secondary text keeps Command's existing `#596970` instead of the prototype's `#6d7d80`. It needs at least 4.5:1 on the green and grey washes, which `#6d7d80` does not reach, so the axe checks would fail.
-- **Controls:** binary settings (SOS audio, quality rule enablement, Follow Original) are switches. Modes are an exclusive menu, actions are buttons, and Records and Tools are anchored menus.
+- **Controls:** binary settings (SOS audio, quality rule enablement, Follow Original, map layers) are switches. Modes are an exclusive menu and actions are buttons. The Day/Night control is an SVG sun / north-east-facing crescent.
+- **Windows:** Records, Tools, Maps & Layers, Map layers, SOS emergencies, Event history and Phone controls share the `.v514-modal` family: centred 720 px, title + subtitle, tabs where needed, scrolling body and a footer. History (`#history-inspection`) and Recording facts (`#recording-facts`) are 640 px read-only sheets: a three-figure summary, titled row sections and raw JSON folded away by default. At ≤520 px windows use 16 px padding and full-width footer buttons.
+- **Travel Back:** entry opens the Capture range window (date picker + 24-hour time per end, two filter switches, inline validation); the context bar shows the chosen range and a *New history* tag replaces status text when later data arrives.
+- **Empty states:** a surface without data shows a labelled empty state (e.g. Get a Map's *Map preview* grid), never a blank canvas.
 - **Truth:** the context bar, mode label and inspector only mirror `/local/state`, the recording state and the playback mode. Stale GNSS is never styled as fresh; "Connected" means current Command contact only.
 
 ## Operator UI/UX quality gate — 15 reusable rules
@@ -273,8 +276,8 @@ inspection; canvas keyboard arrows pan, +/− zoom, F fits. Geographic projectio
 WGS84 coordinates in Web Mercator for both modes; authoritative geographic distance
 continues to use the existing backend. No accuracy circles are introduced.
 
-The persistent SOS header counter opens an emergency drawer; compact arrival notices
-are dismissible without acknowledgement. A separate Event History drawer retains
+The persistent SOS header counter opens the SOS emergencies window; compact arrival notices
+are dismissible without acknowledgement. A separate Event history window retains
 acknowledged SOS and ordinary operation evidence. Event cards distinguish activation, snapshot,
 Command receipt and human acknowledgement. Existing AudioContext alerts repeat while
 unacknowledged after explicit enablement from the persistent toolbar, including before an SOS arrives; blocked/unavailable sound is shown visibly.

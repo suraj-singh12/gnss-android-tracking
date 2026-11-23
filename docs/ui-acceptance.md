@@ -23,6 +23,14 @@ Design authority: `docs/design/approved/command-v5.14-interactive.html` (SHA-256
 | At ≤800 px, Speed and More were clipped and timeline text overlapped the seek bar | The timeline wraps; the seek bar takes its own row. |
 | In Travel Back at narrow widths, Capture range & diagnostics covered Zoom in | The panel is part of the playback context block, below the measured map tools. |
 
+### Later rounds (merged in PR #67 at `add036a`, merge `54b4845`)
+
+- **Prototype parity:** Records, Tools, Maps & Layers, Map layers, SOS and Phone controls became centred V5.14 windows; compact party cards; utility-menu groups; Start recording choice cards; Phone controls Recipients / Instruction / Enrollment / Results; Travel Back Capture range window.
+- **Polish:** Capture range opens on entry with date picker + 24-hour time and inline validation; shorter status text; 16 px narrow-window padding.
+- **History and Recording facts:** redesigned as structured read-only sheets (summary, row sections, folded raw data); one facts sheet for live, saved and Travel Back.
+- **Get a Map:** labelled empty / failed / geometry preview states instead of a blank SVG. **Day/Night:** SVG crescent facing north-east. A CSP-blocked inline style on `#map-coverage-status` moved to CSS.
+- **Review fixes:** terrain off clears every product; saved frames keep recorded track/label visibility; only authenticated success counts as Applied; Capture range Cancel restores values; calendar month arrows keep the picker open; Travel Back Excluded ignores accepted decisions; History tags only non-accepted decisions; presentation evidence is not claimed confirmed after Pause/Stop.
+
 ### Verification (local, Linux)
 
 - `command`: `go test -race ./...` and `go vet ./...` pass. `test-tools`: `go test -race ./...` and `go vet ./...` pass.
@@ -41,6 +49,8 @@ Design authority: `docs/design/approved/command-v5.14-interactive.html` (SHA-256
 
 - `dem-offline-acceptance` needs a live terrain provider and operator transfer approval. It was not run locally.
 - Native macOS and Windows runtime behaviour is not proven by Linux browser runs or cross-builds.
+- Physical SOS speaker output was not tested.
+- CI `dem-provider` failed at the merged head because Overpass and Geofabrik refused connections and regional files exceed the 30 MB CI transfer budget; offline map acceptance passed.
 
 ## Issue #39 — operator-approved focused polish (21 November 2026, P2-series)
 
