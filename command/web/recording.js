@@ -400,6 +400,8 @@
       $("snapshot-receipt").hidden = false;
       $("snapshot-receipt").textContent =
         `Saved ${receipt.name} · ${receipt.id} · ${receipt.confirmed_events} confirmed states · ${receipt.included.length} of ${receipt.total_parties} parties included · evidence limitations retained`;
+      $("stopped-choice-text").textContent =
+        "Snapshot saved. The stopped recording stays retained until discarded.";
     } catch (e) {
       $("snapshot-error").textContent = e.message;
     } finally {

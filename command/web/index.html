@@ -13,14 +13,15 @@
     <script src="/playback.js" defer></script>
     <script src="/library.js" defer></script>
     <script src="/control.js" defer></script>
+    <script src="/workspace.js" defer></script>
   </head>
-  <body>
-    <header>
-      <div class="brand">
-        <span class="brand-mark">G</span>
+  <body id="command">
+    <header class="header">
+      <div class="identity brand">
+        <span class="brand-mark logo" aria-hidden="true">G</span>
         <div>
-          <span class="brand-name">GNSS Command Centre</span>
-          <div class="command-summary">
+          <span class="brand-name identity-name">GNSS Command</span>
+          <div class="command-summary identity-caption">
             <span
               id="connection"
               role="status"
@@ -34,156 +35,125 @@
           </div>
         </div>
       </div>
-      <div class="header-tools">
-        <details class="header-menu-root menu" open><summary>Menu</summary>
+      <details class="menu mode-picker" id="mode-picker">
+        <summary id="mode-button" class="mode-chooser" aria-label="Operational mode: LIVE"><span id="mode-label">LIVE</span><svg class="arrow" viewBox="0 0 20 12" aria-hidden="true"><path d="m4 3 6 6 6-6"/></svg></summary>
+        <div class="menu-content mode-dropdown">
+          <nav id="mode-navigation" aria-label="Operational mode">
+            <button id="mode-live" class="mode-menu-item"><span><strong>Live</strong><small>Current locations and SOS</small></span><span class="menu-check" aria-hidden="true"></span></button>
+            <button id="mode-recording" class="mode-menu-item"><span><strong>Record</strong><small>Record the operator presentation</small></span><span class="menu-check" aria-hidden="true"></span></button>
+            <button id="mode-library" class="mode-menu-item"><span><strong>View Recording</strong><small>Frozen saved evidence</small></span><span class="menu-check" aria-hidden="true"></span></button>
+            <button id="mode-travel" class="mode-menu-item"><span><strong>Travel Back</strong><small>Original GNSS capture history</small></span><span class="menu-check" aria-hidden="true"></span></button>
+          </nav>
+        </div>
+      </details>
+      <div class="header-tools header-right">
+        <details class="header-menu-root menu" open><summary class="utility-trigger" aria-label="Open navigation and tools"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></summary>
           <div class="menu-groups">
-            <details class="menu"><summary>Workspace</summary><div class="menu-content"><button id="open-map">Map &amp; layers</button><button id="open-control">Phone controls</button></div></details>
-            <details class="menu"><summary>Records</summary><div class="menu-content"><button id="open-travel">Travel Back</button><button id="open-library">Saved recordings</button><button id="open-history" aria-label="Events history">Events</button></div></details>
-            <details class="menu"><summary>Tools</summary><div class="menu-content"><button id="open-quality">Quality settings</button><a href="/local/field-report">Export diagnostics</a><button id="open-about">About</button></div></details>
-            <details class="menu"><summary>View</summary><div class="menu-content"><button id="appearance" aria-label="Switch to Night appearance">Night</button></div></details>
+            <span class="menu-group-title compact-only">Explore</span>
+            <button id="open-records" class="header-link" aria-haspopup="dialog">Records</button>
+            <button id="open-tools" class="header-link" aria-haspopup="dialog">Tools</button>
+            <button id="open-map" class="header-link">Maps<span class="compact-only">&nbsp;&amp; Layers</span></button>
+            <button class="header-link compact-only" data-menu-proxy="open-layers" aria-haspopup="dialog">Map layers</button>
+            <div class="menu-divider compact-only"></div>
+            <span class="menu-group-title compact-only">Workspace</span>
+            <button class="header-link compact-only" data-menu-proxy="toggle-parties">Parties panel</button>
+            <button class="header-link compact-only" data-menu-proxy="toggle-details">Selected details</button>
+            <button class="header-link compact-only" data-menu-proxy="open-history" aria-haspopup="dialog">Event history</button>
+            <button class="header-link compact-only" data-menu-proxy="open-sos" aria-haspopup="dialog">SOS emergencies</button>
+            <div class="menu-divider compact-only"></div>
+            <button class="header-link compact-only" data-menu-proxy="open-about" aria-haspopup="dialog">About Command</button>
+            <div class="legacy-entry-points" hidden><button id="open-travel" tabindex="-1">Travel Back</button><button id="open-control" tabindex="-1">Phone controls</button></div>
           </div>
         </details>
-        <button id="sos-audio">SOS alarm: enable</button>
-        <button id="open-sos" class="emergency" aria-label="Open SOS emergencies">SOS <span id="sos-count">0</span></button>
+        <button id="appearance" class="theme-toggle" aria-label="Switch to Night appearance" title="Switch to Night appearance"><svg class="theme-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
+        <button id="open-sos" class="emergency" aria-label="Open SOS emergencies"><svg class="small-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 21h20L12 3ZM12 9v5M12 18h.01"/></svg><span class="label-text">SOS</span> <span id="sos-count">0</span></button>
       </div>
     </header>
     <dialog id="phone-control" aria-labelledby="phone-control-title">
-      <div class="dialog-heading">
-        <h1 id="phone-control-title">Live phone controls</h1>
-        <button data-close="phone-control" aria-label="Close phone controls">
-          ×
-        </button>
-      </div>
-      <p>
-        Commands address enrolled phones through their existing outbound
-        connection. Offline / closed apps may not execute. Recording and
-        historical map views never determine recipients.
-      </p>
+      <div class="dialog-heading"><div class="dialog-title"><h1 id="phone-control-title">Phone controls</h1><p class="dialog-sub">Authenticated per-phone commands, enrollment and durable results</p></div><button data-close="phone-control" aria-label="Close phone controls"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button></div>
       <section class="control-identity" aria-label="Public Command identity">
-        <strong>THIS COMMAND · PUBLIC IDENTITY</strong>
-        <p id="control-authority">Command ID unavailable</p>
-        <button id="control-copy-authority" disabled>Copy Command ID</button>
-        <span id="control-copy-status" role="status"></span>
-        <p>Public authority UUID · not an authorization secret</p>
+        <p class="note">The Command ID is public identity, not the enrollment secret. Verify each phone UUID on Android and transfer its per-phone credential privately. Network contact alone does not establish trust.</p>
+        <div class="formrow"><span class="form-label">Command ID · public</span><p id="control-authority">Command ID unavailable</p></div>
+        <div class="control-identity-actions"><button id="control-copy-authority" type="button" disabled>Copy Command ID</button><span id="control-copy-status" role="status"></span></div>
       </section>
-      <h2>Phones</h2>
-      <div class="controls">
-        <button id="control-one">Selected party</button
-        ><button id="control-all">All eligible phones</button
-        ><button id="control-none">Clear selection</button>
-      </div>
-      <div id="control-phones" aria-label="Remote recipients"></div>
-      <label
-        >Instruction
+      <div id="control-enrollment" aria-label="Phone enrollment"></div>
+      <p class="footer-helper control-enrollment-help">Enroll, replace or revoke a phone credential here. Credentials are shown once in a private local prompt and are never stored by the browser. Android response verification is separate.</p>
+      <div class="phone-form">
+        <div class="formrow"><label for="control-recipients">Recipients</label><select id="control-recipients">
+          <option value="selected">Selected party</option>
+          <option value="all">All enrolled</option>
+          <option value="custom">Choose recipients</option>
+        </select></div>
+        <div class="controls control-target-actions" hidden>
+          <button id="control-one" type="button">Selected party</button
+          ><button id="control-all" type="button">All eligible phones</button
+          ><button id="control-none" type="button">Clear selection</button>
+        </div>
+        <div id="control-phones" aria-label="Remote recipients"></div>
+        <div class="formrow"><label for="control-operation">What should the phone do?</label>
         <select id="control-operation">
-          <option value="reporting">Reporting interval</option>
-          <option value="adaptive">Adaptive GNSS persistence</option>
           <option value="sync">Sync All Now</option>
-          <option value="tracking_start">Start Tracking</option>
-          <option value="tracking_stop">Stop Tracking</option>
-          <option value="alert">Phone alert (Normal / Urgent)</option>
-        </select></label
-      >
-      <label
-        >Reporting seconds (5–86400, step 5; blank restores local default)<input
-          id="control-seconds"
-          type="number"
-          min="5"
-          max="86400"
-          step="5"
-          value="10"
-      /></label>
-      <label
-        ><input id="control-adaptive" type="checkbox" />Enable adaptive
-        persistence (OFF otherwise; future measurements only)</label
-      >
-      <label
-        >Expires after seconds<input
-          id="control-ttl"
-          type="number"
-          min="5"
-          max="86400"
-          value="300"
-      /></label>
-      <fieldset id="control-alert-options" hidden>
-        <legend>Phone alert</legend>
-        <label
-          >Alert mode<select id="control-alert-mode">
-            <option value="normal">Normal attention</option>
-            <option value="urgent">Urgent repeating</option>
-          </select></label
-        >
-        <label
-          >Message (optional, 160 characters)<input
-            id="control-alert-message"
-            maxlength="160"
-            type="text"
-        /></label>
-        <label
-          >Urgent output duration seconds (5–120)<input
-            id="control-alert-duration"
-            type="number"
-            min="5"
-            max="120"
-            step="1"
-            value="60"
-        /></label>
-        <label
-          >Urgent repeat seconds (5–30)<input
-            id="control-alert-repeat"
-            type="number"
-            min="5"
-            max="30"
-            step="1"
-            value="10"
-        /></label>
-        <p>
-          Alert expiry: 5–3600 seconds. Normal output is attempted once; its
-          notification remains available until expiry/Stop. Urgent output stops
-          at expiry, duration, local Stop or confirmed cancellation.
-          Sound/vibration depend on Android settings; output attempted does not
-          mean heard. Phone alerts are separate from SOS.
-        </p>
-      </fieldset>
-      <button id="control-issue" class="primary">Review and issue</button>
-      <p id="control-status" role="status">Loading…</p>
-      <h2>Per-phone command history</h2>
-      <div id="control-history"></div>
-    </dialog>
-    <nav id="mode-navigation" aria-label="Operational mode"><button id="mode-live">LIVE</button><button id="mode-recording">RECORDING LIVE</button><button id="mode-library">VIEWING RECORDING</button><button id="mode-travel">TRAVEL BACK</button><section id="playback-rail" hidden aria-label="Historical playback">
-      <div>
-        <strong id="historical-mode">● VIEWING RECORDING</strong> <span id="playback-name"></span>
+          <option value="reporting">Set reporting interval</option>
+          <option value="adaptive">Adaptive storage</option>
+          <option value="tracking_start">Start tracking</option>
+          <option value="tracking_stop">Stop tracking</option>
+          <option value="alert">Phone alert</option>
+        </select></div>
+        <div class="formrow" data-control-op="reporting"><label for="control-seconds">Reporting interval (seconds) · blank restores the phone default</label><input
+          id="control-seconds" type="number" min="5" max="86400" step="5" value="10" /></div>
+        <label class="switchline" data-control-op="adaptive"><span><b>Adaptive persistence</b><small>Applies to future measurements only</small></span><input id="control-adaptive" type="checkbox" role="switch" /></label>
+        <fieldset id="control-alert-options" hidden>
+          <legend>Phone alert</legend>
+          <div class="formgrid">
+            <div class="formrow"><label for="control-alert-mode">Alert mode</label><select id="control-alert-mode">
+              <option value="normal">Normal attention</option>
+              <option value="urgent">Urgent repeating</option>
+            </select></div>
+          </div>
+          <div class="formrow"><label for="control-alert-message">Message · up to 160 characters</label><input id="control-alert-message" maxlength="160" type="text" placeholder="Optional operational message" /></div>
+          <div class="formgrid">
+            <div class="formrow"><label for="control-alert-duration">Urgent duration · sec</label><input id="control-alert-duration" type="number" min="5" max="120" step="1" value="60" /></div>
+            <div class="formrow"><label for="control-alert-repeat">Repeat every · sec</label><input id="control-alert-repeat" type="number" min="5" max="30" step="1" value="10" /></div>
+          </div>
+          <p class="footer-helper">Alert expiry is 5–3600 seconds. Sound and vibration depend on Android settings; output attempted does not mean heard. Phone alerts are separate from SOS.</p>
+        </fieldset>
+        <div class="formrow"><label for="control-ttl">Expires after · seconds</label><input id="control-ttl" type="number" min="5" max="86400" value="300" /></div>
+        <p id="control-op-note" class="note"></p>
+        <p class="footer-helper">Requested state, durable phone receipt and actual applied result are different. Offline or legacy phones may remain unknown or unsupported.</p>
+        <p id="control-status" role="status">Loading…</p>
       </div>
-      <label id="follow-label"
-        >Follow Original
-        <input id="follow-original" type="checkbox" role="switch" checked /><span id="follow-state">ON</span></label>
-      <span id="historical-authority">Read-only evidence</span
-      ><button id="exit-playback">Exit playback</button>
-    </section>
-    </nav><output id="operational-mode" aria-live="polite">LIVE</output><div id="error" role="alert" hidden></div>
-    <button id="historical-return" hidden>Go Back</button><section class="recording-bar" aria-label="Recording controls">
+      <button id="control-issue" class="primary">Review instruction</button>
+      <div class="filter-row control-results-filter"><label for="control-results-filter">Filter outcomes</label><select id="control-results-filter">
+        <option value="all">All results</option>
+        <option value="pending">Pending / unknown</option>
+        <option value="applied">Applied / acknowledged</option>
+        <option value="closed">Failed / cancelled / expired</option>
+      </select></div>
+      <div id="control-history" aria-label="Per-phone command results"></div>
+      <p class="footer-helper control-results-help">Every recipient has its own result and authenticated custody. A queued request is not proof of execution.</p>
+    </dialog>
+<div id="error" role="alert" hidden></div>
+    <section class="recording-bar" aria-label="Recording controls">
       <span id="recording" role="status">Connecting…</span>
       <details class="capture-disclosure"><summary id="capture-summary">Presentation status</summary><div class="capture-detail"><strong id="capture-heading" hidden>Presentation unverified at this time</strong><span id="capture-health" role="status">Awaiting browser ownership</span></div></details>
       <div class="controls">
-        <button id="start" class="primary">Start Recording</button>
+        <button id="start" class="primary">Start recording</button>
         <button id="pause" class="primary" hidden>Pause</button>
         <button id="resume" class="primary" hidden>Resume</button>
         <button id="save-recording">Save</button>
         <button id="stop" class="danger">Stop</button>
       </div>
     </section>
-    <div id="stopped-choice" hidden role="status">
-      Recording finally stopped. Unsaved evidence is retained.
-      <button id="stopped-save">Save snapshot</button
-      ><button id="discard-recording">Discard unsaved recording</button>
+    <div class="recording-notices">
+      <div id="stopped-choice" hidden role="status">
+        <span id="stopped-choice-text">Recording finally stopped. Unsaved evidence is retained.</span>
+        <button id="stopped-save">Save snapshot</button
+        ><button id="discard-recording">Discard unsaved recording</button>
+      </div>
+      <output id="snapshot-receipt" hidden></output>
     </div>
     <dialog id="save-snapshot" aria-labelledby="save-snapshot-title">
-      <div class="dialog-heading">
-        <h1 id="save-snapshot-title">Save snapshot</h1>
-        <button data-close="save-snapshot" aria-label="Close Save snapshot">
-          ×
-        </button>
-      </div>
+      <div class="dialog-heading"><div class="dialog-title"><h1 id="save-snapshot-title">Save snapshot</h1><p class="dialog-sub">Freeze confirmed display evidence as a saved recording.</p></div><button data-close="save-snapshot" aria-label="Close Save snapshot"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button></div>
       <p id="save-continuation">The recording continues after saving.</p>
       <form id="snapshot-form">
         <label
@@ -230,95 +200,92 @@
         </div>
       </form>
     </dialog>
-    <output id="snapshot-receipt" hidden></output>
     <dialog id="browser-occupied" aria-labelledby="browser-occupied-title">
-      <h1 id="browser-occupied-title">Command browser access</h1>
+      <div class="dialog-heading"><div class="dialog-title"><h1 id="browser-occupied-title">Command browser access</h1><p class="dialog-sub">Only one dashboard browser can own presentation capture.</p></div></div>
       <p id="browser-ownership-reason">
         Only one dashboard browser can own presentation capture. Close the other
         dashboard and wait for ownership recovery.
       </p>
       <button id="retry-owner">Retry</button>
     </dialog>
+    <dialog id="travel-range" aria-labelledby="travel-range-title">
+      <div class="dialog-heading"><div class="dialog-title"><h1 id="travel-range-title">Capture range</h1><p class="dialog-sub">Choose the original GNSS capture-time window.</p></div><button data-close="travel-range" aria-label="Close Capture range"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button></div>
+      <form id="travel-range-form" method="dialog">
+        <div class="capture-grid"><div class="capture-field"><span class="capture-label" id="travel-from-label">From</span><div class="capture-fields"><button type="button" class="capture-date-button" id="travel-from-date" data-which="from" aria-haspopup="true" aria-controls="travel-calendar" aria-expanded="false" aria-labelledby="travel-from-label travel-from-date-text"><span class="date-button-label" id="travel-from-date-text"></span><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 3v4M16 3v4M3.5 10h17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button><input class="capture-time-input" id="travel-from-time" type="text" inputmode="numeric" maxlength="5" autocomplete="off" spellcheck="false" aria-label="From time in 24-hour HH:MM format" /></div><div class="capture-time-hint">24-hour time</div></div><div class="capture-field"><span class="capture-label" id="travel-to-label">To</span><div class="capture-fields"><button type="button" class="capture-date-button" id="travel-to-date" data-which="to" aria-haspopup="true" aria-controls="travel-calendar" aria-expanded="false" aria-labelledby="travel-to-label travel-to-date-text"><span class="date-button-label" id="travel-to-date-text"></span><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 3v4M16 3v4M3.5 10h17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button><input class="capture-time-input" id="travel-to-time" type="text" inputmode="numeric" maxlength="5" autocomplete="off" spellcheck="false" aria-label="To time in 24-hour HH:MM format" /></div><div class="capture-time-hint">24-hour time</div></div></div><input type="hidden" id="travel-start" /><input type="hidden" id="travel-end" /><p id="travel-range-error" role="alert"></p>
+        <p class="section-label">Observation filters</p>
+        <label class="switchline"><span><b>Exclude parties offline at snapshot</b><small>Uses contact at snapshot acquisition, not GNSS quality.</small></span><input type="checkbox" role="switch" id="travel-offline" /></label>
+        <label class="switchline"><span><b>Show all observations</b><small>Diagnostic dots only; does not alter qualified distance.</small></span><input type="checkbox" role="switch" id="travel-raw" /></label>
+        <p class="range-guidance">New arrivals become visible only after Refresh. Original GNSS remains unchanged.</p>
+        <pre id="travel-diagnostics" hidden></pre>
+        <div class="controls">
+          <button type="button" data-close="travel-range">Cancel</button
+          ><button type="submit" id="travel-apply" class="primary">Apply range</button>
+        </div>
+      </form>
+      <div id="travel-calendar" class="range-calendar capture-popover" role="group" aria-label="Choose a capture date" hidden></div>
+    </dialog>
     <dialog id="recording-start" aria-labelledby="recording-start-title">
-      <div class="dialog-heading">
-        <h1 id="recording-start-title">Start Recording from</h1>
-        <button data-close="recording-start" aria-label="Close Start Recording">
-          ×
-        </button>
-      </div>
+      <div class="dialog-heading"><div class="dialog-title"><h1 id="recording-start-title">Start recording</h1><p class="dialog-sub">Choose which received observations the recording includes. Recording begins when you press Start.</p></div><button data-close="recording-start" aria-label="Close Start Recording"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button></div>
       <form id="recording-start-form">
-        <label
-          ><input
-            type="radio"
-            name="mode"
-            id="session-mode"
-            value="from_beginning"
-          />
-          Beginning of retained history</label
-        >
-        <p id="session-mode-status" class="muted"></p>
-        <label
-          ><input
-            type="radio"
-            name="mode"
-            id="current-mode"
-            value="from_now"
-            checked
-          />
-          Current Time</label
-        >
+        <div class="record-choice-group" role="radiogroup" aria-label="Recording start">
+          <label class="record-choice"><input type="radio" name="mode" id="current-mode" value="from_now" checked /><span><strong>From now</strong><small>Begin with observations received after Start</small></span></label>
+          <label class="record-choice"><input type="radio" name="mode" id="session-mode" value="from_beginning" /><span><strong>From beginning</strong><small>Include all retained received history</small></span></label>
+        </div>
+        <p id="session-mode-status" class="dialog-hint"></p>
         <p id="recording-start-error" role="alert"></p>
         <div class="controls">
           <button type="button" data-close="recording-start">Cancel</button
-          ><button id="confirm-recording" class="primary">
-            Start Recording
-          </button>
+          ><button id="confirm-recording" class="primary">Start recording</button>
         </div>
       </form>
     </dialog>
     <dialog id="about" aria-labelledby="about-title">
-      <div class="dialog-heading">
-        <h1 id="about-title">GNSS Tracker &amp; GNSS Command Centre</h1>
-        <button data-close="about" aria-label="Close About">×</button>
-      </div>
-      <p>
+      <div class="dialog-heading"><div class="dialog-title"><h1 id="about-title">Tools</h1><p class="dialog-sub">Inspect system status and control operator tools.</p></div><button data-close="about" aria-label="Close About"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button></div>
+      <div class="about-app"><div class="about-logo" aria-hidden="true">G</div><div><h2>GNSS Command</h2><p>Cross-platform, offline-first operational location tracking</p></div></div>
+      <p class="about-description">
         An offline-first GNSS tracking system in which Android devices collect
         and retain location observations, while a local Command Centre receives
         positions, displays movement and historical tracks, manages recording
         and handles emergency SOS alerts over a local network.
       </p>
-      <h2>Developer</h2>
-      <p>
-        Lt Suraj Singh<br /><a href="mailto:surajsingh5092@gmail.com"
-          >surajsingh5092@gmail.com</a
-        >
-      </p>
+      <div class="tool-fact"><span>Product</span><strong>GNSS Tracker &amp; GNSS Command Centre</strong></div>
+      <div class="tool-fact"><span>Operating modes</span><strong>Live · Record · View Recording · Travel Back</strong></div>
+      <div class="tool-fact"><span>Data authority</span><strong>Original GNSS, durable receipt and browser evidence remain distinct</strong></div>
+      <a class="about-contact-row" href="mailto:surajsingh5092@gmail.com" aria-label="Email developer Lt Suraj Singh, surajsingh5092@gmail.com"><span class="about-contact-symbol" aria-hidden="true">✉</span><span class="about-contact-copy"><strong>Developer contact</strong><small>Lt Suraj Singh · surajsingh5092@gmail.com</small></span><span class="about-contact-out" aria-hidden="true">↗</span></a>
     </dialog>
-    <dialog id="sos-panel" class="drawer" aria-labelledby="sos-heading">
-      <div class="emergency-heading">
-        <h1 id="sos-heading">SOS emergencies</h1>
-        <button data-close="sos-panel" aria-label="Close SOS emergencies">
-          ×
-        </button>
+    <dialog id="diagnostics" aria-labelledby="diagnostics-title">
+      <div class="dialog-heading"><div class="dialog-title"><h1 id="diagnostics-title">Tools</h1><p class="dialog-sub">Inspect system status and control operator tools.</p></div><button data-close="diagnostics" aria-label="Close Diagnostics"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button></div>
+      <h2 class="tool-panel-heading">Command diagnostics</h2><p class="tool-panel-intro">Operational health and retained facts, separate from recorded presentation evidence.</p>
+      <div class="tool-fact"><span>Transport receipt</span><strong>Durable SQLite receipt before ACK</strong></div>
+      <div class="tool-fact"><span>Projection</span><strong>Independent of receipt</strong></div>
+      <div class="tool-fact"><span>History playback</span><strong>Read-only</strong></div>
+      <div class="tool-fact"><span>Responsiveness timings</span><strong><button id="diagnostics-runtime" type="button" class="link-button">Export timings</button></strong></div>
+      <div class="dialog-footer controls"><button type="button" data-dismiss="diagnostics">Close</button><a class="button primary" href="/local/field-report">Export diagnostics</a></div>
+    </dialog>
+    <dialog id="sos-sound" aria-labelledby="sos-sound-title">
+      <div class="dialog-heading"><div class="dialog-title"><h1 id="sos-sound-title">Tools</h1><p class="dialog-sub">Inspect system status and control operator tools.</p></div><button data-close="sos-sound" aria-label="Close SOS sound"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button></div>
+      <h2 class="tool-panel-heading">Emergency audio</h2><p class="tool-panel-intro">Audible alerts are optional. Visual SOS indicators remain active.</p>
+      <div class="audio-setting-row switchline"><span><b>Audible SOS cue</b><small id="tools-sos-audio-status">Off · visual SOS alerts remain available</small></span><button id="tools-sos-audio" type="button" role="switch" aria-checked="false" aria-label="Audible SOS cue">Audible SOS cue</button></div>
+      <div class="tool-fact"><span>Pending SOS</span><strong id="tools-sos-pending">None</strong></div>
+      <div class="tool-fact"><span>Audio playback</span><strong>Browser and speaker-dependent</strong></div>
+    </dialog>
+    <dialog id="sos-panel" aria-labelledby="sos-heading">
+      <div class="dialog-heading emergency-heading"><div class="dialog-title"><h1 id="sos-heading">SOS emergencies</h1><p id="sos-summary" class="dialog-sub" role="status" aria-live="polite"></p></div><button data-close="sos-panel" aria-label="Close SOS emergencies"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button></div>
+      <div class="sos-tabs" role="group" aria-label="SOS view"><button type="button" data-sos-view="pending" aria-pressed="true">Pending emergencies</button><button type="button" data-sos-view="all" aria-pressed="false">All SOS history</button></div>
+      <div class="audio-setting-row switchline">
+        <span><b>Audible SOS alarm</b><small id="sos-audio-status" role="status"
+          >Audible alert blocked until enabled. Visible alerts remain
+          active.</small
+        ></span>
+        <button id="sos-audio" type="button" role="switch" aria-checked="false" aria-label="Audible SOS alarm">SOS alarm: enable</button>
       </div>
-      <p id="sos-summary" role="status" aria-live="polite"></p>
-      <span id="sos-audio-status" role="status"
-        >Audible alert blocked until enabled. Visible alerts remain
-        active.</span
-      >
+            <p id="sos-empty" class="tool-panel-intro" hidden>No pending emergencies.</p>
       <div id="sos-alerts"></div>
+      <p class="sos-support-note">Command receipt and human acknowledgement are separate. Audio cannot guarantee someone heard the alert.</p>
     </dialog>
-    <dialog id="event-history" class="drawer" aria-labelledby="history-heading">
-      <div class="dialog-heading">
-        <h1 id="history-heading">Event History</h1>
-        <button data-close="event-history" aria-label="Close Event History">
-          ×
-        </button>
-      </div>
-      <p>
-        Original occurrence, Command receipt and operator acknowledgement remain
-        separate.
-      </p>
+    <dialog id="event-history" aria-labelledby="history-heading">
+      <div class="dialog-heading"><div class="dialog-title"><h1 id="history-heading">Records</h1><p class="dialog-sub">Saved recordings and operational event history.</p></div><button data-close="event-history" aria-label="Close Event History"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button></div>
+      <h2 class="tool-panel-heading">Operational events</h2><p class="tool-panel-intro">Original occurrence, Command receipt and operator acknowledgement remain separate.</p>
       <label
         >Filter
         <select id="event-filter">
@@ -341,25 +308,19 @@
       </button>
     </div>
     <dialog id="saved-library" aria-labelledby="library-title">
-      <div class="dialog-heading">
-        <h1 id="library-title">Saved Recordings</h1>
-        <button data-close="saved-library" aria-label="Close Saved recordings">
-          ×
-        </button>
-      </div>
-      <p class="muted library-subtitle">Frozen snapshots from this Command</p>
-      <label class="library-search-label"
-        ><span class="sr-only">Search recordings</span
-        ><input
-          id="library-search"
-          type="search"
-          placeholder="⌕  Search recordings"
-      /></label>
-      <div class="library-sortline">
-        <strong>Saved recordings</strong
-        ><label
-          ><span class="sr-only">Sort saved recordings</span
-          ><select id="library-sort">
+      <div class="dialog-heading"><div class="dialog-title"><h1 id="library-title">Records</h1><p class="dialog-sub">Saved recordings and operational event history.</p></div><button data-close="saved-library" aria-label="Close Saved recordings"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button></div>
+      <div class="workspace-tabs" role="tablist" aria-label="Record types" data-tab-group="records" data-tab-opener="open-records"><button id="open-library" role="tab" data-tab-dialog="saved-library">Saved recordings</button><button id="open-history" role="tab" data-tab-dialog="event-history">Event history</button></div>
+      <div class="records-toolbar">
+        <label class="library-search-label"
+          ><span>Find a recording</span
+          ><input
+            id="library-search"
+            type="search"
+            placeholder="Search by name or date"
+        /></label>
+        <label class="library-sortline"
+          ><span>Sort by</span
+          ><select id="library-sort" aria-label="Sort saved recordings">
             <option value="saved_at">Saved at · Newest</option>
             <option value="started_at">Actual start · Newest</option>
             <option value="name">Name · A–Z</option>
@@ -376,12 +337,7 @@
       ></section>
     </dialog>
     <dialog id="library-edit" aria-labelledby="library-edit-title">
-      <div class="dialog-heading">
-        <h1 id="library-edit-title">Edit recording metadata</h1>
-        <button data-close="library-edit" aria-label="Close metadata editor">
-          ×
-        </button>
-      </div>
+      <div class="dialog-heading"><div class="dialog-title"><h1 id="library-edit-title">Edit recording metadata</h1><p class="dialog-sub">Actual start, save time and immutable evidence remain unchanged.</p></div><button data-close="library-edit" aria-label="Close metadata editor"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button></div>
       <form id="library-edit-form">
         <label>Name<input id="library-name" required maxlength="256" /></label
         ><label
@@ -399,16 +355,19 @@
         <button type="submit">Save metadata</button>
       </form>
     </dialog>
-    <main class="details-closed">
+    <main>
       <aside class="party-overview">
-        <div class="aside-title">
-          <h1>Parties</h1>
-          <span id="count">0</span>
-          <button id="collapse-parties" aria-label="Collapse party sidebar">
-            ‹
+        <div class="aside-title side-heading">
+          <div><h1>Parties</h1><small><span id="count">0</span> parties · searchable</small></div>
+          <button id="collapse-parties" aria-label="Close Parties">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg>
           </button>
         </div>
-        <p class="muted">Contact and GNSS are independent.</p>
+        <div class="party-tools">
+          <input id="party-search" class="panel-search" type="search" placeholder="Find party or ID" aria-label="Search parties" autocomplete="off" />
+          <div class="panel-filters" role="group" aria-label="Party filter"><button type="button" data-party-filter="all" aria-pressed="true">All</button><button type="button" data-party-filter="online" aria-pressed="false">Online</button><button type="button" data-party-filter="attention" aria-pressed="false">Attention</button></div>
+          <p id="party-filter-status" class="caption" role="status">Contact and GNSS are independent.</p>
+        </div>
         <div id="devices"></div>
         <p id="no-parties">
           Waiting for party leaders.<small
@@ -417,18 +376,73 @@
           >
         </p>
       </aside>
-      <section class="canvas" aria-label="Geographic workspace"><button id="toggle-parties" aria-label="Restore Parties sidebar" aria-expanded="true">›</button>
-        <div class="canvas-toolbar">
-          <span>N ↑ <span id="map-mode-label">Blank canvas</span></span>
+      <div class="center">
+      <div class="context">
+        <div class="context-copy"><div class="context-title" id="context-title">Live operations</div><div class="context-detail" id="context-detail">Contact and GNSS freshness stay separate</div></div>
+        <div class="context-right" id="context-actions"><output id="operational-mode" aria-live="polite">LIVE</output><button id="historical-return" hidden>Go Back</button>
+        <section id="playback-rail" hidden aria-label="Historical playback">
+      <div>
+        <strong id="historical-mode">● VIEWING RECORDING</strong> <span id="playback-name"></span>
+      </div>
+      <label id="follow-label"
+        >Follow Original
+        <input id="follow-original" type="checkbox" role="switch" checked /><span id="follow-state">ON</span></label>
+      <span id="historical-authority">Read-only evidence</span
+      ><button id="exit-playback">Exit playback</button>
+    </section>
+        </div>
+      </div>
+      <section class="canvas" aria-label="Geographic workspace">
+        <div class="map-tag"><strong>N ↑ <span id="map-mode-label">Blank canvas</span></strong><small id="map-tag-detail"><span id="scale-label"></span></small></div>
+        <div class="canvas-toolbar map-actions" role="toolbar" aria-label="Map controls">
           <div>
-            <button id="zoom-in" aria-label="Zoom in">+</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="fit">Fit parties</button><button id="focus-party">Focus selected</button><button id="inspect-history">Inspect history</button><button id="open-layers" title="Show or hide locally prepared terrain layers" aria-label="Map Layers" aria-expanded="false">Layers</button>
+            <button id="zoom-in" aria-label="Zoom in" title="Zoom in"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M4 12h16"/></svg></button><button id="zoom-out" aria-label="Zoom out" title="Zoom out"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h16"/></svg></button><button id="fit" title="Fit all parties into view">Fit parties</button><button id="focus-party" title="Focus on selected party">Focus selected</button><button id="inspect-history" title="Inspect original history of the selected party" aria-label="Inspect history"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6"/><path d="M3 3.5V8h4.5"/><path d="M12 7.5V12l3 2"/></svg>History</button><button id="open-layers" title="Show or hide locally prepared terrain layers" aria-label="Map Layers" aria-expanded="false">Layers <svg class="small-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5"/></svg></button><button id="toggle-parties" class="panel-toggle" aria-label="Show Parties" aria-expanded="true">Parties</button><button id="toggle-details" class="panel-toggle" aria-label="Show selected party details" aria-expanded="false">Details</button>
           </div>
         </div>
-        <div class="playback-context"><div id="playback-status" role="status" hidden></div>
+        <div class="playback-context"><div id="travel-settings" class="travel-rail-actions" hidden><button type="button" id="travel-range-open" aria-haspopup="dialog">Range</button><button type="button" id="travel-refresh">Refresh</button><span id="travel-pending" class="sr-only" role="status"></span></div>
+<div id="playback-status" role="status" hidden></div>
         <details id="playback-evidence" hidden><summary>Presentation unverified at this time</summary><p id="playback-evidence-detail"></p></details></div>
         <div id="playback-notice" role="status" hidden></div>
         <div id="playback-sos" hidden></div>
-        <details id="travel-settings" hidden><summary>Capture range & diagnostics</summary><label>Start <input id="travel-start" step="1" type="datetime-local"></label><label>End <input id="travel-end" step="1" type="datetime-local"></label><button id="travel-refresh">Refresh View</button><span id="travel-pending" role="status"></span><p>Retained original GNSS only · unknown gaps remain unknown. Quality uses the current policy without editing it.</p><label><input id="travel-offline" type="checkbox">Exclude offline at snapshot (contact, not GNSS quality)</label><label><input id="travel-raw" type="checkbox">Use All Observations (diagnostic dots, no qualified distance)</label><pre id="travel-diagnostics"></pre></details><section id="playback-timeline" hidden aria-label="Recording timeline">
+        <div id="projection-status" role="status"></div>
+        <div id="label-density" role="status" hidden></div>
+        <div id="map-detail-status" role="status"></div>
+
+        <dialog id="history-inspection" aria-labelledby="history-inspection-title">
+          <div class="dialog-heading"><div class="dialog-title"><h1 id="history-inspection-title">History</h1><p class="dialog-sub" id="inspection-party">Read only</p></div><button data-close="history-inspection" aria-label="Close history"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button></div>
+          <div class="workspace-tabs history-layers" role="tablist" aria-label="History layer"><button type="button" role="tab" id="inspection-qualified" data-layer="qualified" aria-selected="true">Qualified track</button><button type="button" role="tab" id="inspection-raw" data-layer="raw" aria-selected="false">Original observations</button></div>
+          <dl id="inspection-summary" class="history-stats"></dl>
+          <div id="inspection-list" class="history-list" role="region" aria-label="History entries" tabindex="0"></div>
+          <p id="inspection-note" class="history-note"></p>
+          <details class="history-raw"><summary>Page data</summary><pre id="inspection-data"></pre></details>
+          <div class="dialog-footer"><span id="inspection-status" class="history-page" role="status"></span><button type="button" id="inspection-restart">First page</button><button type="button" id="inspection-next" class="primary">Next page</button></div>
+        </dialog>
+        <dialog id="recording-facts" aria-labelledby="recording-facts-title">
+          <div class="dialog-heading"><div class="dialog-title"><h1 id="recording-facts-title">Recording facts</h1><p class="dialog-sub" id="recording-facts-sub">Read only</p></div><button data-close="recording-facts" aria-label="Close recording facts"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button></div>
+          <div id="recording-facts-content" class="facts-sheet"></div>
+          <div class="dialog-footer"><button type="button" class="primary" data-dismiss-facts>Done</button></div>
+        </dialog>
+        <svg
+          id="tracks"
+          tabindex="0"
+          role="group"
+          aria-label="Geographic tracks. Arrow keys pan; plus and minus zoom; F fits visible parties."
+        ></svg>
+        <div id="empty">
+          No locations to display<small
+            >Live positions appear independently of Recording and historical
+            recovery.</small
+          >
+        </div>
+        <div id="hover" role="status">
+                  </div>
+        <div class="canvas-legend">
+          <span>● Live GNSS</span
+          ><span id="track-layer-label">— Qualified history</span
+          ><span>Gaps split route sections</span>
+        </div>
+      </section>
+        <section id="playback-timeline" hidden aria-label="Recording timeline">
           <div class="playback-time">
             <strong id="presentation-time"></strong
             ><small id="timeline-authority">Presentation time</small>
@@ -479,58 +493,12 @@
             ⋮
           </button>
         </section>
-        <div id="projection-status" role="status"></div>
-        <div id="label-density" role="status" hidden></div>
-        <div id="map-detail-status" role="status"></div>
-
-        <dialog
-          id="history-inspection"
-          aria-labelledby="history-inspection-title"
-        >
-          <form method="dialog">
-            <button aria-label="Close history inspection">Close</button>
-          </form>
-          <h2 id="history-inspection-title">Original history inspection</h2>
-          <label
-            >Layer
-            <select id="inspection-layer">
-              <option value="qualified">
-                Full qualified geometry and decisions
-              </option>
-              <option value="raw">Original observations</option>
-            </select></label
-          >
-          <p id="inspection-status" role="status"></p>
-          <button id="inspection-restart">First page</button
-          ><button id="inspection-next">Next page</button>
-          <pre id="inspection-data"></pre>
-        </dialog>
-        <svg
-          id="tracks"
-          tabindex="0"
-          role="group"
-          aria-label="Geographic tracks. Arrow keys pan; plus and minus zoom; F fits visible parties."
-        ></svg>
-        <div id="empty">
-          No locations to display<small
-            >Live positions appear independently of Recording and historical
-            recovery.</small
-          >
-        </div>
-        <div id="hover" role="status">
-          Select a location point to inspect coordinates, time and accuracy.
-        </div>
-        <div class="canvas-legend">
-          <span>● Live GNSS</span
-          ><span id="track-layer-label">— Qualified history</span
-          ><span>Gaps split route sections</span><span id="scale-label"></span>
-        </div>
-      </section>
+      </div>
       <aside class="party-detail" aria-label="Selected party details">
-        <div class="aside-title">
-          <h1>Selected party</h1>
-          <button id="close-details" aria-label="Close selected party details">
-            ×
+        <div class="aside-title side-heading">
+          <div><h1>Selected party</h1><small>Contextual evidence</small></div>
+          <button id="close-details" aria-label="Close Details">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg>
           </button>
         </div>
         <div id="selected-detail">
@@ -541,58 +509,32 @@
       </aside>
     </main>
     <dialog id="historical-inspection" aria-labelledby="historical-title">
-      <div class="dialog-heading">
-        <h1 id="historical-title">Historical · READ ONLY</h1>
-        <button
-          data-close="historical-inspection"
-          aria-label="Close historical inspection"
-        >
-          ×
-        </button>
-      </div>
+      <div class="dialog-heading"><div class="dialog-title"><h1 id="historical-title">Historical · READ ONLY</h1><p class="dialog-sub">Read-only evidence from the selected time.</p></div><button data-close="historical-inspection" aria-label="Close historical inspection"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button></div>
       <div id="historical-content"></div>
     </dialog>
     <dialog id="layers" aria-labelledby="layers-title">
-      <div class="dialog-heading">
-        <h1 id="layers-title">Layers</h1>
-        <button data-close="layers" aria-label="Close Layers">×</button>
+      <div class="dialog-heading"><div class="dialog-title"><h1 id="layers-title">Map layers</h1><p class="dialog-sub">Adjust what is visible in this view.</p></div><button data-close="layers" aria-label="Close Layers"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button></div>
+      <label class="switchline layer-switch"><span><b>Qualified tracks</b></span><input type="checkbox" role="switch" id="layer-tracks" checked /></label>
+      <label class="switchline layer-switch"><span><b>Party labels</b></span><input type="checkbox" role="switch" id="layer-labels" checked /></label>
+      <label class="switchline layer-switch"><span><b>Terrain</b><small>Requires saved DEM products.</small></span><input type="checkbox" role="switch" id="layer-terrain" /></label>
+      <div class="layer-products" aria-label="Terrain products">
+        <label class="switchline layer-switch"><span><b>Hillshade</b><small id="availability-hillshade"></small></span><input type="checkbox" role="switch" id="layer-hillshade" /></label>
+        <label class="switchline layer-switch"><span><b>Contours</b><small id="availability-contours"></small></span><input type="checkbox" role="switch" id="layer-contours" /></label>
+        <label class="switchline layer-switch"><span><b>Elevation</b><small id="availability-elevation"></small></span><input type="checkbox" role="switch" id="layer-elevation" /></label>
       </div>
-      <p class="muted">
-        Vector features remain visible. Toggles use local data only.
-      </p>
-      <label
-        ><input type="checkbox" id="layer-hillshade" /> Hillshade
-        <small id="availability-hillshade"></small></label
-      ><label
-        ><input type="checkbox" id="layer-contours" /> Contours
-        <small id="availability-contours"></small></label
-      ><label
-        ><input type="checkbox" id="layer-elevation" /> Elevation
-        <small id="availability-elevation"></small
-      ></label>
+      <button type="button" id="apply-layers" class="primary">Apply layers</button>
       <p id="terrain-metadata" class="muted"></p>
     </dialog>
     <dialog id="quality" aria-labelledby="quality-title">
-      <div class="dialog-heading">
-        <h1 id="quality-title">Track quality</h1>
-        <button data-close="quality" aria-label="Close quality settings">
-          ×
-        </button>
-      </div>
-      <p>
-        Apply rules to rebuild the current Recording. Recording boundaries
-        remain authoritative.
-      </p>
+      <div class="dialog-heading"><div class="dialog-title"><h1 id="quality-title">Tools</h1><p class="dialog-sub">Inspect system status and control operator tools.</p></div><button data-close="quality" aria-label="Close quality settings"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button></div>
+      <div class="workspace-tabs" role="tablist" aria-label="Tools sections" data-tab-group="tools" data-tab-opener="open-tools"><button id="open-quality" role="tab" data-tab-dialog="quality">Quality</button><button id="open-diagnostics" role="tab" data-tab-dialog="diagnostics">Diagnostics</button><button id="open-sos-sound" role="tab" data-tab-dialog="sos-sound">SOS sound</button><button id="open-about" role="tab" data-tab-dialog="about">About</button></div>
+      <h2 class="tool-panel-heading">Quality rules</h2><p class="tool-panel-intro">Apply rules to rebuild the current Recording. Original observations and recording boundaries remain unchanged.</p>
+      <div class="quality-label-head" aria-hidden="true"><span>Rule</span><span>Enabled</span><span>Value</span></div>
       <form id="quality-form"></form>
       <div id="quality-progress" role="status"></div>
     </dialog>
     <dialog id="map-settings" aria-labelledby="map-title">
-      <div class="dialog-heading">
-        <h1 id="map-title">Map & layers</h1>
-        <button data-close="map-settings" aria-label="Close map settings">
-          ×
-        </button>
-      </div>
+      <div class="dialog-heading"><div class="dialog-title"><h1 id="map-title">Maps &amp; Layers</h1><p class="dialog-sub">Get a map, import an existing file or adjust what is displayed.</p></div><button data-close="map-settings" aria-label="Close map settings"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button></div>
       <section class="map-section" aria-labelledby="current-map-title">
         <h2 id="current-map-title">Current Map</h2>
         <p id="current-map-name">Blank canvas · no saved map selected</p>
@@ -837,7 +779,7 @@
           </div>
 
           <a id="export-manifest" hidden>Save source & coverage manifest</a>
-          <pre id="map-coverage-status" style="white-space: pre-wrap"></pre>
+          <pre id="map-coverage-status"></pre>
           <button id="download-terrain">
             Download / retry selected terrain
           </button>

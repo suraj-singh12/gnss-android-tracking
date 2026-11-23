@@ -25,11 +25,14 @@ let viewport, offlineMap, inspectedPoint, locatedSOS, terrain, activeMapID;
 function applyAppearance() {
   const night = localStorage.getItem("gnss-appearance") === "night";
   document.documentElement.dataset.appearance = night ? "night" : "day";
-  $("appearance").textContent = night ? "Day" : "Night";
+  $("appearance").firstElementChild.innerHTML = night
+    ? '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/>'
+    : '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
   $("appearance").setAttribute(
     "aria-label",
     `Switch to ${night ? "Day" : "Night"} appearance`,
   );
+  $("appearance").title = $("appearance").getAttribute("aria-label");
   if (terrain) {
     terrain.image = undefined;
     for (const g of terrain.grids || []) g.image = undefined;
@@ -67,6 +70,14 @@ function distance(m) {
 function time(s) {
   return new Date(s).toLocaleString(undefined, { timeZoneName: "short" });
 }
+// Compact inspector time: time of day for today, date + time otherwise.
+function shortTime(s) {
+  const t = new Date(s),
+    today = t.toDateString() === new Date().toDateString();
+  return today
+    ? t.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    : t.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
 function color(id) {
   return state.devices[id].track_color;
 }
@@ -103,7 +114,7 @@ function updateSessionChoice() {
   // From Beginning selects all retained sessions; no current session report needed.
   $("session-mode").disabled = false;
   $("session-mode-status").textContent =
-    "Includes retained observations from all received tracking sessions, even if they arrive late.";
+    "From beginning also includes late arrivals from all received tracking sessions.";
   $("confirm-recording").disabled = !!state?.recording;
 }
 $("start").onclick = () => {
@@ -136,7 +147,8 @@ $("dots").onchange = () => {
   }
   poll();
 };
-let audio;
+let audio,
+  sosSoundOff = false;
 let activeTone;
 const seenSOS = new Set();
 function stopTone() {
@@ -175,50 +187,73 @@ async function sosSound(test = false) {
     audio.onstatechange = () => {
       alarm.update(
         state?.sos_alerts?.some((a) => !a.operator_acknowledged_at),
-        audio.state === "running",
+        audio.state === "running" && !sosSoundOff,
       );
       if (audio.state !== "running") {
         $("sos-audio").textContent = "SOS alarm: blocked";
+        $("sos-audio").setAttribute("aria-checked", "false");
         $("sos-audio-status").textContent =
           "Audio suspended / blocked. Enable sound; visual SOS stays active.";
       }
     };
-    if (test) await audio.resume();
+    if (test) {
+      sosSoundOff = false;
+      await audio.resume();
+    }
     if (audio.state !== "running") throw Error("Audio blocked or suspended");
     const pending = state?.sos_alerts?.some((a) => !a.operator_acknowledged_at);
     alarm.update(pending, true);
     if (test && !pending) beep();
     $("sos-audio").textContent = "SOS alarm: ready";
+    $("sos-audio").setAttribute("aria-checked", "true");
     $("sos-audio-status").textContent =
       "Sound enabled · one shared beep every second until every SOS is acknowledged. Check speaker volume.";
   } catch (e) {
     $("sos-audio").textContent = (window.AudioContext || window.webkitAudioContext) ? "SOS alarm: blocked" : "SOS alarm: error";
+    $("sos-audio").setAttribute("aria-checked", "false");
     $("sos-audio-status").textContent =
       "Audible alert blocked / unavailable. Enable audio and check speaker volume; visible SOS remains active.";
     alarm.update(alarm.pending, false);
   }
 }
-$("sos-audio").onclick = () => sosSound(true);
+// The operator can silence the audible alarm; visible SOS state is unaffected.
+function silenceSos() {
+  sosSoundOff = true;
+  alarm.update(alarm.pending, false);
+  $("sos-audio").textContent = "SOS alarm: off";
+  $("sos-audio").setAttribute("aria-checked", "false");
+  $("sos-audio-status").textContent =
+    "Audible SOS alarm turned off by the operator. Visible SOS alerts remain active.";
+}
+$("sos-audio").onclick = () =>
+  $("sos-audio").getAttribute("aria-checked") === "true" ? silenceSos() : sosSound(true);
 $("open-sos").onclick = $("sos-toast-view").onclick = () =>
   $("sos-panel").showModal();
 $("sos-toast-dismiss").onclick = () => {
   $("sos-toast").hidden = true;
 };
+// V5.14 breakpoints: header utility menu ≤1250, Details drawer ≤1190, Parties drawer ≤800.
+const compactHeader = () => innerWidth <= 1250,
+  detailsDrawer = () => innerWidth <= 1190,
+  partiesDrawer = () => innerWidth <= 800;
 function detailsOpen(open) {
-  if (open && innerWidth <= 1100) {
+  if (open && partiesDrawer()) {
     document.querySelector("main").classList.add("parties-closed");
     $("toggle-parties").setAttribute("aria-expanded", "false");
   }
   document.querySelector("main").classList.toggle("details-closed", !open);
   $("close-details").setAttribute("aria-expanded", String(open));
+  $("toggle-details").setAttribute("aria-expanded", String(open));
 }
 $("close-details").onclick = () => { detailsOpen(false); $("tracks").focus(); };
+$("toggle-details").onclick = () =>
+  detailsOpen(document.querySelector("main").classList.contains("details-closed"));
 $("toggle-parties").onclick = $("collapse-parties").onclick = () => {
   const closed = document
     .querySelector("main")
     .classList.toggle("parties-closed");
   $("toggle-parties").setAttribute("aria-expanded", String(!closed));
-  if (!closed && innerWidth <= 1100) detailsOpen(false);
+  if (!closed && partiesDrawer()) detailsOpen(false);
 };
 function renderSOS() {
   const alerts = [...(state.sos_alerts || [])].sort(
@@ -229,9 +264,6 @@ function renderSOS() {
       a.device_id.localeCompare(b.device_id),
   );
   const pending = alerts.filter((a) => !a.operator_acknowledged_at).length;
-  $("sos-heading").textContent = pending
-    ? "SOS emergencies"
-    : "SOS event history";
   $("sos-count").textContent = pending;
   $("open-sos").classList.toggle("active", pending > 0);
   $("open-sos").setAttribute(
@@ -253,6 +285,7 @@ function renderSOS() {
   const summary = `${pending} unacknowledged · ${alerts.length - pending} acknowledged.`;
   if ($("sos-summary").textContent !== summary)
     $("sos-summary").textContent = summary;
+  $("sos-summary").classList.toggle("clear", !pending);
   // Reuse event-specific nodes so polling never removes keyboard focus or changes
   // the identity captured by a pending acknowledgement request.
   const root = $("sos-alerts");
@@ -355,7 +388,7 @@ function renderSOS() {
       card.remove();
   }
   if (focused && document.activeElement !== focused) focused.focus();
-  alarm.update(pending > 0, audio?.state === "running");
+  alarm.update(pending > 0, audio?.state === "running" && !sosSoundOff);
 }
 function render() {
   const started = performance.now();
@@ -374,7 +407,7 @@ function renderDashboard() {
   $("projection-status").textContent = state.projection_error
     ? "Projection failed: " + state.projection_error
     : state.projection_pending
-      ? "Projection catching up — displayed history is not fully synchronized"
+      ? "Catching up history…"
       : "";
   updateConnectionLabel();
   $("connection").classList.toggle(
@@ -383,7 +416,7 @@ function renderDashboard() {
   );
   if (state.history_sampled)
     $("projection-status").textContent +=
-      " · Map preview only (bounded points); use Inspect selected history for every full-resolution point and original observation. Distance remains full resolution.";
+      " · Preview points; Inspect history shows every point";
   const recording = state.recording;
   $("recording").textContent = recording
     ? `${recording.status === "stopped" ? "STOPPED" : recording.active ? "● REC" : "PAUSED"} · ${duration(recording.duration_s)}`
@@ -395,6 +428,9 @@ function renderDashboard() {
     !recording || recording.active || recording.status === "stopped";
   $("stop").disabled = !recording || recording.status === "stopped";
   $("save-recording").disabled = !recording;
+  if (recording?.status !== "stopped")
+    $("stopped-choice-text").textContent =
+      "Recording finally stopped. Unsaved evidence is retained.";
   $("stopped-choice").hidden = recording?.status !== "stopped";
   const devices = Object.values(state.devices).sort((a, b) =>
     a.device_id.localeCompare(b.device_id),
@@ -621,6 +657,22 @@ function renderDashboard() {
         undefined,
         "device" + (selectedParty === d.device_id ? " selected" : ""),
       );
+      const sosPending = state.sos_alerts?.some(
+        (a) => a.device_id === d.device_id && !a.operator_acknowledged_at,
+      );
+      overview.dataset.contact = d.contact_condition;
+      overview.dataset.attention = String(
+        !!sosPending ||
+          d.contact_condition !== "healthy" ||
+          !d.current_position,
+      );
+      overview.dataset.search = [
+        d.snapshot.party.id,
+        d.snapshot.party.name,
+        d.device_id,
+      ]
+        .join(" ")
+        .toLowerCase();
       const select = el("button", d.snapshot.party.id, "party-select");
       select.setAttribute(
         "aria-pressed",
@@ -633,70 +685,146 @@ function renderDashboard() {
         render();
       };
       const overviewTitle = el("div", undefined, "device-title");
-      const dot = el("span", undefined, "swatch");
-      dot.style.backgroundColor = color(d.device_id);
-      overviewTitle.append(dot, select, toggle);
+      const dot = el(
+        "span",
+        undefined,
+        "swatch pip " + (sosPending ? "red" : d.contact_condition),
+      );
+      overviewTitle.append(dot, select);
+      if (sosPending) {
+        const sos = el("span", "SOS", "party-sos");
+        sos.title = "SOS received · needs acknowledgement";
+        sos.append(el("span", " received · needs acknowledgement", "sr-only"));
+        overviewTitle.append(sos);
+      }
+      overviewTitle.append(toggle);
+      overview.title = `${d.snapshot.party.name} · ${historyLabel(d)}`;
       overview.append(
         overviewTitle,
-        el("small", d.snapshot.party.name),
-        el("div", labels[d.contact_condition], d.contact_condition),
-        el("div", gnssLabel(d)),
-        el("small", historyLabel(d)),
+        el(
+          "small",
+          `${{ healthy: "Connected", delayed: "Contact delayed", contact_lost: "Offline" }[d.contact_condition]} · ${gnssLabel(d)} · ${distance(d.total_m)}`,
+          "party-meta " + d.contact_condition,
+        ),
       );
-      if (
-        state.sos_alerts?.some(
-          (a) => a.device_id === d.device_id && !a.operator_acknowledged_at,
-        )
-      )
-        overview.append(el("strong", "SOS Received · needs acknowledgement"));
       if (!preserveDevices) $("devices").append(overview);
       if (selectedParty === d.device_id && !preserveDetail) {
-        card.className = "selected-content";
-        title.replaceChildren(swatch, el("h2", d.snapshot.party.id));
+        // V5.14 inspector: actionable contact/GNSS facts first, evidence in one disclosure.
         const f = d.location?.fix;
-        if (f)
-          card.insertBefore(
-            el(
-              "div",
-              `${f.latitude.toFixed(6)}, ${f.longitude.toFixed(6)} · observed ${time(f.observed_at)}`,
-              "detail-block",
-            ),
-            status,
-          );
-        const summary = el("div", undefined, "status detail-block");
-        summary.append(
+        const inspector = el("section", undefined, "selected-content inspector-person");
+        const head = el("div", undefined, "inspector-person-header");
+        const name = el("h2", undefined, "detail-name");
+        name.append(el("span", d.snapshot.party.id));
+        head.append(
+          name,
           el(
-            "div",
-            gnssLabel(d) +
-              " · accuracy " +
-              (f?.horizontal_accuracy_m == null
-                ? "unknown"
-                : "±" + f.horizontal_accuracy_m + " m"),
+            "span",
+            gnssLabel(d),
+            "inspector-fix" + (d.current_position ? " positive" : ""),
           ),
-          el("div", "Last Command contact: " + time(d.last_contact)),
+        );
+        const critical = el("div", undefined, "inspector-critical");
+        const contact = el("div", undefined, "inspector-contact");
+        contact.append(
+          el("span", "Command contact", "inspector-kicker"),
           el(
-            "div",
-            "Battery: " +
-              (d.snapshot.health.battery_percent == null
-                ? "Unavailable"
-                : d.snapshot.health.battery_percent + "%"),
+            "strong",
+            { healthy: "Connected", delayed: "Delayed", contact_lost: "Offline" }[d.contact_condition],
+            d.contact_condition,
           ),
-          el("div", historyLabel(d)),
+        );
+        const metrics = el("div", undefined, "inspector-metric-pair");
+        for (const [label, value] of [
+          [
+            "Observation age",
+            d.location_age_s == null
+              ? "Unavailable"
+              : Math.max(0, d.location_age_s).toFixed(0) + " s",
+          ],
+          [
+            "Battery",
+            d.snapshot.health.battery_percent == null
+              ? "Unavailable"
+              : d.snapshot.health.battery_percent + "%",
+          ],
+        ]) {
+          const metric = el("div");
+          metric.append(el("span", label, "inspector-kicker"), el("strong", value));
+          metrics.append(metric);
+        }
+        critical.append(contact, metrics);
+        const fact = (root, label, value, full) => {
+          const row = el("div", undefined, "fact");
+          const v = el("span", value);
+          if (full) v.title = full;
+          row.append(el("span", label), v);
+          root.append(row);
+        };
+        const facts = el("div", undefined, "inspector-facts");
+        fact(facts, "Accuracy", f?.horizontal_accuracy_m == null ? "Unknown" : "±" + f.horizontal_accuracy_m + " m");
+        fact(facts, "Last fix", f ? shortTime(f.observed_at) : "No fix received", f && time(f.observed_at));
+        fact(facts, "Qualified distance", distance(d.total_m));
+        // Observation sync: Command-durable receipts against the phone's last queue report.
+        const h = d.history, queue = h?.last_reported_phone_queue, live = !!h?.phone_state_recent;
+        const received = h?.received_observations ?? 0,
+          pendingCount = queue?.pending_observations,
+          total = received + (pendingCount ?? 0);
+        const sync = el("section", undefined, "inspector-sync");
+        sync.setAttribute("aria-label", "Observation synchronization");
+        const syncHead = el("div", undefined, "sync-head");
+        syncHead.append(
+          el("b", "Observation sync"),
+          el("span", !queue ? "No queue report" : !live ? "Last report" : pendingCount === 0 ? "Reported zero pending" : "Receiving",
+            "soft-tag" + (live && pendingCount === 0 ? "" : " warn")),
+        );
+        const count = el("div", undefined, "sync-count");
+        count.append(el("strong", received.toLocaleString()), el("span", queue ? ` of ${total.toLocaleString()} received` : " received"));
+        const track = el("div", undefined, "sync-track");
+        track.setAttribute("role", "progressbar");
+        track.setAttribute("aria-label", "Durably received observations");
+        track.setAttribute("aria-valuemin", "0");
+        track.setAttribute("aria-valuemax", String(Math.max(total, received)));
+        track.setAttribute("aria-valuenow", String(received));
+        const bar = el("i");
+        bar.style.width = (total ? Math.min(100, (received / total) * 100) : received ? 100 : 0) + "%";
+        track.append(bar);
+        const syncMeta = el("div", undefined, "sync-meta");
+        syncMeta.append(
+          el("b", pendingCount == null ? "Pending unknown" : pendingCount.toLocaleString() + " pending"),
+          el("span", !queue ? "Phone queue unavailable" : live ? "Last phone queue report" : "Offline · last reported, not live"),
+        );
+        sync.append(syncHead, count, track, syncMeta);
+        const evidenceFacts = el("div", undefined, "inspector-facts evidence-facts");
+        fact(evidenceFacts, "Team", d.snapshot.party.name);
+        fact(evidenceFacts, "Last Command contact", shortTime(d.last_contact), time(d.last_contact));
+        fact(evidenceFacts, "Coordinates", f ? `${f.latitude.toFixed(6)}, ${f.longitude.toFixed(6)}` : "Unavailable");
+        fact(evidenceFacts, "Recording", historyLabel(d));
+        const reporting = el("div", undefined, "inspector-reporting");
+        reporting.append(
+          el("span", "Reporting interval override · seconds", "inspector-kicker"),
+          form,
           el(
             "small",
-            d.location_age_s == null
-              ? "Observation age unavailable"
-              : "Observation age: " +
-                  Math.max(0, d.location_age_s).toFixed(0) +
-                  " s",
+            "Remote override " +
+              (d.desired_config.reporting_interval_override_s ?? "cleared") +
+              " · legacy v1 setting; authenticated controls are in Phone controls",
           ),
         );
-        card.insertBefore(summary, form);
-        const diagnostics = el("details");
-        diagnostics.append(
-          el("summary", "Diagnostics & significant events"),
-          status,
+        const policy = el("button", "Quality policy", "full");
+        policy.type = "button";
+        policy.onclick = () => $("open-quality").click();
+        const diagnostics = el("details", undefined, "inspector-evidence");
+        const evidenceSummary = el("summary"),
+          evidenceCopy = el("span", undefined, "evidence-copy");
+        evidenceCopy.append(
+          el("strong", "Observation evidence & quality"),
+          el("small", "Original fixes, qualification, gaps and significant events"),
         );
+        const disclosure = el("span", undefined, "evidence-disclosure");
+        disclosure.append(el("span", "Expand", "evidence-open-text"), el("span", "Collapse", "evidence-close-text"));
+        disclosure.insertAdjacentHTML("beforeend", '<svg class="small-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>');
+        evidenceSummary.append(evidenceCopy, disclosure);
+        diagnostics.append(evidenceSummary, evidenceFacts, status, reporting);
         for (const event of state.sos_alerts ?? []) {
           if (event.device_id !== d.device_id) continue;
           diagnostics.append(
@@ -706,8 +834,14 @@ function renderDashboard() {
             ),
           );
         }
-        card.append(diagnostics);
-        $("selected-detail").append(card);
+        const actions = el("div", undefined, "inspector-actions");
+        remote.className = "primary";
+        actions.append(remote);
+        diagnostics.append(policy);
+        inspector.append(head, critical, facts);
+        $("selected-detail").append(inspector, sync, diagnostics, actions);
+        if (!live)
+          $("selected-detail").append(el("p", "* Last-reported values are not live.", "inspector-disclaimer"));
       }
     }
   }
@@ -725,6 +859,7 @@ function renderDashboard() {
       enabled.name = "enabled_" + key;
       enabled.checked = state.policy.enabled?.[key] !== false;
       enabled.setAttribute("aria-label", "Enable " + label);
+      enabled.setAttribute("role", "switch");
       row.append(enabled);
       input.name = key;
       input.setAttribute("aria-label", label);
@@ -823,6 +958,13 @@ for (const button of document.querySelectorAll("[data-close]"))
   button.onclick = () => $(button.dataset.close).close();
 let eventEvidence = [];
 let eventSnapshot;
+function eventSummary(title, detail, kind) {
+  const summary = el("summary"),
+    copy = el("span", undefined, "event-main");
+  copy.append(el("strong", title), el("small", detail));
+  summary.append(copy, el("span", kind, "event-kind"));
+  return summary;
+}
 function renderEvents() {
   const root = $("history-events"),
     filter = $("event-filter").value;
@@ -842,9 +984,10 @@ function renderEvents() {
       row.dataset.key = "sos/" + a.device_id + "/" + a.event_id;
       row.open = opened.has(row.dataset.key);
       row.append(
-        el(
-          "summary",
-          `SOS · ${a.party.id} · ${time(a.triggered_at)} · ${a.operator_acknowledged_at ? "Acknowledged" : "Unacknowledged"}`,
+        eventSummary(
+          `SOS · ${a.party.id}`,
+          `${time(a.triggered_at)} · ${a.operator_acknowledged_at ? "Acknowledged" : "Unacknowledged"}`,
+          "SOS",
         ),
       );
       row.append(
@@ -871,9 +1014,10 @@ function renderEvents() {
       row.dataset.key = "operation/" + e.ordinal;
       row.open = opened.has(row.dataset.key);
       row.append(
-        el(
-          "summary",
-          `${e.kind.replaceAll("_", " ")} · ${time(e.at)}${e.device_id ? " · " + (state?.devices[e.device_id]?.snapshot.party.id || e.device_id.slice(0, 8)) : ""}`,
+        eventSummary(
+          `${e.kind.replaceAll("_", " ")}${e.device_id ? " · " + (state?.devices[e.device_id]?.snapshot.party.id || e.device_id.slice(0, 8)) : ""}`,
+          time(e.at),
+          "Operation",
         ),
       );
       row.append(el("pre", JSON.stringify(e, null, 2)));
@@ -980,12 +1124,39 @@ async function refreshMaps(selected) {
     );
     option.dataset.source = m.source;
     $("saved-maps").add(option);
-    const row = el("div", undefined, "saved-map-row");
-    const select = el("strong", m.source);
+    const row = el("div", undefined, "saved-map-row map-row");
+    const main = el("button", undefined, "map-row-main");
+    main.type = "button";
+    main.onclick = () => {
+      $("saved-maps").value = m.id;
+      loadSavedMap(m.id).catch(showError);
+    };
     row.dataset.mapId = m.id;
     row.classList.toggle("selected", m.id === (selected || activeMapID));
-    row.append(
-      select,
+    const rowActions = el("div", undefined, "map-row-actions");
+    const active = m.id === (selected || activeMapID);
+    const tag = el("span", active ? "Active" : "Stored", "soft-tag map-row-tag" + (active ? "" : " warn"));
+    const more = el("button", "Details");
+    more.type = "button";
+    more.onclick = () => {
+      const open = $("maps-library").dataset.details !== m.id;
+      if (open) $("maps-library").dataset.details = m.id;
+      else delete $("maps-library").dataset.details;
+      if (open && activeMapID !== m.id) {
+        $("saved-maps").value = m.id;
+        loadSavedMap(m.id).catch(showError);
+      }
+    };
+    const remove = el("button", "Delete", "danger");
+    remove.type = "button";
+    remove.onclick = async () => {
+      if (activeMapID !== m.id) await loadSavedMap(m.id).catch(showError);
+      if (activeMapID === m.id) $("delete-map").click();
+    };
+    rowActions.append(tag, more, remove);
+    row.append(main, rowActions);
+    main.append(
+      el("strong", m.source),
       el(
         "small",
         `${m.bounds ? m.bounds.map((v) => v.toFixed(4)).join(", ") : "Imported geographic coverage"} · ${
@@ -1002,8 +1173,9 @@ async function refreshMaps(selected) {
   }
   if (!maps.length)
     $("saved-map-list").append(
-      el("p", "No saved maps yet. Download or import a map."),
+      el("p", "No offline maps yet. Import one or download a new area.", "inline-status"),
     );
+  $("saved-map-count").textContent = `${maps.length} saved map${maps.length === 1 ? "" : "s"} · click a map to use it`;
   if (selected) $("saved-maps").value = selected;
 }
 function useMap(text, source, id, recordingAsset = "") {
@@ -1028,8 +1200,15 @@ function useMap(text, source, id, recordingAsset = "") {
   offlineMap = parsed;
   activeMapID = id;
   $("current-map-name").textContent = source;
-  for (const row of $("saved-map-list").children)
-    row.classList.toggle("selected", row.dataset.mapId === id);
+  for (const row of $("saved-map-list").children) {
+    const active = row.dataset.mapId === id;
+    row.classList.toggle("selected", active);
+    const tag = row.querySelector(".map-row-tag");
+    if (tag) {
+      tag.textContent = active ? "Active" : "Stored";
+      tag.classList.toggle("warn", !active);
+    }
+  }
   terrain = undefined;
   updateLayers();
   $("map-mode").value = "offline";
@@ -1090,6 +1269,7 @@ function updateLayers() {
         ? `Available in visible DEM chunks · ${control.checked ? "visible" : "hidden"}; inspect coverage gaps`
         : "Unavailable in current view; inspect saved source / render status";
   }
+  syncTerrainSwitch();
   $("current-map-layers").textContent =
     offlineMap?.plan && radiusManifest
       ? radiusSummary(radiusManifest)
@@ -1161,7 +1341,7 @@ $("open-layers").onclick = () => {
   updateLayers();
   const dialog = $("layers");
   if (dialog.open) dialog.close();
-  else dialog.show();
+  else dialog.showModal();
   $("open-layers").setAttribute("aria-expanded", String(dialog.open));
 };
 $("layers").onclose = () =>
@@ -1182,6 +1362,47 @@ for (const kind of terrainLayers)
     updateLayers();
     draw();
   };
+// Qualified tracks and party labels are presentation-only; history and distance are unchanged.
+for (const [kind, cls] of [["tracks", "hide-qualified-tracks"], ["labels", "hide-party-labels"]]) {
+  const control = $("layer-" + kind), key = "gnss-layer-" + kind;
+  control.checked = localStorage.getItem(key) !== "false";
+  document.body.classList.toggle(cls, !control.checked);
+  control.onchange = () => {
+    localStorage.setItem(key, String(control.checked));
+    document.body.classList.toggle(cls, !control.checked);
+  };
+}
+// Recorded frames keep only what the operator saw, so saved playback reproduces the layer switches.
+function presentedOuterHTML(element) {
+  const hidden = [
+    ...($("layer-tracks").checked ? [] : ["polyline[data-segment]"]),
+    ...($("layer-labels").checked ? [] : ["[data-party-label]"]),
+  ].join(",");
+  if (!hidden) return element.outerHTML;
+  if (element.matches(hidden)) return "";
+  const copy = element.cloneNode(true);
+  for (const node of copy.querySelectorAll(hidden)) node.remove();
+  return copy.outerHTML;
+}
+function syncTerrainSwitch() {
+  const available = terrainLayers.filter((k) => !$("layer-" + k).disabled);
+  $("layer-terrain").disabled = !available.length;
+  $("layer-terrain").checked = available.some((k) => $("layer-" + k).checked);
+  $("layers").querySelector(".layer-products").hidden = !available.length;
+  $("terrain-metadata").hidden = !available.length;
+}
+$("layer-terrain").onchange = () => {
+  // Each product handler re-derives the master switch, so read the request once.
+  const want = $("layer-terrain").checked;
+  for (const kind of terrainLayers) {
+    const control = $("layer-" + kind);
+    if (control.disabled || control.checked === want) continue;
+    control.checked = want;
+    control.onchange();
+  }
+  syncTerrainSwitch();
+};
+$("apply-layers").onclick = () => $("layers").close();
 async function attachTerrain(id, file, components) {
   if (!file)
     throw Error(
@@ -1468,7 +1689,7 @@ function invalidatePreparation(resetConsent = true) {
   $("map-preparation-status").textContent =
     resetConsent === false
       ? "Checking requested area…"
-      : "Area changed · Preview & Download checks the new selection before acquisition.";
+      : "Area changed · Download map checks the new selection before acquisition.";
   $("download-map").disabled = false;
 }
 for (const id of ["map-lat", "map-lon", "map-width", "map-height"])
@@ -2208,37 +2429,212 @@ function drawMap() {
 let polling = false;
 let inspectionCursor = "";
 let inspectionDevice;
+let inspectionLayer = "qualified";
+let inspectionPage = 1;
+let inspectionSnapshot;
+const historyClock = (value) =>
+  value && Number.isFinite(Date.parse(value))
+    ? new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
+    : "—";
+const historyDay = (value) =>
+  value && Number.isFinite(Date.parse(value))
+    ? new Date(value).toLocaleDateString([], { day: "numeric", month: "short" })
+    : "";
+const historyCoordinate = (fix) =>
+  fix && Number.isFinite(fix.latitude) && Number.isFinite(fix.longitude)
+    ? `${fix.latitude.toFixed(5)}, ${fix.longitude.toFixed(5)}`
+    : "";
+const historyDistance = (m) =>
+  Number.isFinite(m) ? (m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${m.toFixed(1)} m`) : "—";
+const historyWords = (text) => {
+  const value = String(text || "").replaceAll("_", " ").trim();
+  return value ? value[0].toUpperCase() + value.slice(1) : "";
+};
+function historyRow(time, title, detail, aside, tags = []) {
+  const row = el("div", undefined, "history-row");
+  row.setAttribute("role", "listitem");
+  const main = el("span", undefined, "history-main");
+  main.append(el("strong", title), el("small", detail));
+  const meta = el("span", undefined, "history-meta");
+  for (const [text, tone] of tags) meta.append(el("span", text, "pill" + (tone ? " " + tone : "")));
+  if (aside) meta.append(el("b", aside));
+  row.append(el("span", time, "history-time"), main, meta);
+  return row;
+}
+function historySection(title, rows) {
+  const section = el("section", undefined, "history-section");
+  const list = el("div", undefined, "history-rows");
+  list.setAttribute("role", "list");
+  list.append(...rows);
+  section.append(el("h2", title), list);
+  return section;
+}
+function historyEmpty(title, detail) {
+  const empty = el("div", undefined, "history-empty");
+  empty.append(el("strong", title), el("small", detail));
+  return empty;
+}
+// Presentation only: every value is read from the bounded Command page as returned.
+function renderHistory(page, layer, snapshot) {
+  const stats = [],
+    sections = [];
+  let note = "";
+  if (layer === "raw") {
+    const originals = page.original_observations || [];
+    const times = originals.map((o) => o.message?.captured_at).filter(Boolean);
+    stats.push(["Observations", String(originals.length)], ["First", historyClock(times[0])], ["Last", historyClock(times.at(-1))]);
+    if (originals.length)
+      sections.push(
+        historySection(
+          "Received by Command",
+          originals.map((o) => {
+            const m = o.message || {},
+              fix = m.fix,
+              type = m.type || "message";
+            const detail = [
+              `#${m.sequence ?? "—"}`,
+              fix?.horizontal_accuracy_m != null ? `±${fix.horizontal_accuracy_m} m` : "",
+              m.health?.gnss_status ? `GNSS ${m.health.gnss_status}` : "",
+              `Received ${historyClock(o.received_at)}`,
+            ].filter(Boolean).join(" · ");
+            const tags = type === "sos" ? [["SOS", "danger"]] : type === "location" ? (fix ? [] : [["No fix", "warn"]]) : [[historyWords(type), ""]];
+            return historyRow(historyClock(m.captured_at), historyCoordinate(fix) || (type === "sos" ? "SOS event" : "No position"), detail, "", tags);
+          }),
+        ),
+      );
+    note = "Capture and receipt times in transport order. No distance is derived from originals.";
+  } else {
+    const points = page.points || [],
+      decisions = page.decisions || [];
+    stats.push(["Points", String(points.length)], ["Decisions", String(decisions.length)], ["Distance", points.length ? historyDistance(points.at(-1).cumulative_m) : "—"]);
+    let segment;
+    if (points.length)
+      sections.push(
+        historySection(
+          "Qualified points",
+          points.map((p) => {
+            const tags = p.segment_id !== segment && segment !== undefined ? [[historyWords(p.segment_reason) || "New segment", ""]] : [];
+            segment = p.segment_id;
+            const detail = [
+              `#${p.sequence}`,
+              p.fix?.horizontal_accuracy_m != null ? `±${p.fix.horizontal_accuracy_m} m` : "",
+              historyDay(p.fix?.observed_at),
+            ].filter(Boolean).join(" · ");
+            return historyRow(historyClock(p.fix?.observed_at), historyCoordinate(p.fix), detail, historyDistance(p.cumulative_m), tags);
+          }),
+        ),
+      );
+    if (decisions.length)
+      sections.push(
+        historySection(
+          "Quality decisions",
+          decisions.map((d) =>
+            historyRow("", historyWords(d.reason), `Message ${String(d.message_id || "").slice(0, 8)} · Policy ${d.policy_revision}`, "", d.reason === "accepted" ? [] : [["Excluded", "warn"]]),
+          ),
+        ),
+      );
+    note = "Full-resolution points. Distances are cumulative and authoritative.";
+  }
+  $("inspection-summary").replaceChildren(
+    ...stats.map(([label, value]) => {
+      const item = el("div");
+      item.append(el("dt", label), el("dd", value));
+      return item;
+    }),
+  );
+  $("inspection-list").replaceChildren(
+    ...(sections.length
+      ? sections
+      : [
+          page.projection_pending
+            ? historyEmpty("Rebuilding history", "Command is still qualifying stored observations. Try again shortly.")
+            : layer === "raw"
+              ? historyEmpty("No observations", "Command has not received observations for this party.")
+              : historyEmpty("No qualified points", "Original observations show everything Command received."),
+        ]),
+  );
+  $("inspection-list").scrollTop = 0;
+  $("inspection-note").textContent = sections.length ? note : "";
+  $("inspection-data").textContent = JSON.stringify(page, null, 2);
+  for (const tab of document.querySelectorAll("#history-inspection [data-layer]"))
+    tab.setAttribute("aria-selected", String(tab.dataset.layer === layer));
+  $("history-inspection").dataset.snapshot = String(!!snapshot);
+}
+function partyLabel(device) {
+  const party = state?.devices?.[device]?.snapshot?.party;
+  return party ? [party.id, party.name].filter(Boolean).join(" · ") : "Selected party";
+}
 async function inspectHistory(cursor = "") {
   const device = selectedParty;
   if (!device) return;
-  $("inspection-status").textContent = "Loading a bounded page…";
+  let failed = false;
+  inspectionSnapshot = undefined;
+  if (!cursor) inspectionPage = 1;
+  $("inspection-party").textContent = `${partyLabel(device)} · Read only`;
+  $("inspection-status").textContent = "Loading…";
+  $("history-inspection").setAttribute("aria-busy", "true");
   try {
-    const layer = $("inspection-layer").value;
+    const layer = inspectionLayer;
     const response = await fetch(
       `/local/history?device_id=${encodeURIComponent(device)}&layer=${layer}&cursor=${encodeURIComponent(cursor)}`,
       { signal: AbortSignal.timeout(4000) },
     );
     const page = await response.json();
-    if (!response.ok) throw Error(page.message || "History unavailable");
+    if (!response.ok)
+      throw Error(
+        response.status === 409
+          ? "History changed. Start again from the first page."
+          : page.message || "History unavailable",
+      );
+    if (cursor) inspectionPage++;
     inspectionCursor = page.next_cursor || "";
-    $("inspection-next").disabled = !inspectionCursor;
-    $("inspection-data").textContent = JSON.stringify(page, null, 2);
     inspectionDevice = device;
-    $("inspection-status").textContent =
-      layer === "raw"
-        ? "Original capture/envelope and Command receipt times; transport sequence order. No distance derived here."
-        : "Full-resolution qualified points and decisions; cumulative distances remain authoritative. Generation changes require First page.";
+    renderHistory(page, layer);
+    $("inspection-status").textContent = `Page ${inspectionPage}`;
   } catch (e) {
-    $("inspection-status").textContent = e.message;
+    failed = true;
+    $("inspection-status").textContent = "";
+    $("inspection-list").replaceChildren(historyEmpty("History unavailable", e.message));
+    $("inspection-summary").replaceChildren();
+    inspectionCursor = "";
+  } finally {
+    $("history-inspection").removeAttribute("aria-busy");
+    $("inspection-next").disabled = !inspectionCursor;
+    $("inspection-restart").disabled = inspectionPage <= 1 && !failed;
   }
 }
+// Read-only view of history already held by playback; no request is made.
+window.showHistorySnapshot = (subtitle, page, layer = "qualified") => {
+  inspectionSnapshot = { subtitle, page };
+  inspectionLayer = layer;
+  $("inspection-party").textContent = `${subtitle} · Read only`;
+  $("inspection-status").textContent = "";
+  renderHistory(page, layer, true);
+  if (!$("history-inspection").open) $("history-inspection").showModal();
+};
 $("inspect-history").onclick = () => {
+  inspectionLayer = "qualified";
   $("history-inspection").showModal();
   inspectHistory();
 };
 $("inspection-restart").onclick = () => inspectHistory();
 $("inspection-next").onclick = () => inspectHistory(inspectionCursor);
-$("inspection-layer").onchange = () => inspectHistory();
+for (const tab of document.querySelectorAll("#history-inspection [data-layer]"))
+  tab.onclick = () => {
+    if (tab.dataset.layer === inspectionLayer) return;
+    inspectionLayer = tab.dataset.layer;
+    if (inspectionSnapshot) renderHistory(inspectionSnapshot.page, inspectionLayer, true);
+    else inspectHistory();
+  };
+$("history-inspection").addEventListener("keydown", (event) => {
+  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+  const tab = event.target.closest?.("[data-layer]");
+  if (!tab) return;
+  const other = [...document.querySelectorAll("#history-inspection [data-layer]")].find((t) => t !== tab);
+  other.focus();
+  other.click();
+  event.preventDefault();
+});
 let livePolling = false;
 let latestLive;
 let latestLiveStarted = -Infinity;
@@ -2527,7 +2923,8 @@ async function previewRadius() {
     $("map-plan-details").textContent =
       `Additional network transfer: unknown. Initial cumulative allowance: 5 MB, shared by vectors, DEM, source discovery and retries. Large fallback requires additional approval before transfer. Disk: ≤256 MiB saved chunks, ≤1 GB source cache plus bounded on-disk index and 3 GB free-space admission for regional processing. WGS84 centre ${request.lat}, ${request.lon}; radius ${request.radius_m} m; approximate ellipsoidal area ${(plan.approximate_ellipsoidal_area_m2 / 1000000).toFixed(6)} km² (sampled boundary). Ellipsoidal geodesic circle. Envelope W/S/E/N ${plan.bounds.map((v) => v.toFixed(7)).join(", ")}. ${plan.chunks.length} chunks; ${plan.source_tiles.length} possible native source tiles including sampling halo; ${plan.maximum_source_requests_before_retries} maximum source requests before cache/retries. DEM transfer ≤ ${(plan.maximum_compressed_dem_bytes / 1048576).toFixed(1)} MiB before bounded retries (compressed sizes unknown). Vector sizes unknown, ≤20 MiB/chunk. DEM ≤${(plan.maximum_terrain_bytes / 1048576).toFixed(1)} MiB; chunk library budget 256 MiB; source cache 99 MiB; disk reserve 128 MiB; one network/decode at a time. Provider cooldown 10 s/vector request. ${plan.dem_unsupported || "DEM adapter: 56°S–60°N, WGS84/EGM96, native 1 arc sec; source accuracy varies."} ${plan.unsupported || "Confirm estimate, then acquire available layers. Coverage gaps remain explicit."}`;
     $("map-preparation-status").textContent =
-      `${request.radius_m} m radius · ${plan.chunks.length} geographic chunks. Additional transfer unknown; initially limited to 5 MB. Regional sources require up to 3 GB free disk space. ${plan.unsupported || "Review coverage and resource limits, then Download Map."}`;
+      plan.unsupported ||
+      `${request.radius_m} m radius · ${plan.chunks.length} ${plan.chunks.length === 1 ? "area" : "areas"} · starts within 5 MB · regional sources need up to 3 GB free disk`;
     $("map-preview").replaceChildren();
     if (plan.circle?.length) {
       const pts = plan.circle.map((p) => {
@@ -2555,6 +2952,7 @@ async function previewRadius() {
           "stroke-width": 2,
           "data-requested-circle": "true",
         }),
+        svg("circle", { cx: 200, cy: 90, r: 3.5, class: "map-preview-centre" }),
       );
     }
     $("download-map").disabled = !!plan.unsupported;
@@ -3133,7 +3531,9 @@ function initializeMapModal() {
   const oldDisplay = current.querySelector("details");
   for (const node of [...oldDisplay.children].slice(1)) display.append(node);
   oldDisplay.remove();
-  library.append(display, $("map-warning"));
+  display.id = "map-display";
+  display.querySelector("summary").id = "open-map-display";
+  library.append($("map-warning"));
   current.classList.add("map-current-strip");
   $("current-map-title").textContent = "Current Map";
   const change = el("button", "Change in My Maps →");
@@ -3148,6 +3548,7 @@ function initializeMapModal() {
     [get, "Get a Map", "new-map"],
     [imports, "Import", "open-map-import"],
     [library, "My Maps", "choose-saved-map"],
+    [display, "Display", "open-map-display"],
   ];
   let importAreaEdited = false;
   function selectTab(id) {
@@ -3185,27 +3586,28 @@ function initializeMapModal() {
     tab.onclick = () => selectTab(panel.id);
     tab.onkeydown = (e) => {
       let next = index;
-      if (e.key === "ArrowRight") next = (index + 1) % 3;
-      else if (e.key === "ArrowLeft") next = (index + 2) % 3;
+      if (e.key === "ArrowRight") next = (index + 1) % panels.length;
+      else if (e.key === "ArrowLeft") next = (index + panels.length - 1) % panels.length;
       else if (e.key === "Home") next = 0;
-      else if (e.key === "End") next = 2;
+      else if (e.key === "End") next = panels.length - 1;
       else return;
       e.preventDefault();
       selectTab(panels[next][0].id);
       $("tab-" + panels[next][0].id).focus();
     };
     tabs.append(tab);
-    $(legacy).onclick = (e) => {
+    panel.querySelector("#" + legacy).onclick = (e) => {
       e.preventDefault();
       selectTab(panel.id);
     };
   });
   current.after(tabs);
+  current.hidden = true;
   const body = el("div");
   body.className = "map-modal-body";
   const feedback = dialog.querySelector(".map-download-feedback");
   tabs.after(body);
-  body.append(get, imports, library);
+  body.append(get, imports, library, display);
   for (const [panel] of panels) {
     const wrapper = el("div");
     wrapper.id = panel.id + "-panel";
@@ -3218,11 +3620,12 @@ function initializeMapModal() {
   }
   const footer = el("div");
   footer.className = "map-modal-footer";
-  const footerNote = el("small", "Saved maps work without internet");
-  footerNote.className = "muted";
+  const closeMaps = el("button", "Close");
+  closeMaps.type = "button";
+  closeMaps.onclick = () => dialog.close();
   const actions = el("div");
   actions.className = "map-footer-actions";
-  footer.append(footerNote, actions);
+  footer.append(closeMaps, actions);
   dialog.append(footer);
   const getActions = el("div");
   getActions.dataset.mapAction = "map-preparation";
@@ -3238,6 +3641,7 @@ function initializeMapModal() {
   const use = el("button", "Use selected map");
   use.className = "primary";
   use.id = "use-selected-map";
+  use.hidden = true;
   use.onclick = () => $("save-use-map").onclick();
   libraryActions.append(use);
   actions.append(libraryActions);
@@ -3263,19 +3667,30 @@ function initializeMapModal() {
   form.id = "get-map-form";
   for (const node of [...get.children].slice(1)) form.append(node);
   get.append(form);
-  form.prepend(el("h2", "Where do you need the map?"));
   const search = form.querySelector(".map-search-row");
-  const centre = el("button", "Use map centre");
-  centre.id = "use-map-centre";
-  centre.onclick = () => {
-    if (!viewport) return;
-    const [lon, lat] = GeoMap.unproject(viewport.cx, viewport.cy);
+  $("search-map").textContent = "Search";
+  $("search-map").classList.add("primary");
+  $("map-search").placeholder = "Place or latitude, longitude";
+  $("map-search").setAttribute("aria-label", "Place, landmark or comma separated coordinates");
+  const searchLabel = $("map-search").closest("label");
+  searchLabel.firstChild.textContent = "";
+  const locationTitle = el("p", "Location", "map-field-caption");
+  search.before(locationTitle);
+  // "latitude, longitude" in the search box sets the centre directly.
+  $("search-map").addEventListener("click", (event) => {
+    const m = $("map-search").value.trim().match(/^([-+]?\d+(?:\.\d+)?)\s*,\s*([-+]?\d+(?:\.\d+)?)$/);
+    if (!m) return;
+    event.stopImmediatePropagation();
+    const lat = Number(m[1]), lon = Number(m[2]);
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      $("map-preparation-status").textContent = "Latitude must be between −90 and 90; longitude between −180 and 180.";
+      return;
+    }
     $("map-lat").value = lat;
-    $("map-lon").value = ((lon + 540) % 360) - 180;
+    $("map-lon").value = lon;
+    $("map-search-results").hidden = true;
     invalidatePreparation();
-  };
-  search.append(centre);
-  $("search-map").textContent = "Find";
+  }, true);
   const precise = el("details");
   precise.className = "map-precise";
   precise.append(el("summary", "Coordinates & advanced area"));
@@ -3288,6 +3703,7 @@ function initializeMapModal() {
   shapeDetails.remove();
   precise.append($("legacy-area"));
   search.after(precise);
+  precise.hidden = true;
   const presets = el("div");
   presets.className = "map-radius-presets";
   presets.setAttribute("aria-label", "Coverage radius");
@@ -3321,25 +3737,41 @@ function initializeMapModal() {
   presets.children[1].click();
   const preview = el("section");
   preview.className = "map-selection-preview";
-  preview.append(
-    el("p", "Selection preview"),
-    $("map-preview"),
-    el(
-      "small",
-      "Requested area only · geographic features appear after acquisition.",
-    ),
-  );
-  get.append(preview);
+  // The preview is geometry only; say what it shows and where, never a bare box.
+  const previewEmpty = el("div", undefined, "map-preview-empty");
+  previewEmpty.innerHTML =
+    '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/></svg><b>Map preview</b><small>Enter a location or latitude, longitude and select Search.</small>';
+  const previewLabel = el("div", undefined, "map-preview-label");
+  previewLabel.id = "map-preview-label";
+  preview.append($("map-preview"), previewEmpty, previewLabel);
+  radiusLabel.before(preview);
+  const syncPreview = () => {
+    const drawn = $("map-preview").childElementCount > 0;
+    previewEmpty.hidden = drawn;
+    previewLabel.hidden = !drawn;
+    if (!drawn) return;
+    const lat = Number($("map-lat").value),
+      lon = Number($("map-lon").value),
+      radius = Number($("map-radius").value) * Number($("radius-unit").value);
+    const place = $("map-search").value.trim();
+    previewLabel.replaceChildren(
+      el("strong", place && !/^[-+\d.,\s]+$/.test(place) ? place : `${lat.toFixed(4)}, ${lon.toFixed(4)}`),
+      el("small", $("map-shape").value === "circle" ? `${radius >= 1000 ? +(radius / 1000).toFixed(1) + " km" : radius + " m"} radius` : "Rectangle"),
+    );
+  };
+  new MutationObserver(syncPreview).observe($("map-preview"), { childList: true });
+  syncPreview();
   const optional = el("div");
   optional.className = "map-optional-terrain";
   const terrainLabel = el("label");
   const include = el("input");
   include.type = "checkbox";
   include.id = "include-map-terrain";
-  terrainLabel.append(
-    include,
-    document.createTextNode(" Include terrain & elevation"),
-  );
+  terrainLabel.className = "map-switchline";
+  include.setAttribute("role", "switch");
+  const terrainCopy = el("span");
+  terrainCopy.append(el("b", "Include terrain & elevation data"), el("small", "Optional · downloaded only where source data exists"));
+  terrainLabel.append(terrainCopy, include);
   const terrainOptions = $("download-hillshade").closest("fieldset");
   const products = el("details");
   products.append(
@@ -3348,15 +3780,10 @@ function initializeMapModal() {
   );
   products.hidden = true;
   include.onchange = () => {
-    products.hidden = !include.checked;
     for (const k of terrainLayers) $("download-" + k).checked = include.checked;
     invalidatePreparation();
   };
-  optional.append(
-    terrainLabel,
-    el("small", "Hillshade and contours use available elevation data."),
-    products,
-  );
+  optional.append(terrainLabel, products);
   get.append(optional);
   optional.after(precise);
   for (const k of terrainLayers)
@@ -3369,6 +3796,13 @@ function initializeMapModal() {
   consent.lastChild.textContent =
     " Allow up to 5 MB for this map. Ask before any additional transfer.";
   get.append(consent);
+  // Download is the explicit approval for the first 5 MB; more asks again.
+  consent.hidden = true;
+  $("download-map").addEventListener("click", () => {
+    if ($("confirm-map-cost").checked) return;
+    $("confirm-map-cost").checked = true;
+    $("confirm-map-cost").dispatchEvent(new Event("change"));
+  }, true);
   const technical = el("details");
   technical.append(
     el("summary", "Coverage, sources & resource limits"),
@@ -3377,6 +3811,7 @@ function initializeMapModal() {
   );
   form.querySelector(".map-actions").remove();
   get.append(technical);
+  technical.hidden = true;
   // The old details container now has no plan content; remove that empty wrapper.
   for (const d of [...form.querySelectorAll(":scope > details")])
     if (!d.querySelector("input,select,button,p")) d.remove();
@@ -3395,7 +3830,7 @@ function initializeMapModal() {
   taskSource.after(taskReason);
   feedback.setAttribute("aria-label", "Map acquisition and recovery");
   const originalDownload = $("download-map").onclick;
-  $("download-map").textContent = "Preview & Download";
+  $("download-map").textContent = "Download map";
   $("download-map").disabled = false;
   let primaryPending = false;
   $("download-map").onclick = async () => {
@@ -3423,19 +3858,45 @@ function initializeMapModal() {
       $("download-map").disabled = !!preparedMap?.plan?.unsupported;
     }
   };
-  imports.insertBefore(
-    el("h2", "Import an existing offline map"),
-    imports.children[1],
-  );
-  $("source-map-file").closest("label").classList.add("map-file-drop");
+  imports.insertBefore(el("p", "Existing map file", "map-field-caption"), imports.children[1]);
+  {
+    const input = $("source-map-file"), picker = input.closest("label");
+    picker.className = "map-file-picker";
+    picker.replaceChildren();
+    const info = el("span", undefined, "file-info");
+    const fileName = el("strong", "Choose an offline map file", "file-name");
+    info.append(fileName, el("small", ".gmap.zip, GeoJSON or OSM PBF"));
+    const icon = el("span", "⇧", "file-icon");
+    icon.setAttribute("aria-hidden", "true");
+    const browse = el("span", "Choose file", "file-browse");
+    browse.setAttribute("aria-hidden", "true");
+    input.setAttribute("aria-label", "Choose offline map file");
+    picker.append(icon, info, browse, input);
+    input.addEventListener("change", () => {
+      const file = input.files[0];
+      fileName.textContent = file ? file.name : "Choose an offline map file";
+    });
+  }
   $("import-map-source").disabled = !$("source-map-file").files.length;
+  $("import-map-source").textContent = "Import map";
   $("source-map-file").addEventListener("change", () => {
     $("import-map-source").disabled =
       !$("source-map-file").files.length || !!downloadAbort || mapImportPending;
   });
   $("source-map-mode").options[0].textContent = "Selected area";
   $("source-map-mode").options[1].textContent = "Entire file · if feasible";
-  library.insertBefore(el("h2", "Your offline maps"), library.children[1]);
+  const listHeading = el("div", undefined, "map-list-heading");
+  const listCopy = el("div");
+  const count = el("small", "0 saved maps");
+  count.id = "saved-map-count";
+  listCopy.append(el("b", "Your offline maps"), count);
+  const beginImport = el("button", "Import map", "primary");
+  beginImport.type = "button";
+  beginImport.onclick = () => selectTab("map-import");
+  listHeading.append(listCopy, beginImport);
+  library.insertBefore(listHeading, library.children[1]);
+  $("saved-maps").closest("label").hidden = true;
+  $("delete-map").hidden = true;
   function updateTask() {
     const previousState = dialog.dataset.mapState;
     const transfer = radiusManifest?.transfer;
@@ -3479,9 +3940,8 @@ function initializeMapModal() {
       body.scrollTop = 0;
     form.hidden = acquiring || approval;
     optional.hidden = acquiring || approval;
-    precise.hidden = acquiring || approval;
-    consent.hidden =
-      acquiring || approval || dialog.dataset.mapTab !== "map-preparation";
+    precise.hidden = true;
+    consent.hidden = true;
     $("map-preparation-status").hidden = acquiring || approval;
     feedback.hidden =
       !task ||
@@ -3518,14 +3978,8 @@ function initializeMapModal() {
     $("save-use-map").disabled = !!radiusManifest && !available;
     $("delete-map").disabled = busy || !activeMapID;
     $("export-map").hidden = !activeMapID;
-    centre.disabled = busy || !viewport;
     $("use-import-centre").disabled = busy || !viewport;
-    $("use-import-centre").hidden = $("source-map-mode").value === "full";
-    footerNote.textContent = acquiring
-      ? "Verified saved areas are retained"
-      : approval
-        ? "Approval applies to this cumulative allowance"
-        : "Saved maps work without internet";
+    $("use-import-centre").hidden = true;
   }
   // Backend handlers already publish authoritative progress/manifest state into
   // these nodes. Observe those changes, without introducing another job timer.
@@ -3549,17 +4003,64 @@ function initializeMapModal() {
   });
   const consentArea = el("div");
   consentArea.className = "map-footer-consent";
-  consentArea.append(footerNote, consent);
+  consentArea.append(consent);
   footer.prepend(consentArea);
-  library.insertBefore(display.querySelector(".current-map-controls"), display);
-  library.insertBefore($("current-map-layers"), display);
+  const displayControls = display.querySelector(".current-map-controls"),
+    displayLayers = $("current-map-layers");
   const visibility = el("button", "Layer visibility");
   visibility.onclick = () => {
     dialog.close();
     $("open-layers").click();
   };
-  library.insertBefore(visibility, display);
-  $("regional-import-options").hidden = false;
+  display.querySelector("summary").after(displayControls, displayLayers, visibility);
+  // Display carries the prototype controls; map choice lives in My Maps, layers in Map layers.
+  displayControls.hidden = displayLayers.hidden = visibility.hidden = true;
+  $("map-metadata").hidden = true;
+  {
+    const all = $("all-observations"), allLabel = all.closest("label");
+    allLabel.className = "map-switchline";
+    all.setAttribute("role", "switch");
+    const copy = el("span");
+    copy.append(el("b", "Use all observations"), el("small", "Off by default · diagnostic dots do not add distance"));
+    allLabel.replaceChildren(copy, all);
+    allLabel.nextElementSibling?.tagName === "P" && allLabel.nextElementSibling.remove();
+    const dots = $("dots"), dotsLabel = dots.closest("label");
+    const dotRow = el("div", undefined, "dot-interval-row");
+    const dotText = el("label", "Display dot interval");
+    dotText.htmlFor = "dots";
+    const dotValue = el("div", undefined, "dot-value");
+    dotValue.append(dots, el("span", "seconds"));
+    dotRow.append(dotText, dotValue);
+    dotsLabel.replaceWith(dotRow);
+    const opacity = $("map-opacity"), opacityLabel = opacity.closest("label");
+    const opacityRow = el("div", undefined, "display-opacity");
+    const opacityText = el("label", "Background opacity ");
+    opacityText.htmlFor = "map-opacity";
+    const opacityValue = el("strong");
+    const showOpacity = () => (opacityValue.textContent = Math.round(opacity.value * 100) + "%");
+    opacity.addEventListener("input", showOpacity);
+    showOpacity();
+    opacityText.append(opacityValue);
+    opacityRow.append(opacityText, opacity);
+    opacityLabel.replaceWith(opacityRow);
+    const displayActions = el("div");
+    displayActions.dataset.mapAction = "map-display";
+    const apply = el("button", "Apply", "primary");
+    apply.type = "button";
+    apply.id = "apply-map-display";
+    apply.onclick = () => {
+      if (!$("dots").checkValidity()) return $("dots").reportValidity();
+      dialog.close();
+    };
+    displayActions.append(apply);
+    actions.append(displayActions);
+  }
+  const importArea = () => /\.(osm\.)?pbf$/i.test($("source-map-file").files[0]?.name || "");
+  const syncImportArea = () => {
+    $("regional-import-options").hidden = !importArea();
+    importPreview.hidden = !importArea();
+  };
+  $("source-map-file").addEventListener("change", syncImportArea);
   for (const id of ["import-map-lat", "import-map-lon", "import-map-radius"])
     $(id).addEventListener("input", () => {
       importAreaEdited = true;
@@ -3575,6 +4076,7 @@ function initializeMapModal() {
     updateImportPreview().catch(showError);
   };
   $("import-crop-fields").before(useImportCentre);
+  useImportCentre.hidden = true;
   const importLimits = $("regional-import-options").querySelector("p");
   const importDetails = el("details");
   importDetails.append(
@@ -3582,11 +4084,10 @@ function initializeMapModal() {
     importLimits,
   );
   imports.append(importDetails);
-  const importFormatNote = el(
-    "small",
-    "Supported: OSM PBF, GeoJSON and portable .gmap.zip.",
-  );
-  $("source-map-file").closest("label").append(importFormatNote);
+  importDetails.hidden = true;
+  // One picker imports GeoJSON, PBF and packages; the legacy GeoJSON input stays for automation.
+  $("map-file").closest("details").hidden = true;
+
   const importPreview = el("section");
   importPreview.className = "map-selection-preview";
   const importSVG = svg("svg", {
@@ -3604,13 +4105,13 @@ function initializeMapModal() {
     ),
   );
   imports.insertBefore(importPreview, $("map-import-status"));
+  syncImportArea();
   let importPreviewVersion = 0;
   async function updateImportPreview() {
     const revision = ++importPreviewVersion;
     const file = $("source-map-file").files[0];
     importPreview.hidden =
-      $("source-map-mode").value === "full" ||
-      (file && !/\.pbf$/i.test(file.name));
+      $("source-map-mode").value === "full" || !file || !/\.pbf$/i.test(file.name);
     if (importPreview.hidden) return;
     try {
       const plan = await mapPost("map-plan", {
@@ -3752,7 +4253,7 @@ window.recordingAppliedState = () => {
           sos: (applied.sos_alerts || []).filter((a) => a.device_id === id),
           svg: [...$("tracks").querySelectorAll("[data-device]")]
             .filter((e) => e.dataset.device === id)
-            .map((e) => e.outerHTML)
+            .map(presentedOuterHTML)
             .join(""),
           panel:
             id === selectedParty ? $("selected-detail")?.innerText : undefined,
@@ -3874,12 +4375,14 @@ window.PinnedTerrainRenderer = {hillshade:appendPinnedHillshade,contours:appendP
 document.addEventListener("click", (event) => {
   const menu = event.target.closest(".menu");
   if (menu && event.target.closest("button, a")) {
-    for (let current = menu; current; current = current.parentElement?.closest(".menu")) if (!current.classList.contains("header-menu-root") || innerWidth <= 1100) current.open = false;
-  } else if (!menu) document.querySelectorAll(".menu[open]").forEach((item) => { if (!item.classList.contains("header-menu-root") || innerWidth <= 1100) item.open = false; });
+    for (let current = menu; current; current = current.parentElement?.closest(".menu")) if (!current.classList.contains("header-menu-root") || compactHeader()) current.open = false;
+  } else if (!menu) document.querySelectorAll(".menu[open]").forEach((item) => { if (!item.classList.contains("header-menu-root") || compactHeader()) item.open = false; });
 });
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
-  const menu = event.target.closest(".menu[open]");
+  let menu = event.target.closest(".menu[open]");
+  // At wide widths the header groups are always visible; never collapse their root.
+  if (menu?.classList.contains("header-menu-root") && !compactHeader()) menu = undefined;
   if (menu) { event.preventDefault(); menu.open = false; menu.querySelector("summary")?.focus(); }
 });
 const captureHealth = $("capture-health");
@@ -3902,16 +4405,21 @@ window.addEventListener("resize", updateConnectionLabel);
 const headerMenuRoot = document.querySelector(".header-menu-root");
 let compactLayout;
 function updateCompactLayout() {
-  const compact = innerWidth <= 1100;
-  if (compact === compactLayout) return;
-  compactLayout = compact;
-  headerMenuRoot.open = !compact;
-  if (compact) {
-    const main = document.querySelector("main");
-    main.classList.add("details-closed");
-    $("toggle-parties").setAttribute("aria-expanded", String(!main.classList.contains("parties-closed")));
-    $("close-details").setAttribute("aria-expanded", "false");
-  }
+  const layout = [compactHeader(), detailsDrawer(), partiesDrawer()].join();
+  if (layout === compactLayout) return;
+  const previous = compactLayout?.split(",") || [];
+  compactLayout = layout;
+  headerMenuRoot.open = !compactHeader();
+  const main = document.querySelector("main");
+  if (detailsDrawer() && previous[1] !== "true") main.classList.add("details-closed");
+  if (partiesDrawer() && previous[2] !== "true") main.classList.add("parties-closed");
+  // Leaving drawer layout restores the desktop columns that drawer mode closed.
+  if (!detailsDrawer() && previous[1] === "true") main.classList.remove("details-closed");
+  if (!partiesDrawer() && previous[2] === "true") main.classList.remove("parties-closed");
+  $("toggle-parties").setAttribute("aria-expanded", String(!main.classList.contains("parties-closed")));
+  $("collapse-parties").setAttribute("aria-expanded", String(!main.classList.contains("parties-closed")));
+  for (const id of ["close-details", "toggle-details"])
+    $(id).setAttribute("aria-expanded", String(!main.classList.contains("details-closed")));
 }
 window.addEventListener("resize", updateCompactLayout);
 updateCompactLayout();
@@ -3925,25 +4433,28 @@ playbackMoreContent.className = "menu-content";
 for (const id of ["playback-facts", "playback-start"]) playbackMoreContent.append($(id));
 playbackMore.append(playbackMoreSummary, playbackMoreContent);
 $("playback-timeline").append(playbackMore);
+$("playback-timeline").append($("travel-settings"));
 // Restore focus for non-modal narrow drawers, including historical inspection.
 document.addEventListener("click", event => {
-  if (innerWidth > 1100) return;
+  if (!detailsDrawer()) return;
   const id = event.target.closest("button")?.id;
   if (!["toggle-parties", "collapse-parties", "toggle-details", "close-details"].includes(id)) return;
   queueMicrotask(() => {
     const left = id.includes("parties"), main = document.querySelector("main");
+    if (left && !partiesDrawer()) return;
     const closed = main.classList.contains(left ? "parties-closed" : "details-closed");
-    if (closed) $(left ? "toggle-parties" : "tracks").focus();
+    if (closed) $(left ? "toggle-parties" : "toggle-details").focus();
     else $(left ? "collapse-parties" : "close-details").focus();
   });
 }, true);
 document.addEventListener("keydown", event => {
-  if (event.key !== "Escape" || innerWidth > 1100 || event.target.closest("dialog, .menu")) return;
+  if (event.key !== "Escape" || !detailsDrawer() || event.target.closest("dialog, .menu")) return;
   const aside = event.target.closest(".party-overview, .party-detail");
   if (!aside) return;
   const left = aside.classList.contains("party-overview");
+  if (left && !partiesDrawer()) return;
   document.querySelector("main").classList.add(left ? "parties-closed" : "details-closed");
-  const toggle = $(left ? "toggle-parties" : "tracks");
+  const toggle = $(left ? "toggle-parties" : "toggle-details");
   toggle.setAttribute("aria-expanded", "false");
   toggle.focus();
   event.preventDefault();
@@ -3963,7 +4474,7 @@ document.addEventListener("keydown", event => {
 });
 // The recording controls belong to the live map cell so side panels never
 // consume the dock's width. Existing nodes and handlers are retained.
-document.querySelector(".canvas").append(document.querySelector(".recording-bar"));
+document.querySelector(".canvas").after(document.querySelector(".recording-bar"));
 for (const group of document.querySelectorAll(".menu-groups > .menu")) {
   group.addEventListener("toggle", () => {
     if (group.open) for (const sibling of group.parentElement.children) if (sibling !== group) sibling.open = false;
@@ -3976,7 +4487,7 @@ document.addEventListener("click", event => {
   if (!button) return;
   const menu = button.closest(".menu");
   const root = button.closest(".header-menu-root");
-  const trigger = root && innerWidth <= 1100 ? root.querySelector(":scope > summary") : menu.querySelector(":scope > summary");
+  const trigger = root && compactHeader() ? root.querySelector(":scope > summary") : menu.querySelector(":scope > summary");
   const previouslyOpen = new Set(document.querySelectorAll("dialog[open]"));
   queueMicrotask(() => {
     for (const dialog of document.querySelectorAll("dialog[open]")) {
@@ -3995,9 +4506,18 @@ function updateMapChromeBounds() {
   const contextBottom = playback ? context.getBoundingClientRect().bottom : rect.bottom;
   root.setProperty('--command-panel-top', `${Math.max(rect.bottom, contextBottom) + 12}px`);
   const dock = playback ? $('playback-timeline') : document.querySelector('.recording-bar');
-  root.setProperty('--command-dock-top', `${dock.getBoundingClientRect().top}px`);
+  const dockRect = dock.getBoundingClientRect();
+  root.setProperty('--command-dock-top', `${dockRect.height ? dockRect.top : innerHeight}px`);
 }
 const chromeBounds = new ResizeObserver(updateMapChromeBounds);
 for (const element of [mapToolbar, $('playback-timeline'), document.querySelector('.recording-bar'), document.querySelector('.playback-context')]) chromeBounds.observe(element);
 window.addEventListener('resize', updateMapChromeBounds);
 updateMapChromeBounds();
+
+// Compact header menu entries reuse the existing workspace controls.
+document.addEventListener("click", (event) => {
+  const proxy = event.target.closest("[data-menu-proxy]");
+  if (!proxy) return;
+  headerMenuRoot.open = false;
+  $(proxy.dataset.menuProxy).click();
+});

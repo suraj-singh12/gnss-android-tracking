@@ -325,6 +325,13 @@ not determine contact health. GNSS has its own quality/age indication.
 
 ### Appearance, header, About and recording
 
+The workspace follows the approved Command V5.14 layout (#66). The header holds the
+identity, the mode picker, Maps / Records / Tools, Day/Night and SOS. The Parties panel
+(search; All / Online / Attention), map, Details inspector and bottom rail sit below it.
+Recording controls appear in Record mode, and in LIVE whenever a recording exists.
+Panels become drawers at ≤1190 px (Details) and ≤800 px (Parties). The SOS audio switch
+is in **SOS emergencies** (Tools → SOS sound opens it).
+
 Day/Night persists per browser. The header's **Command Connected/Disconnected** is
 browser-to-local-server contact; **connected/total Parties** uses existing Android
 contact policy. About identifies **Lt Suraj Singh**, **surajsingh5092@gmail.com**;
@@ -635,7 +642,7 @@ Command alone owns human acknowledgement. No additional phone return channel or
 ACK-piggyback configuration field is added. The phone can confirm **Received by
 Command**, and does not display a human acknowledgement it has not received.
 
-Choose **Enable / test audible SOS alert**, then check speaker volume. Browser
+In **SOS emergencies**, turn on the **Audible SOS alarm** switch, then check speaker volume. Browser
 permissions may block playback until a user gesture, after suspension or on reload;
 the panel explicitly shows blocked/unavailable audio. When enabled, a short audible
 cue repeats every **one second** from one shared scheduler while any event is
@@ -894,7 +901,9 @@ clear stale presentation. No ACK or preview proves all history complete.
 points and decisions, pinned to a published generation. A generation or policy/window
 change returns 409; restart inspection. `layer=raw` returns up to 16 original retained
 envelopes with capture/measurement/receipt times, in original transport-sequence order.
-The Inspect history dialog exposes both layers and pagination. Raw diagnostic map
+The History dialog (map toolbar) shows both layers as tabs with structured, paginated
+entries; the raw page JSON stays available under Page data. Recording facts opens a
+read-only sheet for live recording, saved playback and Travel Back. Raw diagnostic map
 mode is bounded too; authoritative geometry and raw originals are never decimated
 in SQLite. Queue reports retain freshness and unresolved-count distinctions.
 
@@ -1203,7 +1212,8 @@ physical Android and native macOS/Windows acceptance remain separate from softwa
 
 ### Operational modes and Travel Back (#34)
 
-The mode strip separates LIVE, RECORDING LIVE, VIEWING RECORDING and TRAVEL BACK.
+The header mode picker (approved V5.14, #66) separates LIVE, RECORD (`RECORDING LIVE`),
+VIEW RECORDING and TRAVEL BACK.
 Active and operator-paused recordings lock historical entry, including after Save
 Snapshot; final Stop or Discard releases the lock. LIVE navigation never stops
 GNSS receipt, synchronization or SOS. Saved playback retains #37's sealed source,

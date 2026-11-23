@@ -1,3 +1,28 @@
+# Issue #66 — Command V5.14 production workspace preservation matrix
+
+Visual authority: the approved [Command V5.14 interactive design](https://github.com/suraj-singh12/gnss-android-tracking/blob/docs/approved-command-v5-14-issue-34/docs/design/approved/command-v5.14-interactive.html)
+(SHA-256 `5594847d65a10dabd066941930fae5fbe01aa007a71407b0f1d2127298faec81`). This is approved in #34 and implemented in #66.
+The prototype's simulated data is not used. Every control below keeps the existing production owner and element ID.
+Controls only moved; no operational authority changed.
+
+| Approved V5.14 element | Production element / owner | Behaviour contract |
+| --- | --- | --- |
+| Identity + caption | `#connection`, `#party-summary` (app.js poll) | Command contact and party counts come only from `/local/state` |
+| Centre mode picker (Live / Record / View Recording / Travel Back) | `details#mode-picker` holding `#mode-live`, `#mode-recording`, `#mode-library`, `#mode-travel`. `playback.js updateMode` owns `#operational-mode`; workspace.js mirrors it | Recording locks still disable View Recording and Travel Back. Record opens the existing Start Recording dialog; Cancel does not mutate anything |
+| Maps / Records / Tools | `#open-map`; Records `#open-library`, `#open-travel`, `#open-history`; Tools `#open-quality`, `#open-control`, field report, `#open-sos-sound`, `#open-about` | The same handlers as before. At ≤1250 px they move into the ☰ utility menu (`.header-menu-root`) |
+| Day/Night glyph | `#appearance` → `gnss-appearance` localStorage | Persists across reloads; the accessible name states the action |
+| SOS button + count | `#open-sos`, `#sos-count` | The visible SOS state is independent of audio |
+| SOS audio switch | `#sos-audio` (`role="switch"`) inside SOS emergencies | `aria-checked` is true only when the AudioContext is running; blocked audio is reported, never claimed |
+| Parties panel (242 px) with search and All / Online / Attention | `#devices` cards (app.js) with `data-contact`, `data-attention` and `data-search`; workspace.js filters rows | Filters hide list rows only. Map visibility stays with the per-party track switch; the selection stays with `selectParty` |
+| Context bar | `#context-title` / `#context-detail` from the operational mode, `#recording` and `#connection`; `#playback-rail`, `#historical-return` | Read-only mirrors with no separate state. Follow Original remains the existing `#follow-original` switch |
+| Map controls | `#zoom-in`, `#zoom-out`, `#fit`, `#focus-party`, `#inspect-history`, `#open-layers`, plus `#toggle-parties` / `#toggle-details` when a panel is closed | Existing map and playback handlers; Inspect history is retained |
+| Bottom rail | `.recording-bar` (Start / Pause / Resume / Save / Stop) or `#playback-timeline` | Hidden only in LIVE with no recording. An active, paused or stopped-unsaved recording stays visible in LIVE |
+| Details inspector (270 px) | `#selected-detail`, rendered from `/local/state` | Contact, GNSS freshness, observation age, battery, accuracy, last fix, qualified distance and coordinates. The legacy reporting override (`.override`) stays visible; diagnostics and SOS history sit under *Observation evidence & quality*; Phone controls opens `#phone-control` |
+| Responsive drawers | `compactHeader` ≤1250 px, `detailsDrawer` ≤1190 px, `partiesDrawer` ≤800 px (app.js) | Drawers overlay the map; Escape and the close buttons return focus to the matching toggle |
+| Dialog family | Existing `<dialog>` elements | Native focus trap, Escape and Cancel. Footers wrap on narrow screens |
+
+Verification: `test-tools/integration/command-v514-workspace.cjs` covers the items above, together with the updated existing suites listed in [ui-acceptance.md](ui-acceptance.md).
+
 # Issue #39 — Android V4.6 production preservation matrix
 
 This is the owning implementation ledger, not a new audit. It retains the **60 IDs**

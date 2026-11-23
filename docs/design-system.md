@@ -59,6 +59,18 @@ face; Tracking policy holds only Adaptive storage and Policy details (interval l
 Party & Command); Command Instructions, History search and Phone Alerts share one list,
 pill and fact grammar, with colour used only for operational meaning.
 
+## Current Command V5.14 contract — Issue #66
+
+Command follows the [approved V5.14 interactive reference](https://github.com/suraj-singh12/gnss-android-tracking/blob/docs/approved-command-v5-14-issue-34/docs/design/approved/command-v5.14-interactive.html)
+(SHA-256 `5594847d65a10dabd066941930fae5fbe01aa007a71407b0f1d2127298faec81`), which was approved in #34.
+The production implementation lives in `command/web`: `index.html`, the V5.14 layer at the end of `style.css`, and `workspace.js`.
+
+- **Shell:** a 58 px header (identity, centred mode picker, then Maps / Records / Tools, Day/Night and SOS). The workspace is a three-column grid: Parties 242 px, map, Details 270 px. The centre column holds the context bar, the map and the bottom rail.
+- **Breakpoints:** at ≤1250 px the header actions move into the ☰ menu; at ≤1190 px Details becomes a drawer; at ≤800 px Parties becomes a drawer; at ≤520 px the identity text and map tag are hidden.
+- **Tokens:** the V5.14 palette (`--panel`, `--soft`, `--green`, `--amber`, `--red` plus their washes) is mapped onto the existing Command variable names. Day secondary text keeps Command's existing `#596970` instead of the prototype's `#6d7d80`. It needs at least 4.5:1 on the green and grey washes, which `#6d7d80` does not reach, so the axe checks would fail.
+- **Controls:** binary settings (SOS audio, quality rule enablement, Follow Original) are switches. Modes are an exclusive menu, actions are buttons, and Records and Tools are anchored menus.
+- **Truth:** the context bar, mode label and inspector only mirror `/local/state`, the recording state and the playback mode. Stale GNSS is never styled as fresh; "Connected" means current Command contact only.
+
 ## Operator UI/UX quality gate — 15 reusable rules
 
 These operator-established, cross-screen rules come from approved/refined Command V5.4–V5.14 and Android V4-series design reviews. Apply them to every future proposed UI-affecting change **before** requesting operator design approval. They supplement, not override, a pinned approved screen-specific design. Cross-project reference: [Design Quality Rules in Systems Library](https://app.notion.com/p/40e85dbdf080819297d0dcc92f7f0cf0).
@@ -323,7 +335,7 @@ labels. Native Android resources and Command CSS semantic tokens apply throughou
 each app stores its independent choice. Command keeps About and Day/Night beside SOS;
 connection and connected/total parties sit beneath identity. No Local workspace label.
 
-Start dialog defaults Current Time, requires confirmation, and explains unavailable
+Start dialog defaults From now (Current Time), requires confirmation, and explains unavailable
 session metadata. About/appearance never acknowledge events or silence alarms.
 Layers beside Focus selected is a compact nonmodal popover, disabled for missing
 components, with local instant toggles. DEM availability is not inferred from checkbox
