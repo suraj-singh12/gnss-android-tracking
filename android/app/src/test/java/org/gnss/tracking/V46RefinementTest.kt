@@ -288,8 +288,13 @@ class V46RefinementTest {
             withContext(Dispatchers.IO) {
                 app.repository.dao.insertCommand(
                     CommandRecord(Protocol.newId(), "authority", device, "enrollment", "alert", 1, now - 60_000,
-                        state = "recipient_acknowledged",
+                        state = "recipient_acknowledged", confirmed = true,
                         requested = """{"mode":"normal","message":"Old regroup call","duration_s":5,"repeat_s":5}"""))
+                // Unconfirmed results sort first in the journal; the card must still pick the newest match.
+                app.repository.dao.insertCommand(
+                    CommandRecord(Protocol.newId(), "authority", device, "enrollment", "alert", 0, now - 120_000,
+                        state = "recipient_acknowledged",
+                        requested = """{"mode":"normal","message":"Older regroup drill","duration_s":5,"repeat_s":5}"""))
                 app.repository.dao.insertCommand(
                     CommandRecord(Protocol.newId(), "authority", device, "enrollment", "alert", 2, now,
                         state = "unknown",
@@ -308,6 +313,7 @@ class V46RefinementTest {
             settle()
             until { texts(a).contains("Old regroup call") }
             assertFalse("Hidden active alert is not shown", texts(a).contains("Check in at ridge"))
+            assertFalse("The newest matching alert wins over older unconfirmed ones", texts(a).contains("Older regroup drill"))
             assertFalse(texts(a).contains("No matching phone alerts"))
             assertFalse("The older alert's card cannot acknowledge the hidden one",
                 shown(a).filterIsInstance<Button>().any { it.text == "Acknowledge / Stop Alert" })

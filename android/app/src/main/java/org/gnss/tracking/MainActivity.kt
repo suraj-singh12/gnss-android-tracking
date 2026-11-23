@@ -4671,7 +4671,8 @@ class MainActivity : Activity() {
                         setOnClickListener { showInstruction(row) }
                     }
             }
-            val alerts = all.filter { it.trusted && it.operation == "alert" }
+            // The journal lists unconfirmed results first; the card wants the most recently received alert.
+            val alerts = all.filter { it.trusted && it.operation == "alert" }.sortedByDescending { it.received }
             val activeAlert =
                 alerts.firstOrNull { it.state in listOf("output_attempted", "alert_blocked", "unknown") }
             // Search and outcome filters pick the newest matching alert, preferring the active one.
