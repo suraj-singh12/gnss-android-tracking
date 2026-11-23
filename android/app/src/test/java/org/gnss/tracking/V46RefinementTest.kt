@@ -6,6 +6,8 @@ import android.view.KeyEvent
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
+import android.app.AlertDialog
+import android.widget.Switch
 import android.widget.TextView
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.*
@@ -273,6 +275,55 @@ class V46RefinementTest {
             sheet.dismiss()
             settle()
             assertNotNull("Closing the sheet returns to the list", instruction())
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test
+    fun alertCardFollowsActivityFiltersToTheNewestMatchingAlert() = runBlocking {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            val a = controller.get()
+            val device = withContext(Dispatchers.IO) { app.repository.state().deviceId }
+            val now = System.currentTimeMillis()
+            withContext(Dispatchers.IO) {
+                app.repository.dao.insertCommand(
+                    CommandRecord(Protocol.newId(), "authority", device, "enrollment", "alert", 1, now - 60_000,
+                        state = "recipient_acknowledged",
+                        requested = """{"mode":"normal","message":"Old regroup call","duration_s":5,"repeat_s":5}"""))
+                app.repository.dao.insertCommand(
+                    CommandRecord(Protocol.newId(), "authority", device, "enrollment", "alert", 2, now,
+                        state = "unknown",
+                        requested = """{"mode":"urgent","message":"Check in at ridge","duration_s":60,"repeat_s":10}"""))
+            }
+            openNativeScreen(a, "Diagnostics")
+            shown(a).filterIsInstance<Button>().single { it.text == "Activity" }.performClick()
+            settle()
+            until { texts(a).contains("Check in at ridge") }
+            assertTrue(shown(a).filterIsInstance<Button>().any { it.text == "Acknowledge / Stop Alert" })
+            shown(a).filterIsInstance<Button>().single { it.text == "Filters" }.performClick()
+            settle()
+            val filter = ShadowAlertDialog.getLatestAlertDialog()
+            nativeViews(filter.window!!.decorView).filterIsInstance<Switch>().single { it.text == "Unknown" }.performClick()
+            filter.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+            settle()
+            until { texts(a).contains("Old regroup call") }
+            assertFalse("Hidden active alert is not shown", texts(a).contains("Check in at ridge"))
+            assertFalse(texts(a).contains("No matching phone alerts"))
+            assertFalse("The older alert's card cannot acknowledge the hidden one",
+                shown(a).filterIsInstance<Button>().any { it.text == "Acknowledge / Stop Alert" })
+            assertTrue(shown(a).filterIsInstance<Button>().any { it.text == "View alert history" })
+            shown(a).filterIsInstance<EditText>().single { it.hint == "Search activity" }.setText("regroup")
+            settle()
+            controller.recreate()
+            settle()
+            val b = controller.get()
+            openNativeScreen(b, "Diagnostics")
+            shown(b).filterIsInstance<Button>().single { it.text == "Activity" }.performClick()
+            settle()
+            until { texts(b).contains("Old regroup call") }
+            assertTrue("Filters survive recreation", shown(b).filterIsInstance<Button>().any { it.text == "Filters · 1 off" })
+            assertEquals("Search survives recreation", "regroup",
+                shown(b).filterIsInstance<EditText>().single { it.hint == "Search activity" }.text.toString())
         } finally { controller.pause().stop().destroy() }
     }
 

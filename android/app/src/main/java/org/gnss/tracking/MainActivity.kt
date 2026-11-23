@@ -219,6 +219,11 @@ class MainActivity : Activity() {
             v46Outcomes.clear()
             v46Outcomes.addAll(it)
         }
+        savedInstanceState?.getStringArrayList("activityOutcomes")?.let {
+            activityOutcomes.clear()
+            activityOutcomes.addAll(it)
+        }
+        activityQuery = savedInstanceState?.getString("activityQuery") ?: ""
         restoredCustomInterval = savedInstanceState?.getBoolean("customIntervalChoice") ?: false
         restoredPartyCustomInterval = savedInstanceState?.getBoolean("partyCustomIntervalChoice") ?: false
         draftState = savedInstanceState?.getBundle("settingsDraft")
@@ -4594,14 +4599,11 @@ class MainActivity : Activity() {
             }
         add(alertCard, alertFailure, 6)
         lateinit var alertAction: Button
+        // The alert the card currently asks the recipient to act on; null when filters hide it.
+        var cardActiveAlert: CommandRecord? = null
         alertAction =
             action(alertCard, "Acknowledge / Stop Alert", true) {
-                val row =
-                    v46Records.firstOrNull {
-                        it.trusted &&
-                            it.operation == "alert" &&
-                            it.state in listOf("output_attempted", "alert_blocked", "unknown")
-                    }
+                val row = cardActiveAlert
                 if (row == null) {
                     instructionFilter.setText("")
                     consoleFilters.getValue("Command type").setSelection(6)
@@ -4669,15 +4671,15 @@ class MainActivity : Activity() {
                         setOnClickListener { showInstruction(row) }
                     }
             }
-            val active =
-                all.firstOrNull {
-                    it.trusted &&
-                        it.operation == "alert" &&
-                        it.state in listOf("output_attempted", "alert_blocked", "unknown")
-                }
-            val latestAlert = active ?: all.firstOrNull { it.trusted && it.operation == "alert" }
-            val alertShown =
-                if (latestAlert == null) activityQuery.isBlank() else activityMatches(latestAlert)
+            val alerts = all.filter { it.trusted && it.operation == "alert" }
+            val activeAlert =
+                alerts.firstOrNull { it.state in listOf("output_attempted", "alert_blocked", "unknown") }
+            // Search and outcome filters pick the newest matching alert, preferring the active one.
+            val latestAlert =
+                activeAlert?.takeIf(::activityMatches) ?: alerts.firstOrNull(::activityMatches)
+            val active = activeAlert?.takeIf { it === latestAlert }
+            cardActiveAlert = active
+            val alertShown = latestAlert != null || (alerts.isEmpty() && activityQuery.isBlank())
             alertCard.visibility = if (alertShown) View.VISIBLE else View.GONE
             alertNoMatch.visibility = if (alertShown) View.GONE else View.VISIBLE
             val latestSpec =
@@ -5551,6 +5553,8 @@ class MainActivity : Activity() {
         outState.putBoolean("customIntervalChoice", v46IntervalPicker?.selectedItemPosition == 4)
         outState.putBoolean("partyCustomIntervalChoice", v46PartyIntervalPicker?.selectedItemPosition == 4)
         outState.putStringArrayList("v46Outcomes", ArrayList(v46Outcomes))
+        outState.putStringArrayList("activityOutcomes", ArrayList(activityOutcomes))
+        outState.putString("activityQuery", activityQuery)
         mainScroll?.let { routeScrolls[route] = it.scrollY }
         outState.putBundle(
             "routeScrolls",
