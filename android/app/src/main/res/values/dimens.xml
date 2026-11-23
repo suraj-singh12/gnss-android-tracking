@@ -81,4 +81,13 @@
     <dimen name="text_meta">10.5sp</dimen>
     <dimen name="text_micro">10sp</dimen>
     <dimen name="text_metric">26sp</dimen>
+    <!-- Leading tiles and step badges in grouped rows. -->
+    <dimen name="icon_tile">36dp</dimen>
+    <dimen name="step_badge">28dp</dimen>
+    <!-- Segmented selectors: track inset, label padding and the auto-size floor (dp so large text
+         shrinks inside a fixed segment instead of escaping it). -->
+    <dimen name="segment_inset">3dp</dimen>
+    <dimen name="segment_label_padding">2dp</dimen>
+    <dimen name="segment_text_min">10dp</dimen>
+    <dimen name="segment_text_max_floor">11dp</dimen>
 </resources>
