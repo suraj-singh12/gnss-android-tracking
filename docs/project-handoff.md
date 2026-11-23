@@ -3,8 +3,9 @@
 > Prepared 23 Nov 2026 for a planning / brainstorming agent. The source of truth is always the repository at the SHA below, the current GitHub issues and `AGENTS.md`; this document is a map, not an authority. Verify any specific before acting on it.
 
 - **Repository:** `suraj-singh12/gnss-android-tracking`
-- **Integration branch:** `integration/combined-upgrades` @ `bb0a056` ("Merge PR #69: Android v3 simplified UI (#68)")
-- **`main`:** `04ff61e`. Integration is **241 commits ahead, 0 behind**. Nothing from the 20 Oct–23 Nov waves is on `main` yet.
+- **`main`:** latest released code. On 2026-11-23 `integration/combined-upgrades` was fast-forwarded into `main` and published as the **v1.0.0 pre-release**. The architecture below describes source at `bb0a056` (plus docs, licence and version updates after it).
+- **`integration/combined-upgrades`:** combined testing branch. New work branches from `main`, PRs target integration, and the operator promotes integration to `main`. All other branches were deleted on 2026-11-23.
+- **Licence:** proprietary, all rights reserved (`LICENSE`).
 - **Owner/operator:** suraj-singh12. Operator approval gates design, merges, issue closure and releases.
 
 ---
@@ -267,28 +268,18 @@ node test-tools/integration/<suite>.cjs             # Playwright; env GNSS_COMMA
 
 ## 12. Current state: what is open
 
-### 12.1 Open issues (21)
-| Pri | # | Topic | Status notes |
-|---|---|---|---|
-| P0 | 59 | Map-first Command responsive UX | Possibly largely addressed by V5.14 (#66); needs triage against its acceptance list |
-| P0 | 57 | QA audit of old Command PR #54 | Likely obsolete since #60/#61/#67 superseded #54; draft PR #58 |
-| P0 | 55 | Make the SOS retry/ACK test deterministic | Test-only fix; check whether PR #56 already fixed it |
-| P0 | 49 | Dependable offline maps + V3 Maps & Layers popup | Software merged (PR #50); popup now redone in V5.14; field reliability still reported |
-| P0 | 23 | Windows Command native acceptance (20+1 fleet, LIVE/SOS responsiveness) | **Not tested natively** |
-| P1 | 39 | Android V4.6 re-audit | Superseded in part by v3 (#68) |
-| P1 | 38 | Portable recording packages (offline map assets, export/import, encryption) | **Not started**; the next big feature on the evidence roadmap |
-| P1 | 37 / 34 / 27 | Saved playback / operational modes / recording evidence | Software merged (#60/#61/#53); still open for acceptance |
-| P1 | 26 / 25 / 24 | Phone alerts / authenticated control / adaptive persistence | Software merged; **physical device acceptance NOT TESTED** |
-| P1 | 7 | Cross-platform field acceptance, endurance, reproducible release gates | Umbrella release gate |
-| P2 | 28 | Resilient automatic offline maps | Software merged; provider reliability open |
-| P3 | 13 | Optional read-only LAN feed of qualified locations | Deferred |
-| — | 62 | UI/UX design governance | Draft PR #63 |
-| — | 48 / 47 / 46 | Android identity discoverability / switch flicker / Day/Night icons | Software merged for #48 and #47 (PRs #52, #51); #46 likely addressed by v3 Appearance in Settings; need confirmation and closure |
+### 12.1 Open issues (4, after the 2026-11-23 triage)
+| # | Topic | Status |
+|---|---|---|
+| 7 | Cross-platform field acceptance, endurance, release gates | Umbrella. Holds the remaining physical/native/provider acceptance from the closed software-merged issues #24–#28, #34, #37, #39, #47–#49 |
+| 23 | Windows Command native acceptance (20+1 fleet) | Software fix merged (PR #36); native 2-hour 20+1 run not done |
+| 38 | Portable recording packages (offline map assets, export/import, encryption) | Not started |
+| 13 | Optional read-only LAN feed of qualified locations | Deferred, not started |
 
-### 12.2 Open PRs (all drafts or stale)
-- **Into integration:** #63 (governance docs, draft) and #58 (QA-only, draft).
-- **Into `main`:** #33 and #32 (old map/DEM diagnostics, drafts), probably superseded.
-- **Old Issue #6 stack:** #17 → #18 → #19 → #20 (chained, never merged), superseded by later integration work.
+All other issues were closed on 2026-11-23 with comments linking the PRs that completed or replaced them.
+
+### 12.2 Open PRs
+None. Stale PRs #17–#20, #32, #33, #58 and #63 were closed as superseded on 2026-11-23.
 
 ### 12.3 Unverified / release blockers
 1. Native **macOS and Windows** Command runtime (only cross-builds plus Linux browser runs exist).
@@ -296,7 +287,7 @@ node test-tools/integration/<suite>.cjs             # Playwright; env GNSS_COMMA
 3. **Physical SOS speaker** output on the Command laptop.
 4. **Live map-provider downloads** (`dem-provider`).
 5. **Sustained 20+1 fleet / multi-day endurance and storage growth** (no retention policy; evidence journal growth unmeasured at multi-day scale).
-6. No signing, installers or release workflow; Android builds are debug APKs (`versionName 0.1`).
+6. No signing, installers or release automation; v1.0.0 ships a debug-signed APK (`versionName 1.0.0`) and unsigned Command binaries.
 
 ### 12.4 Small known UI items (Command V5.14)
 - At ≤520 px the map toolbar wraps to two rows.
@@ -309,8 +300,8 @@ node test-tools/integration/<suite>.cjs             # Playwright; env GNSS_COMMA
 
 ## 13. Suggested planning themes (for brainstorming)
 
-1. **Release readiness:** merge `integration/combined-upgrades` → `main`, then signing, installers, versioning and a release workflow (#7). Decide the gating set: native Windows/macOS runs, physical phone runs, 20+1 endurance.
-2. **Triage and hygiene:** close or retire superseded issues/PRs (#57/#58, #32/#33, #17–#20, possibly #59, #46, #47, #48, #55) with evidence; mark software-merged issues as "field acceptance pending" consistently.
+1. **Release readiness:** v1.0.0 is a pre-release. Next: release signing (APK keystore, macOS notarisation, Windows code signing), installers and a tag-driven release workflow (#7). Decide the gating set: native Windows/macOS runs, physical phone runs, 20+1 endurance.
+2. **Acceptance tracking:** turn the #7 umbrella into a concrete, scripted field test plan (see theme 4).
 3. **CI health:** make `dem-provider` non-blocking or replace it with a scheduled job. Fix the flaky `SosActivityTest`.
 4. **Field acceptance campaign:** a scripted physical test plan from `DEVICE-ACCEPTANCE.md` covering #24/#25/#26/#22/#5, plus a Windows native 20+1 run (#23).
 5. **#38 portable recording packages:** the next evidence feature (export/import of saved recordings with pinned map assets, plus encryption).

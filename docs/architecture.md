@@ -384,8 +384,7 @@ never changes qualified distance or raw authority. Large diagnostic ZIPs stream
 separate evidence files with explicit INCONCLUSIVE whole-corpus assessments. See
 command/README.md and protocol/protocol-v1.md for bounds and compatibility.
 
-Guidance remains identical to documentation-only branch chore/codex-repo-instructions
-at ca7b091e9032ac54e3ddd8d89a6b9ec414fb9f91; only AGENTS.md was transferred.
+Agent guidance lives in `AGENTS.md` on `main`.
 
 ## Issue #25 durable authenticated Command → Android control
 
