@@ -207,7 +207,7 @@ internal class VisualTokens(context: android.content.Context) {
         R.dimen.text_display, R.dimen.text_dialog_title, R.dimen.text_appbar_title, R.dimen.text_hero,
         R.dimen.text_heading, R.dimen.text_body, R.dimen.text_input, R.dimen.text_button, R.dimen.text_row_title, R.dimen.text_value,
         R.dimen.text_label, R.dimen.text_mono, R.dimen.text_caption, R.dimen.text_small, R.dimen.text_meta,
-        R.dimen.text_micro, R.dimen.text_metric,
+        R.dimen.text_micro, R.dimen.text_metric, R.dimen.text_tile,
     ).map(::sp)
     val radii = listOf(
         R.dimen.radius_card, R.dimen.radius_dialog, R.dimen.radius_button, R.dimen.radius_input,

@@ -17,4 +17,6 @@
     <color name="secondary_surface">#17242A</color>
     <color name="positive_surface">#233C35</color>
     <color name="warning_surface">#393022</color>
+    <!-- Text and numerals drawn on an accent fill. -->
+    <color name="on_accent">#12302A</color>
 </resources>
