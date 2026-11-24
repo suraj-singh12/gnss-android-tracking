@@ -1,0 +1,16 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; font: 13px/1.35 -apple-system, system-ui, sans-serif; color: #24343b; background: #f3f5f4; }
+body { display: grid; grid-template-rows: 44px 1fr; }
+header { display: flex; align-items: center; gap: 12px; padding: 0 12px; background: #fff; border-bottom: 1px solid #dce3df; }
+.tag { color: #8a4b00; background: #fff4df; border: 1px solid #f2c46d; border-radius: 10px; padding: 1px 8px; font-size: 12px; }
+nav { display: flex; gap: 4px; margin-left: auto; }
+button { font: inherit; border: 1px solid #dce3df; background: #fff; border-radius: 6px; padding: 4px 10px; cursor: pointer; color: #24343b; }
+button[aria-pressed="true"] { background: #17654c; color: #fff; border-color: #17654c; }
+.zoom button { width: 30px; padding: 4px 0; }
+main { position: relative; overflow: hidden; }
+canvas { width: 100%; height: 100%; display: block; background: #eef1ef; }
+canvas:focus { outline: 2px solid #17654c; outline-offset: -2px; }
+#note { position: absolute; top: 8px; left: 8px; background: rgba(255,255,255,.92); border: 1px solid #dce3df; border-radius: 6px; padding: 4px 8px; font-size: 12px; max-width: 60%; }
+#note:empty { display: none; }
+#scale { position: absolute; left: 8px; bottom: 26px; background: rgba(255,255,255,.85); padding: 2px 6px; border-radius: 4px; font-size: 11px; border-bottom: 2px solid #24343b; }
+footer { position: absolute; right: 0; bottom: 0; left: 0; background: rgba(255,255,255,.88); font-size: 10.5px; padding: 3px 8px; color: #44545b; }

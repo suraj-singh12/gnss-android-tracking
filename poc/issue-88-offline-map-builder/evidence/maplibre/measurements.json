@@ -1,0 +1,203 @@
+{
+ "build": {
+  "started": "2026-11-24T22:43:11",
+  "features_per_layer": {
+   "poi": 1472,
+   "peak": 963,
+   "place": 1713,
+   "boundary": 33,
+   "transportation": 19815,
+   "waterway": 5601,
+   "aerialway": 157,
+   "railway": 18,
+   "landuse": 1406,
+   "landcover": 7212,
+   "water": 1073,
+   "water_name": 192,
+   "building": 26287,
+   "cliff": 682
+  },
+  "tippecanoe_warnings": [],
+  "version_maplibre": "6.19.0",
+  "seconds": 42.8,
+  "sizes": {
+   "osm.mbtiles": 7516160,
+   "dem.mbtiles": 16162816,
+   "landcover.mbtiles": 1400832
+  },
+  "static_bytes": 2023475,
+  "centre": [
+   42.5722,
+   1.4847
+  ],
+  "radius_m": 20000.0
+ },
+ "headless_chrome": {
+  "cold_load": {
+   "navigation_to_first_idle_ms": 743,
+   "styleMs": 81,
+   "loadMs": 537,
+   "firstIdleMs": 542,
+   "errors": []
+  },
+  "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M3, Unspecified Version)",
+  "views": [
+   {
+    "name": "01-overview-z10",
+    "zoom": 10,
+    "centre": [
+     42.5722,
+     1.4847
+    ],
+    "jump_to_idle_ms": 700,
+    "state": "idle"
+   },
+   {
+    "name": "02-overview-z11",
+    "zoom": 11,
+    "centre": [
+     42.5722,
+     1.4847
+    ],
+    "jump_to_idle_ms": 710,
+    "state": "idle"
+   },
+   {
+    "name": "03-intermediate-z13-valleys",
+    "zoom": 13,
+    "centre": [
+     42.55,
+     1.53
+    ],
+    "jump_to_idle_ms": 699,
+    "state": "idle"
+   },
+   {
+    "name": "04-intermediate-z13-pessons-lakes",
+    "zoom": 13,
+    "centre": [
+     42.525,
+     1.655
+    ],
+    "jump_to_idle_ms": 657,
+    "state": "idle"
+   },
+   {
+    "name": "05-detail-z14-arinsal",
+    "zoom": 14.3,
+    "centre": [
+     42.5722,
+     1.4847
+    ],
+    "jump_to_idle_ms": 663,
+    "state": "idle"
+   },
+   {
+    "name": "06-detail-z15-andorra-la-vella",
+    "zoom": 15,
+    "centre": [
+     42.5078,
+     1.5211
+    ],
+    "jump_to_idle_ms": 698,
+    "state": "idle"
+   },
+   {
+    "name": "07-detail-z15-coma-pedrosa-trails",
+    "zoom": 15,
+    "centre": [
+     42.5917,
+     1.4442
+    ],
+    "jump_to_idle_ms": 665,
+    "state": "idle"
+   },
+   {
+    "name": "08-detail-z17-andorra-la-vella-buildings",
+    "zoom": 17,
+    "centre": [
+     42.5089,
+     1.534
+    ],
+    "jump_to_idle_ms": 702,
+    "state": "idle"
+   }
+  ],
+  "animations": {
+   "flyTo_z10_to_z16": {
+    "duration_ms": 4292,
+    "frames": 129,
+    "median_frame_ms": 33.3,
+    "p95_frame_ms": 33.4,
+    "max_frame_ms": 33.4,
+    "frames_over_33ms": 9
+   },
+   "pan_8_steps_z15": {
+    "duration_ms": 4028,
+    "frames": 121,
+    "median_frame_ms": 33.3,
+    "p95_frame_ms": 33.4,
+    "max_frame_ms": 33.5,
+    "frames_over_33ms": 21
+   },
+   "zoomOut_z16_to_z10": {
+    "duration_ms": 3545,
+    "frames": 148,
+    "median_frame_ms": 16.7,
+    "p95_frame_ms": 33.4,
+    "max_frame_ms": 33.5,
+    "frames_over_33ms": 18
+   }
+  },
+  "storage": {
+   "dem.mbtiles": 16162816,
+   "landcover.mbtiles": 1400832,
+   "osm.mbtiles": 7516160,
+   "static_runtime_bytes": 2064384
+  },
+  "offline": {
+   "server": "python3 serve.py under sandbox-exec (deny network-outbound except loopback)",
+   "browser": "Chrome, non-loopback requests aborted and recorded",
+   "external_requests_attempted": 0
+  },
+  "external_requests": []
+ },
+ "visible_chrome": {
+  "cold_load": {
+   "navigation_to_first_idle_ms": 1103,
+   "styleMs": 691,
+   "loadMs": 1021,
+   "firstIdleMs": 1025,
+   "errors": []
+  },
+  "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M3, Unspecified Version)",
+  "animations": {
+   "flyTo_z10_to_z16": {
+    "duration_ms": 4904,
+    "frames": 294,
+    "median_frame_ms": 16.7,
+    "p95_frame_ms": 17.5,
+    "max_frame_ms": 21.1,
+    "frames_over_33ms": 0
+   },
+   "pan_8_steps_z15": {
+    "duration_ms": 3955,
+    "frames": 237,
+    "median_frame_ms": 16.7,
+    "p95_frame_ms": 17.6,
+    "max_frame_ms": 23.8,
+    "frames_over_33ms": 0
+   },
+   "zoomOut_z16_to_z10": {
+    "duration_ms": 3456,
+    "frames": 208,
+    "median_frame_ms": 16.7,
+    "p95_frame_ms": 17.4,
+    "max_frame_ms": 17.7,
+    "frames_over_33ms": 0
+   }
+  },
+  "external_requests": []
+ },
+ "note": "Apple M3 8 GB, macOS, Google Chrome via Playwright; headless rAF is display-throttled, visible-window timings are the responsiveness figures."
+}

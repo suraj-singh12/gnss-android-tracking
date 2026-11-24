@@ -1,0 +1,7 @@
+{
+  "name": "gangtok-20km",
+  "description": "Gangtok, Sikkim, India. Public mountainous test area requested by the operator for the MapLibre POC. Not an operational location.",
+  "centre": [27.3389, 88.6065],
+  "radius_km": 20,
+  "profile": "standard"
+}

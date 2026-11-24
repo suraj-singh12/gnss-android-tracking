@@ -1,0 +1,14 @@
+{
+  "name": "arinsal-20km",
+  "description": "Public mountainous test area (Pyrenees): Arinsal, Andorra; crosses into Spain (Catalonia) and France (Ariege). Same area as the README demo. Not an operational location.",
+  "centre": [42.5722, 1.4847],
+  "radius_km": 20,
+  "profile": "high",
+  "imagery": {
+    "datetime": "2025-06-15T00:00:00Z/2026-09-30T23:59:59Z",
+    "months": [7, 8, 9],
+    "max_scene_cloud": 10,
+    "max_aoi_cloud_pct": 3,
+    "max_candidates": 4
+  }
+}
