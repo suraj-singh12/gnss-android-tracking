@@ -103,7 +103,7 @@ and `values-night/colors.xml`, plus the shared `NativeUi` vocabulary.
   Use shared outlined inputs, readable stateful disabled surfaces and quiet feedback.
 - Read-only facts use shared label/value hierarchy; technical logs use selectable,
   wrapping monospace content in bounded surfaces. Preserve the original live sources,
-  unknowns and evidence. Detailed trust evidence has one existing More evidence disclosure.
+  unknowns and evidence. Detailed trust evidence has one existing Evidence & rejection reasons disclosure.
 - The weighted main ScrollView, fixed SOS dock and navigation are separate siblings.
   Apply system/cutout/IME insets once at their shared root; do not add a footer-height
   padding workaround to each destination. A partly visible row may be fully accessible
