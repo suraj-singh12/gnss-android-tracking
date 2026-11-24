@@ -64,7 +64,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("cannot listen on port %d (already running?): %v", *port, err)
 	}
-	url := fmt.Sprintf("http://127.0.0.1:%d/#11/42.5722/1.4847", *port)
+	url := fmt.Sprintf("http://127.0.0.1:%d/", *port)
 	fmt.Println("Offline MapLibre POC (not GNSS Command):", url)
 	fmt.Println("Close this window or press Ctrl+C to stop.")
 	if !*noOpen {

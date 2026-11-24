@@ -7,14 +7,17 @@ maplibregl.setWorkerUrl("/static/maplibre-gl-worker.mjs");
 const t0 = performance.now();
 const metrics = (window.__poc = { styleMs: null, loadMs: null, firstIdleMs: null, errors: [] });
 
+const cfg = await (await fetch("/static/config.json")).json();
+document.getElementById("area").textContent = `${cfg.title} ${cfg.radius_km} km`;
+document.title = `Offline MapLibre POC · ${cfg.title} · not GNSS Command`;
 const map = new maplibregl.Map({
   container: "map",
   style: buildStyle(location.origin),
-  center: [1.4847, 42.5722],
+  center: [cfg.centre[1], cfg.centre[0]],
   zoom: 11,
   minZoom: 8,
   maxZoom: 18,
-  maxBounds: [[0.95, 42.2], [2.0, 42.95]],
+  maxBounds: cfg.bounds,
   hash: true,
   renderWorldCopies: false,
   attributionControl: { compact: false, customAttribution: "Offline POC · not GNSS Command" },

@@ -9,6 +9,7 @@ files) and one viewer executable per platform (Go, standard library only).
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import sqlite3
@@ -19,7 +20,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 TARGETS = [("darwin", "arm64", "open-map-macos-apple-silicon"), ("darwin", "amd64", "open-map-macos-intel"),
            ("windows", "amd64", "open-map-windows.exe"), ("linux", "amd64", "open-map-linux")]
-README = """GNSS offline map POC (Issue #88) - Arinsal, Andorra, 20 km radius
+README = """GNSS offline map POC (Issue #88) - {TITLE}
 ==================================================================
 Experimental evaluation build. NOT GNSS Command. Works fully offline.
 
@@ -37,8 +38,8 @@ macOS may block the unsigned viewer: right-click it > Open, or run
   xattr -dr com.apple.quarantine <unzipped folder>
 Windows SmartScreen may warn: More info > Run anyway.
 
-Try: scroll/pinch to zoom, drag to pan, double-click to zoom in. Start at the overview and zoom
-into Andorra la Vella (town), Arinsal (village) and the lakes/peaks to the north and east.
+Try: scroll/pinch to zoom, drag to pan, double-click to zoom in. Start at the overview, then
+zoom into the main town, villages, roads, rivers and peaks.
 
 Data: (c) OpenStreetMap contributors (ODbL); Copernicus DEM GLO-30 (c) DLR/Airbus, ESA/EU;
 ESA WorldCover 2021 (CC BY 4.0). Software: MapLibre GL JS (BSD-3-Clause), Noto Sans (OFL).
@@ -61,9 +62,11 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--bundle", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--slug", default="arinsal", help="short area name for the zip")
     a = ap.parse_args()
     bundle, out = Path(a.bundle).expanduser(), Path(a.out).expanduser()
-    stage = out / "gnss-offline-map-poc-arinsal"
+    cfg = json.loads((bundle / "static/config.json").read_text())
+    stage = out / f"gnss-offline-map-poc-{a.slug}"
     shutil.rmtree(stage, ignore_errors=True)
     m = stage / "map"
     shutil.copytree(bundle / "static", m / "static")
@@ -74,8 +77,8 @@ def main() -> None:
     for goos, arch, name in TARGETS:
         env = dict(os.environ, GOOS=goos, GOARCH=arch, CGO_ENABLED="0")
         subprocess.run(["go", "build", "-trimpath", "-ldflags=-s -w", "-o", str(stage / name), "."], cwd=HERE / "server", env=env, check=True)
-    (stage / "README.txt").write_text(README)
-    zpath = out / "gnss-offline-map-poc-arinsal.zip"
+    (stage / "README.txt").write_text(README.replace("{TITLE}", f"{cfg['title']}, {cfg['radius_km']:g} km radius"))
+    zpath = out / f"gnss-offline-map-poc-{a.slug}.zip"
     zpath.unlink(missing_ok=True)
     with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
         for p in sorted(stage.rglob("*")):

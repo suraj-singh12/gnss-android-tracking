@@ -8,7 +8,7 @@ cd "$(dirname "$0")" || exit 1
 python3 serve.py --bundle "$BUNDLE" --port "$PORT" &
 PID=$!
 sleep 1
-open "http://127.0.0.1:$PORT/#11/42.5722/1.4847" 2>/dev/null || xdg-open "http://127.0.0.1:$PORT/" 2>/dev/null
+open "http://127.0.0.1:$PORT/" 2>/dev/null || xdg-open "http://127.0.0.1:$PORT/" 2>/dev/null
 echo "Serving on http://127.0.0.1:$PORT/  (Ctrl+C to stop)"
 trap 'kill $PID' INT TERM
 wait $PID

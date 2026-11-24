@@ -68,7 +68,7 @@ def area_minzoom(a: float, big=6, mid=9, small=11, tiny=13) -> int:
 
 def classify(p: dict, gtype: str, geom):
     """Return (layer, properties, minzoom) or None. Only map-relevant attributes are kept."""
-    name = p.get("name")
+    name = p.get("name:en") or p.get("name")
     poly = gtype in ("Polygon", "MultiPolygon")
     out = []
     if gtype == "Point":
@@ -96,9 +96,10 @@ def classify(p: dict, gtype: str, geom):
         if p.get("highway") in ROAD:
             cls, z = ROAD[p["highway"]]
             props = {"class": cls}
-            for k in ("name", "ref"):
-                if p.get(k):
-                    props[k] = p[k]
+            if name:
+                props["name"] = name
+            if p.get("ref"):
+                props["ref"] = p["ref"]
             if p["highway"].endswith("_link"):
                 props["link"] = 1
             if p.get("tunnel") in ("yes", "building_passage"):
@@ -149,6 +150,7 @@ def main() -> None:
     ap.add_argument("--cache", required=True)
     ap.add_argument("--node", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--title", help="area label shown in the map badge")
     a = ap.parse_args()
     run_dir, cache, node, out = (Path(x).expanduser() for x in (a.run, a.cache, a.node, a.out))
     gis = Path(os.environ.get("CONDA_PREFIX") or Path(os.sys.executable).parent.parent)
@@ -185,7 +187,7 @@ def main() -> None:
     stats["features_per_layer"] = counts
     osm_mb = out / "tiles/osm.mbtiles"
     cmd = ["tippecanoe", "-o", str(osm_mb), "--force", "-Z6", "-z14", "-P", "--simplification=4", "--detect-shared-borders",
-           "--drop-densest-as-needed", "--extend-zooms-if-still-dropping", "--name=Arinsal POC", "--attribution=© OpenStreetMap contributors"]
+           "--drop-densest-as-needed", "--extend-zooms-if-still-dropping", f"--name={a.title or 'POC area'}", "--attribution=© OpenStreetMap contributors"]
     for layer in counts:
         cmd += ["-L", f"{layer}:{work / (layer + '.geojsonseq')}"]
     p = run(cmd, env)
@@ -241,6 +243,11 @@ def main() -> None:
     stats["static_bytes"] = sum(p.stat().st_size for p in (out / "static").rglob("*") if p.is_file())
     info = json.loads((run_dir / "run.json").read_text())["input"]
     stats["centre"], stats["radius_m"] = info["centre"], info["radius_m"]
+    bbox = json.loads((run_dir / "run.json").read_text())["plan"]["bbox"]
+    m = 0.15
+    (out / "static/config.json").write_text(json.dumps({
+        "title": a.title or info["name"], "centre": info["centre"], "radius_km": info["radius_m"] / 1000,
+        "bounds": [[bbox[0] - m, bbox[1] - m], [bbox[2] + m, bbox[3] + m]]}))
     (out / "build.json").write_text(json.dumps(stats, indent=1))
     shutil.rmtree(work, ignore_errors=True)
     print(json.dumps(stats, indent=1))

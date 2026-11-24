@@ -6,7 +6,24 @@ changed; no satellite, 3D, contours, night mode, acquisition UI or recording wor
 
 ## Download and try it on any machine
 
-Portable offline build (34.8 MB, no installation, no internet needed after download):
+**Gangtok, Sikkim (20 km)**, 23.5 MB: [download/gnss-offline-map-poc-gangtok.zip](download/gnss-offline-map-poc-gangtok.zip)
+([SHA-256](download/gnss-offline-map-poc-gangtok.zip.sha256)). Direct link:
+https://github.com/suraj-singh12/gnss-android-tracking/raw/devX/issue-88-offline-map-builder-poc/poc/issue-88-offline-map-builder/download/gnss-offline-map-poc-gangtok.zip
+
+Gangtok data (24 Nov 2026): Geofabrik India North-Eastern and Eastern zones (110 + 248 MB,
+the Eastern zone needed only for 21 of 1,437 circle samples near Rangpo), Copernicus DEM
+(282–4,545 m), WorldCover (90.5% tree cover); 422.9 MB downloaded in total, 3.5 min end to end.
+Map files: vector 2.1 MB, DEM 10.5 MB, land cover 0.6 MB. Unzipped and tested offline on macOS
+in the network-denying sandbox: first full render 0.35 s, 0 external requests. Screenshots:
+[overview z11](evidence/maplibre/gangtok/02-overview-z11.jpg),
+[Gangtok z13](evidence/maplibre/gangtok/03-intermediate-z13-gangtok.jpg),
+[Rumtek/Ranipool z13](evidence/maplibre/gangtok/04-intermediate-z13-rumtek-ranipool.jpg),
+[town centre z15](evidence/maplibre/gangtok/05-detail-z15-gangtok-centre.jpg),
+[MG Marg z16](evidence/maplibre/gangtok/06-detail-z16-mg-marg.jpg).
+OSM has fewer street names and forest polygons here than in Andorra; WorldCover supplies the
+vegetation.
+
+**Arinsal, Andorra (20 km)**, 34.8 MB:
 [download/gnss-offline-map-poc-arinsal.zip](download/gnss-offline-map-poc-arinsal.zip)
 ([SHA-256](download/gnss-offline-map-poc-arinsal.zip.sha256)). Direct link:
 https://github.com/suraj-singh12/gnss-android-tracking/raw/devX/issue-88-offline-map-builder-poc/poc/issue-88-offline-map-builder/download/gnss-offline-map-poc-arinsal.zip
