@@ -30,11 +30,13 @@ Approved overrides of earlier #39/V4.6 rules:
 **Tracking** answers "Am I tracked and is it reaching Command?": one status card
 (`Not tracking`, `Tracking`, or `Tracking · saving on phone` when Command does not
 respond), one sentence and one action (Start Tracking, or the approved Stop with
-confirmation). A **Needs attention** row appears only for a real issue and opens the owning
-Settings page. Plain lists follow: **GNSS** (Position fix, Accuracy, Fix age, Battery) and
-**Delivery to Command** (Command: `Not set up` / `Not checked yet` / `Reachable` /
-`Unreachable` from `Sender.commandReachable` only; Waiting on phone; Delivered to Command;
-Last Command ACK; Sync now). While SOS is active, a card shows three separate checkpoints:
+confirmation). A **Needs attention** row (warning tint, above the status card) appears only
+for a real issue and opens the owning Settings page. **Position** is four value tiles (Fix:
+Fresh / Stale / Unavailable / Stopped, Accuracy, Last fix, Battery). **Delivery** is one card:
+Command status (`Not set up` / `Not checked yet` / `Reachable` / `Unreachable` from
+`Sender.commandReachable` only), then On phone → Delivered (real Room counts; Delivered means
+Command ACK), one short line (Last ACK time, No ACK yet, or Sends automatically when reachable),
+and Sync now only while data waits. Saved data & sync keeps the full list. While SOS is active, a card shows three separate checkpoints:
 Saved on phone, Delivered to Command, Acknowledged by an operator. Delivery is never shown
 as human acknowledgement. Fresh/Stale uses `max(30 s, 2 × interval)`.
 

@@ -81,6 +81,9 @@
     <dimen name="text_meta">10.5sp</dimen>
     <dimen name="text_micro">10sp</dimen>
     <dimen name="text_metric">26sp</dimen>
+    <!-- Tracking home value tiles and delivery counts. -->
+    <dimen name="text_tile">20sp</dimen>
+    <dimen name="tile_padding_v">10dp</dimen>
     <!-- Leading tiles and step badges in grouped rows. -->
     <dimen name="icon_tile">36dp</dimen>
     <dimen name="step_badge">28dp</dimen>
