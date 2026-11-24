@@ -3,7 +3,8 @@
 Tracked in [#88](https://github.com/suraj-singh12/gnss-android-tracking/issues/88).
 This directory is **isolated feasibility tooling**, not production code. It changes no
 Command, Android, schema, renderer, UI, packaging or CI behaviour. The decision report
-with measured results is [REPORT.md](REPORT.md). The operator design proposal is the
+with measured results is [REPORT.md](REPORT.md). The post-POC rendering evaluation and upgrade design is
+[RENDERING-EVALUATION.md](RENDERING-EVALUATION.md). The operator design proposal is the
 simulated prototype in [design/](design/get-a-map-prototype.html), not approved UI.
 
 ## What it does
@@ -122,6 +123,7 @@ GNSS_PLAYWRIGHT_MODULE=~/gnss-poc-88-work/node/node_modules/playwright \
 | `viewer/` | POC reference viewer (not Command) for imagery, land cover, labels |
 | `evaluate.py` | independent cross-layer checks (summits vs DEMs, lakes vs land cover and imagery classes) |
 | `capture.cjs` | Playwright captures and measurements |
+| `compose.cjs` | labelled side-by-side comparisons (actual Command vs reference renderer) |
 | `design/get-a-map-prototype.html` | simulated Get a Map proposal for operator review |
 | `evidence/` | small committed captures and metric summaries |
 

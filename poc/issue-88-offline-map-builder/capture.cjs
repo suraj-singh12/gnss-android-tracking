@@ -29,6 +29,8 @@ const VIEWS = [
   { id: "arinsal-detail", lat: 42.5722, lon: 1.4847, z: 14 },
   { id: "coma-pedrosa-detail", lat: 42.5917, lon: 1.4442, z: 14 },
   { id: "andorra-la-vella-detail", lat: 42.5078, lon: 1.5211, z: 15 },
+  { id: "pessons-lakes", lat: 42.5135, lon: 1.6620, z: 14 },
+  { id: "valley-terrain", lat: 42.5600, lon: 1.5500, z: 13 },
 ];
 const SANDBOX = '(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip "localhost:*"))(allow network-outbound (remote unix-socket))';
 const results = { run: RUN, captured_at: new Date().toISOString(), external_requests_blocked: [], viewer: [], command: [], ui: [], design: [] };
@@ -134,15 +136,17 @@ async function commandCaptures(browser) {
     const layerState = await page.evaluate(() => ["hillshade", "contours"].map((k) => [k, document.getElementById("layer-" + k).checked]));
     await page.click("#apply-layers");
     for (const v of VIEWS) {
+      await page.evaluate(() => { const e = document.getElementById("map-detail-status"); if (e) e.textContent = ""; });
       const t0 = Date.now();
       await page.evaluate(([lat, lon, z]) => {
         const [cx, cy] = GeoMap.project(lon, lat);
         viewport = { cx, cy, scale: (256 * 2 ** z) / (2 * Math.PI * 6378137) }; // eslint-disable-line no-undef
         draw(); // eslint-disable-line no-undef
       }, [v.lat, v.lon, v.z]);
-      await page.waitForLoadState("networkidle");
-      await sleep(1500);
+      // Wait for Command's own completion message for this viewport (progressive chunk loading).
+      await page.waitForFunction(() => (document.getElementById("map-detail-status")?.textContent || "").startsWith("Local detail"), null, { timeout: 120000 }).catch(() => {});
       const settle = Date.now() - t0;
+      await sleep(800);
       const file = `command-${kind}-${v.id}.png`;
       await page.screenshot({ path: path.join(OUT, file), clip: { x: 242, y: 106, width: 928, height: 794 } });
       const warn = await page.evaluate(() => [...document.querySelectorAll("#map-warning, #map-mode-label, .map-notice")].map((e) => e.textContent.trim()).filter(Boolean).join(" | "));
