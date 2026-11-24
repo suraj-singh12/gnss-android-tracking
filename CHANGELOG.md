@@ -3,6 +3,16 @@
 All notable changes to this project are recorded here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [1.1.1] — 2026-11-24 (pre-release)
+
+### Changed
+- Licence: the project is now open source under the GNU General Public License v3.0
+  only (`GPL-3.0-only`), replacing the proprietary licence (#81). v1.0.0 and v1.1.0
+  keep the licence they shipped with.
+- Added `THIRD_PARTY_NOTICES.md` listing bundled dependencies and their licences, all
+  GPL-3.0-compatible.
+- Android `versionName` 1.1.1, `versionCode` 3. No product behaviour change.
+
 ## [1.1.0] — 2026-11-24 (pre-release)
 
 [Release assets](https://github.com/suraj-singh12/gnss-android-tracking/releases/tag/v1.1.0)
