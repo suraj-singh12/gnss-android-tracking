@@ -124,7 +124,11 @@
       ctx.imageSmoothingEnabled = true;
       for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) {
         const t = tile(layer, tz, x, y);
-        if (t.ok) ctx.drawImage(t.img, x * ts - ox, y * ts - oy, ts + 0.5, ts + 0.5);
+        if (t.ok) {
+          // Integer edges without overlap: overlapping translucent tiles drew dark seams.
+          const px = Math.round(x * ts - ox), py = Math.round(y * ts - oy);
+          ctx.drawImage(t.img, px, py, Math.round((x + 1) * ts - ox) - px, Math.round((y + 1) * ts - oy) - py);
+        }
         else if (!t.img.complete) loaded = false;
       }
       ctx.globalAlpha = 1;

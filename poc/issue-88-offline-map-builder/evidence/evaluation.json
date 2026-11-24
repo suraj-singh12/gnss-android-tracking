@@ -1,0 +1,125 @@
+{
+ "summits": {
+  "copernicus_minus_osm_ele": {
+   "n": 453,
+   "mean_m": -13.1,
+   "median_m": -8.0,
+   "median_abs_m": 8.0,
+   "p90_abs_m": 34.0
+  },
+  "skadi_minus_osm_ele": {
+   "n": 453,
+   "mean_m": -21.5,
+   "median_m": -20.0,
+   "median_abs_m": 20.0,
+   "p90_abs_m": 40.0
+  },
+  "largest_copernicus_differences": [
+   {
+    "name": "roc del Rellotge",
+    "osm_ele": 2393.4,
+    "copernicus": 2260.0
+   },
+   {
+    "name": "Pic de Lavans",
+    "osm_ele": 2896.0,
+    "copernicus": 2777.0
+   },
+   {
+    "name": "Cap de Montuell",
+    "osm_ele": 2423.0,
+    "copernicus": 2527.0
+   },
+   {
+    "name": "Couillade de Puntussan",
+    "osm_ele": 2646.0,
+    "copernicus": 2551.0
+   },
+   {
+    "name": "Roc de la Figuera",
+    "osm_ele": 1296.4,
+    "copernicus": 1216.0
+   }
+  ],
+  "interpretation": "negative = grid reads below the surveyed summit (expected for 30 m cells); OSM ele values have mixed provenance"
+ },
+ "lakes": {
+  "n": 59,
+  "min_area_ha": 2,
+  "worldcover_water_match_pct": 94.9,
+  "worldcover_classes_at_points": {
+   "30": 2,
+   "60": 1,
+   "80": 56
+  },
+  "sentinel2_scl_water_match_pct": 69.5,
+  "sentinel2_scl_classes_at_points": {
+   "4": 1,
+   "5": 15,
+   "6": 41,
+   "7": 2
+  },
+  "mismatches": [
+   {
+    "name": "\u00c9tang de Soulanet",
+    "ha": 6.5,
+    "worldcover": 80.0,
+    "scl": 5.0
+   },
+   {
+    "name": "\u00c9tang de Mille Roques",
+    "ha": 5.5,
+    "worldcover": 80.0,
+    "scl": 5.0
+   },
+   {
+    "name": "\u00c9tang de la Peyre",
+    "ha": 2.0,
+    "worldcover": 80.0,
+    "scl": 5.0
+   },
+   {
+    "name": "Estany Primer",
+    "ha": 2.0,
+    "worldcover": 80.0,
+    "scl": 5.0
+   },
+   {
+    "name": "\u00c9tang des Castellasses",
+    "ha": 3.2,
+    "worldcover": 80.0,
+    "scl": 5.0
+   },
+   {
+    "name": "\u00c9tang de Mirabail",
+    "ha": 2.9,
+    "worldcover": 80.0,
+    "scl": 5.0
+   },
+   {
+    "name": null,
+    "ha": 3.2,
+    "worldcover": 80.0,
+    "scl": 7.0
+   },
+   {
+    "name": "\u00c9tang de la Gardelle",
+    "ha": 2.6,
+    "worldcover": 80.0,
+    "scl": 5.0
+   },
+   {
+    "name": "Estany Gran de la Pera",
+    "ha": 2.5,
+    "worldcover": 80.0,
+    "scl": 5.0
+   },
+   {
+    "name": "Estany Forcat",
+    "ha": 3.4,
+    "worldcover": 80.0,
+    "scl": 7.0
+   }
+  ]
+ }
+}

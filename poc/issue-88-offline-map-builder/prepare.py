@@ -265,6 +265,12 @@ class Runner:
             "samples": len(samples), "uncovered_samples": uncovered, "regions": regions}
         if uncovered:
             raise Failure(f"{uncovered} circle samples are outside every Geofabrik extract")
+        # Command admits a PBF crop only if its declared bounds cover every 240" chunk
+        # envelope, so extract the whole chunk-grid envelope (data genuinely covers
+        # what is declared) instead of declaring bounds larger than the data.
+        e = 2e-7
+        gb = self.grid_bbox
+        bbox_arg = f"{gb[0] - e:.7f},{gb[1] - e:.7f},{gb[2] + e:.7f},{gb[3] + e:.7f}"
         crops = []
         for r in regions:
             pbf = self.fetch(r["pbf"], st)
@@ -274,7 +280,7 @@ class Runner:
             info = self.run(["osmium", "fileinfo", "-g", "header.option.osmosis_replication_timestamp", str(pbf)], st, check=False).stdout.strip()
             r["replication_timestamp"] = info or None
             crop = self.work / f"crop-{r['id'].replace('/', '_')}.osm.pbf"
-            self.run(["osmium", "extract", "-p", str(self.out / "plan" / "circle.geojson"), "-s", "complete_ways",
+            self.run(["osmium", "extract", "-b", bbox_arg, "-s", "complete_ways", "--set-bounds",
                       "--overwrite", "-o", str(crop), str(pbf)], st)
             crops.append(str(crop))
         (self.out / "osm").mkdir(exist_ok=True)
@@ -282,7 +288,13 @@ class Runner:
         if len(crops) == 1:
             shutil.copy(crops[0], area_pbf)
         else:
-            self.run(["osmium", "merge", "--overwrite", "-o", str(area_pbf)] + crops, st)
+            merged = self.work / "merged.osm.pbf"
+            self.run(["osmium", "merge", "--overwrite", "-o", str(merged)] + crops, st)
+            # merge drops the header bbox; re-declare the genuinely covered envelope.
+            self.run(["osmium", "extract", "-b", bbox_arg, "-s", "complete_ways", "--set-bounds", "--overwrite",
+                      "-o", str(area_pbf), str(merged)], st)
+        header = self.run(["osmium", "fileinfo", "-g", "header.boxes", str(area_pbf)], st).stdout.strip()
+        self.report["stages"][st]["declared_bounds"] = header
         self.report["stages"][st]["seconds_before_layers"] = round(time.time() - t0, 2)
         self.osm_layers(area_pbf)
         self.report["stages"][st]["seconds"] = round(time.time() - t0, 2)
@@ -845,6 +857,7 @@ class Runner:
                 try:
                     self.package()
                 except (Failure, RuntimeError) as e:
+                    failed = True
                     self.layer("command_package", "failed", error=str(e))
             else:
                 self.layer("command_package", "blocked", reason="needs ready OSM and DEM layers")
@@ -853,6 +866,7 @@ class Runner:
             try:
                 self.baseline()
             except (Failure, RuntimeError) as e:
+                failed = True
                 self.layer("command_baseline", "failed", error=str(e))
         self.report["finished_at"] = utc()
         self.report["overall"] = overall(self.report["layers"], self.layers)
