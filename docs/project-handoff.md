@@ -1,9 +1,9 @@
-# GNSS Android Tracking — Project Handoff (state at v1.0.0)
+# GNSS Android Tracking — Project Handoff (state at v1.1.0)
 
 > Prepared 23 Nov 2026 for a planning / brainstorming agent. The source of truth is always the repository at the SHA below, the current GitHub issues and `AGENTS.md`; this document is a map, not an authority. Verify any specific before acting on it.
 
 - **Repository:** `suraj-singh12/gnss-android-tracking`
-- **`main`:** latest released code. On 2026-11-23 `integration/combined-upgrades` was fast-forwarded into `main` and published as the **v1.0.0 pre-release**. On 2026-11-23 `dev` (with the Android UI polish of #73, PR #74) was promoted to `main` and published as the **v1.1.0 pre-release**. The architecture below describes source at `bb0a056` (plus docs, licence and version updates after it); see #73 for the v1.1.0 UI changes.
+- **`main`:** latest released code. On 2026-11-23 `integration/combined-upgrades` was fast-forwarded into `main` and published as the **v1.0.0 pre-release**. On 2026-11-23 `dev` was promoted to `main` and published as the **v1.1.0 pre-release** (`e9221d6`: Android UI polish #73 via PRs #74/#77, Tracking home redesign #78 via PR #79, permanent APK signing via PR #75). The architecture below describes source at `bb0a056` (plus docs, licence and version updates after it); see `CHANGELOG.md` for the v1.1.0 changes.
 - **Branches (2026-11-23):** `dev` (development; issue branches start here and PRs target it), `main` (promoted from `dev` by PR on operator instruction), `release/v1.0.0` and `release/v1.1.0` (cut from `main`, carry the `v1.0.0` and `v1.1.0` tags) and `integration/combined-upgrades` (kept for history, no longer a PR target). All other branches were deleted.
 - **Licence:** proprietary, all rights reserved (`LICENSE`).
 - **Owner/operator:** suraj-singh12. Operator approval gates design, merges, issue closure and releases.
@@ -300,7 +300,7 @@ None. Stale PRs #17–#20, #32, #33, #58 and #63 were closed as superseded on 20
 
 ## 13. Suggested planning themes (for brainstorming)
 
-1. **Release readiness:** v1.1.0 is a pre-release. Next: release signing (APK keystore, macOS notarisation, Windows code signing), installers and a tag-driven release workflow (#7). Decide the gating set: native Windows/macOS runs, physical phone runs, 20+1 endurance.
+1. **Release readiness:** v1.1.0 is a pre-release. The APK already uses a permanent field key. Next: release signing (macOS notarisation, Windows code signing), installers and a tag-driven release workflow (#7). Decide the gating set: native Windows/macOS runs, physical phone runs, 20+1 endurance.
 2. **Acceptance tracking:** turn the #7 umbrella into a concrete, scripted field test plan (see theme 4).
 3. **CI health:** `dem-provider` is now a non-blocking warning; decide whether to replace the failing live sources (Geofabrik regional size, overpass-api.de 502) or move it to a scheduled job. Fix the flaky `SosActivityTest`.
 4. **Field acceptance campaign:** a scripted physical test plan from `DEVICE-ACCEPTANCE.md` covering #24/#25/#26/#22/#5, plus a Windows native 20+1 run (#23).

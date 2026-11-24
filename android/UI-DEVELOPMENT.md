@@ -84,7 +84,7 @@ To restyle the whole app, change a token or a `NativeUi` component. Examples:
 | `list(parent)`, `menu(…, status)` , `rowRipple()` | Record lists | One bordered list with peer dividers; rows may carry a trailing `statusPill`. Used by Command Instructions and History search. |
 | `selector(spinner)` + `selectorAdapter(items)` / `selectorItem(view)` | Exclusive choices | Outlined field, single down-chevron at a fixed 12dp end inset, Body type in field and popup. |
 | `switchRow(switch)` | Binary settings | Label start, Switch end, 48dp. Use a Switch, never a CheckBox, for a binary setting. |
-| `intervalPicker(card, editor, …)` (in `installV46Screens`) | Reporting interval | One selector + Custom field; v3 shows it on Tracking policy with its own Save bar over the same canonical draft. |
+| `intervalPicker(card, editor, …)` (in `installV46Screens`) | Reporting interval | Segmented `RadioGroup` (5/10/30/60 s, Custom) + Custom field on Tracking policy, with its own Save bar over the same canonical draft. |
 | `metric(parent, value, caption)` | Large counts | 26sp autosizing value with caption. |
 | `tileRow(parent, gap)` + `tile(row, caption, value)` | Tracking home values | Equal-width bordered tiles (12dp radius, `tile_padding_v`), caption over a 20sp `Tile` value; each tile is one TalkBack item. Used for Position (Fix, Accuracy, Last fix, Battery). |
 | `feedback(view)`, `collapsingLabel(role)` | Status/error text | A collapsing label measures 0 height while empty, so an idle slot leaves no gap. |
@@ -154,7 +154,7 @@ Captures wait for real readiness, not a fixed delay: `shot` dumps the hierarchy 
 loading placeholder (`Loading settings`, `Loading…`, `Reading …`, `Checking…`) remains
 and two consecutive dumps are identical, captures, then verifies the hierarchy did not
 change during the capture (up to three attempts; `READY_TIMEOUT`, default 20 s). The
-tour also opens the reporting-interval selector and Manage access & trust.
+tour also captures the bottom of Tracking policy and Command access.
 
 ### CI emulator capture
 
@@ -298,7 +298,7 @@ Retired on 20 Nov 2026 and no longer reachable: Identity & verification details,
 Transfer recovery, Storage health, GNSS details, Command contact (old restored routes
 map to their owners; `V46RefinementTest`).
 
-Robolectric does not cover open Spinner popups (the emulator tour captures one), real IME
+Robolectric does not cover real IME
 windows, OS permission and document-picker screens, toasts, TalkBack/Switch Access or
 OEM rendering.
 

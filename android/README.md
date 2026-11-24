@@ -580,9 +580,10 @@ renders in the repository are historical evidence, not the implementation specif
 The [60-group preservation matrix](../docs/ui-preservation-matrix.md) identifies owners
 and verification. Command V5.14, protocol and approved artifacts are unchanged.
 
-- **Tracking:** collection lifecycle, real GNSS age/accuracy, Room pending/durably ACKed
-  counts, shared Sync now, protected Start/Stop and the approved pale-red Stop in both
-  themes. Sync while stopped uses the existing bounded dataSync service, never GNSS.
+- **Tracking:** Needs attention row, status card, Position tiles (Fix, Accuracy, Last fix,
+  Battery) and one Delivery card (Command status, Room On phone → Delivered counts, last
+  durable Command ACK) with shared Sync now only while data waits, protected Start/Stop
+  and the approved pale-red Stop in both themes. Sync while stopped uses the existing bounded dataSync service, never GNSS.
   Larger text and short windows scroll; urgent alerts and failures remain reachable.
 - **Global safety:** the same 1.2-second hold/Room SOS engine is available throughout
   navigation. Release, movement, multi-touch, route/window-focus loss or Activity pause
