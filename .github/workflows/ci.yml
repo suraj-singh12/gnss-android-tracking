@@ -356,7 +356,7 @@ jobs:
                  'workflow_run':f"{os.environ.get('GITHUB_SERVER_URL')}/{os.environ.get('GITHUB_REPOSITORY')}/actions/runs/{os.environ.get('GITHUB_RUN_ID')}",
                  'event':os.environ.get('GITHUB_EVENT_NAME'),'ref':os.environ.get('GITHUB_REF'),
                  'native_runtime_verified':{'linux-x64':'browser suites executed this binary','macos-arm64':False,'windows-x64':False}}
-          manifest={'source_revision':sha,'android_version':'1.1.0','command_protocol':1,'android_min_sdk':26,'android_target_sdk':35,'build':build,'assets':assets}
+          manifest={'source_revision':sha,'android_version':'1.1.1','command_protocol':1,'android_min_sdk':26,'android_target_sdk':35,'build':build,'assets':assets}
           (root/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
           (root/'SHA256SUMS').write_text(''.join(f"{a['sha256']}  {n}\n" for n,a in assets.items()))
           print(json.dumps(manifest,indent=2))
