@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Offline MapLibre POC · Arinsal 20 km · not GNSS Command</title>
+<link rel="stylesheet" href="/static/maplibre-gl.css" />
+<style>
+  html, body { margin: 0; height: 100%; font: 13px -apple-system, system-ui, sans-serif; }
+  #map { position: absolute; inset: 0; }
+  #badge { position: absolute; top: 10px; left: 10px; z-index: 2; background: #fffffff0; border: 1px solid #dce5e1; border-radius: 8px; padding: 6px 10px; color: #24343a; box-shadow: 0 1px 4px #0001; }
+  #badge b { color: #216f56; }
+  #badge span { color: #596970; }
+</style>
+</head>
+<body>
+<div id="map" role="region" aria-label="Offline map"></div>
+<div id="badge"><b>Offline MapLibre POC</b> · Arinsal 20 km · <span id="zoom">z11.0</span> · <span>not GNSS Command</span></div>
+<script type="module" src="/app.js"></script>
+</body>
+</html>
