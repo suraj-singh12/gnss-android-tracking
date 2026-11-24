@@ -4,7 +4,22 @@ Tracked in [#88](https://github.com/suraj-singh12/gnss-android-tracking/issues/8
 [RENDERING-EVALUATION.md](RENDERING-EVALUATION.md). POC only: no Command, Android or GNSS code
 changed; no satellite, 3D, contours, night mode, acquisition UI or recording work.
 
-## Try it
+## Download and try it on any machine
+
+Portable offline build (34.8 MB, no installation, no internet needed after download):
+[download/gnss-offline-map-poc-arinsal.zip](download/gnss-offline-map-poc-arinsal.zip)
+([SHA-256](download/gnss-offline-map-poc-arinsal.zip.sha256)). Direct link:
+https://github.com/suraj-singh12/gnss-android-tracking/raw/devX/issue-88-offline-map-builder-poc/poc/issue-88-offline-map-builder/download/gnss-offline-map-poc-arinsal.zip
+
+Unzip, then run the viewer for your system: `open-map-windows.exe`, `open-map-macos-apple-silicon`,
+`open-map-macos-intel` or `open-map-linux`. It serves the map on `http://127.0.0.1:8770` (this
+computer only) and opens the browser. The viewers are unsigned: on macOS right-click > Open (or
+`xattr -dr com.apple.quarantine` on the folder); on Windows SmartScreen choose More info > Run
+anyway. Use Chrome, Edge or Firefox with hardware graphics. `README.txt` in the zip repeats this.
+The viewer is `maplibre/server` (Go, standard library only, loopback only, files served from
+memory); `maplibre/package.py` builds the zip.
+
+## Try it on the POC laptop
 
 The bundle (tiles + MapLibre + fonts, 27 MB) is already built on the POC laptop:
 
