@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Issue #88 POC reference viewer — not GNSS Command</title>
+<link rel="stylesheet" href="viewer.css" />
+</head>
+<body>
+<header>
+  <strong>POC reference viewer</strong>
+  <span class="tag">Not GNSS Command · offline evaluation only</span>
+  <nav aria-label="Map style" id="modes">
+    <button data-mode="topo" aria-pressed="true">Topographic</button>
+    <button data-mode="terrain" aria-pressed="false">Terrain</button>
+    <button data-mode="satellite" aria-pressed="false">Satellite</button>
+    <button data-mode="hybrid" aria-pressed="false">Hybrid</button>
+  </nav>
+  <span class="zoom"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">−</button></span>
+</header>
+<main>
+  <canvas id="map" tabindex="0" aria-label="Offline reference map"></canvas>
+  <div id="note" role="status"></div>
+  <div id="scale"></div>
+  <footer id="attribution"></footer>
+</main>
+<script src="viewer.js"></script>
+</body>
+</html>

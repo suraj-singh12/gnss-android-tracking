@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Get a Map — Issue #88 design proposal (SIMULATED, not Command)</title>
+<style>
+  /* V5.14 tokens copied from command/web/style.css (Day). Night is not shown in this draft. */
+  :root { --ink:#24343a; --muted:#596970; --line:#dce5e1; --accent:#216f56; --background:#eef2f0; --surface:#fff;
+    --soft:#f5f8f6; --greenwash:#e6f1eb; --amber:#9b681d; --amberwash:#faf1df; --amber-text:#7a5216; --red:#963f4b;
+    --redwash:#f9eaec; --control-line:#afc0ba; --shadow:0 20px 60px #142b3038; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; color:var(--ink); background:var(--background); }
+  .sim { position:fixed; left:0; right:0; top:0; z-index:5; display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:6px 10px;
+    background:#2b2b2b; color:#fff; font-size:12px; }
+  .sim b { color:#ffd27a; margin-right:6px; }
+  .sim button { font:inherit; font-size:11.5px; border:1px solid #666; border-radius:5px; background:#3a3a3a; color:#fff; padding:3px 8px; cursor:pointer; }
+  .sim button[aria-pressed="true"] { background:#ffd27a; color:#222; border-color:#ffd27a; }
+  .workspace { position:fixed; inset:38px 0 0 0; background:linear-gradient(#f5f8f6 0 58px, #e3ebe7 58px); }
+  .workspace::before { content:"GNSS Command workspace (simplified backdrop)"; position:absolute; left:16px; top:20px; color:var(--muted); font-size:12px; }
+  .backdrop { position:fixed; inset:38px 0 0 0; background:#101b2199; display:grid; place-items:center; padding:12px; }
+  dialog.v514 { position:static; display:flex; flex-direction:column; width:min(720px, calc(100vw - 24px)); max-height:min(768px, calc(100dvh - 62px));
+    margin:0; padding:0; border:1px solid var(--line); border-radius:17px; background:var(--surface); color:var(--ink); box-shadow:var(--shadow); overflow:hidden; }
+  .narrow dialog.v514 { width:390px; max-height:calc(100dvh - 62px); }
+  .head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; padding:18px 22px 0; }
+  .head h1 { margin:0; font-size:18px; font-weight:770; letter-spacing:-.2px; }
+  .head p { margin:3px 0 0; color:var(--muted); font-size:12.5px; }
+  .x { width:36px; height:36px; border:1px solid var(--line); border-radius:9px; background:var(--surface); cursor:pointer; font-size:16px; color:var(--ink); }
+  .tabs { display:flex; gap:2px; padding:12px 22px 0; border-bottom:1px solid var(--line); }
+  .tabs button { border:0; background:none; font:inherit; font-weight:600; color:var(--muted); padding:8px 12px 9px; border-bottom:2px solid transparent; cursor:pointer; }
+  .tabs button[aria-selected="true"] { color:var(--ink); border-bottom-color:var(--accent); }
+  .current { display:flex; justify-content:space-between; gap:10px; align-items:center; margin:12px 22px 0; padding:8px 12px; background:var(--soft); border-radius:10px; font-size:12.5px; }
+  .current span { color:var(--muted); }
+  .body { flex:1 1 auto; overflow:auto; padding:14px 22px 16px; }
+  .narrow .head, .narrow .tabs, .narrow .body, .narrow .foot { padding-left:16px; padding-right:16px; }
+  .narrow .current { margin-left:16px; margin-right:16px; }
+  .foot { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:12px 22px 16px; border-top:1px solid var(--line); background:var(--surface); }
+  .foot .hint { color:var(--muted); font-size:12px; }
+  .narrow .foot { flex-direction:column; align-items:stretch; }
+  .narrow .foot .btns { display:flex; flex-direction:column-reverse; gap:8px; }
+  .btns { display:flex; gap:8px; }
+  .btn { font:inherit; font-weight:600; min-height:36px; padding:7px 14px; border-radius:9px; border:1px solid var(--control-line); background:var(--surface); color:var(--ink); cursor:pointer; }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn:disabled { opacity:.45; cursor:not-allowed; }
+  .btn:focus-visible, .seg button:focus-visible, .tabs button:focus-visible, input:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  h2 { margin:0 0 8px; font-size:12.5px; font-weight:700; }
+  section + section { margin-top:16px; }
+  .row2 { display:grid; grid-template-columns:1fr 210px; gap:14px; }
+  .narrow .row2 { grid-template-columns:1fr; }
+  .seg { display:inline-flex; border:1px solid var(--control-line); border-radius:9px; overflow:hidden; }
+  .seg button { font:inherit; border:0; background:var(--surface); padding:6px 11px; cursor:pointer; color:var(--ink); }
+  .seg button + button { border-left:1px solid var(--control-line); }
+  .seg button[aria-pressed="true"] { background:var(--greenwash); color:var(--accent); font-weight:700; }
+  label.f { display:block; font-size:12px; color:var(--muted); margin-top:9px; }
+  input[type=text], input[type=number] { display:block; width:100%; margin-top:4px; font:inherit; color:var(--ink); padding:7px 9px; border:1px solid var(--control-line); border-radius:8px; background:var(--surface); }
+  .inline { display:flex; gap:8px; align-items:flex-end; }
+  .inline > * { flex:1; }
+  .result { margin-top:6px; padding:7px 9px; border:1px solid var(--line); border-radius:8px; font-size:12.5px; }
+  .result small { color:var(--muted); }
+  .preview { position:relative; height:190px; border:1px solid var(--line); border-radius:10px; overflow:hidden;
+    background: linear-gradient(135deg, #e8eee9, #dfe8e1); }
+  .preview svg { position:absolute; inset:0; width:100%; height:100%; }
+  .preview .cap { position:absolute; left:8px; bottom:6px; font-size:11px; color:var(--muted); background:#fffd; padding:1px 6px; border-radius:6px; }
+  .detail-desc { margin:6px 0 0; color:var(--muted); font-size:12px; }
+  .rows { border:1px solid var(--line); border-radius:10px; }
+  .rowi { display:grid; grid-template-columns:20px 1fr auto; gap:10px; align-items:start; padding:9px 12px; }
+  .rowi + .rowi { border-top:1px solid var(--line); }
+  .rowi b { font-weight:650; }
+  .rowi small { display:block; color:var(--muted); font-size:11.5px; margin-top:1px; }
+  .rowi .val { text-align:right; font-variant-numeric:tabular-nums; font-size:12px; color:var(--muted); white-space:nowrap; }
+  .ic { width:16px; height:16px; margin-top:1px; border-radius:50%; display:inline-block; }
+  .ic.ok { background:var(--accent); } .ic.lim { background:var(--amber); } .ic.fail { background:var(--red); }
+  .ic.wait { border:2px solid var(--control-line); } .ic.run { border:2px solid var(--accent); border-right-color:transparent; animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .facts { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin-bottom:12px; }
+  .narrow .facts { grid-template-columns:1fr 1fr; }
+  .fact { padding:9px 11px; background:var(--soft); border-radius:10px; }
+  .fact span { display:block; color:var(--muted); font-size:11.5px; }
+  .fact strong { font-size:15px; font-variant-numeric:tabular-nums; }
+  .banner { display:flex; gap:10px; align-items:flex-start; padding:10px 12px; border-radius:10px; margin-bottom:12px; font-size:12.5px; }
+  .banner.ok { background:var(--greenwash); } .banner.lim { background:var(--amberwash); color:var(--amber-text); } .banner.fail { background:var(--redwash); color:var(--red); }
+  .banner b { display:block; color:inherit; }
+  .meter { height:6px; background:var(--soft); border-radius:3px; overflow:hidden; margin-top:6px; }
+  .meter > i { display:block; height:100%; background:var(--accent); }
+  details.more { margin-top:12px; } details.more summary { cursor:pointer; color:var(--muted); font-size:12px; }
+  details.more p { color:var(--muted); font-size:12px; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<div class="sim" role="toolbar" aria-label="Simulation controls (not part of the design)">
+  <b>SIMULATION — not GNSS Command · Issue #88 proposal v1</b>
+  <span>State:</span>
+  <button data-state="area" aria-pressed="true">1 Area</button>
+  <button data-state="review">2 Review</button>
+  <button data-state="progress">3 Preparing</button>
+  <button data-state="ready">4a Ready</button>
+  <button data-state="limited">4b Ready with limitations</button>
+  <button data-state="partial">4c Partial</button>
+  <button data-state="failed">4d Failed</button>
+  <button data-state="offline">No internet</button>
+  <button data-state="storage">Low storage</button>
+  <span style="margin-left:8px">Width:</span>
+  <button data-width="wide" aria-pressed="true">720 px</button>
+  <button data-width="narrow">390 px</button>
+</div>
+<div class="workspace" aria-hidden="true"></div>
+<div class="backdrop">
+<dialog class="v514" open aria-labelledby="t">
+  <div class="head">
+    <div><h1 id="t">Maps &amp; Layers</h1><p>Prepare a map before you go. Field use needs no internet.</p></div>
+    <button class="x" aria-label="Close Maps &amp; Layers">✕</button>
+  </div>
+  <div class="tabs" role="tablist">
+    <button role="tab" aria-selected="true">Get a Map</button>
+    <button role="tab" aria-selected="false">My Maps</button>
+    <button role="tab" aria-selected="false">Import</button>
+  </div>
+  <div class="current" id="current"><div><span>In use:</span> <b id="inuse">Blank canvas</b></div><span id="inuse-meta">No saved map selected</span></div>
+
+  <div class="body" id="body">
+    <!-- 1 AREA -->
+    <div data-view="area review">
+      <div class="row2">
+        <section>
+          <h2>Area</h2>
+          <div class="seg" role="group" aria-label="Find the centre">
+            <button aria-pressed="true">Search</button><button aria-pressed="false">Coordinates</button><button aria-pressed="false">Pick on map</button>
+          </div>
+          <label class="f">Place or landmark<input type="text" value="Arinsal, Andorra" /></label>
+          <div class="result"><b>Arinsal</b> <small>· La Massana, Andorra · 42.5722, 1.4847</small></div>
+          <label class="f" for="radius">Radius</label>
+          <div class="inline">
+            <div class="seg" role="group" aria-label="Radius">
+              <button aria-pressed="false">5 km</button><button aria-pressed="false">10 km</button><button aria-pressed="true">20 km</button><button aria-pressed="false">Custom</button>
+            </div>
+          </div>
+        </section>
+        <section>
+          <h2>Preview</h2>
+          <div class="preview" aria-label="Requested area preview">
+            <svg viewBox="0 0 210 190" aria-hidden="true">
+              <path d="M0 140 L40 110 L70 125 L110 70 L140 95 L170 60 L210 85 L210 190 L0 190Z" fill="#cfdccf" />
+              <path d="M30 20 C80 60 120 40 190 120" stroke="#8fb3cf" stroke-width="2" fill="none"/>
+              <circle cx="105" cy="95" r="70" fill="#216f5614" stroke="#216f56" stroke-width="1.5" stroke-dasharray="5 4"/>
+              <circle cx="105" cy="95" r="3" fill="#216f56"/>
+            </svg>
+            <span class="cap">Requested circle · 1,257 km² · not downloaded data</span>
+          </div>
+        </section>
+      </div>
+      <section>
+        <h2>Detail</h2>
+        <div class="seg" role="group" aria-label="Detail">
+          <button aria-pressed="false">Standard</button><button aria-pressed="true">High</button>
+        </div>
+        <p class="detail-desc" id="detail-desc">Roads, trails, buildings, water and terrain, plus forest &amp; land cover and satellite imagery.</p>
+      </section>
+    </div>
+
+    <!-- 2 REVIEW (appears under Area once a centre exists) -->
+    <section data-view="review">
+      <h2>What you will get</h2>
+      <div class="rows">
+        <div class="rowi"><i class="ic ok"></i><div><b>Roads, trails, buildings &amp; water</b><small>OpenStreetMap · Andorra, Catalonia and Ariège</small></div><span class="val">Available</span></div>
+        <div class="rowi"><i class="ic ok"></i><div><b>Terrain · relief and contours</b><small>Copernicus 30 m elevation</small></div><span class="val">Available</span></div>
+        <div class="rowi"><i class="ic ok"></i><div><b>Forest &amp; land cover</b><small>ESA WorldCover 10 m · 2021</small></div><span class="val">Available</span></div>
+        <div class="rowi"><i class="ic lim"></i><div><b>Satellite imagery</b><small>Sentinel-2 10 m · best clear summer image found: 14 Aug 2025 · 0.3% cloud</small></div><span class="val">10 m detail</span></div>
+      </div>
+      <div class="facts" style="margin-top:12px">
+        <div class="fact"><span>Download, at most</span><strong>960 MB</strong></div>
+        <div class="fact"><span>Saved map size</span><strong>≈ 60 MB</strong></div>
+        <div class="fact"><span>Map space left after</span><strong>196 of 256 MB</strong></div>
+      </div>
+      <details class="more"><summary>Why so much download?</summary>
+        <p>Road data is only published by region. 912 MB of regional files are downloaded once, cropped to your circle and kept on this computer, so the next map in this region needs no road download.</p>
+      </details>
+    </section>
+
+    <!-- 3 PROGRESS -->
+    <section data-view="progress">
+      <div class="facts">
+        <div class="fact"><span>Downloaded</span><strong>418 of 960 MB</strong></div>
+        <div class="fact"><span>Elapsed</span><strong>6 min</strong></div>
+        <div class="fact"><span>Layers ready</span><strong>1 of 4</strong></div>
+      </div>
+      <div class="rows">
+        <div class="rowi"><i class="ic ok"></i><div><b>Terrain · relief and contours</b><small>Ready · checked against a second elevation source</small></div><span class="val">Done</span></div>
+        <div class="rowi"><i class="ic run"></i><div><b>Roads, trails, buildings &amp; water</b><small>Downloading Catalonia region · 371 of 912 MB</small><div class="meter"><i style="width:41%"></i></div></div><span class="val">In progress</span></div>
+        <div class="rowi"><i class="ic wait"></i><div><b>Forest &amp; land cover</b><small>Waiting</small></div><span class="val"></span></div>
+        <div class="rowi"><i class="ic wait"></i><div><b>Satellite imagery</b><small>Waiting</small></div><span class="val"></span></div>
+      </div>
+      <p class="detail-desc">You can close this window; preparation continues while Command is open. Stopping keeps every finished layer.</p>
+    </section>
+
+    <!-- 4 RESULTS -->
+    <section data-view="ready limited partial failed">
+      <div class="banner ok" data-view="ready"><i class="ic ok"></i><div><b>Map ready for offline use</b>Arinsal · 20 km · all 4 layers checked and saved.</div></div>
+      <div class="banner lim" data-view="limited"><i class="ic lim"></i><div><b>Ready, with one limitation</b>Satellite imagery has 2.8% cloud in the north-east. Everything else is complete.</div></div>
+      <div class="banner lim" data-view="partial"><i class="ic lim"></i><div><b>Partly ready</b>Satellite imagery could not be downloaded. The other layers are saved and usable now.</div></div>
+      <div class="banner fail" data-view="failed"><i class="ic fail"></i><div><b>Map not prepared</b>The road data download failed (server error 502). Nothing was saved; your existing maps are unchanged.</div></div>
+      <div class="rows">
+        <div class="rowi"><i class="ic" data-ic="roads"></i><div><b>Roads, trails, buildings &amp; water</b><small data-t="roads"></small></div><span class="val" data-v="roads"></span></div>
+        <div class="rowi"><i class="ic" data-ic="terrain"></i><div><b>Terrain · relief and contours</b><small data-t="terrain"></small></div><span class="val" data-v="terrain"></span></div>
+        <div class="rowi"><i class="ic" data-ic="cover"></i><div><b>Forest &amp; land cover</b><small data-t="cover"></small></div><span class="val" data-v="cover"></span></div>
+        <div class="rowi"><i class="ic" data-ic="sat"></i><div><b>Satellite imagery</b><small data-t="sat"></small></div><span class="val" data-v="sat"></span></div>
+      </div>
+      <details class="more"><summary>Sources, dates and checks</summary>
+        <p>OSM extracts of 24 Nov 2026 · Copernicus DEM GLO-30 · ESA WorldCover 2021 v200 · Sentinel-2 L2A 14 Aug 2025. Coverage, cloud and alignment checks are in the saved preparation report.</p>
+      </details>
+    </section>
+
+    <!-- NO INTERNET -->
+    <section data-view="offline">
+      <div class="banner lim"><i class="ic lim"></i><div><b>No internet connection</b>Getting a new map needs internet. Maps already on this computer work offline.</div></div>
+      <div class="rows">
+        <div class="rowi"><i class="ic ok"></i><div><b>Arinsal · 20 km · High</b><small>Prepared 24 Nov 2026 · 4 layers</small></div><span class="val">Saved</span></div>
+      </div>
+      <p class="detail-desc">Have a map file from another Command laptop? Use <b>Import</b>.</p>
+    </section>
+
+    <!-- LOW STORAGE -->
+    <section data-view="storage">
+      <div class="banner fail"><i class="ic fail"></i><div><b>Not enough space for this map</b>High detail needs about 60 MB of map space; 22 MB is free. Delete a map in My Maps, choose Standard detail (≈ 18 MB), or a smaller radius.</div></div>
+    </section>
+  </div>
+
+  <div class="foot">
+    <span class="hint" id="hint"></span>
+    <div class="btns" id="btns"></div>
+  </div>
+</dialog>
+</div>
+<script>
+  const S = {
+    area: { hint: "Choose an area and detail, then review.", btns: [["Review", "primary", "review"]] },
+    review: { hint: "Downloads up to 960 MB from public sources. Nothing more is downloaded without asking.", btns: [["Back", "", "area"], ["Prepare Map", "primary", "progress"]] },
+    progress: { hint: "Preparing · you can close this window", btns: [["Stop", "", "partial"]] },
+    ready: { hint: "", btns: [["Done", "", "area"], ["Use This Map", "primary", "area"]] },
+    limited: { hint: "", btns: [["Done", "", "area"], ["Use This Map", "primary", "area"]] },
+    partial: { hint: "Retry downloads only what is missing.", btns: [["Retry Missing Layer", "", "progress"], ["Use This Map", "primary", "area"]] },
+    failed: { hint: "Retry keeps nothing half-finished.", btns: [["Back", "", "review"], ["Retry", "primary", "progress"]] },
+    offline: { hint: "", btns: [["Open My Maps", "primary", "area"]] },
+    storage: { hint: "", btns: [["Back", "", "area"], ["Open My Maps", "primary", "area"]] },
+  };
+  const R = {
+    ready: { roads: ["ok", "OpenStreetMap · 24 Nov 2026 · 412 named trails", "Ready"], terrain: ["ok", "Copernicus 30 m · relief and 20 m contours", "Ready"], cover: ["ok", "ESA WorldCover 10 m · 52% tree cover", "Ready"], sat: ["ok", "Sentinel-2 · 14 Aug 2025 · 0.3% cloud · 10 m", "Ready"] },
+    limited: { roads: ["ok", "OpenStreetMap · 24 Nov 2026", "Ready"], terrain: ["ok", "Copernicus 30 m", "Ready"], cover: ["ok", "ESA WorldCover 10 m", "Ready"], sat: ["lim", "Sentinel-2 · 2 Sep 2025 · 2.8% cloud (north-east)", "Cloud"] },
+    partial: { roads: ["ok", "OpenStreetMap · 24 Nov 2026", "Ready"], terrain: ["ok", "Copernicus 30 m", "Ready"], cover: ["ok", "ESA WorldCover 10 m", "Ready"], sat: ["fail", "Download stopped · imagery server did not respond", "Missing"] },
+    failed: { roads: ["fail", "Catalonia region · server error 502 after 3 tries", "Failed"], terrain: ["wait", "Not started", ""], cover: ["wait", "Not started", ""], sat: ["wait", "Not started", ""] },
+  };
+  function show(state) {
+    for (const el of document.querySelectorAll("[data-view]")) el.hidden = !el.dataset.view.split(" ").includes(state);
+    const s = S[state];
+    document.getElementById("hint").textContent = s.hint;
+    const b = document.getElementById("btns"); b.innerHTML = "";
+    for (const [label, kind, next] of s.btns) {
+      const btn = document.createElement("button"); btn.className = "btn " + kind; btn.textContent = label;
+      if (state === "offline" && label === "Review") btn.disabled = true;
+      btn.onclick = () => show(next); b.appendChild(btn);
+    }
+    if (R[state]) for (const k of Object.keys(R[state])) {
+      const [ic, t, v] = R[state][k];
+      document.querySelector(`[data-ic="${k}"]`).className = "ic " + ic;
+      document.querySelector(`[data-t="${k}"]`).textContent = t;
+      document.querySelector(`[data-v="${k}"]`).textContent = v;
+    }
+    const used = ["ready", "limited", "partial"].includes(state);
+    document.getElementById("inuse").textContent = used ? "Arinsal · 20 km · High" : "Blank canvas";
+    document.getElementById("inuse-meta").textContent = used ? "Saved · offline" : "No saved map selected";
+    for (const x of document.querySelectorAll("[data-state]")) x.setAttribute("aria-pressed", String(x.dataset.state === state));
+    document.getElementById("body").scrollTop = state === "review" ? 9999 : 0;
+  }
+  document.querySelectorAll("[data-state]").forEach((b) => (b.onclick = () => show(b.dataset.state)));
+  document.querySelectorAll("[data-width]").forEach((b) => (b.onclick = () => {
+    document.body.classList.toggle("narrow", b.dataset.width === "narrow");
+    document.querySelectorAll("[data-width]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  }));
+  document.querySelectorAll(".seg").forEach((g) => g.addEventListener("click", (e) => {
+    if (e.target.tagName !== "BUTTON") return;
+    g.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === e.target)));
+    if (g.getAttribute("aria-label") === "Detail") document.getElementById("detail-desc").textContent = e.target.textContent === "High"
+      ? "Roads, trails, buildings, water and terrain, plus forest & land cover and satellite imagery."
+      : "Roads, trails, buildings, water and terrain. Smallest download and map size.";
+  }));
+  show("area");
+</script>
+</body>
+</html>
