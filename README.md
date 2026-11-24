@@ -7,7 +7,7 @@ fixes are credible, builds tracks and travelled distance, records operator evide
 presents a local map dashboard with recording, playback, Travel Back, SOS and phone
 controls. Field operation needs no internet, SIM, cloud service or online map.
 
-**Current release:** v1.1.0 (pre-release). See [Releases](https://github.com/suraj-singh12/gnss-android-tracking/releases)
+**Current release:** v1.1.1 (pre-release). See [Releases](https://github.com/suraj-singh12/gnss-android-tracking/releases)
 and the known limitations below.
 
 ## Components
@@ -82,7 +82,7 @@ CI ([workflow](.github/workflows/ci.yml)) runs on pushes to `main`, `dev` and
 - [Design system](docs/design-system.md), [UI acceptance](docs/ui-acceptance.md),
   [UI preservation matrix](docs/ui-preservation-matrix.md)
 - [Project handoff](docs/project-handoff.md): full state and planning context
-- [Changelog](CHANGELOG.md) and [security policy](SECURITY.md)
+- [Changelog](CHANGELOG.md), [security policy](SECURITY.md) and [third-party notices](THIRD_PARTY_NOTICES.md)
 - [Agent and contributor rules](AGENTS.md)
 
 The current interfaces follow the approved designs: Command V5.14 (mode picker, Parties,
@@ -100,7 +100,7 @@ Work is issue-first, one `devX` branch per approved issue. See [AGENTS.md](AGENT
 
 ## Known limitations
 
-v1.1.0 is a pre-release. CI verifies software behaviour on Linux and an Android emulator,
+v1.1.1 is a pre-release. CI verifies software behaviour on Linux and an Android emulator,
 but these are not yet verified:
 
 - Native macOS and Windows Command runtime, including the 20+1 phone Windows run ([#23](https://github.com/suraj-singh12/gnss-android-tracking/issues/23))
@@ -116,4 +116,9 @@ activation is unsupported.
 
 ## License
 
-Proprietary. Copyright (c) 2026 suraj-singh12. All rights reserved. See [LICENSE](LICENSE).
+Copyright (C) 2026 suraj-singh12. Licensed under the
+[GNU General Public License v3.0 only](LICENSE) (SPDX: `GPL-3.0-only`). You may use, study,
+share and modify it; distributed modified versions must also be GPL-3.0-only with source.
+Third-party components keep their own licences; see
+[third-party notices](THIRD_PARTY_NOTICES.md). Releases v1.0.0 and v1.1.0 were published
+under the earlier proprietary licence; v1.1.1 and later are GPL-3.0-only.

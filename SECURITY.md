@@ -4,8 +4,8 @@
 
 | Version | Supported |
 | --- | --- |
-| 1.0.x (pre-release) | Yes |
-| Earlier builds | No |
+| 1.1.x (pre-release) | Yes |
+| 1.0.x and earlier | No |
 
 ## Reporting a vulnerability
 
