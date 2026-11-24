@@ -11,6 +11,7 @@ All notable changes to this project are recorded here. Versions follow
   keep the licence they shipped with.
 - Added `THIRD_PARTY_NOTICES.md` listing bundled dependencies and their licences, all
   GPL-3.0-compatible.
+- README: demo video, why it matters and use cases.
 - Android `versionName` 1.1.1, `versionCode` 3. No product behaviour change.
 
 ## [1.1.0] — 2026-11-24 (pre-release)
