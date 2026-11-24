@@ -1,14 +1,53 @@
 # GNSS Android Tracking
 
-An offline-first field-tracking system. Android phones measure GNSS positions, store
-them durably and send them over a local Wi-Fi network to **GNSS Command**, a portable
-desktop application. Command receives and stores every observation, decides which
-fixes are credible, builds tracks and travelled distance, records operator evidence and
-presents a local map dashboard with recording, playback, Travel Back, SOS and phone
-controls. Field operation needs no internet, SIM, cloud service or online map.
+Offline-first team tracking for places with no internet and no cellular network.
 
-**Current release:** v1.1.0 (pre-release). `main` is prepared as v1.1.1, which is not yet released. See [Releases](https://github.com/suraj-singh12/gnss-android-tracking/releases)
-and the known limitations below.
+Android phones measure GNSS positions, store them durably and send them over a local
+Wi-Fi network to **GNSS Command**, a portable desktop application on one laptop. Command
+stores every observation before acknowledging it, decides which fixes are credible,
+builds tracks and travelled distance, raises SOS alerts and shows everything on a local
+map with saved terrain. Field operation needs no internet, SIM, cloud service or online
+map: the map and terrain for an area are downloaded once, before deployment.
+
+**Current release:** v1.1.1 (pre-release), open source under GPL-3.0-only. See
+[Releases](https://github.com/suraj-singh12/gnss-android-tracking/releases) and the
+known limitations below.
+
+## Demo
+
+[![GNSS Field Tracking demo: mountain search and rescue near Arinsal, Andorra](docs/media/demo-poster.jpg)](docs/media/demo.mp4)
+
+A simulated mountain search-and-rescue near Arinsal, Andorra (3 min; Command and phone
+side by side): offline map and terrain, phone setup, four teams on the map, a team
+leaving Wi-Fi range, an SOS from the phone acknowledged by the operator, and replay of
+the saved operation. It was recorded on Linux with an Android emulator, simulated GNSS
+and three simulated phones; it is not physical field evidence.
+
+## Why it matters
+
+Most tracking tools assume a phone signal or an internet connection. Disasters, mountains,
+forests, mines and remote sites often have neither. This project keeps a team visible
+using only the phones, one laptop and a local Wi-Fi network:
+
+- **Nothing is silently lost.** Each phone saves a fix before sending it, and a fix counts
+  as delivered only after Command has stored it and acknowledged it.
+- **Old data is never shown as live.** A team that leaves Wi-Fi range keeps its last known
+  position, clearly marked as old; gaps are never counted as distance travelled.
+- **SOS is separate from receipt.** An emergency stays open on Command until an operator
+  acknowledges it.
+- **Operations can be replayed.** Saved recordings are immutable and can be played back
+  later.
+
+## Use cases
+
+| Use | How it helps |
+| --- | --- |
+| Disaster response | Coordinate rescue teams after earthquakes, floods or storms when mobile networks are down |
+| Search and rescue | See every search team live, receive SOS with location and notice teams that lose contact |
+| Remote field operations | Track crews in forestry, mining, utilities, pipelines or border areas without coverage |
+| Scientific research | Record survey routes for geology, ecology, glaciology or archaeology and replay them later |
+| Training and debriefs | Replay exercises and real operations to review decisions and timing |
+| Events and expeditions | Follow marshals, trail runners or expedition teams across large outdoor areas |
 
 ## Components
 
@@ -100,14 +139,14 @@ Work is issue-first, one `devX` branch per approved issue. See [AGENTS.md](AGENT
 
 ## Known limitations
 
-v1.1.0 is a pre-release, and v1.1.1 will be one too. CI verifies software behaviour on Linux and an Android emulator,
+v1.1.1 is a pre-release. CI verifies software behaviour on Linux and an Android emulator,
 but these are not yet verified:
 
 - Native macOS and Windows Command runtime, including the 20+1 phone Windows run ([#23](https://github.com/suraj-singh12/gnss-android-tracking/issues/23))
 - Physical Android field acceptance: GNSS accuracy, Doze/OEM behaviour, multi-day offline
   sync, enrollment, alerts and SOS volume key ([#7](https://github.com/suraj-singh12/gnss-android-tracking/issues/7))
 - Physical SOS speaker output on the Command laptop
-- Live map-provider downloads (the `dem-provider` CI job fails on provider refusals and limits)
+- Live map-provider downloads (the `dem-provider` CI job reports provider refusals and limits as warnings)
 - Command builds are unsigned; there is no installer. Android 1.0.0 used a temporary key, so it must be
   synced and uninstalled once before installing 1.1.0; later versions update in place
 
