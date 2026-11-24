@@ -33,7 +33,7 @@ Command: validate → SQLite commit (before ACK, deduplicated) → quality polic
 
 ## Download
 
-Each release publishes assets built by CI from the same `main` commit:
+Each release publishes assets built by CI from one commit on its `release/vX.Y.Z` branch:
 
 | Asset | Platform |
 | --- | --- |
@@ -70,7 +70,7 @@ test-tools/integration/run.sh --console=plain   # real Android Room/Sender → C
 ```
 
 Browser suites (Playwright) are described in [integration tests](test-tools/integration/README.md).
-CI ([workflow](.github/workflows/issue-6-matched-assets.yml)) runs on pushes to `main`, `dev` and
+CI ([workflow](.github/workflows/ci.yml)) runs on pushes to `main`, `dev` and
 `release/**` branches and on pull requests into `dev`, and uploads the release assets above.
 
 ## Documentation
@@ -82,6 +82,7 @@ CI ([workflow](.github/workflows/issue-6-matched-assets.yml)) runs on pushes to 
 - [Design system](docs/design-system.md), [UI acceptance](docs/ui-acceptance.md),
   [UI preservation matrix](docs/ui-preservation-matrix.md)
 - [Project handoff](docs/project-handoff.md): full state and planning context
+- [Changelog](CHANGELOG.md) and [security policy](SECURITY.md)
 - [Agent and contributor rules](AGENTS.md)
 
 The current interfaces follow the approved designs: Command V5.14 (mode picker, Parties,

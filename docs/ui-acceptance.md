@@ -104,7 +104,7 @@ Design authority: `docs/design/approved/command-v5.14-interactive.html` (SHA-256
 
 Continues draft PR #65 from verified head `2a2be2efc01215e92b5570b310e1730fccbd4d55`.
 Scope approved by the operator task; everything else keeps V4.6. Before/after sheets:
-[polish-2/](evidence/issue-39/v46/polish-2/) (before = `2a2be2e` render, after = this source).
+[polish-2/](https://github.com/suraj-singh12/gnss-android-tracking/tree/v1.0.0/docs/evidence/issue-39/v46/polish-2/) (before = `2a2be2e` render, after = this source).
 
 | ID | Surface | Finding | Fix |
 |---|---|---|---|
@@ -131,7 +131,7 @@ Baselines re-recorded for P2-01…P2-12; hashes and reason in `visual-baseline/A
 Continues draft PR #65 from verified head `91ff2ceda2865f26109e6eee9f6f3e9fec2caf60`
 (base `integration/combined-upgrades` `9547985e…`). The operator's task explicitly approved
 the changes below; everything else keeps the approved V4.6 design. Before/after sheets:
-[refinement/](evidence/issue-39/v46/refinement/) (before = CI render of `91ff2ce`, after =
+[refinement/](https://github.com/suraj-singh12/gnss-android-tracking/tree/v1.0.0/docs/evidence/issue-39/v46/refinement/) (before = CI render of `91ff2ce`, after =
 this source; same deterministic fixtures).
 
 ### SOS "Wi-Fi unavailable" — root cause
@@ -218,7 +218,7 @@ their dispositions below are unchanged.
 
 Found by rendering the starting head (Robolectric native, 360×800, Day) and by the new
 audit. "Audit" marks findings the automated rules detected. Baseline evidence:
-[before/after sheets](evidence/issue-39/v46/ui-system/) (before = `5966bbd` 1× render;
+[before/after sheets](https://github.com/suraj-singh12/gnss-android-tracking/tree/v1.0.0/docs/evidence/issue-39/v46/ui-system/) (before = `5966bbd` 1× render;
 after = this work, 2× render scaled; fixture values differ).
 
 | ID | Surface | Defect | Fix |
@@ -322,7 +322,7 @@ continues on `devX/issue-39-android-settings-diagnostics`; no new issue or branc
 - [Original independent findings 01–41, verbatim](https://github.com/suraj-singh12/gnss-android-tracking/issues/39#issuecomment-6745608276)
   remain preserved in the source comment. Its recommendations are hypotheses,
   not additional approvals; the numbered dispositions below preserve every item.
-- Existing source-matched native evidence in `docs/evidence/issue-39/v46/` is
+- Existing source-matched native evidence in [`docs/evidence/issue-39/v46/`](https://github.com/suraj-singh12/gnss-android-tracking/tree/v1.0.0/docs/evidence/issue-39/v46/) is
   historical baseline evidence. New captures are actual Android native Views/Skia
   under Robolectric, **not** a browser prototype or physical-device screenshots.
 
@@ -386,10 +386,10 @@ labels/values. No synthetic physical-key observations or filler content were add
 
 Final full verification source: `8c5fb38e6fdd004ff21bc202b4b6da17f15a2f9e`.
 The final command and artifact summary are in
-[`polish-verification.json`](evidence/issue-39/v46/polish-verification.json), with
-raw [test XML](evidence/issue-39/v46/polish-test-results.zip),
-[Android log](evidence/issue-39/v46/polish-android.log.gz) and
-[lint XML](evidence/issue-39/v46/polish-lint.xml.gz).
+[`polish-verification.json`](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/polish-verification.json), with
+raw [test XML](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/polish-test-results.zip),
+[Android log](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/polish-android.log.gz) and
+[lint XML](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/polish-lint.xml.gz).
 
 Executed from `android/` at that exact commit:
 
@@ -428,7 +428,7 @@ Verification distinctions and development history:
   frames and selectable CharSequence equality). They were corrected; preliminary
   renders are not treated as final-source acceptance.
 - Full run at `0ee75ef8ba21234a50dab0a3f67c1c3e47190f4b`: **299 cases, 261 passed,
-  36 bridge skips, 2 failed** ([log](evidence/issue-39/v46/polish-0ee-failed.log.gz)).
+  36 bridge skips, 2 failed** ([log](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/polish-0ee-failed.log.gz)).
   An obsolete moon/sun-text assertion was replaced by stronger vector/action/bounds
   assertions; a visual test's fixed short settle was replaced by a bounded wait for
   the real asynchronously rendered Room alert action. No operation/assertion was
@@ -437,7 +437,7 @@ Verification distinctions and development history:
   partial captures are **not** a pass.
 - Full run at `14c4d69c82cfabe47df5258cc56d27281c759e79`: **299 cases, 263 passed,
   36 bridge skips, zero failures/errors; lint zero errors, 127 warnings; APK built**
-  ([log](evidence/issue-39/v46/polish-14c4-android.log.gz)). Final native inspection then
+  ([log](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/polish-14c4-android.log.gz)). Final native inspection then
   found a real Night selector regression: native background-tint clearing removed
   the child vector tint, exposing its black fallback stroke. The vector now declares
   its semantic resource stroke; an actual native-raster contrast test protects both
@@ -462,19 +462,19 @@ these are live test-backed native views, not production demonstrations.
 
 | Surface | Before | After |
 |---|---|---|
-| Appearance / pale Stop — Day | [native](evidence/issue-39/v46/android-day-390x842-1.0-tracking-active.png) | [native](evidence/issue-39/v46/polish-after-appearance-day.png) |
-| Appearance / pale Stop — Night | [native](evidence/issue-39/v46/android-night-390x842-1.0-tracking-active.png) | [native](evidence/issue-39/v46/polish-after-appearance-night.png) |
-| Saved data real metrics | [native](evidence/issue-39/v46/android-day-390x842-1.0-saved-data-sync.png) | [native](evidence/issue-39/v46/polish-after-saved-data-sync.png) |
-| Policy details | [native](evidence/issue-39/v46/polish-before-policy-details.png) | [native](evidence/issue-39/v46/polish-after-policy-details.png) |
-| Storage health | [native](evidence/issue-39/v46/polish-before-storage-health.png) | [native](evidence/issue-39/v46/polish-after-storage-health.png), [bottom](evidence/issue-39/v46/polish-after-storage-health-bottom.png) |
-| Identity / retained disclosure | [native](evidence/issue-39/v46/polish-before-identity-verification-details.png) | [native](evidence/issue-39/v46/polish-after-identity-verification-details.png) |
-| Selectable technical logs | [native](evidence/issue-39/v46/polish-before-advanced-logs.png) | [native](evidence/issue-39/v46/polish-after-advanced-logs.png) |
-| Filter dialog — Night, 1.5× | [native](evidence/issue-39/v46/android-night-dialog-1.5-instruction-filter.png) | [native](evidence/issue-39/v46/polish-after-filter-night-large.png), [Day](evidence/issue-39/v46/polish-after-filter-day.png) |
-| Native Night selector tint | [intermediate native](evidence/issue-39/v46/polish-before-night-policy.png) | [corrected native](evidence/issue-39/v46/polish-after-policy-night.png) |
+| Appearance / pale Stop — Day | [native](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/android-day-390x842-1.0-tracking-active.png) | [native](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/polish-after-appearance-day.png) |
+| Appearance / pale Stop — Night | [native](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/android-night-390x842-1.0-tracking-active.png) | [native](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/polish-after-appearance-night.png) |
+| Saved data real metrics | [native](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/android-day-390x842-1.0-saved-data-sync.png) | [native](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/polish-after-saved-data-sync.png) |
+| Policy details | [native](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/polish-before-policy-details.png) | [native](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/polish-after-policy-details.png) |
+| Storage health | [native](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/polish-before-storage-health.png) | [native](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/polish-after-storage-health.png), [bottom](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/polish-after-storage-health-bottom.png) |
+| Identity / retained disclosure | [native](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/polish-before-identity-verification-details.png) | [native](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/polish-after-identity-verification-details.png) |
+| Selectable technical logs | [native](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/polish-before-advanced-logs.png) | [native](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/polish-after-advanced-logs.png) |
+| Filter dialog — Night, 1.5× | [native](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/android-night-dialog-1.5-instruction-filter.png) | [native](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/polish-after-filter-night-large.png), [Day](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/polish-after-filter-day.png) |
+| Native Night selector tint | [intermediate native](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/polish-before-night-policy.png) | [corrected native](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/polish-after-policy-night.png) |
 
-Representative edge captures: [360dp / 1.5× offline](evidence/issue-39/v46/polish-after-360-large-offline.png),
-[480dp / Night / 1.5×](evidence/issue-39/v46/polish-after-480-night-large.png),
-[landscape / 1.5×](evidence/issue-39/v46/polish-after-landscape-large.png).
+Representative edge captures: [360dp / 1.5× offline](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/polish-after-360-large-offline.png),
+[480dp / Night / 1.5×](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/polish-after-480-night-large.png),
+[landscape / 1.5×](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/polish-after-landscape-large.png).
 The larger generated set stays outside Git; existing CI uploads its complete native
 capture directory as an artifact when that workflow runs.
 
@@ -503,7 +503,7 @@ ceiling; overall CI is not all green. Physical Android/TalkBack/Switch Access an
 macOS/Windows acceptance remain **NOT TESTED**. No field-stable/release claim.
 
 See the [60-group matrix](ui-preservation-matrix.md), final exact-code CI section below,
-and [source-specific CI summary](evidence/issue-39/v46/ci-df87669-summary.json).
+and [source-specific CI summary](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/ci-df87669-summary.json).
 Historical attempts and environment repairs below retain their original revisions.
 At that delivery checkpoint, subsequent edits were documentation/evidence only.
 The 9 November refinement above changes presentation and has its own exact-code evidence.
@@ -739,26 +739,26 @@ process recovery of an already sealed `unknown` result, unchanged wire revision/
 and subsequent explicit recipient ACK in 1/5/20-phone fixtures. Stop output does not
 acknowledge SOS or create recipient ACK.
 
-[Exact commands/source trees](evidence/issue-39/v46/verification.json),
-[per-class counts, lint and APK identity](evidence/issue-39/v46/summary.json),
-[bridge XML archive](evidence/issue-39/v46/bridge-test-results.zip) and
-[bridge log](evidence/issue-39/v46/bridge.log.gz) retain the final local evidence.
+[Exact commands/source trees](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/verification.json),
+[per-class counts, lint and APK identity](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/summary.json),
+[bridge XML archive](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/bridge-test-results.zip) and
+[bridge log](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/bridge.log.gz) retain the final local evidence.
 
-[Native render inventory and hashes](evidence/issue-39/v46/native-renders.json)
+[Native render inventory and hashes](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/native-renders.json)
 records the local run's 796 filenames/dimensions/hashes and which 20 images are retained.
-The [Android XML archive](evidence/issue-39/v46/android-test-results.zip),
-[Gradle log](evidence/issue-39/v46/android.log.gz) and
-[lint XML](evidence/issue-39/v46/lint-results-debug.xml.gz) retain actual outputs.
+The [Android XML archive](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/android-test-results.zip),
+[Gradle log](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/android.log.gz) and
+[lint XML](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/lint-results-debug.xml.gz) retain actual outputs.
 Native controls use test-only Room/Operational/input fixtures, not production demo
 records, physical GNSS or hardware-key evidence. Final-source Night Tracking and
 1.5× native urgent-notification renders were manually reviewed; the earlier review
 of unchanged layout covered enrollment, policy, filters, peer key-test controls and
 separate ACK/Stop actions. Geometry/contrast assertions passed in the complete suite.
-Representative images: [Tracking Day](evidence/issue-39/v46/android-day-390x842-1.0-tracking-active.png),
-[Tracking Night](evidence/issue-39/v46/android-night-390x842-1.0-tracking-active.png),
-[Diagnostics](evidence/issue-39/v46/android-day-390x842-1.0-diagnostics.png),
-[physical-test tools](evidence/issue-39/v46/android-day-390x842-1.0-diagnostic-tools.png),
-[large-text native alert](evidence/issue-39/v46/android-day-360-1.5-notification-urgent.png).
+Representative images: [Tracking Day](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/android-day-390x842-1.0-tracking-active.png),
+[Tracking Night](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/android-night-390x842-1.0-tracking-active.png),
+[Diagnostics](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/android-day-390x842-1.0-diagnostics.png),
+[physical-test tools](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/android-day-390x842-1.0-diagnostic-tools.png),
+[large-text native alert](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/android-day-360-1.5-notification-urgent.png).
 
 CI [run 41959230200](https://github.com/suraj-singh12/gnss-android-tracking/actions/runs/41959230200)
 at this exact source initially failed five API-26 framework-resolution cases:
@@ -783,9 +783,9 @@ passed SOS dashboard, UI dashboard and recording foundation, then failed
 the intentionally hidden mobile header summary. Command's existing desktop menu groups
 are exposed directly. This is a scoped test-helper defect; **Command production is
 unchanged**. Checksum verification and asset uploads were skipped after that failure.
-[Job/step states](evidence/issue-39/v46/ci-e9-jobs.json),
-[complete integrated log](evidence/issue-39/v46/ci-e9-integrated-retry.log.gz) and
-[separate provider log](evidence/issue-39/v46/ci-e9-provider.log.gz) retain that evidence.
+[Job/step states](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/ci-e9-jobs.json),
+[complete integrated log](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/ci-e9-integrated-retry.log.gz) and
+[separate provider log](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/ci-e9-provider.log.gz) retain that evidence.
 
 The helper now opens the mobile summary only when visible, then uses the existing
 visible group/control. No assertion is removed and no DOM state is simulated.
@@ -794,8 +794,8 @@ Chromium: 21 parties / 20 included, immutable map/terrain after deletion, determ
 rewind, process restart, delayed history redraw, read-only historical SOS and real
 pause overlap. This was a **pre-commit working-tree** run, explicitly labelled
 `e9b7691-plus-uncommitted-desktop-helper` in its
-[report](evidence/issue-39/v46/playback-helper-working-tree.json) and
-[log](evidence/issue-39/v46/playback-helper-working-tree.log); not an exact-new-commit
+[report](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/playback-helper-working-tree.json) and
+[log](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/playback-helper-working-tree.log); not an exact-new-commit
 CI pass. JavaScript syntax check also passed. Only this browser test helper changed;
 Android, Command and protocol source trees remain byte-for-byte at the tested e9
 revision. CI must validate the new helper commit and remaining browser/asset stages.
@@ -820,8 +820,8 @@ Android/integration results above retain their provenance; they are not relabell
 executions at df. No Android/Command/protocol source changed for the helper correction.
 
 The complete real recording-playback suite **passed at exact df87669**, exit 0:
-[report](evidence/issue-39/v46/playback-df87669.json),
-[log](evidence/issue-39/v46/playback-df87669.log). It used a clean-source Linux Command
+[report](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/playback-df87669.json),
+[log](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/playback-df87669.log). It used a clean-source Linux Command
 binary at df, system Chromium 151.0.7922.173 and official Playwright, including the
 previously failing 1440 px transition to Travel Back and all unchanged assertions.
 
@@ -844,13 +844,13 @@ Command binaries report **vcs.revision=df87669… / vcs.modified=false**. Source
 were unchanged and checkouts clean at build time. No native macOS/Windows execution
 or release signing/field stability is claimed.
 
-[Asset manifest](evidence/issue-39/v46/assets-df87669-manifest.json),
-[SHA256SUMS](evidence/issue-39/v46/assets-df87669-SHA256SUMS),
-[macOS build info](evidence/issue-39/v46/assets-df87669-GNSS-Command-macos-arm64.build-info.txt),
-[Windows build info](evidence/issue-39/v46/assets-df87669-GNSS-Command-windows-x64.exe.build-info.txt),
-[APK package](evidence/issue-39/v46/assets-df87669-android-package.txt),
-[signature evidence](evidence/issue-39/v46/assets-df87669-android-signing.txt) and
-[Android build log](evidence/issue-39/v46/assets-df87669-android-build.log.gz) retain actual outputs.
+[Asset manifest](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/assets-df87669-manifest.json),
+[SHA256SUMS](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/assets-df87669-SHA256SUMS),
+[macOS build info](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/assets-df87669-GNSS-Command-macos-arm64.build-info.txt),
+[Windows build info](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/assets-df87669-GNSS-Command-windows-x64.exe.build-info.txt),
+[APK package](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/assets-df87669-android-package.txt),
+[signature evidence](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/assets-df87669-android-signing.txt) and
+[Android build log](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/assets-df87669-android-build.log.gz) retain actual outputs.
 Binaries are in `/workspace/scratch/gnss-toolchains/assets-df87669/`; no release published.
 Standalone build-info display files trim trailing whitespace from Go stdout; build
 fields and binary checksums are unchanged. Full CI logs retain their original output.
@@ -890,10 +890,10 @@ The bridge executes the same 36 methods skipped in the ordinary run: **296 disti
 reported cases executed across the two phases**, not 332 unique passes. Lint passed;
 the separately retained local lint XML reports **128 warnings**, not zero warnings.
 
-[Exact job/step states, counts and artifact metadata](evidence/issue-39/v46/ci-df87669-summary.json),
-[full integrated log](evidence/issue-39/v46/ci-df87669-integrated.log.gz),
-[CI asset manifest](evidence/issue-39/v46/ci-df87669-manifest.json) and
-[full provider log](evidence/issue-39/v46/ci-df87669-provider.log.gz) retain the source-specific evidence.
+[Exact job/step states, counts and artifact metadata](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/ci-df87669-summary.json),
+[full integrated log](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/ci-df87669-integrated.log.gz),
+[CI asset manifest](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/ci-df87669-manifest.json) and
+[full provider log](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/v46/ci-df87669-provider.log.gz) retain the source-specific evidence.
 Local and CI builds have separate checksum manifests; no byte-identical-build claim is made.
 Use these **CI acceptance artifacts** for shared review (development builds, not a release):
 
@@ -1152,7 +1152,7 @@ if they are not already saved. Their runs, branches and binaries were not replac
 
 ## Matched builds and checksums
 
-Workflow `.github/workflows/issue-6-matched-assets.yml` runs on the dedicated branch,
+Workflow `.github/workflows/ci.yml` runs on the dedicated branch,
 checks ancestry, Android tests/lint/build, Go race/vet/protocol checks, actual cross-language
 integration and Chromium interactions, then produces three independent artifacts:
 
@@ -1634,14 +1634,14 @@ labelled last-known with age at the last update; it never implies continuing fre
 Existing acquisition, original-observation identity, Room/Sender/SOS, service lifetime,
 phone-alert and command result-custody regressions remain gates.
 
-Representative current native views: [Tracking Day](evidence/issue-39/pdf-tracking-day.png),
-[Tracking Night](evidence/issue-39/pdf-tracking-night.png),
-[Settings](evidence/issue-39/pdf-settings.png),
-[Policy](evidence/issue-39/pdf-policy.png),
-[Readiness](evidence/issue-39/pdf-readiness.png),
-[Diagnostics](evidence/issue-39/pdf-diagnostics.png),
-[Instructions](evidence/issue-39/pdf-instructions.png),
-[SOS details](evidence/issue-39/pdf-sos-details.png).
+Representative current native views: [Tracking Day](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/pdf-tracking-day.png),
+[Tracking Night](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/pdf-tracking-night.png),
+[Settings](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/pdf-settings.png),
+[Policy](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/pdf-policy.png),
+[Readiness](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/pdf-readiness.png),
+[Diagnostics](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/pdf-diagnostics.png),
+[Instructions](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/pdf-instructions.png),
+[SOS details](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-39/pdf-sos-details.png).
 The final screenshot artifact includes the full matrix, app windows, native
 notifications, PDF comparison sheets and the previously captured unchanged Command
 screens/windows, with per-image hashes and provenance.
@@ -1727,13 +1727,13 @@ issue closure, release or native field-stability claim is authorized.
 
 ### Approved reference and rendered review
 
-The exact supplied [V3 reference](evidence/issue-49/v3-reference/) is retained
+The exact supplied [V3 reference](https://github.com/suraj-singh12/gnss-android-tracking/tree/v1.0.0/docs/evidence/issue-49/v3-reference/) is retained
 verbatim. Original ZIP SHA-256:
 `49d003b6f45fd7dec75486cd83572403f4fb0e6eb921f73bc9786835c6fd5dcd`.
 The handoff's historical Figma prerequisite is superseded by the current issue and
 operator approval of this ZIP; no populated Figma artifact is claimed.
 
-The [rendered captures](evidence/issue-49/rendered/) are complete application
+The [rendered captures](https://github.com/suraj-singh12/gnss-android-tracking/tree/v1.0.0/docs/evidence/issue-49/rendered/) are complete application
 windows, separate from the design references. Six primary states have Day/Night
 captures at 1600×900, 1280×720 and 390×844. Review metadata identifies the controlled
 provider and actual persisted map state. The complete saved-map library example
@@ -1834,7 +1834,7 @@ native macOS/Windows acceptance remain separately tracked in #23/#7.
 
 ## Issue #27 Recording foundation acceptance
 
-Approved original control images are in `docs/design/issue27/` and linked from #27.
+Approved original control images are in [`docs/design/issue27/`](https://github.com/suraj-singh12/gnss-android-tracking/tree/v1.0.0/docs/design/issue27/) and linked from #27.
 `recording-foundation.cjs` uses production Command HTTP, SQLite and Chromium for
 Start, repeated Pause/Resume, active/paused subset Save, exclusive ownership,
 refresh/browser return, SIGKILL/restart, final Stop dismissal and Discard. Its
@@ -1848,10 +1848,10 @@ Long-running 20+ fleets, sustained large-Save latency and native/physical
 acceptance remain open. No automated pixel-diff baseline is introduced.
 
 Running-app review at code source `cead27f3a373c5d1135357cb7f79f67fd2845a2e`:
-[Day recording](evidence/issue27/rendered/issue27-day-recording.png),
-[Night paused](evidence/issue27/rendered/issue27-night-paused.png),
-[Day Save](evidence/issue27/rendered/issue27-day-save.png) and
-[Night Save](evidence/issue27/rendered/issue27-night-save.png) were inspected against
+[Day recording](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue27/rendered/issue27-day-recording.png),
+[Night paused](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue27/rendered/issue27-night-paused.png),
+[Day Save](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue27/rendered/issue27-day-save.png) and
+[Night Save](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue27/rendered/issue27-night-save.png) were inspected against
 the approved originals. The rail occupies 44 px; party cards in Save use inline
 checkboxes and compact names, with Cancel/Save separated. These are synthetic
 five-phone runtime fixtures, not physical GNSS or native OS acceptance. The linked
@@ -1914,7 +1914,7 @@ Original remain distinct from capture-time reconstruction. SOS uses retained
 capture-quality originals and never promotes a rejected latest report or
 acknowledges an emergency during Locate/Go Back.
 
-[Review screenshots and measured browser evidence](design/issue34/final-review/README.md)
+[Review screenshots and measured browser evidence](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/design/issue34/final-review/README.md)
 cover Day/Night at mobile, tablet and desktop widths. These are genuine application
 renderings driven by deterministic protocol fixtures, not native/field GNSS
 acceptance. Manual screenshot review checked the approved compact hierarchy,

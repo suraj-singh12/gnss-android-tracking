@@ -36,8 +36,8 @@ This is an **offline-first field-tracking system** for teams in the field ("part
 | `command/` | Go 1.24.7 module; `cmd/party-tracker/main.go`; all logic in `internal/core/` (~24.6k lines incl. tests); browser UI in `web/` (vanilla JS/CSS/HTML, embedded via `assets.go`, no build step) |
 | `protocol/` | `protocol-v1.md` (normative wire contract) + `fixtures/` |
 | `test-tools/` | Go contract tests, `phone-simulator`, `mock-receiver`, and `integration/` (real Android Room/Sender ↔ Command bridge `run.sh` + ~27 Node/Playwright browser suites `*.cjs`) |
-| `docs/` | `architecture.md`, `design-system.md`, `ui-acceptance.md`, `ui-preservation-matrix.md`, `design/approved/*` (approved prototypes), `evidence/` |
-| `.github/workflows/issue-6-matched-assets.yml` | The single CI workflow (see §9) |
+| `docs/` | `architecture.md`, `design-system.md`, `ui-acceptance.md`, `ui-preservation-matrix.md`, `design/approved/*` (approved Android v3 and Command V5.14 prototypes); historical design/evidence files are kept at the `v1.0.0` tag |
+| `.github/workflows/ci.yml` | The single CI workflow (see §9) |
 | `AGENTS.md` | Repository working rules for any agent (see §11) |
 
 Key canonical docs, in their `AGENTS.md` reading order: `AGENTS.md` → the current issue/PR → `README.md` → `docs/architecture.md` → `protocol/protocol-v1.md` → component READMEs (`android/README.md`, `command/README.md`, `test-tools/integration/README.md`, `android/DEVICE-ACCEPTANCE.md`, `android/UI-DEVELOPMENT.md`). UI work also needs `docs/design-system.md`, `docs/ui-acceptance.md` and `docs/ui-preservation-matrix.md`.
@@ -224,7 +224,7 @@ test-tools/integration/run.sh --console=plain       # real Android Room/Sender �
 node test-tools/integration/<suite>.cjs             # Playwright; env GNSS_COMMAND_BINARY, GNSS_PLAYWRIGHT_MODULE, GNSS_AXE_MODULE, GNSS_CHROMIUM, GNSS_SCREENSHOT_DIR
 ```
 
-**CI** (`issue-6-matched-assets.yml`, on pushes to `main`, `dev` and `release/**`, and on PRs into `dev`):
+**CI** (`ci.yml`, on pushes to `main`, `dev` and `release/**`, and on PRs into `dev`):
 
 | Job | What it proves |
 |---|---|

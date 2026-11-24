@@ -158,7 +158,7 @@ tour also opens the reporting-interval selector and Manage access & trust.
 
 ### CI emulator capture
 
-The `android-emulator-ui` job in `.github/workflows/issue-6-matched-assets.yml` boots an
+The `android-emulator-ui` job in `.github/workflows/ci.yml` boots an
 API 34 x86_64 emulator, installs the exact-SHA debug APK and runs
 `tools/ci-emulator-tour.sh` (Day/Night × font 1.0/1.5). The artifact
 `Android-emulator-ui-<sha>` contains the PNG/XML captures, `device.txt` and logcat.

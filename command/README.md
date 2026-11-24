@@ -5,7 +5,9 @@ local SQLite, deterministic recording/track engine, and embedded offline dashboa
 Field operators need only the executable and a browser already on their laptop.
 No Node, Python, Docker, external WebAssembly runtime or database service is needed.
 
-## Custom-radius maps (Issue #28)
+## Custom-radius maps
+
+Tracked in [#28](https://github.com/suraj-singh12/gnss-android-tracking/issues/28).
 
 In **Maps & Layers → Get a Map**, choose a centre by exact WGS84 coordinates,
 existing place search, or **Pick centre on current map**. Enter any finite positive
@@ -551,11 +553,14 @@ Cross-build success does not prove physical execution on macOS/Windows. The
 [automated Android integration](../test-tools/integration/README.md) proves
 application boundaries; [physical LAN acceptance](../android/DEVICE-ACCEPTANCE.md)
 remains required. Issue #6 supplies the workspace and offline GeoJSON maps.
-Installers/production signing and release workflows remain separate. Issue #5 SOS behavior is documented below.
+CI publishes unsigned Command binaries with each release; installers and production
+signing remain separate. Issue #5 SOS behavior is documented below.
 The Issue #4 Protocol v1 amendment permits reporting intervals of 5–86400 s in
 5-second steps (default 10 s); Android/Command responsibilities are unchanged.
 
-## Issue #4 field evidence
+## Field evidence
+
+Tracked in [#4](https://github.com/suraj-singh12/gnss-android-tracking/issues/4).
 
 Use **Export diagnostics** on the local dashboard after testing (also
 `GET /local/field-report`). It downloads one `gnss-field-report-<UTC>.zip` with
@@ -843,11 +848,15 @@ nor the Issue #7 high-volume/endurance capacity. Run
 on the intended laptop. Native one-second retention increases phone storage/IO
 relative to interval-only snapshots; no automatic raw-data deletion is enabled.
 
-## Issue #6 operational interface
+## Operational interface
+
+Tracked in [#6](https://github.com/suraj-singh12/gnss-android-tracking/issues/6).
 
 See [UI setup and acceptance](../docs/ui-acceptance.md) and [shared design system](../docs/design-system.md) for the three-destination Android interface, Command workspace, recording/quality controls, protected SOS and exactly two offline canvas/map modes. The existing tracking and SOS engines remain authoritative.
 
-## Issue #22 bounded history receipt and presentation
+## Bounded history receipt and presentation
+
+Tracked in [#22](https://github.com/suraj-singh12/gnss-android-tracking/issues/22).
 
 The default capability remains 65536 bytes/128 historical records. The bounded
 `-history-batch-bytes` option permits the measured candidates 65536, 131072, 262144,
@@ -933,7 +942,9 @@ timeout cannot invent pending history. Startup detects older pending-without-wor
 state and enqueues the existing reconstruction worker; it does not claim completion
 from an ACK or structurally valid cache alone. Original raw envelopes stay unchanged.
 
-## Issue #23 responsiveness and Windows acceptance
+## Responsiveness and Windows acceptance
+
+Tracked in [#23](https://github.com/suraj-singh12/gnss-android-tracking/issues/23).
 
 Browser health is separate from phone contact. Successful `/local/live` polling
 shows **Command Connected**; a failed LIVE request shows **Command LIVE/SOS
@@ -1014,7 +1025,9 @@ laptop, use the exact PR-head workflow executable and checksum manifest:
    evidence; no such cause was established by the Linux tests. Repeat native
    launch/restart, offline maps, LIVE/SOS and controls on macOS ARM64 separately.
 
-## Authenticated phone controls (Issue #25)
+## Authenticated phone controls
+
+Tracked in [#25](https://github.com/suraj-singh12/gnss-android-tracking/issues/25).
 
 Use **Phone controls** in the toolbar or selected party detail. **This Command** displays
 its persistent public authority UUID as **Command ID**; **Copy Command ID** copies only
@@ -1108,7 +1121,9 @@ ceiling blocks acquisition. Their reports preserve actual provider attempts,
 HTTP/timeout errors, transfer accounting, completed/missing chunks and restart
 results. Fixture success never turns a failed public acquisition into PASS.
 
-### Maps & Layers V3 (Issue #49)
+### Maps & Layers V3
+
+Tracked in [#49](https://github.com/suraj-singh12/gnss-android-tracking/issues/49).
 
 The existing 720 px dialog retains the Command dashboard/backdrop, close behavior
 and Day/Night tokens. Get a Map, Import and My Maps have keyboard-operated tabs,

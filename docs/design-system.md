@@ -141,7 +141,7 @@ pill and fact grammar, with colour used only for operational meaning.
 
 ## Current Command V5.14 contract — Issue #66
 
-Command follows the [approved V5.14 interactive reference](https://github.com/suraj-singh12/gnss-android-tracking/blob/docs/approved-command-v5-14-issue-34/docs/design/approved/command-v5.14-interactive.html)
+Command follows the [approved V5.14 interactive reference](design/approved/command-v5.14-interactive.html)
 (SHA-256 `5594847d65a10dabd066941930fae5fbe01aa007a71407b0f1d2127298faec81`), which was approved in #34.
 The production implementation lives in `command/web`: `index.html`, the V5.14 layer at the end of `style.css`, and `workspace.js`.
 
@@ -347,7 +347,7 @@ live, historical, provisional and diagnostic raw layers. Right: selected party's
 coordinates, original observation time, accuracy, last contact, battery, queue state,
 qualified distance and reporting override. Technical evidence is in a disclosure.
 
-Persistent compact recording rail has Start, Pause/Resume, separate Save and final Stop, with both start modes. Stop retains a durable Save/Discard choice. Save requires a name and at least one party; excluded identities remain participation metadata. Day/Night references are preserved in `docs/design/issue27/`.
+Persistent compact recording rail has Start, Pause/Resume, separate Save and final Stop, with both start modes. Stop retains a durable Save/Discard choice. Save requires a name and at least one party; excluded identities remain participation metadata. Day/Night references are preserved in [`docs/design/issue27/`](https://github.com/suraj-singh12/gnss-android-tracking/tree/v1.0.0/docs/design/issue27/).
 Duration is supplied by Command's backend recording windows. Quality dialog exposes
 all eight enabled/value/unit controls and short descriptions; applying invokes the
 existing full reprojection. Raw mode is clearly diagnostic and never changes qualified
@@ -536,7 +536,7 @@ Playback uncertainty appears as informational text immediately beneath the froze
 view status, with reasons and intervals in its disclosure. Narrow right panels
 share a compact width and are bounded between the map controls/context and dock,
 with internal scrolling. Superseded screenshot provenance is in
-`docs/design/issue59/README.md`.
+[`docs/design/issue59/README.md`](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/design/issue59/README.md).
 
 Final #59 density correction: at narrow widths (up to 1100 px), only Parties and
 Selected Party Details use reduced padding, card gaps and restrained 12–15 px

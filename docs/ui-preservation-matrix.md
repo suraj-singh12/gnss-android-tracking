@@ -26,7 +26,7 @@ remain valid and open the v3 owner.
 
 # Issue #66 — Command V5.14 production workspace preservation matrix
 
-Visual authority: the approved [Command V5.14 interactive design](https://github.com/suraj-singh12/gnss-android-tracking/blob/docs/approved-command-v5-14-issue-34/docs/design/approved/command-v5.14-interactive.html)
+Visual authority: the approved [Command V5.14 interactive design](design/approved/command-v5.14-interactive.html)
 (SHA-256 `5594847d65a10dabd066941930fae5fbe01aa007a71407b0f1d2127298faec81`). This is approved in #34 and implemented in #66.
 The prototype's simulated data is not used. Every control below keeps the existing production owner and element ID.
 Controls only moved; no operational authority changed.
@@ -399,7 +399,7 @@ adaptations. Command web and the wire contract remain unchanged.
 The existing controls are moved in place, retaining their original IDs and backend
 handlers; task tabs wrap the same native dialog. The table records implemented
 locations. Existing functional/accessibility checks retain their assertions, with
-navigation updated to the task tabs. The exact supplied [V3 reference](evidence/issue-49/v3-reference/IMPLEMENTATION-HANDOFF.md)
+navigation updated to the task tabs. The exact supplied [V3 reference](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/evidence/issue-49/v3-reference/IMPLEMENTATION-HANDOFF.md)
 is preserved verbatim. Current issue/operator instructions supersede the handoff's
 historical Figma prerequisite; no populated Figma artifact is claimed.
 
@@ -423,7 +423,7 @@ historical Figma prerequisite; no populated Figma artifact is claimed.
 
 ## Issue #48 · Command identity and guided authorization
 
-Approved source: operator-approved [issue48-final-design-review.zip](design/issue48-final-design-review.zip) (guided-enrollment.svg,
+Approved source: operator-approved [issue48-final-design-review.zip](https://github.com/suraj-singh12/gnss-android-tracking/blob/v1.0.0/docs/design/issue48-final-design-review.zip) (guided-enrollment.svg,
 day-night-states.svg, command-phone-controls.svg, proposal.md); final approval given in the
 implementation request. Parent `5f33368344cfb1e69cf55a6a051d0a09f333cf64` includes #47.
 Canonical guidance `3b60b6d6228ca208df75765e2008c9b9abba8a69` matches this branch.
@@ -446,7 +446,7 @@ Android or native macOS/Windows acceptance. No pixel-diff baseline is introduced
 
 ## Issue #27 recording foundation
 
-Approved images: `docs/design/issue27/` (original bytes; mockups, not runtime proof).
+Approved images: [`docs/design/issue27/`](https://github.com/suraj-singh12/gnss-android-tracking/tree/v1.0.0/docs/design/issue27/) (original bytes; mockups, not runtime proof).
 The rail preserves dashboard/navigation/SOS/map/party panels and Day/Night tokens;
 Pause/Resume is primary, Save separate and Stop final. No floating dock is introduced.
 `recording-foundation.cjs` covers actual server/SQLite/Chromium flows and captures
@@ -468,7 +468,7 @@ acceptance remain unverified; see architecture.
 | Live SOS / receipt / synchronization | Existing live header and notifications continue; historical chips have no actions | Existing operational transport/SOS owners |
 
 Approved Day/Night images supplied with #37 are the visual contract. Runtime screenshots
-in `docs/design/issue37/` and the integrated workflow demonstrate actual Command/SQLite
+in [`docs/design/issue37/`](https://github.com/suraj-singh12/gnss-android-tracking/tree/v1.0.0/docs/design/issue37/) and the integrated workflow demonstrate actual Command/SQLite
 fixtures, including populated library, 21-party/20-subset playback, hidden restriction,
 interruption and responsive panel states. They are not pixel-diff baselines or physical
 field acceptance. #34 navigation/Travel Back and #38 packaging remain out of scope.
@@ -482,4 +482,4 @@ field acceptance. #34 navigation/Travel Back and #38 packaging remain out of sco
 | Travel Back | Retained original capture time; existing `Derive` quality/segments/distance | `travel_test.go`, `travel-back.cjs` |
 | Later stored history | Immutable response until manual Refresh View; no Android sync | Frozen-map browser comparison and late-arrival Go test |
 | SOS Locate/Return | Independent LIVE alarm/ACK; suspend/restore paused historical context | Actual receiver SOS in `travel-back.cjs` |
-| Map/panels/themes | Existing renderer, panel sizes and Day/Night tokens; shared transport | Actual application captures in `docs/design/issue34/final-review` |
+| Map/panels/themes | Existing renderer, panel sizes and Day/Night tokens; shared transport | Actual application captures in [`docs/design/issue34/final-review`](https://github.com/suraj-singh12/gnss-android-tracking/tree/v1.0.0/docs/design/issue34/final-review/) |
