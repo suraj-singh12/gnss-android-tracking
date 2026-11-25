@@ -1,0 +1,18 @@
+{
+ "tiles": 79,
+ "z14_layer_feature_counts": {
+  "aerialway": 8,
+  "building": 4789,
+  "cliff": 38,
+  "landcover": 1671,
+  "landuse": 954,
+  "peak": 18,
+  "place": 47,
+  "poi": 50,
+  "transportation": 4775,
+  "water": 63,
+  "water_name": 3,
+  "waterway": 312
+ },
+ "z14_total": 12728
+}

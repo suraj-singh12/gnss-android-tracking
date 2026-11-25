@@ -1,0 +1,112 @@
+name: gdal-windows-smoke
+# Temporary isolated qualification workflow for Issue #93 (native Windows GDAL smoke test).
+# Runs only on the isolated branch devX/issue-93-gdal-windows-smoke. Not part of CI.
+on:
+  push:
+    branches: ['devX/issue-93-gdal-windows-smoke']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage candidate (build-time staging only)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Invoke-WebRequest https://github.com/mamba-org/micromamba-releases/releases/download/2.10.0-0/micromamba-win-64 -OutFile mm.exe
+          $h = (Get-FileHash mm.exe -Algorithm SHA256).Hash.ToLower()
+          if ($h -ne 'f8b4284bd4eb1134122eaf93b3ea6c7be567e596de5829e1a6f478e34e41974a') { throw "micromamba hash mismatch: $h" }
+          ./mm.exe create -y -q -r "$env:RUNNER_TEMP\mamba" -p "$env:RUNNER_TEMP\stage" -c conda-forge --override-channels libgdal-core=3.13.3
+          if ($LASTEXITCODE) { throw 'micromamba create failed' }
+          ./mm.exe list -p "$env:RUNNER_TEMP\stage" --json | Set-Content inventory-packages.json
+
+      - name: Relocate to a spaced path and drop staging
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $src = "$env:RUNNER_TEMP\stage\Library"; $dst = "$env:RUNNER_TEMP\GDAL Qualification\Native GDAL"
+          New-Item -ItemType Directory -Force "$dst\bin","$dst\share" | Out-Null
+          Copy-Item "$src\bin\*.dll","$src\bin\ogr2ogr.exe","$src\bin\ogrinfo.exe" "$dst\bin"
+          Copy-Item -Recurse "$src\share\proj","$src\share\gdal" "$dst\share"
+          Remove-Item -Recurse -Force "$env:RUNNER_TEMP\stage","$env:RUNNER_TEMP\mamba"
+          $files = Get-ChildItem -Recurse $dst
+          $sum = ($files | Measure-Object Length -Sum).Sum
+          "relocated files: $($files.Count), unpacked bytes: $sum ({0:N1} MB)" -f ($sum/1MB)
+          $files | ForEach-Object FullName | Set-Content "$env:RUNNER_TEMP\GDAL Qualification\inventory-files.txt"
+
+      - name: Minimal-environment MVT/MBTiles smoke test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = "$env:RUNNER_TEMP\GDAL Qualification"; $bin = "$root\Native GDAL\bin"
+          $env:PATH = "$bin;$env:SystemRoot\System32;$env:SystemRoot"
+          $env:GDAL_DATA = "$root\Native GDAL\share\gdal"; $env:PROJ_DATA = "$root\Native GDAL\share\proj"; $env:PROJ_NETWORK = 'OFF'
+          Set-Location -LiteralPath $root
+          & "$bin\ogr2ogr.exe" --version; if ($LASTEXITCODE) { throw 'startup failed' }
+          $formats = & "$bin\ogrinfo.exe" --formats | Out-String
+          if ($formats -notmatch 'MVT') { throw 'MVT driver missing' }
+          if ($formats -notmatch 'MBTiles') { throw 'MBTiles driver missing' }
+          '{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"class":"primary","name":"GDAL smoke test","ref":"T1"},"geometry":{"type":"LineString","coordinates":[[1.475,42.568],[1.4847,42.5722],[1.496,42.576]]}},{"type":"Feature","properties":{"class":"wood"},"geometry":{"type":"Polygon","coordinates":[[[1.47,42.56],[1.49,42.56],[1.49,42.58],[1.47,42.58],[1.47,42.56]],[[1.475,42.565],[1.48,42.565],[1.48,42.57],[1.475,42.565]]]}}]}' | Set-Content -Encoding ascii fixture.geojson
+          & "$bin\ogr2ogr.exe" -f MBTiles smoke.mbtiles fixture.geojson -dsco MINZOOM=6 -dsco MAXZOOM=14 -lco NAME=transportation
+          if ($LASTEXITCODE -or -not (Test-Path smoke.mbtiles) -or (Get-Item smoke.mbtiles).Length -eq 0) { throw 'MBTiles write failed' }
+          & "$bin\ogr2ogr.exe" -f MVT smoke-xyz fixture.geojson -dsco FORMAT=DIRECTORY -dsco MINZOOM=6 -dsco MAXZOOM=14 -dsco COMPRESS=YES -lco NAME=transportation
+          if ($LASTEXITCODE) { throw 'MVT write failed' }
+          $r = & "$bin\ogrinfo.exe" -ro -q -oo ZOOM_LEVEL=14 -al smoke.mbtiles | Out-String
+          if ($r -notmatch 'name \(String\) = GDAL smoke test') { throw "name readback failed`n$r" }
+          if ($r -notmatch 'ref \(String\) = T1') { throw "ref readback failed`n$r" }
+          if ($r -notmatch 'POLYGON') { throw "polygon readback failed`n$r" }
+          $n = (Get-ChildItem -Recurse smoke-xyz -Filter *.pbf).Count; "xyz tiles: $n"
+          if ($n -ne 16) { throw "unexpected tile count $n (Linux reference: 16)" }
+          Get-FileHash smoke.mbtiles
+          'SMOKE-CORE: PASS'
+
+      - name: Real-data tiling parity test (Andorra fixture, SIMPLIFICATION=4)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = "$env:RUNNER_TEMP\GDAL Qualification"; $bin = "$root\Native GDAL\bin"
+          $env:PATH = "$bin;$env:SystemRoot\System32;$env:SystemRoot"
+          $env:GDAL_DATA = "$root\Native GDAL\share\gdal"; $env:PROJ_DATA = "$root\Native GDAL\share\proj"; $env:PROJ_NETWORK = 'OFF'
+          Set-Location -LiteralPath $root
+          $fix = "$env:GITHUB_WORKSPACE\.github\qualification-fixtures\issue-93"
+          $fs = [System.IO.File]::OpenRead("$fix\fixture-andorra.gpkg.gz")
+          $gz = New-Object System.IO.Compression.GzipStream($fs, [System.IO.Compression.CompressionMode]::Decompress)
+          $outf = [System.IO.File]::Create("$root\fixture-andorra.gpkg")
+          $gz.CopyTo($outf); $gz.Dispose(); $fs.Dispose(); $outf.Dispose()
+          $conf = Get-Content -Raw "$fix\gdal-conf.json"
+          $layers = Get-Content -Raw "$fix\gdal-layers.json" | ConvertFrom-Json
+          $ref = Get-Content -Raw "$fix\fixture-ref.json" | ConvertFrom-Json
+          $argv = @('-f','MVT',"$root\fixture-xyz","$root\fixture-andorra.gpkg",'-dsco','FORMAT=DIRECTORY','-dsco','MINZOOM=6','-dsco','MAXZOOM=14','-dsco','COMPRESS=YES','-dsco','SIMPLIFICATION=4','-dsco',"CONF=$conf") + $layers
+          & "$bin\ogr2ogr.exe" @argv
+          if ($LASTEXITCODE) { throw 'fixture tiling failed' }
+          $n = (Get-ChildItem -Recurse fixture-xyz -Filter *.pbf).Count; "fixture tiles: $n (Linux reference: $($ref.tiles))"
+          if ($n -ne $ref.tiles) { throw "tile count mismatch: $n vs $($ref.tiles)" }
+          $bad = 0
+          foreach ($prop in $ref.z14_layer_feature_counts.PSObject.Properties) {
+            $o = & "$bin\ogrinfo.exe" -ro -so "$root\fixture-xyz\14" $prop.Name | Out-String
+            if ($o -match 'Feature Count: (\d+)') {
+              $got = [int]$Matches[1]
+              "  $($prop.Name): $got (reference $($prop.Value))"
+              if ($got -ne [int]$prop.Value) { $bad++ }
+            } else { "  $($prop.Name): readback failed"; $bad++ }
+          }
+          if ($bad) { throw "z14 feature-count mismatches: $bad" }
+          'PARITY-ANDORRA: PASS'
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gdal-windows-smoke
+          path: |
+            inventory-packages.json
+            ${{ runner.temp }}/GDAL Qualification/smoke.mbtiles
+            ${{ runner.temp }}/GDAL Qualification/smoke-xyz
+            ${{ runner.temp }}/GDAL Qualification/inventory-files.txt
+          retention-days: 7
