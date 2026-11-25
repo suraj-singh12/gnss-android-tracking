@@ -884,3 +884,20 @@ func TestV2RejectsUndecodableTiles(t *testing.T) {
 		t.Fatal("corrupt PNG tile accepted")
 	}
 }
+
+func TestV2EmptyLayerTilesAccepted(t *testing.T) {
+	// Boundary tiles with zero layers are well-formed: gzip of an empty or
+	// layerless body must not block an otherwise valid package.
+	if e := validateVectorTile(gzipBytes([]byte{})); e != nil {
+		t.Fatal("empty gzip tile rejected", e)
+	}
+	// truncated/corrupt gzip still rejected
+	bad := gzipBytes([]byte{})
+	if e := validateVectorTile(bad[:len(bad)-4]); e == nil {
+		t.Fatal("truncated gzip accepted")
+	}
+	// garbage protobuf still rejected
+	if e := validateVectorTile(gzipBytes([]byte{0xff, 0xff, 0xff, 0x0a})); e == nil {
+		t.Fatal("garbage protobuf accepted")
+	}
+}

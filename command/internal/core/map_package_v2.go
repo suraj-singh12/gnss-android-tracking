@@ -148,7 +148,6 @@ func validateVectorTile(data []byte) error {
 	}
 	// Top level: MVT tiles carry only repeated field 3 (layers).
 	pos := 0
-	layers := 0
 	for pos < len(raw) {
 		key, n := binary.Uvarint(raw[pos:])
 		if n <= 0 {
@@ -167,11 +166,10 @@ func validateVectorTile(data []byte) error {
 			return e
 		}
 		pos += int(ln)
-		layers++
 	}
-	if layers == 0 {
-		return errors.New("vector tile declares no layers")
-	}
+	// Zero-layer tiles are well-formed (empty gzip bodies occur at content
+	// boundaries); emptiness is a preparation-time content property, not a
+	// structural defect.
 	return nil
 }
 
