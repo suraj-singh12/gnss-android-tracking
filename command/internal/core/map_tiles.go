@@ -33,26 +33,26 @@ var tileProducts = map[string]bool{productVector: true, productDEM: true, produc
 // enhancedMapDoc is the immutable descriptor stored in offline_maps.data for a
 // Format 2 map. It is not GeoJSON and never enters the legacy renderer.
 type enhancedMapDoc struct {
-	Type        string                            `json:"type"` // always "GNSS-enhanced-map"
-	Version     int                               `json:"version"`
-	Revision    string                            `json:"revision"`
-	Style       string                            `json:"style"`
-	Requested   json.RawMessage                   `json:"requested,omitempty"`
-	Products    map[string]enhancedProduct        `json:"products"`
-	Missing     []string                          `json:"missing,omitempty"`
-	Provenance  map[string]string                 `json:"provenance,omitempty"`
-	Attribution string                            `json:"attribution"`
+	Type        string                     `json:"type"` // always "GNSS-enhanced-map"
+	Version     int                        `json:"version"`
+	Revision    string                     `json:"revision"`
+	Style       string                     `json:"style"`
+	Requested   json.RawMessage            `json:"requested,omitempty"`
+	Products    map[string]enhancedProduct `json:"products"`
+	Missing     []string                   `json:"missing,omitempty"`
+	Provenance  map[string]string          `json:"provenance,omitempty"`
+	Attribution string                     `json:"attribution"`
 }
 
 type enhancedProduct struct {
-	Encoding string    `json:"encoding"` // mvt-gzip | png
-	CRS      string    `json:"crs"`      // EPSG:3857 tile matrix
-	Minzoom  int       `json:"minzoom"`
-	Maxzoom  int       `json:"maxzoom"`
+	Encoding string     `json:"encoding"` // mvt-gzip | png
+	CRS      string     `json:"crs"`      // EPSG:3857 tile matrix
+	Minzoom  int        `json:"minzoom"`
+	Maxzoom  int        `json:"maxzoom"`
 	Bounds   [4]float64 `json:"bounds"` // actual coverage w,s,e,n
-	Tiles    int       `json:"tiles"`
-	Bytes    int       `json:"bytes"`
-	SHA      string    `json:"sha256"` // canonical tile-set hash
+	Tiles    int        `json:"tiles"`
+	Bytes    int        `json:"bytes"`
+	SHA      string     `json:"sha256"` // canonical tile-set hash
 }
 
 func enhancedDoc(b []byte) (*enhancedMapDoc, error) {
