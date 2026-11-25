@@ -162,17 +162,32 @@ func (s *Store) pinMapRevision(ctx context.Context, id, kind string) (string, er
 	if len(kind) == 0 || len(kind) > 64 {
 		return "", errors.New("invalid pin kind")
 	}
-	d, e := s.readEnhanced(ctx, id)
+	// Existence verification and pin insertion must be atomic with respect to
+	// deletion: both run inside one transaction under the store mutex, which the
+	// delete path also holds for its check-and-delete transaction.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
 		return "", e
 	}
-	if d == nil {
+	defer tx.Rollback()
+	var raw []byte
+	e = tx.QueryRowContext(ctx, `SELECT data FROM offline_maps WHERE id=?`, id).Scan(&raw)
+	if e != nil {
 		return "", errors.New("not an enhanced map revision")
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, e = s.db.ExecContext(ctx, `INSERT OR IGNORE INTO offline_map_pins(map_id,revision,kind,created) VALUES(?,?,?,?)`, id, d.Revision, kind, s.Now().UTC().Format(wireTime))
-	return d.Revision, e
+	d, e := enhancedDoc(raw)
+	if e != nil || d == nil {
+		return "", errors.New("not an enhanced map revision")
+	}
+	if _, e = tx.ExecContext(ctx, `INSERT OR IGNORE INTO offline_map_pins(map_id,revision,kind,created) VALUES(?,?,?,?)`, id, d.Revision, kind, s.Now().UTC().Format(wireTime)); e != nil {
+		return "", e
+	}
+	if e = tx.Commit(); e != nil {
+		return "", e
+	}
+	return d.Revision, nil
 }
 
 func (s *Store) releaseMapRevision(ctx context.Context, id, revision, kind string) error {

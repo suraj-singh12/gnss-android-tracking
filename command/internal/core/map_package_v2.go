@@ -6,10 +6,15 @@ package core
 // (offline_map_tiles). Format 1 behavior is untouched.
 import (
 	"archive/zip"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"database/sql"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"image/png"
+	"io"
 	"math"
 	"net/url"
 	"os"
@@ -83,6 +88,166 @@ func unionBounds(a, b [4]float64) [4]float64 {
 	return [4]float64{math.Min(a[0], b[0]), math.Min(a[1], b[1]), math.Max(a[2], b[2]), math.Max(a[3], b[3])}
 }
 
+// validateMBTilesSchema structurally inspects one table of an untrusted
+// container. Required plain columns must exist; generated, hidden or defaulted
+// columns are rejected.
+func validateMBTilesSchema(db *sql.DB, table string) error {
+	rows, e := db.Query(`SELECT name, type, hidden, dflt_value IS NOT NULL FROM pragma_table_xinfo(?)`, table)
+	if e != nil {
+		return fmt.Errorf("schema inspection failed: %w", e)
+	}
+	defer rows.Close()
+	cols := map[string]string{}
+	for rows.Next() {
+		var name, typ string
+		var hidden int
+		var hasDefault bool
+		if e = rows.Scan(&name, &typ, &hidden, &hasDefault); e != nil {
+			return e
+		}
+		if hidden != 0 || hasDefault {
+			return errors.New(table + ": expression-bearing or hidden column " + name)
+		}
+		cols[strings.ToLower(name)] = strings.ToLower(typ)
+	}
+	if e = rows.Err(); e != nil {
+		return e
+	}
+	if table == "tiles" {
+		for col, affinity := range map[string]string{"zoom_level": "int", "tile_column": "int", "tile_row": "int", "tile_data": ""} {
+			typ, present := cols[col]
+			if !present {
+				return errors.New("tiles table missing required column " + col)
+			}
+			if affinity == "int" && !strings.Contains(typ, "int") {
+				return errors.New("tiles table column " + col + " lacks integer affinity")
+			}
+		}
+	}
+	return nil
+}
+
+const maxInflatedTileBytes = 16 * 1024 * 1024
+
+// validateVectorTile bounded-decodes one gzip MVT tile: inflate with an output
+// cap, then validate protobuf wire structure to MVT layer depth. Magic-byte
+// checks alone admit any gzip file; this proves the tile actually decodes as a
+// well-formed MVT container within bounded memory.
+func validateVectorTile(data []byte) error {
+	zr, e := gzip.NewReader(bytes.NewReader(data))
+	if e != nil {
+		return errors.New("vector tile gzip unreadable")
+	}
+	raw, e := io.ReadAll(io.LimitReader(zr, maxInflatedTileBytes+1))
+	zr.Close()
+	if e != nil {
+		return errors.New("vector tile gzip corrupt")
+	}
+	if len(raw) > maxInflatedTileBytes {
+		return errors.New("vector tile inflates beyond bounds")
+	}
+	// Top level: MVT tiles carry only repeated field 3 (layers).
+	pos := 0
+	layers := 0
+	for pos < len(raw) {
+		key, n := binary.Uvarint(raw[pos:])
+		if n <= 0 {
+			return errors.New("vector tile malformed protobuf key")
+		}
+		pos += n
+		if key>>3 != 3 || key&7 != 2 {
+			return errors.New("vector tile carries non-layer fields")
+		}
+		ln, n := binary.Uvarint(raw[pos:])
+		if n <= 0 || ln > uint64(len(raw)-pos-n) {
+			return errors.New("vector tile truncated layer")
+		}
+		pos += n
+		if e = validateMVTLayer(raw[pos : pos+int(ln)]); e != nil {
+			return e
+		}
+		pos += int(ln)
+		layers++
+	}
+	if layers == 0 {
+		return errors.New("vector tile declares no layers")
+	}
+	return nil
+}
+
+// validateMVTLayer validates wire well-formedness one layer deep: every field
+// must be structurally complete, and the layer must carry version 2.
+func validateMVTLayer(b []byte) error {
+	pos := 0
+	version := uint64(0)
+	for pos < len(b) {
+		key, n := binary.Uvarint(b[pos:])
+		if n <= 0 {
+			return errors.New("layer malformed protobuf key")
+		}
+		pos += n
+		field, wire := key>>3, key&7
+		if field == 15 && wire == 0 {
+			v, n := binary.Uvarint(b[pos:])
+			if n <= 0 {
+				return errors.New("layer malformed version")
+			}
+			version = v
+			pos += n
+			continue
+		}
+		var skip uint64
+		switch wire {
+		case 0:
+			_, n = binary.Uvarint(b[pos:])
+			if n <= 0 {
+				return errors.New("layer truncated varint")
+			}
+			skip = 0
+			pos += n
+			continue
+		case 1:
+			skip = 8
+		case 2:
+			ln, n := binary.Uvarint(b[pos:])
+			if n <= 0 {
+				return errors.New("layer truncated length")
+			}
+			pos += n
+			skip = ln
+		case 5:
+			skip = 4
+		default:
+			return errors.New("layer unsupported wire type")
+		}
+		if skip > uint64(len(b)-pos) {
+			return errors.New("layer truncated field")
+		}
+		pos += int(skip)
+	}
+	if version != 2 {
+		return errors.New("layer missing MVT version 2")
+	}
+	return nil
+}
+
+// validateRasterTile bounded-decodes one PNG tile: structural IHDR validation
+// with a dimension cap, then full pixel decode proving the compressed data is
+// intact. Decode memory is bounded by the dimension cap.
+func validateRasterTile(data []byte) error {
+	cfg, e := png.DecodeConfig(bytes.NewReader(data))
+	if e != nil {
+		return errors.New("raster tile is not a decodable PNG")
+	}
+	if cfg.Width < 1 || cfg.Width > 4096 || cfg.Height < 1 || cfg.Height > 4096 {
+		return errors.New("raster tile dimensions outside bounds")
+	}
+	if _, e = png.Decode(bytes.NewReader(data)); e != nil {
+		return errors.New("raster tile pixel data undecodable")
+	}
+	return nil
+}
+
 // admitMBTiles parses one untrusted MBTiles file read-only with strict schema
 // and resource limits, normalizing TMS rows into XYZ orientation.
 func admitMBTiles(ctx context.Context, path, product string) (*admittedProduct, error) {
@@ -122,19 +287,19 @@ func admitMBTiles(ctx context.Context, path, product string) (*admittedProduct, 
 	if objects["tiles"] == "" {
 		return nil, errors.New("tile container missing tiles table")
 	}
-	ddl := strings.ToLower(objects["tiles"])
-	for _, col := range []string{"zoom_level", "tile_column", "tile_row", "tile_data"} {
-		if !strings.Contains(ddl, col) {
-			return nil, errors.New("tiles table missing required column " + col)
+	// Structural validation of both tables before reading any content: column
+	// inventory comes from pragma_table_xinfo, not SQL text matching. Generated
+	// columns (hidden 2/3) and hidden columns are rejected because virtual
+	// generated expressions evaluate inside SQLite during reads, bypassing the
+	// file-size resource bounds; defaulted columns are rejected as
+	// expression-bearing schema. GDAL/tippecanoe MBTiles use plain stored
+	// columns only, so legitimate containers are unaffected.
+	for _, table := range []string{"tiles", "metadata"} {
+		if objects[table] == "" {
+			continue
 		}
-	}
-	// Expression-bearing schema is rejected outright: generated columns,
-	// defaults and CHECK constraints evaluate inside SQLite during reads,
-	// bypassing the file-size resource bounds (a tiny crafted file can expand
-	// into large allocations). Plain stored columns only.
-	for _, expr := range []string{"generated", " as ", "default", "check"} {
-		if strings.Contains(ddl, expr) {
-			return nil, errors.New("tiles table carries expression-bearing schema")
+		if e = validateMBTilesSchema(db, table); e != nil {
+			return nil, e
 		}
 	}
 	// Metadata format cross-check where declared.
@@ -174,13 +339,22 @@ func admitMBTiles(ctx context.Context, path, product string) (*admittedProduct, 
 		if z < 0 || z > 22 || x < 0 || ty < 0 || x >= (1<<z) || ty >= (1<<z) {
 			return nil, errors.New("tile coordinate outside valid range")
 		}
-		// Content-type sanity: vector tiles are gzip MVT; raster products are PNG.
+		// Bounded decoding validation: tiles must actually decode, not merely
+		// carry the right magic bytes.
 		if product == productVector {
 			if len(data) < 2 || data[0] != 0x1f || data[1] != 0x8b {
 				return nil, errors.New("vector tile is not gzip MVT")
 			}
-		} else if len(data) < 8 || string(data[1:4]) != "PNG" {
-			return nil, errors.New("raster tile is not PNG")
+			if e = validateVectorTile(data); e != nil {
+				return nil, e
+			}
+		} else {
+			if len(data) < 8 || string(data[1:4]) != "PNG" {
+				return nil, errors.New("raster tile is not PNG")
+			}
+			if e = validateRasterTile(data); e != nil {
+				return nil, e
+			}
 		}
 		y := tmsToXYZ(z, ty)
 		sha := shaMap(data)
@@ -460,6 +634,7 @@ func (s *Store) exportMapPackageV2(ctx context.Context, id string, d *enhancedMa
 	z := zip.NewWriter(f)
 	defer z.Close()
 	var assets []mapPackageAssetV2
+	expanded := 0 // aggregate uncompressed bytes; admission rejects packages over mapAssetBudget
 	stageDir, e := os.MkdirTemp("", "gnss-map-v2-export-*")
 	if e != nil {
 		return e
@@ -481,6 +656,10 @@ func (s *Store) exportMapPackageV2(ctx context.Context, id string, d *enhancedMa
 			}
 			if len(b) > mapLimit {
 				return errors.New("terrain product oversized")
+			}
+			expanded += len(b)
+			if expanded > mapAssetBudget {
+				return errors.New("aggregate package exceeds admission expansion limit; refusing export")
 			}
 			w, e := z.Create("terrain.gterrain")
 			if e != nil {
@@ -542,6 +721,10 @@ func (s *Store) exportMapPackageV2(ctx context.Context, id string, d *enhancedMa
 		}
 		if len(b) > maxAssetFileBytes {
 			return errors.New(product + ": rebuilt tile container exceeds admission bounds; refusing export")
+		}
+		expanded += len(b)
+		if expanded > mapAssetBudget {
+			return errors.New("aggregate package exceeds admission expansion limit; refusing export")
 		}
 		w, e := z.Create(product + ".mbtiles")
 		if e != nil {

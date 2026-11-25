@@ -7,6 +7,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"image"
+	"image/png"
 	"io"
 	"net/http/httptest"
 	"net/url"
@@ -27,13 +29,21 @@ func gzipBytes(b []byte) []byte {
 }
 
 func tinyPNG() []byte {
-	// Minimal valid PNG signature + IHDR fragment; package admission checks
-	// signature only (rendering semantics belong to preparation validation).
-	return append([]byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}, bytes.Repeat([]byte{7}, 40)...)
+	// Real decodable 2x2 PNG; admission validates decoding, not magic bytes.
+	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	var out bytes.Buffer
+	if e := png.Encode(&out, img); e != nil {
+		panic(e)
+	}
+	return out.Bytes()
 }
 
 func tinyMVTGzip() []byte {
-	return gzipBytes([]byte{0x1a, 0x04, 0x08, 0x01, 0x12, 0x00}) // protobuf-ish layer fragment
+	// Minimal spec-valid MVT tile: one layer named "test" at version 2.
+	// layer = field1(name)="test" + field15(version)=2; tile = field3(layer).
+	layer := append([]byte{0x0a, 0x04, 't', 'e', 's', 't'}, 0x78, 0x02)
+	tile := append([]byte{0x1a, byte(len(layer))}, layer...)
+	return gzipBytes(tile)
 }
 
 type v2fixture struct {
@@ -742,5 +752,135 @@ func TestV2GterrCommitmentMismatch(t *testing.T) {
 	}
 	if mk(0) == mk(500) {
 		t.Fatal("terrain-distinct packages share one identity")
+	}
+}
+
+func TestV2PinDeleteAtomicity(t *testing.T) {
+	// Regression for non-atomic pinning: existence verification and pin insertion
+	// must serialize against deletion such that no pin can ever reference a
+	// deleted map, and a successful pin must make deletion fail with
+	// map_referenced rather than silently removing the pinned assets.
+	s := extensionStore(t)
+	ctx := context.Background()
+	for round := 0; round < 8; round++ {
+		zipPath, size, _ := buildV2Package(t, t.TempDir(), smallV2Fixture(), nil)
+		m, e := importFile(t, s, zipPath, size)
+		if e != nil {
+			t.Fatal(e)
+		}
+		pinErr := make(chan error, 1)
+		delStatus := make(chan int, 1)
+		start := make(chan struct{})
+		go func() {
+			<-start
+			_, err := s.pinMapRevision(ctx, m.ID, "recording-race")
+			pinErr <- err
+		}()
+		go func() {
+			<-start
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest("POST", "/local/maps/"+m.ID+"/delete", strings.NewReader(`{"name":"x"}`))
+			req.Header.Set("Content-Type", "application/json")
+			s.terrainRequest(rec, req, nil)
+			delStatus <- rec.Result().StatusCode
+		}()
+		close(start)
+		pe, ds := <-pinErr, <-delStatus
+		var mapGone, orphanPins int
+		s.db.QueryRow(`SELECT count(*) FROM offline_maps WHERE id=?`, m.ID).Scan(&mapGone)
+		s.db.QueryRow(`SELECT count(*) FROM offline_map_pins WHERE map_id=? AND map_id NOT IN (SELECT id FROM offline_maps)`, m.ID).Scan(&orphanPins)
+		if orphanPins != 0 {
+			t.Fatal("round", round, ": pin references a deleted map")
+		}
+		// exactly one consistent outcome: pin won (delete refused, map present)
+		// or delete won (pin failed or was never recorded, map absent)
+		switch {
+		case pe == nil:
+			if ds != 409 {
+				t.Fatal("round", round, ": successful pin did not refuse deletion, status", ds)
+			}
+			if mapGone != 1 {
+				t.Fatal("round", round, ": map missing despite successful pin")
+			}
+			// release and clean up for the next round
+			rev, _ := s.pinMapRevision(ctx, m.ID, "recording-race")
+			if e = s.releaseMapRevision(ctx, m.ID, rev, "recording-race"); e != nil {
+				t.Fatal(e)
+			}
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest("POST", "/local/maps/"+m.ID+"/delete", strings.NewReader(`{"name":"x"}`))
+			req.Header.Set("Content-Type", "application/json")
+			s.terrainRequest(rec, req, nil)
+			if rec.Result().StatusCode != 200 {
+				t.Fatal("round", round, ": deletion after release failed")
+			}
+		default:
+			if ds != 200 {
+				t.Fatal("round", round, ": neither pin nor delete succeeded — pin err", pe, "delete status", ds)
+			}
+			if mapGone != 0 {
+				t.Fatal("round", round, ": map survived successful deletion")
+			}
+		}
+	}
+}
+
+func TestV2RejectsUndecodableTiles(t *testing.T) {
+	s := extensionStore(t)
+	mk := func(tiles []admittedTile) func(*mapPackageV2, map[string]string) {
+		return func(p *mapPackageV2, entries map[string]string) {
+			mp := filepath.Join(t.TempDir(), "mutated.mbtiles")
+			writeTestMBTiles(t, mp, tiles, productVector)
+			entries["vector.mbtiles"] = mp
+			b, _ := os.ReadFile(mp)
+			for i, a := range p.Assets {
+				if a.Product == productVector {
+					p.Assets[i].SHA = shaMap(b)
+					p.Assets[i].Bytes = len(b)
+				}
+			}
+		}
+	}
+	good := smallV2Fixture().tiles[productVector]
+	// valid gzip but protobuf garbage inside one tile — magic bytes pass, decode fails
+	bad1 := append([]admittedTile{}, good...)
+	bad1[0].data = gzipBytes([]byte{0xff, 0xff, 0xff, 0x0a})
+	bad1[0].sha = shaMap(bad1[0].data)
+	d := t.TempDir()
+	p, sz, _ := buildV2Package(t, d, smallV2Fixture(), mk(bad1))
+	// accounting must match, so the rejection must come from decode validation
+	if _, e := importFile(t, s, p, sz); e == nil {
+		t.Fatal("gzip-wrapped protobuf garbage accepted")
+	}
+	// gzip stream itself truncated
+	bad2 := append([]admittedTile{}, good...)
+	src := gzipBytes([]byte{0x1a, 0x08, 0x0a, 0x04, 't', 'e', 's', 't', 0x78, 0x02})
+	bad2[0].data = src[:len(src)-4]
+	bad2[0].sha = shaMap(bad2[0].data)
+	p2, sz2, _ := buildV2Package(t, t.TempDir(), smallV2Fixture(), mk(bad2))
+	if _, e := importFile(t, s, p2, sz2); e == nil {
+		t.Fatal("truncated gzip tile accepted")
+	}
+	// PNG signature intact but pixel data corrupt
+	bad3 := append([]admittedTile{}, smallV2Fixture().tiles[productDEM]...)
+	pngb := tinyPNG()
+	pngb[len(pngb)-6] ^= 0xff
+	bad3[0].data = pngb
+	bad3[0].sha = shaMap(pngb)
+	mkDEM := func(p *mapPackageV2, entries map[string]string) {
+		mp := filepath.Join(t.TempDir(), "mutated-dem.mbtiles")
+		writeTestMBTiles(t, mp, bad3, productDEM)
+		entries["dem.mbtiles"] = mp
+		b, _ := os.ReadFile(mp)
+		for i, a := range p.Assets {
+			if a.Product == productDEM {
+				p.Assets[i].SHA = shaMap(b)
+				p.Assets[i].Bytes = len(b)
+			}
+		}
+	}
+	p3, sz3, _ := buildV2Package(t, t.TempDir(), smallV2Fixture(), mkDEM)
+	if _, e := importFile(t, s, p3, sz3); e == nil {
+		t.Fatal("corrupt PNG tile accepted")
 	}
 }

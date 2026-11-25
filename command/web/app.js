@@ -1176,6 +1176,10 @@ async function refreshMaps(selected) {
   if (selected) $("saved-maps").value = selected;
 }
 function useMap(text, source, id, recordingAsset = "") {
+  if (JSON.parse(text).type === "GNSS-enhanced-map")
+    throw Error(
+      "Enhanced offline map: interactive tile rendering arrives with the authorized MapLibre integration. The map is stored; export and deletion remain available. Your current map is unchanged.",
+    );
   const job = JSON.parse(text).plan;
   const previousWrap = GeoMap.setWrap(job?.request.lon || 0);
   let parsed;
