@@ -1149,10 +1149,7 @@ async function refreshMaps(selected) {
     };
     const remove = el("button", "Delete", "danger");
     remove.type = "button";
-    remove.onclick = async () => {
-      if (activeMapID !== m.id) await loadSavedMap(m.id).catch(showError);
-      if (activeMapID === m.id) $("delete-map").click();
-    };
+    remove.onclick = () => deleteSavedMap(m.id);
     rowActions.append(tag, more, remove);
     row.append(main, rowActions);
     main.append(
@@ -1607,46 +1604,49 @@ $("download-terrain").onclick = async () => {
     $("download-terrain").disabled = false;
   }
 };
-$("delete-map").onclick = async () => {
+async function deleteSavedMap(id) {
   if (
-    !activeMapID ||
+    !id ||
     !confirm(
       "Delete this saved map and its associated terrain? GNSS, recordings and SOS are retained.",
     )
   )
     return;
   try {
-    await mapPost(`maps/${encodeURIComponent(activeMapID)}/delete`, {});
-    offlineMap = terrain = undefined;
-    activeMapID = undefined;
-    radiusManifest = undefined;
-    radiusViewKey = undefined;
-    radiusViewVersion++;
-    clearTimeout(radiusViewTimer);
-    globalThis.radiusGrids = [];
-    for (const id of [
-      "resume-map",
-      "save-use-map",
-      "approve-transfer",
-      "export-manifest",
-      "download-progress",
-    ])
-      $(id).hidden = true;
-    $("current-map-name").textContent = "Blank canvas · no saved map selected";
-    $("map-detail-status").textContent = "";
-    $("map-coverage-status").textContent = "";
-    localStorage.removeItem("gnss-map-id");
-    $("map-mode").value = "blank";
-    localStorage.setItem("gnss-map-mode", "blank");
-    $("map-metadata").textContent = "No offline map loaded.";
-    $("export-map").removeAttribute("href");
+    await mapPost(`maps/${encodeURIComponent(id)}/delete`, {});
+    if (activeMapID === id) {
+      offlineMap = terrain = undefined;
+      activeMapID = undefined;
+      radiusManifest = undefined;
+      radiusViewKey = undefined;
+      radiusViewVersion++;
+      clearTimeout(radiusViewTimer);
+      globalThis.radiusGrids = [];
+      for (const hid of [
+        "resume-map",
+        "save-use-map",
+        "approve-transfer",
+        "export-manifest",
+        "download-progress",
+      ])
+        $(hid).hidden = true;
+      $("current-map-name").textContent = "Blank canvas · no saved map selected";
+      $("map-detail-status").textContent = "";
+      $("map-coverage-status").textContent = "";
+      localStorage.removeItem("gnss-map-id");
+      $("map-mode").value = "blank";
+      localStorage.setItem("gnss-map-mode", "blank");
+      $("map-metadata").textContent = "No offline map loaded.";
+      $("export-map").removeAttribute("href");
+    }
     await refreshMaps();
     updateLayers();
     draw();
   } catch (e) {
     showError(e);
   }
-};
+}
+$("delete-map").onclick = () => deleteSavedMap(activeMapID);
 $("saved-maps").onchange = () => {
   if ($("saved-maps").value)
     loadSavedMap($("saved-maps").value).catch(showError);
