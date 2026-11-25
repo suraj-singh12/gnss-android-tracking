@@ -129,6 +129,11 @@ func validateMBTilesSchema(db *sql.DB, table string) error {
 
 const maxInflatedTileBytes = 16 * 1024 * 1024
 
+// exportAdmissionBudget mirrors the importer's aggregate expanded-package limit
+// (mapAssetBudget). It is a var solely so boundary tests can exercise the
+// accounting with small fixtures; production code never mutates it.
+var exportAdmissionBudget = mapAssetBudget
+
 // validateVectorTile bounded-decodes one gzip MVT tile: inflate with an output
 // cap, then validate protobuf wire structure to MVT layer depth. Magic-byte
 // checks alone admit any gzip file; this proves the tile actually decodes as a
@@ -632,7 +637,7 @@ func (s *Store) exportMapPackageV2(ctx context.Context, id string, d *enhancedMa
 	z := zip.NewWriter(f)
 	defer z.Close()
 	var assets []mapPackageAssetV2
-	expanded := 0 // aggregate uncompressed bytes; admission rejects packages over mapAssetBudget
+	expanded := 0 // aggregate uncompressed bytes; admission rejects packages over exportAdmissionBudget
 	stageDir, e := os.MkdirTemp("", "gnss-map-v2-export-*")
 	if e != nil {
 		return e
@@ -656,7 +661,7 @@ func (s *Store) exportMapPackageV2(ctx context.Context, id string, d *enhancedMa
 				return errors.New("terrain product oversized")
 			}
 			expanded += len(b)
-			if expanded > mapAssetBudget {
+			if expanded > exportAdmissionBudget {
 				return errors.New("aggregate package exceeds admission expansion limit; refusing export")
 			}
 			w, e := z.Create("terrain.gterrain")
@@ -721,7 +726,7 @@ func (s *Store) exportMapPackageV2(ctx context.Context, id string, d *enhancedMa
 			return errors.New(product + ": rebuilt tile container exceeds admission bounds; refusing export")
 		}
 		expanded += len(b)
-		if expanded > mapAssetBudget {
+		if expanded > exportAdmissionBudget {
 			return errors.New("aggregate package exceeds admission expansion limit; refusing export")
 		}
 		w, e := z.Create(product + ".mbtiles")
@@ -745,6 +750,10 @@ func (s *Store) exportMapPackageV2(ctx context.Context, id string, d *enhancedMa
 	manifest := mustJSON(p)
 	if len(manifest) > 2*1024*1024 {
 		return errors.New("map manifest exceeds 2 MiB portability limit")
+	}
+	expanded += len(manifest)
+	if expanded > exportAdmissionBudget {
+		return errors.New("aggregate package exceeds admission expansion limit; refusing export")
 	}
 	w, e := z.Create("manifest.json")
 	if e == nil {

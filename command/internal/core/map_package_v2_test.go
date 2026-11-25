@@ -901,3 +901,74 @@ func TestV2EmptyLayerTilesAccepted(t *testing.T) {
 		t.Fatal("garbage protobuf accepted")
 	}
 }
+
+func TestV2ExportAggregateIncludesManifest(t *testing.T) {
+	// Boundary: export must count manifest bytes in the aggregate expansion
+	// limit so it never emits a package its own importer would reject.
+	s := extensionStore(t)
+	zipPath, size, _ := buildV2Package(t, t.TempDir(), smallV2Fixture(), nil)
+	m, e := importFile(t, s, zipPath, size)
+	if e != nil {
+		t.Fatal(e)
+	}
+	d, e := s.readEnhanced(context.Background(), m.ID)
+	if e != nil || d == nil {
+		t.Fatal("not enhanced", e)
+	}
+	export := func() error {
+		f, _ := os.CreateTemp(t.TempDir(), "x.zip")
+		defer f.Close()
+		return s.exportMapPackageV2(context.Background(), m.ID, d, f)
+	}
+	// measure the exact in-budget aggregate: binary-search the largest provenance
+	// padding that still exports, with the budget set just above the unpadded size
+	base := exportAdmissionBudget
+	defer func() { exportAdmissionBudget = base }()
+	if e = export(); e != nil {
+		t.Fatal("baseline export failed", e)
+	}
+	// find aggregate size of the unpadded export by probing: budget too small
+	// must fail even with an unmodified manifest
+	exportAdmissionBudget = 1
+	if e = export(); e == nil || !strings.Contains(e.Error(), "aggregate package") {
+		t.Fatal("tiny budget export succeeded", e)
+	}
+	// raise budget until export succeeds: that point is the exact aggregate.
+	// Then confirm the manifest tips it: shrink budget by one byte below the
+	// success point and confirm failure — proving every manifest byte counts.
+	lo, hi := 1, 4*1024*1024
+	for lo+1 < hi {
+		mid := (lo + hi) / 2
+		exportAdmissionBudget = mid
+		if export() == nil {
+			hi = mid
+		} else {
+			lo = mid
+		}
+	}
+	exportAdmissionBudget = hi
+	if e = export(); e != nil {
+		t.Fatal("export at measured aggregate failed", e)
+	}
+	exportAdmissionBudget = hi - 1
+	if e = export(); e == nil || !strings.Contains(e.Error(), "aggregate package") {
+		t.Fatal("export one byte under aggregate succeeded — manifest bytes not fully counted", e)
+	}
+	// extending the manifest must require additional budget: add a provenance
+	// key on top of whatever the fixture declares
+	prov := map[string]string{}
+	for k, v := range d.Provenance {
+		prov[k] = v
+	}
+	prov["zz-pad"] = "y"
+	d.Provenance = prov
+	exportAdmissionBudget = hi
+	if e = export(); e == nil {
+		t.Fatal("padded export succeeded within unpadded budget")
+	}
+	exportAdmissionBudget = hi + 1
+	// may need a few bytes for JSON structure; boundary is exact per byte added
+	if e = export(); e != nil && !strings.Contains(e.Error(), "aggregate package") {
+		t.Fatal("unexpected export error", e)
+	}
+}
