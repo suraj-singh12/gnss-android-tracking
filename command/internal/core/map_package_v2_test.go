@@ -266,12 +266,12 @@ func TestV2TileServingAndRestart(t *testing.T) {
 	}
 	// negative: wrong zoom, wrong product, bad coordinates, unknown map
 	for _, path := range []string{
-		"/local/maps/" + m.ID + "/tiles/vector/9/32/21",   // zoom outside product range
-		"/local/maps/" + m.ID + "/tiles/evil/6/32/21",     // unknown product
-		"/local/maps/" + m.ID + "/tiles/vector/6/999/21",  // x outside range
-		"/local/maps/" + m.ID + "/tiles/vector/-1/0/0",    // negative zoom
-		"/local/maps/nope/tiles/vector/6/32/21",           // unknown map
-		"/local/maps/" + m.ID + "/tiles/vector/23/0/0",    // zoom beyond limit
+		"/local/maps/" + m.ID + "/tiles/vector/9/32/21",  // zoom outside product range
+		"/local/maps/" + m.ID + "/tiles/evil/6/32/21",    // unknown product
+		"/local/maps/" + m.ID + "/tiles/vector/6/999/21", // x outside range
+		"/local/maps/" + m.ID + "/tiles/vector/-1/0/0",   // negative zoom
+		"/local/maps/nope/tiles/vector/6/32/21",          // unknown map
+		"/local/maps/" + m.ID + "/tiles/vector/23/0/0",   // zoom beyond limit
 	} {
 		rec = httptest.NewRecorder()
 		s.mapTileRequest(rec, httptest.NewRequest("GET", path, nil))
@@ -402,7 +402,7 @@ func TestV2RejectsMalformedAndMalicious(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err = db.Exec(`CREATE TABLE exfil (x)`) ; err != nil {
+		if _, err = db.Exec(`CREATE TABLE exfil (x)`); err != nil {
 			t.Fatal(err)
 		}
 		db.Close()
@@ -570,7 +570,7 @@ func TestV2GterrProductAndFormat1Unaffected(t *testing.T) {
 		gp := filepath.Join(t.TempDir(), "terrain.gterrain")
 		os.WriteFile(gp, gterr, 0600)
 		entries["terrain.gterrain"] = gp
-		p.Enhanced.Products[productGterr] = enhancedProduct{}
+		p.Enhanced.Products[productGterr] = enhancedProduct{SHA: shaMap(gterr), Bytes: len(gterr)}
 		p.Enhanced.Revision = enhancedRevision(p.Enhanced.Products)
 		p.Assets = append(p.Assets, mapPackageAssetV2{"terrain.gterrain", productGterr, shaMap(gterr), len(gterr)})
 	})
@@ -591,7 +591,7 @@ func TestV2GterrProductAndFormat1Unaffected(t *testing.T) {
 		gp := filepath.Join(t.TempDir(), "terrain.gterrain")
 		os.WriteFile(gp, bad, 0600)
 		entries["terrain.gterrain"] = gp
-		p.Enhanced.Products[productGterr] = enhancedProduct{}
+		p.Enhanced.Products[productGterr] = enhancedProduct{SHA: shaMap(bad), Bytes: len(bad)}
 		p.Enhanced.Revision = enhancedRevision(p.Enhanced.Products)
 		p.Assets = append(p.Assets, mapPackageAssetV2{"terrain.gterrain", productGterr, shaMap(bad), len(bad)})
 	})
@@ -633,4 +633,114 @@ func TestV2GterrProductAndFormat1Unaffected(t *testing.T) {
 		t.Fatal("legacy map served enhanced tiles")
 	}
 	fmt.Println("v1+v2 coexist in one library")
+}
+
+func TestV2RejectsDuplicateProductsAndExpressionSchema(t *testing.T) {
+	s := extensionStore(t)
+	// duplicate product assets rejected even with distinct paths
+	d := t.TempDir()
+	p, sz, _ := buildV2Package(t, d, smallV2Fixture(), func(p *mapPackageV2, entries map[string]string) {
+		for i, a := range p.Assets {
+			if a.Product == productDEM {
+				dup := a
+				dup.Path = "dem-copy.mbtiles"
+				entries[dup.Path] = entries[a.Path]
+				p.Assets = append(p.Assets[:i+1], append([]mapPackageAssetV2{dup}, p.Assets[i+1:]...)...)
+				break
+			}
+		}
+	})
+	if _, e := importFile(t, s, p, sz); e == nil {
+		t.Fatal("duplicate product asset accepted")
+	} else if !strings.Contains(e.Error(), "duplicate asset product") {
+		t.Fatal("unexpected rejection reason", e)
+	}
+	// expression-bearing tiles schema rejected before content evaluation
+	d2 := t.TempDir()
+	p2, sz2, _ := buildV2Package(t, d2, smallV2Fixture(), func(p *mapPackageV2, entries map[string]string) {
+		evil := filepath.Join(t.TempDir(), "evil.mbtiles")
+		db, err := sql.Open("sqlite3", "file:"+evil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = db.Exec(`CREATE TABLE tiles (zoom_level integer, tile_column integer, tile_row integer, tile_data blob GENERATED ALWAYS AS (printf('%.1000c','x')) VIRTUAL)`); err != nil {
+			t.Fatal(err)
+		}
+		db.Exec(`CREATE TABLE metadata (name text, value text)`)
+		db.Exec(`INSERT INTO tiles (zoom_level,tile_column,tile_row) VALUES (6,32,21)`)
+		db.Close()
+		entries["vector.mbtiles"] = evil
+		b, _ := os.ReadFile(evil)
+		for i, a := range p.Assets {
+			if a.Product == productVector {
+				p.Assets[i].SHA = shaMap(b)
+				p.Assets[i].Bytes = len(b)
+			}
+		}
+	})
+	if _, e := importFile(t, s, p2, sz2); e == nil {
+		t.Fatal("expression-bearing schema accepted")
+	}
+	// library state preserved
+	var n int
+	s.db.QueryRow(`SELECT count(*) FROM offline_maps`).Scan(&n)
+	if n != 0 {
+		t.Fatal("failed imports mutated library")
+	}
+}
+
+func TestV2GterrCommitmentMismatch(t *testing.T) {
+	s := extensionStore(t)
+	samples := make([]*float64, 4)
+	for i := range samples {
+		v := float64(1000 + i)
+		samples[i] = &v
+	}
+	g := terrainGrid{Bounds: [4]float64{1.4, 42.5, 1.4 + 1.0/3600, 42.5 + 1.0/3600}, Columns: 2, Rows: 2, ArcSeconds: 1, Source: "test", Datum: "EGM96", Components: map[string]bool{"elevation": true}, Samples: samples}
+	gterr, e := encodeTerrain(g)
+	if e != nil {
+		t.Fatal(e)
+	}
+	// declared terrain commitment that does not match actual grid bytes
+	d := t.TempDir()
+	p, sz, _ := buildV2Package(t, d, smallV2Fixture(), func(p *mapPackageV2, entries map[string]string) {
+		gp := filepath.Join(t.TempDir(), "terrain.gterrain")
+		os.WriteFile(gp, gterr, 0600)
+		entries["terrain.gterrain"] = gp
+		p.Enhanced.Products[productGterr] = enhancedProduct{SHA: shaMap([]byte("wrong")), Bytes: len(gterr)}
+		p.Enhanced.Revision = enhancedRevision(p.Enhanced.Products)
+		p.Assets = append(p.Assets, mapPackageAssetV2{"terrain.gterrain", productGterr, shaMap(gterr), len(gterr)})
+	})
+	if _, e = importFile(t, s, p, sz); e == nil {
+		t.Fatal("terrain commitment mismatch accepted")
+	} else if !strings.Contains(e.Error(), "terrain product accounting") {
+		t.Fatal("unexpected rejection reason", e)
+	}
+	// two packages differing only in terrain bytes must have distinct identities
+	mk := func(tweak float64) string {
+		s2 := make([]*float64, 4)
+		for i := range s2 {
+			v := float64(1000+i) + tweak
+			s2[i] = &v
+		}
+		g2 := terrainGrid{Bounds: g.Bounds, Columns: 2, Rows: 2, ArcSeconds: 1, Source: "test", Datum: "EGM96", Components: map[string]bool{"elevation": true}, Samples: s2}
+		b, _ := encodeTerrain(g2)
+		dd := t.TempDir()
+		pp, ssz, _ := buildV2Package(t, dd, smallV2Fixture(), func(p *mapPackageV2, entries map[string]string) {
+			gp := filepath.Join(t.TempDir(), "terrain.gterrain")
+			os.WriteFile(gp, b, 0600)
+			entries["terrain.gterrain"] = gp
+			p.Enhanced.Products[productGterr] = enhancedProduct{SHA: shaMap(b), Bytes: len(b)}
+			p.Enhanced.Revision = enhancedRevision(p.Enhanced.Products)
+			p.Assets = append(p.Assets, mapPackageAssetV2{"terrain.gterrain", productGterr, shaMap(b), len(b)})
+		})
+		m, e := importFile(t, s, pp, ssz)
+		if e != nil {
+			t.Fatal(e)
+		}
+		return m.ID
+	}
+	if mk(0) == mk(500) {
+		t.Fatal("terrain-distinct packages share one identity")
+	}
 }

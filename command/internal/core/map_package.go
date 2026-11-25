@@ -227,7 +227,7 @@ func (s *Store) importMapPackage(ctx context.Context, f *os.File, size int64) (s
 		if files[v.Name] != nil || strings.Contains(v.Name, "..") || strings.ContainsAny(v.Name, "\\:\x00") || strings.HasPrefix(v.Name, "/") || v.Mode()&os.ModeType != 0 {
 			return fail(errors.New("unsafe or duplicate archive entry"))
 		}
-		if v.UncompressedSize64 > maxProductBytes+2*1024*1024 {
+		if v.UncompressedSize64 > maxAssetFileBytes+2*1024*1024 {
 			return fail(errors.New("oversized archive entry"))
 		}
 		expanded += v.UncompressedSize64

@@ -21,10 +21,16 @@ import (
 )
 
 const (
-	maxTilesPerProduct  = 200000
-	maxTileBytes        = 2 * 1024 * 1024
-	maxProductBytes     = 128 * 1024 * 1024
-	enhancedStyleV1     = "gnss-enhanced-v1"
+	maxTilesPerProduct = 200000
+	maxTileBytes       = 2 * 1024 * 1024
+	maxProductBytes    = 128 * 1024 * 1024
+	// maxAssetFileBytes bounds one tile-product container file. It exceeds the
+	// payload cap by slack covering SQLite index/page overhead when immutable
+	// tiles are rebuilt into a fresh MBTiles at export, so admitted products
+	// round-trip; export verifies the bound explicitly and fails loudly rather
+	// than writing a package that admission would reject.
+	maxAssetFileBytes = maxProductBytes + 32*1024*1024
+	enhancedStyleV1   = "gnss-enhanced-v1"
 )
 
 type mapPackageAssetV2 struct {
@@ -35,12 +41,12 @@ type mapPackageAssetV2 struct {
 }
 
 type mapPackageV2 struct {
-	Version     int                         `json:"version"`
-	Format      string                      `json:"format"`
-	Source      string                      `json:"name"`
-	Enhanced    enhancedMapDoc              `json:"enhanced"`
-	Assets      []mapPackageAssetV2         `json:"assets"`
-	Attribution string                      `json:"attribution"`
+	Version     int                 `json:"version"`
+	Format      string              `json:"format"`
+	Source      string              `json:"name"`
+	Enhanced    enhancedMapDoc      `json:"enhanced"`
+	Assets      []mapPackageAssetV2 `json:"assets"`
+	Attribution string              `json:"attribution"`
 }
 
 type admittedTile struct {
@@ -120,6 +126,15 @@ func admitMBTiles(ctx context.Context, path, product string) (*admittedProduct, 
 	for _, col := range []string{"zoom_level", "tile_column", "tile_row", "tile_data"} {
 		if !strings.Contains(ddl, col) {
 			return nil, errors.New("tiles table missing required column " + col)
+		}
+	}
+	// Expression-bearing schema is rejected outright: generated columns,
+	// defaults and CHECK constraints evaluate inside SQLite during reads,
+	// bypassing the file-size resource bounds (a tiny crafted file can expand
+	// into large allocations). Plain stored columns only.
+	for _, expr := range []string{"generated", " as ", "default", "check"} {
+		if strings.Contains(ddl, expr) {
+			return nil, errors.New("tiles table carries expression-bearing schema")
 		}
 	}
 	// Metadata format cross-check where declared.
@@ -211,7 +226,10 @@ func validateEnhancedDoc(d *enhancedMapDoc) error {
 	}
 	for name, p := range d.Products {
 		if name == productGterr {
-			continue // validated through GTERR001 decoding
+			if len(p.SHA) != 64 || p.Bytes < 1 {
+				return errors.New("invalid terrain product accounting")
+			}
+			continue // content validated through GTERR001 decoding and commitment check
 		}
 		if e := validEnhancedProduct(name, p); e != nil {
 			return fmt.Errorf("%s: %w", name, e)
@@ -255,6 +273,7 @@ func (s *Store) importMapPackageV2(ctx context.Context, p *mapPackageV2, files m
 		return fail(errors.New("undeclared or missing archive entries"))
 	}
 	declared := map[string]bool{}
+	declaredProduct := map[string]bool{}
 	stageDir, e := os.MkdirTemp("", "gnss-map-v2-stage-*")
 	if e != nil {
 		return fail(e)
@@ -268,6 +287,10 @@ func (s *Store) importMapPackageV2(ctx context.Context, p *mapPackageV2, files m
 			return fail(errors.New("duplicate manifest asset"))
 		}
 		declared[a.Path] = true
+		if declaredProduct[a.Product] {
+			return fail(errors.New("duplicate asset product: " + a.Product))
+		}
+		declaredProduct[a.Product] = true
 		isTileProduct := tileProducts[a.Product]
 		if !isTileProduct && a.Product != productGterr {
 			return fail(errors.New("unsupported asset product"))
@@ -275,7 +298,11 @@ func (s *Store) importMapPackageV2(ctx context.Context, p *mapPackageV2, files m
 		if _, present := d.Products[a.Product]; !present {
 			return fail(errors.New("asset outside declared products"))
 		}
-		b, e := read(a.Path, maxProductBytes+1024)
+		readCap := maxAssetFileBytes
+		if a.Product == productGterr {
+			readCap = mapLimit + 1024
+		}
+		b, e := read(a.Path, readCap)
 		if e != nil {
 			return fail(e)
 		}
@@ -288,6 +315,10 @@ func (s *Store) importMapPackageV2(ctx context.Context, p *mapPackageV2, files m
 			}
 			if _, e = decodeTerrain(b); e != nil {
 				return fail(errors.New("invalid GTERR001 terrain product"))
+			}
+			gp := d.Products[productGterr]
+			if gp.SHA != shaMap(b) || gp.Bytes != len(b) {
+				return fail(errors.New("terrain product accounting differs from actual grid"))
 			}
 			gterr = b
 			gterrDeclared = true
@@ -494,13 +525,13 @@ func (s *Store) exportMapPackageV2(ctx context.Context, id string, d *enhancedMa
 			format = "pbf"
 		}
 		meta := map[string]string{
-			"format":   format,
-			"name":     d.Style + " " + product,
-			"minzoom":  strconv.Itoa(want.Minzoom),
-			"maxzoom":  strconv.Itoa(want.Maxzoom),
-			"bounds":   fmt.Sprintf("%g,%g,%g,%g", want.Bounds[0], want.Bounds[1], want.Bounds[2], want.Bounds[3]),
-			"type":     "overlay",
-			"version":  "2",
+			"format":  format,
+			"name":    d.Style + " " + product,
+			"minzoom": strconv.Itoa(want.Minzoom),
+			"maxzoom": strconv.Itoa(want.Maxzoom),
+			"bounds":  fmt.Sprintf("%g,%g,%g,%g", want.Bounds[0], want.Bounds[1], want.Bounds[2], want.Bounds[3]),
+			"type":    "overlay",
+			"version": "2",
 		}
 		if e = writeMBTilesFromSlice(ctx, stagePath, tiles, product, meta); e != nil {
 			return e
@@ -508,6 +539,9 @@ func (s *Store) exportMapPackageV2(ctx context.Context, id string, d *enhancedMa
 		b, e := os.ReadFile(stagePath)
 		if e != nil {
 			return e
+		}
+		if len(b) > maxAssetFileBytes {
+			return errors.New(product + ": rebuilt tile container exceeds admission bounds; refusing export")
 		}
 		w, e := z.Create(product + ".mbtiles")
 		if e != nil {
