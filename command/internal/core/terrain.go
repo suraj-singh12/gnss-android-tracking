@@ -289,22 +289,41 @@ func (s *Store) terrainRequest(w http.ResponseWriter, r *http.Request, p *mapPro
 		tx, err := s.db.Begin()
 		if err == nil {
 			defer tx.Rollback()
-			_, err = tx.Exec(`DELETE FROM offline_terrain WHERE map_id=?`, mapID)
+			var pins int
+			if err == nil {
+				pins, err = s.mapPinnedTx(tx, mapID)
+			}
+			if err == nil && pins > 0 {
+				err = errMapReferenced
+			}
+			if err == nil {
+				_, err = tx.Exec(`DELETE FROM offline_terrain WHERE map_id=?`, mapID)
+			}
 			if err == nil {
 				_, err = tx.Exec(`DELETE FROM offline_map_chunks WHERE map_id=?`, mapID)
-				if err == nil {
-					_, err = tx.Exec(`DELETE FROM offline_map_transfers WHERE map_id=?`, mapID)
-				}
-				if err == nil {
-					_, err = tx.Exec(`DELETE FROM offline_maps WHERE id=?`, mapID)
-				}
+			}
+			if err == nil {
+				_, err = tx.Exec(`DELETE FROM offline_map_tiles WHERE map_id=?`, mapID)
+			}
+			if err == nil {
+				_, err = tx.Exec(`DELETE FROM offline_map_pins WHERE map_id=?`, mapID)
+			}
+			if err == nil {
+				_, err = tx.Exec(`DELETE FROM offline_map_transfers WHERE map_id=?`, mapID)
+			}
+			if err == nil {
+				_, err = tx.Exec(`DELETE FROM offline_maps WHERE id=?`, mapID)
 			}
 			if err == nil {
 				err = tx.Commit()
 			}
 		}
 		if err != nil {
-			failure(w, 503, "storage_unavailable", err)
+			if errors.Is(err, errMapReferenced) {
+				failure(w, 409, "map_referenced", err)
+			} else {
+				failure(w, 503, "storage_unavailable", err)
+			}
 		} else {
 			respond(w, 200, map[string]bool{"deleted": true})
 		}
