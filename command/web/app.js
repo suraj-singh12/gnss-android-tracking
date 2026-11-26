@@ -126,6 +126,11 @@ $("start").onclick = () => {
 $("recording-start-form").onchange = updateSessionChoice;
 $("recording-start-form").onsubmit = async (e) => {
   e.preventDefault();
+  if (globalThis.EnhancedMap?.active) {
+    $("recording-start-error").textContent =
+      "Enhanced map rendering cannot be captured in recordings yet (#96). Switch the map mode to legacy Offline or Blank to record — positions and tracks are unaffected.";
+    return;
+  }
   $("confirm-recording").disabled = true;
   try {
     await post("recording", {
@@ -1192,6 +1197,13 @@ function useEnhancedMap(doc, source, id) {
     throw Error(
       "Enhanced map carries no renderable cartography (numeric terrain grid only). The package remains stored and exportable; your current map is unchanged.",
     );
+  {
+    const rec = window.recordingLiveState?.()?.recording;
+    if (rec && (rec.active || rec.status === "paused"))
+      throw Error(
+        "A recording is in progress. Enhanced rendering cannot be captured in recordings yet (#96) — the recording continues on the safe legacy path; your current map is unchanged.",
+      );
+  }
   let coverage = null;
   for (const p of products) {
     if (!p.bounds) continue;
