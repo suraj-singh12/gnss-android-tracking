@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"sort"
@@ -206,6 +207,67 @@ func (s *Store) mapPinnedTx(tx *sql.Tx, id string) (int, error) {
 	return n, e
 }
 
+// enhancedMapPinRequest acquires and releases ephemeral Travel Back pins
+// (#96). Acquisition verifies existence and pins atomically under the store
+// mutex — the deletion transaction holds the same mutex for its check, so a
+// pin and a delete can never interleave. Release is idempotent. Travel pins
+// use the reserved kind 'travel' and are swept at startup because travel
+// sessions never survive a restart.
+func (s *Store) enhancedMapPinRequest(w http.ResponseWriter, r *http.Request) bool {
+	if r.URL.Path != "/local/enhanced-map-pin" {
+		return false
+	}
+	if r.Method != "POST" {
+		failure(w, 405, "method_not_allowed", errors.New("use POST"))
+		return true
+	}
+	if origin := r.Header.Get("Origin"); origin != "" && origin != "http://"+r.Host && origin != "https://"+r.Host {
+		failure(w, 403, "forbidden", errors.New("same-origin controls only"))
+		return true
+	}
+	var in struct {
+		MapID   string `json:"map_id"`
+		Release bool   `json:"release"`
+	}
+	b, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 4096))
+	if err == nil {
+		err = json.Unmarshal(b, &in)
+	}
+	if err == nil && (in.MapID == "" || len(in.MapID) > 256) {
+		err = errors.New("valid map_id required")
+	}
+	if err != nil {
+		failure(w, 400, "invalid_pin_request", err)
+		return true
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	if in.Release {
+		// Release every travel pin for the map; the single live travel session
+		// pins at most one revision per map and exits idempotently.
+		if err = s.releaseMapRevisionKind(ctx, in.MapID, "travel"); err == nil {
+			respond(w, 200, map[string]bool{"released": true})
+			return true
+		}
+	} else {
+		var revision string
+		revision, err = s.pinMapRevision(ctx, in.MapID, "travel")
+		if err == nil {
+			respond(w, 200, map[string]any{"pinned": true, "revision": revision})
+			return true
+		}
+	}
+	failure(w, 409, "pin_unavailable", err)
+	return true
+}
+
+func (s *Store) releaseMapRevisionKind(ctx context.Context, id, kind string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, e := s.db.ExecContext(ctx, `DELETE FROM offline_map_pins WHERE map_id=? AND kind=?`, id, kind)
+	return e
+}
+
 // ---- tile delivery ----
 
 func tileMIME(product string) (string, string) {
@@ -221,6 +283,13 @@ func tileMIME(product string) (string, string) {
 // mapTileRequest serves immutable tiles for validated enhanced maps.
 // Local same-origin, read-only, bounded coordinates; no filesystem paths.
 func (s *Store) mapTileRequest(w http.ResponseWriter, r *http.Request) bool {
+	// /local/enhanced-gated is the playback availability gate's suppression
+	// target (#96): tiles recorded as unavailable at capture are rewritten here
+	// and receive honest absence, exactly as a tile that never existed.
+	if r.Method == "GET" && r.URL.Path == "/local/enhanced-gated" {
+		failure(w, 404, "tile_unavailable", errors.New("tile unavailable at capture"))
+		return true
+	}
 	// /local/maps/{id}/tiles/{product}/{z}/{x}/{y}
 	if r.Method != "GET" || !strings.HasPrefix(r.URL.Path, "/local/maps/") || !strings.Contains(r.URL.Path, "/tiles/") {
 		return false
