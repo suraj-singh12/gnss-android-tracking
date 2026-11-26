@@ -131,8 +131,20 @@ async function update(args) {
   // Missing-revision honesty is verified cheaply per revision, cached: tile
   // serving itself 404s absent revisions, so probe one deterministic URL head
   // through the style's own source reference rather than inventing state.
+  const missing = enhanced.availability?.missing || [];
+  const missingKeys = [];
+  for (const m of missing) {
+    if (m && m.product) missingKeys.push(`${m.product}/${m.z}/${m.x}/${m.y}`);
+    else if (m && m.key) missingKeys.push(m.key);
+  }
+  missingKeys.sort();
+  const missingSig = missingKeys.join(";");
   const revisionKey = enhanced.map_id + "@" + enhanced.revision;
-  if (!state.map || state.activeRevision !== revisionKey) {
+  // Rebuild when the recorded-missing set changes even within one revision:
+  // tiles already loaded into the instance are not re-mediated by
+  // transformRequest, so a stricter earlier frame could otherwise display
+  // geography unavailable at its capture time.
+  if (!state.map || state.activeRevision !== revisionKey || state.missingSig !== missingSig) {
     if (state.map) {
       state.map.remove();
       state.map = null;
@@ -163,12 +175,9 @@ async function update(args) {
   // Layer toggles as recorded: the recorded style embeds them structurally
   // already (visibility state at capture is part of the generated style's
   // layers), so no runtime adjustment is required for reconstruction.
-  const missing = enhanced.availability?.missing || [];
+  state.missingSig = missingSig;
   state.missing = new Map();
-  for (const m of missing) {
-    if (m && m.product) state.missing.set(`${m.product}/${m.z}/${m.x}/${m.y}`, true);
-    else if (m && m.key) state.missing.set(m.key, true);
-  }
+  for (const k of missingKeys) state.missing.set(k, true);
   // Camera: the recorded production viewport through the identical transform.
   const z = Math.log2((viewport.scale * WORLD) / 512);
   const [lon, lat] = lonLat(viewport.cx, viewport.cy);
