@@ -203,8 +203,15 @@ only while an enhanced map is active. All tiles, fonts and logic are embedded or
 served from the same loopback origin — no network access occurs. Incomplete
 coverage, tile loading and WebGL failure are disclosed in the existing status
 surface; WebGL failure falls back to the exact legacy blank-canvas experience.
-Recordings made while the enhanced map is active capture overlays without the
-cartographic background (recording integration is a separate future scope).
+
+Recordings made while the enhanced map is active reconstruct the recorded
+cartography in playback and Travel Back: frames pin the immutable map revision
+and carry the exact style evidence, camera and bounded availability record, so
+playback re-renders the real interactive map beneath the frozen operational
+evidence. Geography that was unavailable during capture stays absent in playback
+even when tiles exist locally; deletion of a referenced map revision is refused
+while any recording or Travel Back session references it. Legacy recordings
+replay exactly as before.
 
 ## Build and run
 

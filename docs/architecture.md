@@ -550,9 +550,38 @@ design. Honest states merge into the existing projection-status surface: tiles
 loading, coverage incomplete (from package coverage metadata) and WebGL failure —
 which falls back to the exact legacy blank-canvas experience with the cause
 disclosed. Enhanced rendering is frame-coherent (flat, no world copies, zoom
-clamped to the operational range with tile overzoom beyond z14). Recordings made
-while the enhanced map is active capture the operational overlays without the
-cartographic background; recording integration is scope 3 and unchanged.
+clamped to the operational range with tile overzoom beyond z14).
+
+Enhanced recording, playback and Travel Back (#93, issue #96) extend the existing
+recording model in place — never a parallel system. Display frames carry an
+`enhanced` object: renderer identity and version, the immutable map revision,
+the exact generated style documents as recording evidence, layer toggles and
+bounded availability evidence (loaded/idle/stable settlement state plus a
+deduplicated missing-tile record, truncated conservatively rather than blocking
+capture). Frames carrying enhanced evidence pin the referenced revision durably
+for the recording (`rec:` pins); Save freezes references into the snapshot
+(`saved:` pins); discard and confirmed deletion release their own pins inside
+the same transaction, and deletion of any referenced revision is refused
+atomically with `map_referenced`. Playback re-renders the recorded cartography
+from the pinned revision through the vendored renderer beneath the frozen SVG
+evidence — actual interactive maps, never raster capture — driven by the
+recorded camera through the identical transform, reconstructing pan, zoom,
+inspection divergence, layer controls and timeline navigation exactly as the
+legacy reader does. Recorded-missing tiles are gated out of reconstruction even
+when cached or usable as parent/child fallbacks: geographical information
+unavailable during capture is absent, never substituted by subsequently
+available data. Missing revisions, foreign renderers and incomplete style
+evidence degrade to the overlay-only blank experience with explicit disclosure
+in the playback evidence surface. Travel Back pins the applicable revision at
+entry through a same-origin backend endpoint (`travel` pins, atomic against
+deletion) and releases it at exit; ephemeral travel pins are swept at startup
+because sessions never survive a restart. Legacy v1 recordings replay exactly
+as before permanently; mixed enhanced/legacy recordings degrade per frame.
+Portable self-contained enhanced recordings (#38) remain future work: the
+recording embeds style documents and availability evidence but references map
+revisions by identity, so export must either bundle the referenced tile sets
+or degrade honestly at import — that contract is documented here without
+implementing #38.
 
 ### Android presentation boundary
 
