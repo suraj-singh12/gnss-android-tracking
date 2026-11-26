@@ -530,6 +530,30 @@ deletion until recording/Travel Back integration (scope 3) uses them. Format 1
 packages, legacy maps and their import/export are untouched; both formats coexist
 in the one library under the same 64-map/256-MiB budget, now including tile bytes.
 
+Enhanced LIVE rendering (#93, issue #95) is restricted to controlled review by the
+default-off `-enhanced-map` launch flag; without it every surface behaves exactly
+as before, and enhanced packages still import, export and delete but cannot
+activate. The capability is disclosed at `/local/enhanced-map-capability`. When
+enabled, activating an enhanced map renders vendored MapLibre GL JS (BSD-3-Clause,
+`command/web/vendor/`, embedded with the dashboard assets) on an opaque WebGL
+canvas beneath the existing transparent operational SVG: the production camera
+(`viewport` centre/scale in Web-Mercator metres) remains the single authority —
+existing drag, wheel, keyboard, zoom/fit/focus controls and camera math are
+unchanged — and the MapLibre camera follows it every frame through the identical
+projection, so overlay alignment is exact by construction. The style is generated
+per map from the accepted #92 POC cartography with same-origin tiles/fonts only
+(no network access, no external requests); night mode derives a subdued-road
+palette from the same style so operational overlays stay prominent. The Layers
+menu gains enhanced-labels (default on) and hillshade controls only while an
+enhanced map is active. Attribution lives in the canvas corner per the approved
+design. Honest states merge into the existing projection-status surface: tiles
+loading, coverage incomplete (from package coverage metadata) and WebGL failure —
+which falls back to the exact legacy blank-canvas experience with the cause
+disclosed. Enhanced rendering is frame-coherent (flat, no world copies, zoom
+clamped to the operational range with tile overzoom beyond z14). Recordings made
+while the enhanced map is active capture the operational overlays without the
+cartographic background; recording integration is scope 3 and unchanged.
+
 ### Android presentation boundary
 
 Tracked in [#39](https://github.com/suraj-singh12/gnss-android-tracking/issues/39).

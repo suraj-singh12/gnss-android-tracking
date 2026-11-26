@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>GNSS · Command Centre</title>
     <link rel="stylesheet" href="/style.css" />
+    <script type="module" src="/enhanced.js"></script>
     <script src="/map.js" defer></script>
     <script src="/terrain.js" defer></script>
     <script src="/sos-alarm.js" defer></script>
@@ -521,6 +522,10 @@
         <label class="switchline layer-switch"><span><b>Hillshade</b><small id="availability-hillshade"></small></span><input type="checkbox" role="switch" id="layer-hillshade" /></label>
         <label class="switchline layer-switch"><span><b>Contours</b><small id="availability-contours"></small></span><input type="checkbox" role="switch" id="layer-contours" /></label>
         <label class="switchline layer-switch"><span><b>Elevation</b><small id="availability-elevation"></small></span><input type="checkbox" role="switch" id="layer-elevation" /></label>
+      </div>
+      <div class="layer-products" id="enhanced-layer-controls" hidden aria-label="Enhanced map layers">
+        <label class="switchline layer-switch"><span><b>Enhanced labels</b><small id="availability-enhanced-labels">Place, road and feature labels of the enhanced map.</small></span><input type="checkbox" role="switch" id="layer-enhanced-labels" checked /></label>
+        <label class="switchline layer-switch"><span><b>Enhanced hillshade</b><small id="availability-enhanced-hillshade">Terrain shading rendered from the map package DEM.</small></span><input type="checkbox" role="switch" id="layer-enhanced-hillshade" checked /></label>
       </div>
       <button type="button" id="apply-layers" class="primary">Apply layers</button>
       <p id="terrain-metadata" class="muted"></p>

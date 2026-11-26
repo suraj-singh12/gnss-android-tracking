@@ -160,6 +160,23 @@ type Store struct {
 	projectionRaw        map[string]*rawCursor
 	projectionByteBudget int
 	projections          map[string]*ProjectionCache
+	enhancedMap          bool
+}
+
+// SetEnhancedMapEnabled records the operator's launch-time opt-in to enhanced
+// (Format 2 / MapLibre) LIVE rendering. Default off: without the flag every
+// behaviour is exactly the legacy experience. Set once at startup before
+// serving; read-only afterwards.
+func (s *Store) SetEnhancedMapEnabled(enabled bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.enhancedMap = enabled
+}
+
+func (s *Store) enhancedMapEnabled() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.enhancedMap
 }
 
 var ErrConflict = errors.New("identity conflict")

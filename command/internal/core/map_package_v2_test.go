@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/png"
@@ -970,5 +971,31 @@ func TestV2ExportAggregateIncludesManifest(t *testing.T) {
 	// may need a few bytes for JSON structure; boundary is exact per byte added
 	if e = export(); e != nil && !strings.Contains(e.Error(), "aggregate package") {
 		t.Fatal("unexpected export error", e)
+	}
+}
+
+func TestEnhancedMapCapabilityEndpoint(t *testing.T) {
+	s := extensionStore(t)
+	read := func() map[string]bool {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "/local/enhanced-map-capability", nil)
+		s.LocalHandler(nil).ServeHTTP(rec, req)
+		if rec.Result().StatusCode != 200 {
+			t.Fatal("capability status", rec.Result().StatusCode)
+		}
+		var out map[string]bool
+		json.NewDecoder(rec.Result().Body).Decode(&out)
+		return out
+	}
+	if read()["enabled"] {
+		t.Fatal("capability must default off (legacy experience preserved)")
+	}
+	s.SetEnhancedMapEnabled(true)
+	if !read()["enabled"] {
+		t.Fatal("capability must reflect the launch flag")
+	}
+	s.SetEnhancedMapEnabled(false)
+	if read()["enabled"] {
+		t.Fatal("capability must follow flag reset")
 	}
 }

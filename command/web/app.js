@@ -21,7 +21,7 @@ function selectParty(id) {
   localStorage.setItem("gnss-selected-party", id);
   locatedSOS = undefined;
 }
-let viewport, offlineMap, inspectedPoint, locatedSOS, terrain, activeMapID;
+let viewport, offlineMap, enhancedMap, inspectedPoint, locatedSOS, terrain, activeMapID;
 function applyAppearance() {
   const night = localStorage.getItem("gnss-appearance") === "night";
   document.documentElement.dataset.appearance = night ? "night" : "day";
@@ -404,11 +404,12 @@ function renderDashboard() {
   window.OperationalModes?.update?.();
   if (window.HistoricalPlayback?.active) return;
   if ($("event-history").open) renderEvents();
-  $("projection-status").textContent = state.projection_error
-    ? "Projection failed: " + state.projection_error
-    : state.projection_pending
-      ? "Catching up history…"
-      : "";
+  $("projection-status").textContent =
+    (state.projection_error
+      ? "Projection failed: " + state.projection_error
+      : state.projection_pending
+        ? "Catching up history…"
+        : "") || enhancedStatusText();
   updateConnectionLabel();
   $("connection").classList.toggle(
     "unavailable",
@@ -1175,11 +1176,66 @@ async function refreshMaps(selected) {
   $("saved-map-count").textContent = `${maps.length} saved map${maps.length === 1 ? "" : "s"} · click a map to use it`;
   if (selected) $("saved-maps").value = selected;
 }
+// useEnhancedMap activates an immutable Format 2 enhanced map for LIVE
+// rendering. Without the operator's launch-time opt-in the activation safeguard
+// remains: the map is importable, exportable, servable and deletable but never
+// falsely reported active, and the current operational map is left unchanged.
+function useEnhancedMap(doc, source, id) {
+  if (!globalThis.EnhancedMap?.capabilityEnabled)
+    throw Error(
+      "Enhanced offline map requires the controlled-review -enhanced-map launch option. The map is stored; export and deletion remain available. Your current map is unchanged.",
+    );
+  const products = Object.values(doc.products || {});
+  if (!products.length || !products.some((p) => p.bounds))
+    throw Error("Enhanced map descriptor incomplete; your current map is unchanged.");
+  let coverage = null;
+  for (const p of products) {
+    if (!p.bounds) continue;
+    coverage = coverage
+      ? [Math.min(coverage[0], p.bounds[0]), Math.min(coverage[1], p.bounds[1]), Math.max(coverage[2], p.bounds[2]), Math.max(coverage[3], p.bounds[3])]
+      : [...p.bounds];
+  }
+  radiusManifest = undefined;
+  radiusViewKey = undefined;
+  radiusViewVersion++;
+  globalThis.radiusGrids = undefined;
+  $("resume-map").hidden = true;
+  $("export-manifest").hidden = true;
+  $("map-coverage-status").textContent = "";
+  $("map-detail-status").textContent = "";
+  offlineMap = undefined;
+  enhancedMap = { id, doc, source, bounds: coverage };
+  activeMapID = id;
+  $("current-map-name").textContent = source;
+  for (const row of $("saved-map-list").children) {
+    const active = row.dataset.mapId === id;
+    row.classList.toggle("selected", active);
+    const tag = row.querySelector(".map-row-tag");
+    if (tag) {
+      tag.textContent = active ? "Active" : "Stored";
+      tag.classList.toggle("warn", !active);
+    }
+  }
+  terrain = undefined;
+  updateLayers();
+  $("map-mode").value = "offline";
+  $("map-warning").textContent = "";
+  const productList = Object.keys(doc.products).join(", ");
+  $("map-metadata").textContent =
+    `Source: ${source} · Enhanced offline map revision ${doc.revision} · WGS84 tile products: ${productList} · Coverage ${coverage.map((n) => n.toFixed(5)).join(", ")} · saved locally` +
+    (doc.missing?.length ? ` · package honestly lacks: ${doc.missing.join(", ")}` : "");
+  $("map-attribution").textContent = doc.attribution || "";
+  $("export-map").href = "/local/maps/" + encodeURIComponent(id) + "/export";
+  $("export-map").setAttribute("download", "offline-map.gmap.zip");
+  localStorage.setItem("gnss-map-id", id);
+  viewport = undefined;
+  draw();
+  localStorage.setItem("gnss-map-mode", "offline");
+}
 function useMap(text, source, id, recordingAsset = "") {
   if (JSON.parse(text).type === "GNSS-enhanced-map")
-    throw Error(
-      "Enhanced offline map: interactive tile rendering arrives with the authorized MapLibre integration. The map is stored; export and deletion remain available. Your current map is unchanged.",
-    );
+    return useEnhancedMap(JSON.parse(text), source, id);
+  enhancedMap = undefined;
   const job = JSON.parse(text).plan;
   const previousWrap = GeoMap.setWrap(job?.request.lon || 0);
   let parsed;
@@ -1225,6 +1281,7 @@ function useMap(text, source, id, recordingAsset = "") {
   localStorage.setItem("gnss-map-mode", "offline");
 }
 async function loadSavedMap(id) {
+  if (globalThis.EnhancedMapReady) await globalThis.EnhancedMapReady;
   const response = await mapAssetFetch("/local/maps/" + encodeURIComponent(id));
   if (!response.ok)
     throw Error("Saved map unavailable; blank canvas remains available");
@@ -1246,6 +1303,8 @@ async function loadSavedMap(id) {
 }
 const terrainLayers = ["hillshade", "contours", "elevation"];
 function updateLayers() {
+  const enhancedControls = $("enhanced-layer-controls");
+  if (enhancedControls) enhancedControls.hidden = !enhancedMap;
   for (const kind of terrainLayers) {
     const control = $("layer-" + kind),
       available =
@@ -1619,7 +1678,7 @@ async function deleteSavedMap(id) {
   try {
     await mapPost(`maps/${encodeURIComponent(id)}/delete`, {});
     if (activeMapID === id) {
-      offlineMap = terrain = undefined;
+      offlineMap = enhancedMap = terrain = undefined;
       activeMapID = undefined;
       radiusManifest = undefined;
       radiusViewKey = undefined;
@@ -1849,9 +1908,9 @@ $("map-mode").onchange = () => {
   $("current-map-name").textContent =
     $("map-mode").value === "blank"
       ? "Blank canvas"
-      : offlineMap?.source || "No offline map selected";
+      : offlineMap?.source || enhancedMap?.source || "No offline map selected";
   localStorage.setItem("gnss-map-mode", $("map-mode").value);
-  if ($("map-mode").value === "offline" && !offlineMap) {
+  if ($("map-mode").value === "offline" && !offlineMap && !enhancedMap) {
     $("map-warning").textContent =
       "No offline map loaded. Blank canvas remains available.";
   }
@@ -1873,7 +1932,7 @@ $("map-file").onchange = async () => {
     await refreshMaps(saved.id);
     await loadSavedMap(saved.id);
   } catch (e) {
-    offlineMap = undefined;
+    offlineMap = enhancedMap = undefined;
     $("map-mode").value = "blank";
     localStorage.setItem("gnss-map-mode", "blank");
     $("map-metadata").textContent = "No valid offline map loaded.";
@@ -2006,6 +2065,14 @@ function draw() {
     globalThis.RecordingCapture?.changed();
   }
 }
+// Enhanced honesty states (coverage, tile loading, WebGL failure) merge into
+// the existing projection status surface; production projection truth always
+// wins when both have something to say. Shared by drawMap and renderDashboard
+// because both write projection-status.
+function enhancedStatusText() {
+  const enhancedMode = enhancedMap && $("map-mode").value === "offline";
+  return enhancedMode ? globalThis.EnhancedMap?.statusText() || "" : "";
+}
 function drawMap() {
   const root = $("tracks"),
     raw = $("all-observations").checked;
@@ -2033,10 +2100,11 @@ function drawMap() {
   const geo = (p) => GeoMap.project(p.fix.longitude, p.fix.latitude);
   if (!viewport) {
     let coords = all.map(geo);
-    if (!coords.length && offlineMap && $("map-mode").value === "offline")
+    const fitBounds = offlineMap?.bounds || enhancedMap?.bounds;
+    if (!coords.length && fitBounds && $("map-mode").value === "offline")
       coords = [
-        GeoMap.project(offlineMap.bounds[0], offlineMap.bounds[1]),
-        GeoMap.project(offlineMap.bounds[2], offlineMap.bounds[3]),
+        GeoMap.project(fitBounds[0], fitBounds[1]),
+        GeoMap.project(fitBounds[2], fitBounds[3]),
       ];
     if (!coords.length) coords = [[0, 0]];
     let minX = Infinity,
@@ -2060,7 +2128,7 @@ function drawMap() {
         ),
       ),
     };
-    viewport.empty = !all.length && !offlineMap;
+    viewport.empty = !all.length && !offlineMap && !enhancedMap;
   } else if (viewport.empty && all.length) {
     viewport = undefined;
     draw();
@@ -2109,6 +2177,8 @@ function drawMap() {
     night,
     $("map-mode").value,
     $("map-opacity").value,
+    enhancedMap?.id,
+    !!globalThis.EnhancedMap?.active,
     ["hillshade", "contours", "elevation"].map((k) => $("layer-" + k).checked),
     Object.values(state.devices).map((d) => [
       d.device_id,
@@ -2139,9 +2209,13 @@ function drawMap() {
     ).filter(Boolean)) {
       if (layerOn("hillshade") && terrain.shades) appendPinnedHillshade(root, terrain, xyCoord, night);
     }
-    $("map-mode-label").textContent = mapVisible
-      ? "Offline geographic map"
-      : "Blank canvas";
+    const enhancedMode = enhancedMap && $("map-mode").value === "offline";
+    const enhancedVisible = enhancedMode && globalThis.EnhancedMap?.active;
+    $("map-mode-label").textContent = enhancedVisible
+      ? "Enhanced offline map"
+      : mapVisible
+        ? "Offline geographic map"
+        : "Blank canvas";
     const outsideView = points.some((p) => {
       const [x, y] = xy(p);
       return x < 0 || x > w || y < 0 || y > h;
@@ -2153,7 +2227,7 @@ function drawMap() {
         : outsideView
           ? "Historical geometry extends beyond this view — use Fit parties."
           : "";
-    $("projection-status").textContent = projectionStatus;
+    $("projection-status").textContent = projectionStatus || enhancedStatusText();
     if (mapVisible) {
       const layer = svg("g", {
         "data-layer": "offline-map",

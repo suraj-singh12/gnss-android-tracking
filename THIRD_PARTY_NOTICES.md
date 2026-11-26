@@ -37,6 +37,18 @@ Build and test tools that are not shipped (Gradle wrapper under Apache-2.0, Andr
 JUnit 4 under EPL-1.0, Robolectric under MIT, AndroidX Test, Playwright under
 Apache-2.0) do not affect the licence of the distributed software.
 
+## Command embedded web assets
+
+| Component | Version | Licence |
+| --- | --- | --- |
+| MapLibre GL JS (`command/web/vendor/maplibre-gl*.mjs`, `maplibre-gl.css`) | 6.19.0 | BSD-3-Clause |
+| Noto Sans font files (`command/web/fonts/noto-sans-*.woff2`) | google/fonts checkout | SIL Open Font License 1.1 |
+
+MapLibre GL JS is © MapLibre contributors; its licence text ships in
+`command/web/vendor/MAPLIBRE-LICENSE.txt`. Noto fonts are © the Noto Project authors; the
+licence text ships in `command/web/fonts/OFL.txt`. Both licences are GPL-3.0
+compatible. These assets are embedded into the Command binary for offline operation.
+
 ## Map and terrain data
 
 Command downloads map and terrain data at run time; the data is not bundled. It keeps

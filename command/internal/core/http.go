@@ -103,6 +103,10 @@ func (s *Store) LocalHandler(assets http.Handler) http.Handler {
 			respond(w, 200, s.runtimeReport())
 			return
 		}
+		if r.URL.Path == "/local/enhanced-map-capability" && r.Method == "GET" {
+			respond(w, 200, map[string]bool{"enabled": s.enhancedMapEnabled()})
+			return
+		}
 		switch r.URL.Path {
 		case "/local/live", "/local/state", "/local/history":
 			var done func()
