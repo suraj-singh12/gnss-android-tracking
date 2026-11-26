@@ -1138,9 +1138,9 @@ async function refreshMaps(selected) {
       loadSavedMap(m.id).catch(showError);
     };
     row.dataset.mapId = m.id;
-    row.classList.toggle("selected", m.id === (selected || activeMapID));
+    row.classList.toggle("selected", m.id === activeMapID);
     const rowActions = el("div", undefined, "map-row-actions");
-    const active = m.id === (selected || activeMapID);
+    const active = m.id === activeMapID;
     const tag = el("span", active ? "Active" : "Stored", "soft-tag map-row-tag" + (active ? "" : " warn"));
     const more = el("button", "Details");
     more.type = "button";
@@ -3077,15 +3077,8 @@ async function startRadiusDownload() {
       confirmed: $("confirm-map-cost").checked,
     });
     preparedMap = undefined;
-    // Activate before tagging: a refused activation must not leave the new
-    // map falsely marked Active while export still targets the previous one.
-    let activated = false;
-    try {
-      await loadSavedMap(saved.id);
-      activated = true;
-    } finally {
-      await refreshMaps(activated ? saved.id : undefined);
-    }
+    await refreshMaps(saved.id);
+    await loadSavedMap(saved.id);
     await resumeRadius();
   } catch (e) {
     $("map-preparation-status").textContent = e.message;
@@ -3593,13 +3586,8 @@ $("import-map-source").onclick = async () => {
       if (!r.ok) throw Error(saved.message || "Import rejected");
     }
     if (downloadAbort === controller) downloadAbort = undefined;
-    let activated = false;
-    try {
-      await loadSavedMap(saved.id);
-      activated = true;
-    } finally {
-      await refreshMaps(activated ? saved.id : undefined);
-    }
+    await refreshMaps(saved.id);
+    await loadSavedMap(saved.id);
     if (!/\.zip$/i.test(file.name) && offlineMap?.plan) await resumeRadius();
     $("map-import-status").textContent = radiusManifest
       ? `Stored in Saved Maps. ${radiusSummary(radiusManifest)} ${radiusManifest.chunks.some((c) => c.vector.status === "complete" || c.terrain.status === "complete") ? "Verified saved areas are available offline." : "No verified map areas yet; retry missing work."}`
