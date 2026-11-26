@@ -421,6 +421,13 @@ func (s *Store) presentationOperation(op string, r presentationRequest) (any, er
 		gapFrom := l.Seen
 		l = presentationLease{Token: id() + id(), Epoch: id(), Seen: now, GapFrom: gapFrom, GapKind: gapKind}
 		result = l
+		// Travel Back pins are ephemeral to the live browser session (#96):
+		// a successful claim means any prior browser's travel session is dead —
+		// closed explicitly or expired — so its pins release here, inside the
+		// same transaction, rather than blocking deletion until restart.
+		if _, e = tx.Exec(`DELETE FROM offline_map_pins WHERE kind='travel'`); e != nil {
+			return nil, e
+		}
 	} else {
 		if !owner(l, r, now) {
 			return nil, errors.New("browser ownership expired or fenced; reacquire before capture")

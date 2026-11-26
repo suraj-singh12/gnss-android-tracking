@@ -41,6 +41,7 @@
     anchorEnhanced,
     travelEnhanced,
     travelPinnedMap,
+    travelPinFailed,
     selected,
     filters = new Map(),
     epochs = {},
@@ -572,6 +573,9 @@
         .toFixed(
           1,
         )} m · Unknown gaps preserved` +
+        (travelPinFailed
+          ? " · Enhanced map revision could not be pinned; cartographic reconstruction unavailable — positions and operational evidence are unaffected."
+          : "") +
         (globalThis.PlaybackEnhanced?.status
           ? " · " + globalThis.PlaybackEnhanced.status
           : "");
@@ -777,6 +781,7 @@
     updateMode();
     travel = undefined;
     travelEnhanced = undefined;
+    travelPinFailed = false;
     travelBasis = undefined;
     suspended = false;
     $("historical-return").hidden = true;
@@ -1422,17 +1427,39 @@
     }
     travel = next;
     // Pin the applicable enhanced revision for the session duration (#96):
-    // backend-enforced, atomic against deletion, released on exit. Pin failure
-    // is honest — travel continues with overlay evidence and disclosure.
+    // backend-enforced, atomic against deletion, released on exit. Acquisition
+    // is confirmed before the reconstruction is used — an unpinned revision
+    // could be deleted mid-session — and failure degrades honestly to the
+    // overlay evidence with disclosure.
     const enh = travelEnhanced;
     if (enh?.map_id) {
-      fetch("/local/enhanced-map-pin", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ map_id: enh.map_id }),
-      })
-        .then((r) => { if (r.ok) travelPinnedMap = enh.map_id; })
-        .catch(() => {});
+      let acquired = false;
+      try {
+        const r = await fetch("/local/enhanced-map-pin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ map_id: enh.map_id }),
+        });
+        acquired = r.ok;
+      } catch {}
+      if (request !== travelRequest) {
+        // Superseded by exit or re-entry while the pin call was in flight:
+        // release immediately so the race never leaks a reference.
+        if (acquired)
+          fetch("/local/enhanced-map-pin", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ map_id: enh.map_id, release: true }),
+          }).catch(() => {});
+        return;
+      }
+      if (acquired) {
+        travelPinnedMap = enh.map_id;
+        travelPinFailed = false;
+      } else {
+        travelEnhanced = undefined;
+        travelPinFailed = true;
+      }
     }
     travel.styles = next.styles;
     travel.contacts = next.contacts;
