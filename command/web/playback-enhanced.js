@@ -234,7 +234,11 @@ async function update(args) {
       center: [0, 0],
       zoom: 1,
       interactive: false, // inspection divergence is the playback transform, not the camera
-      attributionControl: { compact: true }, // the recorded experience included attribution; hiding it would misrepresent the evidence
+      // The recorded experience included attribution; hiding it would
+      // misrepresent the evidence. Always-expanded because playback is
+      // deliberately non-interactive (pointer input belongs to the frozen
+      // evidence overlay): a collapsible control could never be opened.
+      attributionControl: { compact: false },
       fadeDuration: 0,
       maxZoom: 24,
       renderWorldCopies: false,
