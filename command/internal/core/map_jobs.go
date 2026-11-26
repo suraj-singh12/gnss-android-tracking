@@ -211,7 +211,7 @@ func (s *Store) writeChunk(ctx context.Context, mapID, key, layer string, b []by
 	defer tx.Rollback()
 	if len(b) > 0 {
 		var total int
-		err = tx.QueryRowContext(ctx, `SELECT coalesce(sum(length(vector)),0)+coalesce(sum(length(terrain)),0)-coalesce((SELECT length(`+column+`) FROM offline_map_chunks WHERE map_id=? AND chunk_key=?),0) FROM offline_map_chunks`, mapID, key).Scan(&total)
+		err = tx.QueryRowContext(ctx, `SELECT coalesce(sum(length(vector)),0)+coalesce(sum(length(terrain)),0)-coalesce((SELECT length(`+column+`) FROM offline_map_chunks WHERE map_id=? AND chunk_key=?),0)+(SELECT coalesce(sum(length(data)),0) FROM offline_map_tiles) FROM offline_map_chunks`, mapID, key).Scan(&total)
 		if err != nil {
 			return err
 		}

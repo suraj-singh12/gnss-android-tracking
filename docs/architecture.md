@@ -510,6 +510,26 @@ operational assets. This archive is not frozen recording evidence; #38 retains t
 separate ownership. UI uses one Map & Layers dialog with Download New Map, Use
 Existing Map and Import Map, existing Saved Maps selection and Layers controls.
 
+Enhanced maps (#93, issue #94) use `version=2` of the same `.gmap.zip` extension,
+carrying typed immutable tile products: `vector` (gzip MVT z6–14+ pyramid),
+`dem` (Terrarium PNG), `landcover` (PNG) and `terrain-gterr` (the existing
+GTERR001 numeric grid, reused unchanged). MBTiles is untrusted input: admitted
+read-only with an object allowlist (tables `tiles`/`metadata` only — no views,
+triggers, virtual tables or extensions), bounded tile count/bytes/zoom/coordinate
+limits and gzip/PNG content checks, then normalized once into Command-owned
+indexed storage (`offline_map_tiles`, XYZ orientation). Manifest accounting
+(tile counts, bytes, coverage, canonical tile-set hashes) must match actual
+admitted content exactly or the package is rejected before publication; import
+stays atomic and idempotent (`portable2-` identity derives from the immutable
+descriptor). Tiles serve read-only at
+`/local/maps/{id}/tiles/{product}/{z}/{x}/{y}` with correct MIME/gzip passthrough
+and bounded coordinates; the enhanced descriptor never enters the legacy GeoJSON
+renderer. Map revision identity (`revision`) is content-derived; whole-revision
+pin/release references (`offline_map_pins`) protect referenced revisions from
+deletion until recording/Travel Back integration (scope 3) uses them. Format 1
+packages, legacy maps and their import/export are untouched; both formats coexist
+in the one library under the same 64-map/256-MiB budget, now including tile bytes.
+
 ### Android presentation boundary
 
 Tracked in [#39](https://github.com/suraj-singh12/gnss-android-tracking/issues/39).

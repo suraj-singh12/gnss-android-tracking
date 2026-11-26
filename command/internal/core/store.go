@@ -233,6 +233,18 @@ func Open(path string) (*Store, error) {
 	if _, err = db.Exec(`CREATE TABLE IF NOT EXISTS offline_map_transfers(map_id TEXT PRIMARY KEY REFERENCES offline_maps(id),data TEXT NOT NULL)`); err != nil {
 		return fail(err)
 	}
+	if _, err = db.Exec(`CREATE TABLE IF NOT EXISTS offline_map_tiles (
+ map_id TEXT NOT NULL REFERENCES offline_maps(id), product TEXT NOT NULL,
+ z INTEGER NOT NULL, x INTEGER NOT NULL, y INTEGER NOT NULL,
+ data BLOB NOT NULL, sha TEXT NOT NULL,
+ PRIMARY KEY(map_id,product,z,x,y)) WITHOUT ROWID`); err != nil {
+		return fail(err)
+	}
+	if _, err = db.Exec(`CREATE TABLE IF NOT EXISTS offline_map_pins (
+ map_id TEXT NOT NULL, revision TEXT NOT NULL, kind TEXT NOT NULL, created TEXT NOT NULL,
+ PRIMARY KEY(map_id,revision,kind))`); err != nil {
+		return fail(err)
+	}
 	if err = sourceSchema(&Store{db: db}); err != nil {
 		return fail(err)
 	}

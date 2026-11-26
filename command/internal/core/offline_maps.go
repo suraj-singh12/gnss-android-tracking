@@ -169,7 +169,7 @@ func (s *Store) listMaps() ([]savedMap, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	rows, err := db.QueryContext(ctx, `SELECT m.id,m.source,m.created,length(m.data)+(SELECT coalesce(sum(coalesce(length(vector),0)+coalesce(length(terrain),0)),0) FROM offline_map_chunks WHERE map_id=m.id),coalesce(json_extract(m.data,'$.plan.bounds'),json_extract(m.data,'$.requested_bounds'),'null'),coalesce(substr(t.data,1,8204),x''),coalesce(json_array_length(m.data,'$.plan.chunks'),0),
+	rows, err := db.QueryContext(ctx, `SELECT m.id,m.source,m.created,length(m.data)+(SELECT coalesce(sum(coalesce(length(vector),0)+coalesce(length(terrain),0)),0) FROM offline_map_chunks WHERE map_id=m.id)+(SELECT coalesce(sum(length(data)),0) FROM offline_map_tiles WHERE map_id=m.id),coalesce(json_extract(m.data,'$.plan.bounds'),json_extract(m.data,'$.requested_bounds'),'null'),coalesce(substr(t.data,1,8204),x''),coalesce(json_array_length(m.data,'$.plan.chunks'),0),
  (SELECT count(*) FROM offline_map_chunks WHERE map_id=m.id AND vector IS NOT NULL),
  (SELECT count(*) FROM offline_map_chunks WHERE map_id=m.id AND terrain IS NOT NULL) FROM offline_maps m LEFT JOIN offline_terrain t ON t.map_id=m.id ORDER BY m.created DESC`)
 	if err != nil {
@@ -409,7 +409,7 @@ func (s *Store) saveMap(source string, b []byte) (savedMap, error) {
 	}
 	defer tx.Rollback()
 	var count, total int
-	if err = tx.QueryRow(`SELECT count(*),coalesce(sum(length(data)),0) FROM offline_maps`).Scan(&count, &total); err != nil {
+	if err = tx.QueryRow(`SELECT count(*),coalesce(sum(length(data)),0)+(SELECT coalesce(sum(length(data)),0) FROM offline_map_tiles) FROM offline_maps`).Scan(&count, &total); err != nil {
 		return savedMap{}, err
 	}
 	if count >= 64 || total+len(b) > 256*1024*1024 {
@@ -422,7 +422,7 @@ func (s *Store) saveMap(source string, b []byte) (savedMap, error) {
 	return m, tx.Commit()
 }
 func (s *Store) mapRequest(w http.ResponseWriter, r *http.Request, p *mapProvider) bool {
-	if s.mapPackageRequest(w, r) || s.mapSourceRequest(w, r, p) {
+	if s.mapPackageRequest(w, r) || s.mapSourceRequest(w, r, p) || s.mapTileRequest(w, r) {
 		return true
 	}
 	if s.mapJobRequest(w, r, p) {

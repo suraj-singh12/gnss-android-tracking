@@ -53,7 +53,7 @@ func (s *Store) publishJob(id, source string, b []byte) (savedMap, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var count, total int
-	if e := s.db.QueryRow(`SELECT count(*),coalesce(sum(length(data)),0) FROM offline_maps`).Scan(&count, &total); e != nil {
+	if e := s.db.QueryRow(`SELECT count(*),coalesce(sum(length(data)),0)+(SELECT coalesce(sum(length(data)),0) FROM offline_map_tiles) FROM offline_maps`).Scan(&count, &total); e != nil {
 		return m, e
 	}
 	if count >= 64 || total+len(b) > mapAssetBudget {
@@ -70,6 +70,9 @@ func (s *Store) exportMapPackage(ctx context.Context, id string, f *os.File) err
 	s.mu.Unlock()
 	if e != nil {
 		return e
+	}
+	if d, e2 := enhancedDoc(raw); e2 == nil {
+		return s.exportMapPackageV2(ctx, id, d, f)
 	}
 	raw = portableMapData(raw)
 	p := mapPackage{Version: 1, Format: "GNSS-Command-map", Source: source, Map: raw, Assets: []mapPackageAsset{}, Attribution: "© OpenStreetMap contributors · ODbL; DEM: " + demAttribution, Derivation: "GTERR001 native DEM; compatible Command Horn hillshade/marching-square contours; voids transparent. Checksums show byte integrity, not publisher authenticity."}
@@ -224,7 +227,7 @@ func (s *Store) importMapPackage(ctx context.Context, f *os.File, size int64) (s
 		if files[v.Name] != nil || strings.Contains(v.Name, "..") || strings.ContainsAny(v.Name, "\\:\x00") || strings.HasPrefix(v.Name, "/") || v.Mode()&os.ModeType != 0 {
 			return fail(errors.New("unsafe or duplicate archive entry"))
 		}
-		if v.UncompressedSize64 > mapLimit+2*1024*1024 {
+		if v.UncompressedSize64 > maxAssetFileBytes+2*1024*1024 {
 			return fail(errors.New("oversized archive entry"))
 		}
 		expanded += v.UncompressedSize64
@@ -255,6 +258,23 @@ func (s *Store) importMapPackage(ctx context.Context, f *os.File, size int64) (s
 	b, e := read("manifest.json", 2*1024*1024)
 	if e != nil {
 		return fail(e)
+	}
+	var probe struct {
+		Version int    `json:"version"`
+		Format  string `json:"format"`
+	}
+	if e = json.Unmarshal(b, &probe); e != nil {
+		return fail(e)
+	}
+	if probe.Format != "GNSS-Command-map" {
+		return fail(errors.New("unsupported package metadata"))
+	}
+	if probe.Version == 2 {
+		var p2 mapPackageV2
+		if e = json.Unmarshal(b, &p2); e != nil {
+			return fail(e)
+		}
+		return s.importMapPackageV2(ctx, &p2, files, read)
 	}
 	var p mapPackage
 	if e = json.Unmarshal(b, &p); e != nil {
@@ -367,7 +387,7 @@ func (s *Store) importMapPackage(ctx context.Context, f *os.File, size int64) (s
 		return m, nil
 	}
 	var count, total int
-	if e = tx.QueryRow(`SELECT count(*),coalesce(sum(length(data)),0)+(SELECT coalesce(sum(coalesce(length(vector),0)+coalesce(length(terrain),0)),0) FROM offline_map_chunks) FROM offline_maps`).Scan(&count, &total); e != nil {
+	if e = tx.QueryRow(`SELECT count(*),coalesce(sum(length(data)),0)+(SELECT coalesce(sum(coalesce(length(vector),0)+coalesce(length(terrain),0)),0) FROM offline_map_chunks)+(SELECT coalesce(sum(length(data)),0) FROM offline_map_tiles) FROM offline_maps`).Scan(&count, &total); e != nil {
 		return fail(e)
 	}
 	if count >= 64 || int64(total)+int64(expanded) > mapAssetBudget {
