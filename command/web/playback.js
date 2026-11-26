@@ -1330,7 +1330,7 @@
       : 1;
     const width = travelMap?.width || 1200,
       height = travelMap?.height || 700;
-    if (travelMap?.viewport && travelMap.map_svg)
+    if (travelMap?.viewport && (travelMap.map_svg || travelEnhanced))
       ({ cx, cy, scale } = travelMap.viewport);
     else if (travelBasis) ({ cx, cy, scale } = travelBasis);
     else travelBasis = { cx, cy, scale };
