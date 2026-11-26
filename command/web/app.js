@@ -1195,6 +1195,10 @@ function useEnhancedMap(doc, source, id) {
       ? [Math.min(coverage[0], p.bounds[0]), Math.min(coverage[1], p.bounds[1]), Math.max(coverage[2], p.bounds[2]), Math.max(coverage[3], p.bounds[3])]
       : [...p.bounds];
   }
+  // The projection wrap centre belongs to the active map: inheriting a radius
+  // map's seam origin would put enhanced overlays in the wrong world copy while
+  // the background stays clamped to the world edge.
+  GeoMap.setWrap((coverage[0] + coverage[2]) / 2);
   radiusManifest = undefined;
   radiusViewKey = undefined;
   radiusViewVersion++;
