@@ -1,6 +1,6 @@
 # Issue #96 design proposal — Enhanced recording, playback and Travel Back
 
-**Status: design gate — STOPPED for operator approval. No production implementation.**
+**Status: design gate — updated with operator refinements (addendum 2026-11-26), STOPPED for final approval. No production implementation.**
 Audited application: real `dev` Command at merge `251081848c7d4db3f98c69547b8e7785dcdb30f8` (post-#95), running with `-enhanced-map`, Format 2 fixture package and three live parties. All screenshots are the unmodified production application.
 
 ---
@@ -23,11 +23,13 @@ The existing model is preserved exactly: browser lease, journal, delta codec, ga
 enhanced: {
   renderer: "maplibre-gl", renderer_version: "<vendored version>",
   map_id, revision,            // immutable Format 2 identity (content hash)
-  style_hash,                  // generated-style digest — compatibility evidence
+  style: { day, night },       // the exact generated style documents (see below)
   layers: { labels, hillshade },          // enhanced-layer toggles at capture
   availability: {
     state: "ready" | "loading" | "coverage-incomplete" | "degraded" | "failed",
     settled: true|false,       // loaded+idle+stable at the render opportunity
+    missing: [ { product, z, x, y } ],   // bounded, deduplicated — see below
+    truncated: false,          // honest overflow evidence if the bound is hit
     detail: "<honest operator-facing cause, as displayed live>"
   }
 }
@@ -36,7 +38,9 @@ enhanced: {
 Already captured today and reused unchanged: `common.viewport` (the production camera — cx/cy/scale, the complete enhanced camera since #95's architecture makes the production camera the single authority), `appearance` (day/night), viewport size, layer menu state, panels, selection. No duplicate camera or theme capture is added.
 
 **Honesty rules (hard requirements):**
-- `availability.state` reflects what was *actually rendered* at the render opportunity — `loading` while tiles are in flight, `coverage-incomplete` when the recorded viewport overflowed package coverage, `degraded` on partial/tile-error states, `failed` on context loss. Playback must reproduce that state honestly and may **never** substitute tiles that only became available later, nor data from the current library.
+- `availability.state` reflects what was *actually rendered* at the render opportunity — `loading` while tiles are in flight, `coverage-incomplete` when the recorded viewport overflowed package coverage, `degraded` on partial/tile-error states, `failed` on context loss. Playback must reproduce that state honestly and may **never** substitute tiles that only became available later, nor data from the current library. **A warning never justifies display: geographical information unavailable during capture is not merely disclosed — it is absent in playback reconstruction.** The disclosure explains the absence; it never accompanies silently substituted geography.
+- `availability.missing` is the bounded, deduplicated tile/product availability record (operator decision 3): the deterministic `{product, z, x, y}` keys of tiles that were required by the recorded viewport but *not* actually rendered at capture — still loading, errored, or outside coverage. Tile identity is deterministic per source (z/x/y), tile counts inside one viewport are naturally small (single digits to dozens), identical keys deduplicate across frames and intervals through the existing delta codec, and a fixed bound caps the record: beyond the bound, recording stops adding keys and sets `truncated:true` as honest evidence — capture never fails and positions are never blocked. Recording the *missing* set rather than the rendered set keeps the common case (complete rendering) at zero cost.
+- `style` embeds the exact generated style documents (operator refinement: compatibility is **preserved**, not merely hash-identified). The style is generated, compact (small JSON, no assets — tiles/fonts are served by identity from the immutable revision) and constant across a recording, so the delta codec stores it once. Playback renders the *recorded* style verbatim through the vendored renderer; the recorded `renderer`/`renderer_version` is validated for compatibility and any incompatibility degrades honestly with disclosure rather than mis-rendering.
 - `settled` implements the strengthened settlement requirement: a frame is `settled:true` only when the tile set was fully loaded **and** MapLibre idle **and** the camera and style have been stable for a short stability window (no source/camera mutation in flight). Settlement never blocks or delays operational capture — positions are captured regardless; only the honest readiness flag varies.
 - Switching maps mid-recording produces honest mixed recordings: enhanced intervals carry the object, legacy intervals carry embedded SVG as today, blank intervals carry neither. No interval is ever misrepresented.
 
@@ -49,7 +53,8 @@ Playback (saved recordings and View Recording of the unsaved snapshot) gains a s
 1. On session open, the player resolves the recorded `(map_id, revision)` against the pin store. The server already serves immutable revision tiles/styles (#94/#95); playback reuses those endpoints unchanged.
 2. Each checkpoint applies its recorded `viewport` through the identical Web-Mercator transform — overlay alignment is exact by the same construction as LIVE, measured the same way.
 3. Interactive pan/zoom/inspection, follow/seek, timeline navigation, layer controls, theme and selected-party filtering work exactly as they do in playback today — the only difference is that the geographical background is a live interactive map instead of replayed SVG markup. Recorded enhanced-layer toggles initialize the playback layer state; the operator may diverge interactively, as with every other inspection control.
-4. Recorded availability is reproduced honestly: intervals captured `loading`/`coverage-incomplete`/`failed` show the same disclosure in the same projection-status surface, not a silently perfect map. Where the recording honestly captured `ready`, playback re-renders the real tiles.
+4. Recorded availability is **enforced**, not merely disclosed (operator decision 3): playback reconstructs each interval's cartography from the pinned revision but suppresses exactly the recorded `missing` tile keys — implemented as a deterministic request gate in the shared component's playback mode (tile URLs are deterministic `{product}/{z}/{x}/{y}`, so a `transformRequest`-level filter needs no new infrastructure). Unavailable-at-capture tiles simply do not render; the honest disclosure explains the gap. Where the recording captured `ready`, playback re-renders the real tiles completely.
+5. Explicit seek re-anchors the recorded camera (operator decision 2): timeline seeks restore the checkpoint's recorded viewport; interactive inspection between seeks diverges exactly as playback inspection behaves today and is never destroyed except by the operator's own seek.
 
 **Fallback when the revision is unavailable** (deleted before protection existed, or a transferred recording without its package — the #38 case): playback falls back to the overlay-only blank experience with an explicit, persistent disclosure: *"Recorded enhanced map revision … is not available on this Command. Positions, tracks and operational evidence are unaffected."* It never substitutes another revision, another map, or the current library.
 
@@ -59,9 +64,9 @@ Playback (saved recordings and View Recording of the unsaved snapshot) gains a s
 
 Format 2 packages are already immutable and content-addressed; identical revisions are already deduplicated by identity. Added, minimally:
 
-- **Durable references** in the recording store: recording-start (and the first enhanced frame) records a reference `(recording/unsaved identity, map_id, revision)`; Save/seal carries references into the saved recording's metadata; discard releases the unsaved reference in the same lifecycle transaction. Reuses the existing presentation asset-claim mechanics and journal discipline — no parallel bookkeeping.
-- **Deletion protection**: deleting an enhanced package that any unsaved or saved recording references is refused with an honest error naming the count of referencing recordings (e.g. *"Referenced by 2 saved recordings — export or delete those recordings first. The map itself is unchanged."*). Replacement cannot occur silently because revisions are immutable identities — a re-imported different package is a different revision.
-- **Travel Back pin**: entering Travel Back pins the applicable enhanced revision in memory for the session; exiting releases it. Pins are deliberately memory-only, so a restart can never leave stale pins blocking deletion (**restart-safe cleanup by construction**); durable recording references live in the database and survive restart, as they must.
+- **Durable recording references** in the recording store: recording-start (and the first enhanced frame) records a reference `(recording/unsaved identity, map_id, revision)`; Save/seal carries references into the saved recording's metadata; discard releases the unsaved reference in the same lifecycle transaction. Reuses the existing presentation asset-claim mechanics and journal discipline — no parallel bookkeeping.
+- **Backend-enforced pins, atomic against deletion** (operator decision 4): one small pin table holds both durable recording references and ephemeral Travel Back pins. Deletion checks pins **inside the same transaction** as the delete, so a pin acquisition and a deletion can never interleave — the deletion either sees the pin and refuses, or commits first and the later pin acquisition fails honestly because the revision is gone. Travel Back pins are acquired through the Command backend at entry and released at exit; because travel sessions do not survive a restart, startup sweeps ephemeral pin rows — restart cleanup is a deterministic one-statement migration-time sweep, not a heuristic. Pin acquisition failure (revision already gone) surfaces honestly at Travel Back entry rather than degrading mid-session.
+- **Deletion protection**: deleting an enhanced package that any recording or active Travel Back session references is refused with an honest error naming the referencing recordings (e.g. *"Referenced by 2 saved recordings and 1 active Travel Back session — the map itself is unchanged."*). Per operator direction the error does **not** suggest export as a workaround: self-contained enhanced-recording transfer is #38 scope and does not exist yet. Replacement cannot occur silently because revisions are immutable identities — a re-imported different package is a different revision.
 - **No garbage collection of user maps** is introduced: packages remain operator-managed. GC in the issue scope means reference cleanup, which the lifecycle transactions above cover.
 
 ## 5. Travel Back
@@ -105,9 +110,13 @@ Everything reuses existing production components; no workspace or control redesi
 
 Existing regressions plus focused additions: legacy v1 fixture replay byte-identical; mixed enhanced/legacy/blank recording; active and final Save; pause/gap intervals; seek/inspection/layers; delayed/stale/missing tiles with throttled tile server; deletion refusal while referenced and success after references released; re-import identity; daemon restart mid-recording and mid-travel; storage-pressure admission; settlement flag correctness against synthetic tile delays; alignment measurement (same viewport-transform construction proof as #95, plus screenshot evidence); SOS/ACK non-interference. `go test -race ./...`, `go vet`, browser regressions, notices and owning docs updated per AGENTS.md.
 
-## 10. Decisions requested from the operator
+## 10. Operator decisions — resolved (2026-11-26)
 
-1. **Deletion protection strength** — refuse deletion while referenced (proposed), or allow with an explicit type-to-confirm warning that playback will permanently degrade? Proposed: refuse; export-first path remains available.
-2. **Playback divergence memory** — when the operator pans/zooms during playback inspection then seeks, should the camera re-anchor to the recorded camera at each seek (proposed, consistent with evidence-first playback) or retain the diverged camera?
-3. **Availability granularity** — compact per-frame state as proposed, or additionally a per-interval rollup in recording metadata (slightly more evidence, slightly more complexity)? Proposed: per-frame only.
-4. **Travel Back pin disclosure** — the one-line entry-dialog disclosure (proposed), or silent pinning since release-on-exit is guaranteed? Proposed: disclose; honesty costs one line.
+1. **Deletion protection: refuse** deletion of referenced map revisions. The refusal error does not suggest export as a workaround — self-contained enhanced-recording transfer is #38 scope and does not yet exist.
+2. **Seek re-anchors the recorded camera**; interactive inspection between seeks is unchanged existing playback behaviour.
+3. **Availability is bounded, deduplicated tile/product metadata** — the `missing` record above — and it gates playback reconstruction: a warning never justifies displaying geography that was unavailable during capture.
+4. **Travel Back pin disclosure approved**; pins are enforced at the Command backend atomically against deletion, with reliable release and deterministic restart sweep.
+5. **Style/renderer compatibility is preserved, not merely identified**: the exact generated style documents travel inside the recording evidence (bounded, delta-compressed) and playback renders them verbatim through the vendored renderer, with recorded-version validation and honest degradation on incompatibility.
+6. Existing terrain inspection and recording functionality are preserved unchanged — terrain layers, hillshade/contours/elevation controls and every recording guarantee remain exactly as they are.
+
+**Feasibility confirmation** (verified against the merged #95 implementation, not prototypes): tile URLs are deterministic per product `{z}/{x}/{y}` and already served by immutable identity, so both recording-side missing-key capture (reading the live source caches) and playback-side gating (a request-level filter in the shared component) are small additions inside the existing component — no new rendering infrastructure. Pin atomicity is one table plus transaction-local checks in the existing deletion and pin endpoints; the restart sweep is one statement at startup. Style embedding rides the existing delta codec and compresses to a single copy per recording. No parallelism, no new subsystems.
