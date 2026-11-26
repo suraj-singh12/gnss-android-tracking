@@ -114,6 +114,18 @@ async function update(args) {
     PlaybackEnhanced.status = `Recorded enhanced renderer "${enhanced.renderer}" is not supported by this Command; positions, tracks and operational evidence are unaffected.`;
     return;
   }
+  // Conservative degradation (#96): truncated availability evidence cannot
+  // account for every tile, and failed capture evidence is uncertain — cached
+  // or subsequently available geography could appear incorrectly. Overlay
+  // evidence is never affected; only the reconstruction is suppressed.
+  const av0 = enhanced.availability || {};
+  if (av0.truncated || av0.state === "failed") {
+    detach(true);
+    PlaybackEnhanced.status = av0.truncated
+      ? "Recorded tile availability evidence is truncated; cartographic reconstruction suppressed — positions, tracks and operational evidence are unaffected."
+      : "Recorded tile availability evidence is uncertain; cartographic reconstruction suppressed — positions, tracks and operational evidence are unaffected.";
+    return;
+  }
   const style = night ? enhanced.style?.night : enhanced.style?.day;
   if (!style?.layers) {
     detach(true);
@@ -203,9 +215,7 @@ async function update(args) {
   // Honest availability surfacing: loading/degraded/truncated evidence is
   // carried to the playback evidence surface by the caller reading status.
   const av = enhanced.availability || {};
-  if (av.truncated)
-    PlaybackEnhanced.status = "Recorded tile availability evidence is truncated; reconstruction degrades conservatively — some recorded-missing geography may appear absent.";
-  else if (av.state && av.state !== "ready")
+  if (av.state && av.state !== "ready")
     PlaybackEnhanced.status = av.detail || "";
   else PlaybackEnhanced.status = "";
   if (state.map) state.map.resize();
