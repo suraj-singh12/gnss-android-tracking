@@ -4290,7 +4290,9 @@ window.recordingAppliedState = () => {
   const assetEvidence = recordingAppliedAssets();
   return {
     version: 1,
-    map_id: $("map-mode").value === "offline" ? activeMapID || "" : "",
+    // Enhanced cartography can never be captured in a recording (#96 scope);
+    // claiming it would be false evidence. Recordings stay on the legacy path.
+    map_id: $("map-mode").value === "offline" && !enhancedMap ? activeMapID || "" : "",
     assets: assetEvidence.assets,
     asset_warnings: assetEvidence.warnings,
     common: {
