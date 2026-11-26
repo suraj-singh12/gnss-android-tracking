@@ -461,6 +461,8 @@
       transform,
       angle,
       night: document.documentElement.dataset.appearance === "night",
+    })?.then?.(() => {
+      if (frame?.checkpoint) updateEvidence(frame.checkpoint);
     });
     for (const [id, p] of Object.entries(checkpoint.parties)) {
       const card = label(
@@ -569,7 +571,10 @@
         )
         .toFixed(
           1,
-        )} m · Unknown gaps preserved`;
+        )} m · Unknown gaps preserved` +
+        (globalThis.PlaybackEnhanced?.status
+          ? " · " + globalThis.PlaybackEnhanced.status
+          : "");
       return;
     }
     const trailing = session.metadata.trailing_unverified_interval;
@@ -605,6 +610,9 @@
       " · read-only evidence" +
       (checkpoint.asset_warnings?.length
         ? " · " + checkpoint.asset_warnings.join(" ")
+        : "") +
+      (globalThis.PlaybackEnhanced?.status
+        ? " · " + globalThis.PlaybackEnhanced.status
         : "");
   }
   let inspectorMap, anchor;
