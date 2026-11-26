@@ -286,7 +286,7 @@ function boot() {
     // shows only when an enhanced map is the active map and map mode is offline.
     const em = typeof enhancedMap !== "undefined" ? enhancedMap : null;
     const modeEl = document.getElementById("map-mode");
-    const shouldShow = !!em && state.capability && !state.failedIDs.has(em.id) && modeEl && modeEl.value === "offline";
+    const shouldShow = !!em && state.capability && !state.failedIDs.has(em.id) && modeEl && modeEl.value === "offline" && !window.HistoricalPlayback?.active;
     if (shouldShow && (!Enhanced.active || state.activeID !== em.id)) activate(em.doc, em.id);
     else if (!shouldShow && Enhanced.active) deactivate();
     // Frame-coherent camera follow: x = (px - cx) * scale + w/2 and
