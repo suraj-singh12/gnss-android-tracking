@@ -10,7 +10,7 @@
 // default-off `-enhanced-map` opt-in, (b) an enhanced (Format 2) map is the
 // active map and (c) map mode is offline. Every other state is exactly the
 // legacy experience. Rendering is flat mercator, no world copies.
-import { buildStyle } from "/enhanced-style.js";
+import { buildStyle, viewportOverflowsCoverage } from "/enhanced-style.js";
 
 const R = 6378137;
 const WORLD = 2 * Math.PI * R;
@@ -135,21 +135,28 @@ function currentViewport() {
 function outsideCoverage() {
   const vp = currentViewport();
   if (!vp || !Number.isFinite(vp.cx) || !state.coverage) return false;
-  const [lon, lat] = viewportLonLat(vp);
-  const c = state.coverage;
-  return lon < c[0] || lon > c[2] || lat < c[1] || lat > c[3];
+  const tracks = document.getElementById("tracks");
+  const w = tracks ? tracks.clientWidth : 0, h = tracks ? tracks.clientHeight : 0;
+  return viewportOverflowsCoverage(vp.cx, vp.cy, vp.scale, w, h, state.coverage);
 }
 
 // statusText contributes the enhanced layer's persistent honesty states to the
 // existing projection-status surface. Production draw code merges them; when no
 // enhanced state is active this returns "" and production text is untouched.
+function recordingGate() {
+  const rec = window.recordingLiveState?.()?.recording;
+  return !!(rec && (rec.active || rec.status === "paused"));
+}
+
 function statusText() {
   if (Enhanced.failed)
     return "Enhanced map unavailable: " + Enhanced.failed + " Legacy map experience active — positions, tracks and controls are unchanged.";
+  if (recordingGate() && !Enhanced.failed)
+    return "Enhanced map hidden while a recording is active — recordings remain on the safe legacy path until #96. Positions, tracks and controls are unchanged.";
   if (!Enhanced.active) return "";
   if (outsideCoverage())
     return "Enhanced map coverage incomplete here — positions, tracks and controls remain exact; background may be missing.";
-  if (state.tilesLoading && !state.firstPainted)
+  if (state.tilesLoading)
     return "Enhanced map tiles loading… positions remain exact; background may be incomplete.";
   return "";
 }
@@ -230,11 +237,26 @@ async function ensureMap(doc, id) {
       if (e.isSourceLoaded !== true) state.tilesLoading = true;
     });
     state.map.on("idle", () => {
-      const wasFirst = !state.firstPainted;
       state.tilesLoading = false;
       state.firstPainted = true;
-      if (wasFirst) repaintProduction();
+      repaintProduction();
     });
+    state.map.on("sourcedataloading", () => repaintProduction());
+    // Runtime WebGL context loss after successful initialisation: fail openly
+    // — never silently — with the operational overlays unaffected by
+    // construction. The context is not recoverable through MapLibre.
+    const contextLost = () => {
+      if (!Enhanced.active) return;
+      deactivate();
+      if (state.activeID) state.failedIDs.add(state.activeID);
+      Enhanced.failed = "WebGL context lost.";
+      repaintProduction();
+    };
+    // Registered directly on the drawing canvas: event delivery for real GPU
+    // loss must not depend on container bubbling behaviour.
+    const glCanvas = state.gl.querySelector("canvas");
+    if (glCanvas) glCanvas.addEventListener("webglcontextlost", contextLost);
+    state.gl.addEventListener("webglcontextlost", contextLost);
     state.map.on("error", () => {
       // Individual tile absence is legitimate "no data"; sustained rendering
       // failure still must not corrupt the operational overlays, which are
@@ -290,7 +312,7 @@ function boot() {
     // shows only when an enhanced map is the active map and map mode is offline.
     const em = typeof enhancedMap !== "undefined" ? enhancedMap : null;
     const modeEl = document.getElementById("map-mode");
-    const shouldShow = !!em && state.capability && !state.failedIDs.has(em.id) && modeEl && modeEl.value === "offline" && !window.HistoricalPlayback?.active;
+    const shouldShow = !!em && state.capability && !state.failedIDs.has(em.id) && modeEl && modeEl.value === "offline" && !window.HistoricalPlayback?.active && !recordingGate();
     if (shouldShow && (!Enhanced.active || state.activeID !== em.id)) activate(em.doc, em.id);
     else if (!shouldShow && Enhanced.active) deactivate();
     // Frame-coherent camera follow: x = (px - cx) * scale + w/2 and
