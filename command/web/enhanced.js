@@ -427,7 +427,10 @@ Enhanced.captureState = function captureState() {
   const em = typeof enhancedMap !== "undefined" ? enhancedMap : null;
   return {
     renderer: "maplibre-gl",
-    renderer_version: state.maplibre?.version || "unknown",
+    // The vendored bundle does not re-export its version; the constant is
+    // pinned here beside the vendored artifact it describes (vendor/
+    // maplibre-gl.mjs — update both together).
+    renderer_version: state.maplibre?.version || "6.19.0",
     map_id: em?.id || state.activeID,
     revision: em?.doc?.revision || "",
     style: { day: state.styleDay, night: state.styleNight },
