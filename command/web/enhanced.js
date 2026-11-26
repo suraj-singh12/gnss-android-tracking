@@ -88,6 +88,7 @@ const state = {
   labelsOn: true,
   hillshadeOn: true,
   failedIDs: new Set(),
+  activating: false,
 };
 
 function webglUsable() {
@@ -261,7 +262,8 @@ function repaintProduction() {
 }
 
 async function activate(doc, id) {
-  state.activeID = id; // claim up front: the rAF sync loop must not re-enter
+  if (state.activating) return; // the rAF sync loop must not re-enter in flight
+  state.activating = true;
   try {
     await ensureMap(doc, id);
     state.failedIDs.delete(id);
@@ -274,6 +276,8 @@ async function activate(doc, id) {
     state.failedIDs.add(id); // this map stays failed; other enhanced maps retry cleanly
     Enhanced.failed = (e && e.message) || "initialisation failed.";
     repaintProduction();
+  } finally {
+    state.activating = false;
   }
 }
 
