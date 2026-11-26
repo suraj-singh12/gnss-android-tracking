@@ -15,8 +15,6 @@
 // to the recorded pixel dimensions and undergoes the same letterbox mapping
 // the SVG viewBox applies, plus the playback world transform, so the recorded
 // camera projection lands exactly beneath the frozen overlay evidence.
-import { viewportOverflowsCoverage } from "/enhanced-style.js";
-
 const R = 6378137;
 const WORLD = 2 * Math.PI * R;
 
@@ -62,6 +60,23 @@ function gated(url) {
     if (mz === k.z && mx === k.x && my === k.y) return true;
   }
   return false;
+}
+
+// suppressionReason is the pure conservative-degradation decision (#96),
+// exported for focused regression tests. Any unavailable-at-capture uncertainty
+// suppresses reconstruction: later-loaded geography is never an acceptable
+// cosmetic difference. Known-absent tiles (error/unavailable) do not suppress
+// — they are reliably established and gated exactly.
+function suppressionReason(av0) {
+  av0 = av0 || {};
+  const settling = av0.state === "loading" || (av0.missing || []).some((m) => m && m.kind === "loading");
+  if (av0.truncated)
+    return "Recorded tile availability evidence is truncated; cartographic reconstruction suppressed — positions, tracks and operational evidence are unaffected.";
+  if (settling)
+    return "Recorded tiles were still loading at capture; their availability cannot be established reliably, so cartographic reconstruction is suppressed — positions, tracks and operational evidence are unaffected.";
+  if (av0.state === "failed")
+    return "Recorded tile availability evidence is uncertain; cartographic reconstruction suppressed — positions, tracks and operational evidence are unaffected.";
+  return "";
 }
 
 async function ensureMaplibre() {
@@ -127,15 +142,17 @@ async function update(args) {
     return;
   }
   // Conservative degradation (#96): truncated availability evidence cannot
-  // account for every tile, and failed capture evidence is uncertain — cached
-  // or subsequently available geography could appear incorrectly. Overlay
-  // evidence is never affected; only the reconstruction is suppressed.
+  // account for every tile, failed capture evidence is uncertain, and tiles
+  // still settling at capture ("loading") have no reliable outcome — cached
+  // or subsequently loaded geography could appear that was never visible at
+  // capture. This is never an acceptable cosmetic difference: uncertain
+  // cartography is suppressed with disclosure. Overlay evidence is never
+  // affected; only the reconstruction is suppressed.
   const av0 = enhanced.availability || {};
-  if (av0.truncated || av0.state === "failed") {
+  const reason = suppressionReason(av0);
+  if (reason) {
     detach(true);
-    PlaybackEnhanced.status = av0.truncated
-      ? "Recorded tile availability evidence is truncated; cartographic reconstruction suppressed — positions, tracks and operational evidence are unaffected."
-      : "Recorded tile availability evidence is uncertain; cartographic reconstruction suppressed — positions, tracks and operational evidence are unaffected.";
+    PlaybackEnhanced.status = reason;
     return;
   }
   const style = night ? enhanced.style?.night : enhanced.style?.day;
@@ -198,21 +215,26 @@ async function update(args) {
   // Rebuild when the recorded-missing set changes even within one revision:
   // tiles already loaded into the instance are not re-mediated by
   // transformRequest, so a stricter earlier frame could otherwise display
-  // geography unavailable at its capture time.
-  if (!state.map || state.activeRevision !== revisionKey || state.missingSig !== missingSig) {
+  // geography unavailable at its capture time. Day/Night transitions within
+  // the same revision rebuild as well: the recorded appearance variant is a
+  // different style document, and diffing cannot be trusted to reproduce it
+  // exactly — the appearance the operator saw is evidence.
+  const nightKey = night ? "night" : "day";
+  if (!state.map || state.activeRevision !== revisionKey || state.missingSig !== missingSig || state.nightKey !== nightKey) {
     if (state.map) {
       state.map.remove();
       state.map = null;
     }
     state.activeRevision = revisionKey;
     state.key = "";
+    state.nightKey = nightKey;
     state.map = new state.maplibre.Map({
       container: gl,
       style,
       center: [0, 0],
       zoom: 1,
       interactive: false, // inspection divergence is the playback transform, not the camera
-      attributionControl: false, // recorded evidence carries its own attribution
+      attributionControl: { compact: true }, // the recorded experience included attribution; hiding it would misrepresent the evidence
       fadeDuration: 0,
       maxZoom: 24,
       renderWorldCopies: false,
@@ -231,6 +253,7 @@ async function update(args) {
   // already (visibility state at capture is part of the generated style's
   // layers), so no runtime adjustment is required for reconstruction.
   state.missingSig = missingSig;
+  state.nightKey = nightKey;
   state.missing = new Map();
   for (const k of missingKeys) state.missing.set(k, true);
   // Recorded layer preferences (#96): the capture embeds the generated style,
@@ -242,8 +265,10 @@ async function update(args) {
   const applyPrefs = () => {
     if (!state.map) return;
     for (const layer of style.layers || []) {
-      if (layer.type === "symbol" && prefs.labels === false) {
-        try { state.map.setLayoutProperty(layer.id, "visibility", "none"); } catch {}
+      // Bidirectional: explicit visibility in both directions — a toggle back
+      // ON must restore the layer even when the instance is reused.
+      if (layer.type === "symbol") {
+        try { state.map.setLayoutProperty(layer.id, "visibility", prefs.labels === false ? "none" : "visible"); } catch {}
       }
       if (layer.id === "hillshade") {
         try { state.map.setLayoutProperty(layer.id, "visibility", prefs.hillshade === false ? "none" : "visible"); } catch {}
@@ -291,12 +316,14 @@ function detach(keepInstance) {
     state.map = null;
     state.activeRevision = "";
     state.key = "";
+    state.nightKey = "";
   }
 }
 
 const PlaybackEnhanced = {
   update,
   detach,
+  suppressionReason,
   status: "",
   // availabilityNote composes the honest one-line disclosure for the playback
   // evidence surface, or "" when reconstruction is complete.
