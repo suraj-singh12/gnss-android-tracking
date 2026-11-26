@@ -222,17 +222,18 @@ async function ensureMap(doc, id) {
     canvas.insertBefore(gl, tracks);
     state.gl = gl;
   }
+  // Tile identity is product-scoped (the tile URL carries the product),
+  // while MapLibre events carry the style source id. Resolve source ->
+  // product from the style's own tile templates on EVERY activation: the map
+  // instance is reused across map switches, and a stale mapping would record
+  // evidence against the previous map's products.
+  state.sourceProducts = {};
+  const activeStyle = nightNow() ? state.styleNight : state.styleDay;
+  for (const [sid, s] of Object.entries(activeStyle?.sources || {})) {
+    const m = /\/tiles\/([a-z0-9-]+)\//i.exec((s.tiles || [""])[0] || "");
+    if (m) state.sourceProducts[sid] = m[1];
+  }
   if (!state.map) {
-    // Tile identity is product-scoped (the tile URL carries the product),
-    // while MapLibre events carry the style source id. Resolve source ->
-    // product from the style's own tile templates once per activation so
-    // ledger keys are consistent across request, loaded and error paths.
-    state.sourceProducts = {};
-    const activeStyle = nightNow() ? state.styleNight : state.styleDay;
-    for (const [sid, s] of Object.entries(activeStyle?.sources || {})) {
-      const m = /\/tiles\/([a-z0-9-]+)\//i.exec((s.tiles || [""])[0] || "");
-      if (m) state.sourceProducts[sid] = m[1];
-    }
     state.map = new state.maplibre.Map({
       container: state.gl,
       style: nightNow() ? state.styleNight : state.styleDay,
