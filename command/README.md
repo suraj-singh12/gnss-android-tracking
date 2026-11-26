@@ -186,6 +186,26 @@ Issue #28 acceptance evidence is recorded in `docs/ui-acceptance.md`. Linux cros
 and synthetic browser surfaces are not native macOS/Windows or real-provider acceptance.
 
 
+## Enhanced offline map rendering (controlled review)
+
+Enhanced (`version=2`) `.gmap.zip` packages carry typed tile products (vector, DEM,
+landcover, terrain). Their interactive rendering in the LIVE dashboard is restricted
+to controlled review: launch Command with `-enhanced-map` to enable it. Without the
+flag nothing changes — the legacy experience is byte-for-byte the default, and
+enhanced packages can still be imported, exported and deleted but not activated.
+
+With the flag, activating an enhanced map from the existing Maps dialog renders
+vendored offline MapLibre cartography beneath the unchanged operational overlays
+(positions, tracks, accuracy, SOS, selection, labels). The existing camera controls,
+keyboard contract, zoom range, day/night appearance and legacy/blank modes are
+unchanged; the Layers menu gains enhanced-labels (default on) and hillshade switches
+only while an enhanced map is active. All tiles, fonts and logic are embedded or
+served from the same loopback origin — no network access occurs. Incomplete
+coverage, tile loading and WebGL failure are disclosed in the existing status
+surface; WebGL failure falls back to the exact legacy blank-canvas experience.
+Recordings made while the enhanced map is active capture overlays without the
+cartographic background (recording integration is a separate future scope).
+
 ## Build and run
 
 Development requires Go 1.24.7 or newer. From `command`:

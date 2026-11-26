@@ -30,12 +30,14 @@ func run() error {
 	ingest := flag.String("ingest-listen", ":8080", "LAN phone ingestion address")
 	local := flag.String("dashboard-listen", "127.0.0.1:8081", "local dashboard/control address")
 	batchBytes := flag.Int("history-batch-bytes", 65536, "negotiated history ceiling: 65536/131072/262144/524288/1048576/2097152; default preserves priority latency")
+	enhancedMap := flag.Bool("enhanced-map", false, "controlled review opt-in: enable enhanced (Format 2) offline map rendering in the LIVE dashboard; default off preserves the legacy experience")
 	flag.Parse()
 	store, err := core.OpenWithBatchLimit(*database, *batchBytes)
 	if err != nil {
 		return err
 	}
 	defer store.Close()
+	store.SetEnhancedMapEnabled(*enhancedMap)
 	phone, err := net.Listen("tcp", *ingest)
 	if err != nil {
 		return err
@@ -52,7 +54,7 @@ func run() error {
 	fail := make(chan error, 2)
 	go func() { fail <- servers[0].Serve(phone) }()
 	go func() { fail <- servers[1].Serve(ui) }()
-	log.Printf("Command dashboard http://%s; phone ingestion %s; SQLite %s", ui.Addr(), phone.Addr(), *database)
+	log.Printf("Command dashboard http://%s; phone ingestion %s; SQLite %s; enhanced map rendering %s", ui.Addr(), phone.Addr(), *database, map[bool]string{true: "enabled (controlled review)", false: "off (legacy)"}[*enhancedMap])
 	select {
 	case <-ctx.Done():
 	case err = <-fail:
