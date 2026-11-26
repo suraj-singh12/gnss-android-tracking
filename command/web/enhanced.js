@@ -93,6 +93,7 @@ const state = {
   // Inflight keys are exactly the tiles requested but not yet rendered — the
   // only non-deterministic availability factor for immutable local packages.
   inflight: new Map(),
+    failed: new Map(),    // HTTP-failure tile outcomes (response-status evidence)
   errored: new Map(),
   lastMutation: 0,
 };
@@ -397,6 +398,33 @@ function tileKeyFromURL(url) {
 }
 Enhanced.tileKeyFromURL = tileKeyFromURL;
 
+// Per-tile outcome evidence (#96): tile rendering success is never inferred
+// from source completion — vector 404s are empty loads in the renderer and
+// emit no error. The deterministic same-origin tile URLs make response
+// statuses authoritative, so exactly those responses are observed through a
+// fetch wrapper. The wrapper only inspects status and never alters the
+// request or response; non-tile traffic passes through untouched.
+if (!globalThis.__enhancedTileEvidenceInstalled) {
+  globalThis.__enhancedTileEvidenceInstalled = true;
+  const originalFetch = globalThis.fetch.bind(globalThis);
+  globalThis.fetch = async function enhancedTileEvidenceFetch(input, init) {
+    const response = await originalFetch(input, init);
+    try {
+      const url = typeof input === "string" ? input : input?.url;
+      const key = tileKeyFromURL(url || "");
+      if (key && state.inflight) {
+        state.inflight.delete(key);
+        if (!response.ok) {
+          state.failed.set(key, performance.now());
+          if (state.failed.size > 4096) state.failed.delete(state.failed.keys().next().value);
+          state.lastMutation = performance.now();
+        }
+      }
+    } catch { /* evidence bookkeeping never interferes with rendering */ }
+    return response;
+  };
+}
+
 // captureState is the recording evidence surface (#96): what the enhanced
 // renderer actually presented at the capture moment, honestly. Positions never
 // wait on this — it is read synchronously inside the existing capture pump.
@@ -419,6 +447,10 @@ Enhanced.captureState = function captureState() {
     if (now - at > 30000) { state.errored.delete(key); continue; }
     consider(key, "error");
   }
+  for (const [key, at] of state.failed) {
+    if (now - at > 30000) { state.failed.delete(key); continue; }
+    consider(key, "unavailable");
+  }
   const vp = currentViewport();
   const tracks = document.getElementById("tracks");
   const w = tracks ? tracks.clientWidth : 0, h = tracks ? tracks.clientHeight : 0;
@@ -430,7 +462,7 @@ Enhanced.captureState = function captureState() {
     ? "failed"
     : overflow
       ? "coverage-incomplete"
-      : missing.some((m) => m.kind === "error")
+      : missing.some((m) => m.kind === "error" || m.kind === "unavailable")
         ? "degraded"
         : missing.length || state.tilesLoading
           ? "loading"
