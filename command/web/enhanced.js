@@ -418,6 +418,12 @@ if (!globalThis.__enhancedTileEvidenceInstalled) {
           state.failed.set(key, performance.now());
           if (state.failed.size > 4096) state.failed.delete(state.failed.keys().next().value);
           state.lastMutation = performance.now();
+        } else {
+          // A later success is authoritative recovery evidence: prior failure
+          // records for the same tile are cleared so playback never gates
+          // geography that was demonstrably visible at capture.
+          state.failed.delete(key);
+          state.errored.delete(key);
         }
       }
     } catch { /* evidence bookkeeping never interferes with rendering */ }
@@ -434,22 +440,75 @@ Enhanced.captureState = function captureState() {
   const now = performance.now();
   const missing = [];
   let truncated = false;
+  const seen = new Set();
   const consider = (key, kind) => {
+    if (seen.has(key + kind)) return;
     if (missing.length >= MISSING_BOUND) { truncated = true; return; }
+    seen.add(key + kind);
     const parts = key.split("/");
     missing.push({ product: parts[0], z: +parts[1], x: +parts[2], y: +parts[3], kind });
   };
+  // Visible-tile geometry shared by eviction and deterministic absence: the
+  // integer tile pyramid coordinates covering the current viewport.
+  const vp0 = currentViewport();
+  const tracks0 = document.getElementById("tracks");
+  const w0 = tracks0 ? tracks0.clientWidth : 0, h0 = tracks0 ? tracks0.clientHeight : 0;
+  const visibleKeys = new Set();
+  let coverageRect = null;
+  if (vp0 && Number.isFinite(vp0.cx) && w0 > 0) {
+    const R = 6378137, WORLD = 2 * Math.PI * R;
+    const z = Math.max(0, Math.min(14, Math.floor(Math.log2((vp0.scale * WORLD) / 512))));
+    const n = 2 ** z;
+    const xAt = (mx) => ((mx / R) * (180 / Math.PI) + 180) / 360 * n;
+    const yAt = (my) => {
+      const lat = (2 * Math.atan(Math.exp(my / R)) - Math.PI / 2) * (180 / Math.PI);
+      return (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n;
+    };
+    const x0 = Math.floor(xAt(vp0.cx - w0 / 2 / vp0.scale)), x1 = Math.floor(xAt(vp0.cx + w0 / 2 / vp0.scale));
+    const y0 = Math.floor(yAt(vp0.cy + h0 / 2 / vp0.scale)), y1 = Math.floor(yAt(vp0.cy - h0 / 2 / vp0.scale));
+    if ((x1 - x0 + 1) * (y1 - y0 + 1) <= 256) {
+      coverageRect = { z, x0, x1, y0, y1, n };
+      for (let x = Math.max(0, x0); x <= Math.min(n - 1, x1); x++)
+        for (let y = Math.max(0, y0); y <= Math.min(n - 1, y1); y++)
+          visibleKeys.add(`${z}/${x}/${y}`);
+    }
+  }
+  const inView = (key) => visibleKeys.has(key.split("/").slice(1).join("/"));
   for (const [key, at] of state.inflight) {
-    if (now - at > 30000) { state.inflight.delete(key); continue; }
+    // Evidence of tiles still inside the viewport never expires: the renderer
+    // caches empty outcomes and stops re-requesting, but the absence persists.
+    if (now - at > 30000 && !inView(key)) { state.inflight.delete(key); continue; }
     consider(key, "loading");
   }
   for (const [key, at] of state.errored) {
-    if (now - at > 30000) { state.errored.delete(key); continue; }
+    if (now - at > 30000 && !inView(key)) { state.errored.delete(key); continue; }
     consider(key, "error");
   }
   for (const [key, at] of state.failed) {
-    if (now - at > 30000) { state.failed.delete(key); continue; }
+    if (now - at > 30000 && !inView(key)) { state.failed.delete(key); continue; }
     consider(key, "unavailable");
+  }
+  // Deterministic absence (#96): tile existence inside an immutable revision
+  // is fixed by the validated package coverage — tiles whose centre falls
+  // outside coverage are definitively absent at capture for every product,
+  // regardless of how the renderer reports their outcome. This evidence is
+  // computed from metadata, never inferred from source completion.
+  if (coverageRect && state.coverage) {
+    const [cw, cs, ce, cn] = state.coverage;
+    const { z, x0, x1, y0, y1, n } = coverageRect;
+    const lonAtX = (x) => (x + 0.5) / n * 360 - 180;
+    const latAtY = (y) => {
+      const t = Math.PI * (1 - 2 * (y + 0.5) / n);
+      return Math.atan(Math.sinh(t)) * 180 / Math.PI;
+    };
+    for (const product of ["vector", "landcover", "dem"]) {
+      for (let x = Math.max(0, x0); x <= Math.min(n - 1, x1); x++)
+        for (let y = Math.max(0, y0); y <= Math.min(n - 1, y1); y++) {
+          const lon = lonAtX(x), lat = latAtY(y);
+          if (lon < cw || lon > ce || lat < cs || lat > cn)
+            consider(`${product}/${z}/${x}/${y}`, "unavailable");
+        }
+    }
   }
   const vp = currentViewport();
   const tracks = document.getElementById("tracks");
