@@ -126,11 +126,6 @@ $("start").onclick = () => {
 $("recording-start-form").onchange = updateSessionChoice;
 $("recording-start-form").onsubmit = async (e) => {
   e.preventDefault();
-  if (globalThis.EnhancedMap?.active) {
-    $("recording-start-error").textContent =
-      "Enhanced map rendering cannot be captured in recordings yet (#96). Switch the map mode to legacy Offline or Blank to record — positions and tracks are unaffected.";
-    return;
-  }
   $("confirm-recording").disabled = true;
   try {
     await post("recording", {
@@ -1189,15 +1184,6 @@ function useEnhancedMap(doc, source, id) {
   if (!globalThis.EnhancedMap?.capabilityEnabled)
     throw Error(
       "Enhanced offline map requires the controlled-review -enhanced-map launch option. The map is stored; export and deletion remain available. Your current map is unchanged.",
-    );
-  // Interactive selection during a recording must not silently discard the
-  // live operational basemap: the recording gate hides the enhanced replacement,
-  // leaving a blank canvas for the rest of the interval. Restoration after a
-  // reload is unaffected — no basemap exists yet at that point, nothing is lost.
-  const rec = window.recordingLiveState?.()?.recording;
-  if ((rec?.active || rec?.status === "paused") && offlineMap && $("map-mode").value === "offline")
-    throw Error(
-      "Selecting an enhanced map during an active recording would discard the current operational basemap for the rest of the recording — recordings remain on the safe legacy path (#96). Stop the recording first; your current map is unchanged.",
     );
   const products = Object.values(doc.products || {});
   if (!products.length || !products.some((p) => p.bounds))
@@ -4290,11 +4276,18 @@ function recordingAppliedAssets() {
 window.recordingAppliedState = () => {
   const applied = window.recordingRenderedModel || {};
   const assetEvidence = recordingAppliedAssets();
+  // Frame schema v2 (#96): adds the optional enhanced capture object. The
+  // enhanced object is the truthful enhanced-map claim — revision, renderer,
+  // style, layers and actual availability; map_id stays blank for enhanced
+  // because legacy asset pins do not apply to immutable tile revisions.
+  const enhancedCapture =
+    typeof globalThis.EnhancedMap?.captureState === "function"
+      ? globalThis.EnhancedMap.captureState()
+      : null;
   return {
-    version: 1,
-    // Enhanced cartography can never be captured in a recording (#96 scope);
-    // claiming it would be false evidence. Recordings stay on the legacy path.
+    version: 2,
     map_id: $("map-mode").value === "offline" && !enhancedMap ? activeMapID || "" : "",
+    ...(enhancedCapture ? { enhanced: enhancedCapture } : {}),
     assets: assetEvidence.assets,
     asset_warnings: assetEvidence.warnings,
     common: {
