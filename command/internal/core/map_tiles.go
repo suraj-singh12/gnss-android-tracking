@@ -261,6 +261,34 @@ func (s *Store) enhancedMapPinRequest(w http.ResponseWriter, r *http.Request) bo
 	return true
 }
 
+// enhancedRevisionRequest discloses the current immutable revision of an
+// enhanced map so playback can validate recorded revision evidence exactly
+// before reconstruction (#96): a replaced or missing revision degrades
+// honestly instead of silently rendering substituted geography.
+func (s *Store) enhancedRevisionRequest(w http.ResponseWriter, r *http.Request) bool {
+	if r.URL.Path != "/local/enhanced-revision" {
+		return false
+	}
+	if r.Method != "GET" {
+		failure(w, 405, "method_not_allowed", errors.New("use GET"))
+		return true
+	}
+	id := r.URL.Query().Get("id")
+	if id == "" || len(id) > 256 {
+		failure(w, 400, "invalid_revision_request", errors.New("valid id required"))
+		return true
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	d, err := s.readEnhanced(ctx, id)
+	if err != nil || d == nil {
+		failure(w, 404, "revision_unavailable", errors.New("enhanced map revision unavailable"))
+		return true
+	}
+	respond(w, 200, map[string]string{"map_id": id, "revision": d.Revision})
+	return true
+}
+
 func (s *Store) releaseMapRevisionKind(ctx context.Context, id, kind string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

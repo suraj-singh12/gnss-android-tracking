@@ -422,7 +422,7 @@ func (s *Store) saveMap(source string, b []byte) (savedMap, error) {
 	return m, tx.Commit()
 }
 func (s *Store) mapRequest(w http.ResponseWriter, r *http.Request, p *mapProvider) bool {
-	if s.mapPackageRequest(w, r) || s.mapSourceRequest(w, r, p) || s.mapTileRequest(w, r) || s.enhancedMapPinRequest(w, r) {
+	if s.mapPackageRequest(w, r) || s.mapSourceRequest(w, r, p) || s.mapTileRequest(w, r) || s.enhancedMapPinRequest(w, r) || s.enhancedRevisionRequest(w, r) {
 		return true
 	}
 	if s.mapJobRequest(w, r, p) {

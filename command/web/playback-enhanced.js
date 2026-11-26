@@ -114,6 +114,18 @@ async function update(args) {
     PlaybackEnhanced.status = `Recorded enhanced renderer "${enhanced.renderer}" is not supported by this Command; positions, tracks and operational evidence are unaffected.`;
     return;
   }
+  // Renderer compatibility is validated, not merely identified: a different
+  // major generation of the vendored renderer cannot be trusted to interpret
+  // the recorded style evidence the same way. Minor differences within one
+  // generation remain compatible because the exact style documents travel
+  // with the recording.
+  const VENDORED_MAJOR = "6";
+  const recordedMajor = String(enhanced.renderer_version || "").split(".")[0];
+  if (enhanced.renderer_version && recordedMajor !== VENDORED_MAJOR) {
+    detach(true);
+    PlaybackEnhanced.status = `Recorded enhanced renderer version ${enhanced.renderer_version} is incompatible with this Command's renderer; positions, tracks and operational evidence are unaffected.`;
+    return;
+  }
   // Conservative degradation (#96): truncated availability evidence cannot
   // account for every tile, and failed capture evidence is uncertain — cached
   // or subsequently available geography could appear incorrectly. Overlay
@@ -152,6 +164,31 @@ async function update(args) {
   missingKeys.sort();
   const missingSig = missingKeys.join(";");
   const revisionKey = enhanced.map_id + "@" + enhanced.revision;
+  // Exact revision validation (#96): the recording references an immutable
+  // revision by identity; substitution is dishonest even when a same-named
+  // map is present. The check is cached per revision and performed without
+  // any external request — same-origin Command only.
+  if (!state.revisionChecks) state.revisionChecks = new Map();
+  const check = state.revisionChecks.get(revisionKey);
+  if (check === false) {
+    detach(true);
+    PlaybackEnhanced.status = "The exact recorded map revision is unavailable on this Command; cartographic reconstruction suppressed — positions, tracks and operational evidence are unaffected.";
+    return;
+  }
+  if (check !== true) {
+    if (!check) {
+      state.revisionChecks.set(revisionKey, "pending");
+      fetch(`/local/enhanced-revision?id=${encodeURIComponent(enhanced.map_id)}`)
+        .then(async (r) => {
+          const ok = r.ok && (await r.json()).revision === enhanced.revision;
+          state.revisionChecks.set(revisionKey, ok);
+        })
+        .catch(() => state.revisionChecks.set(revisionKey, false));
+    }
+    detach(true);
+    PlaybackEnhanced.status = "Validating recorded map revision…";
+    return;
+  }
   // Rebuild when the recorded-missing set changes even within one revision:
   // tiles already loaded into the instance are not re-mediated by
   // transformRequest, so a stricter earlier frame could otherwise display
