@@ -461,12 +461,16 @@
       height: h,
       transform,
       angle,
-      // Inspection consistency: when the camera diverges from the recorded
-      // viewport, the anchor frame supplies viewport, dimensions and enhanced
-      // evidence — the appearance must come from the same anchor frame, not
-      // the advancing playback frame, or the reconstruction rebuilds into a
-      // style the inspected evidence never had.
-      night: (travel ? travelMap?.appearance : follow ? checkpoint.common?.appearance : (anchor?.appearance ?? checkpoint.common?.appearance)) === "night",
+      // Inspection consistency: the appearance follows the frame whose
+      // enhanced evidence is actually reconstructed — the anchor frame when
+      // its enhanced evidence is in effect, otherwise the advancing playback
+      // frame. Mixing one frame's style variant with another frame's evidence
+      // rebuilds the reconstruction into an appearance that evidence never had.
+      night: (travel
+        ? travelMap?.appearance
+        : follow
+          ? checkpoint.common?.appearance
+          : (anchorEnhanced ? anchor?.appearance : checkpoint.common?.appearance)) === "night",
     })?.then?.(() => {
       if (frame?.checkpoint) updateEvidence(frame.checkpoint);
     });
