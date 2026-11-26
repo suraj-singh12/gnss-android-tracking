@@ -286,11 +286,13 @@ function boot() {
     else if (!shouldShow && Enhanced.active) deactivate();
     // Frame-coherent camera follow: x = (px - cx) * scale + w/2 and
     // y = h/2 - (py - cy) * scale is exactly MapLibre's own Web-Mercator
-    // transform when scale = 256 * 2^z / WORLD, so alignment is exact.
+    // transform when scale = 512 * 2^z / WORLD, so alignment is exact.
+    // (MapLibre's world is 512 px wide at zoom 0 — verified against the
+    // vendored build — not 256.)
     if (Enhanced.active && state.map) {
       const vp = currentViewport();
       if (vp && Number.isFinite(vp.cx) && Number.isFinite(vp.scale) && vp.scale > 0) {
-        const z = Math.log2((vp.scale * WORLD) / 256);
+        const z = Math.log2((vp.scale * WORLD) / 512);
         const [lon, lat] = viewportLonLat(vp);
         const tracks = document.getElementById("tracks");
         const w = tracks ? tracks.clientWidth : 0, h = tracks ? tracks.clientHeight : 0;
