@@ -460,7 +460,7 @@
       height: h,
       transform,
       angle,
-      night: document.documentElement.dataset.appearance === "night",
+      night: (travel ? travelMap?.appearance : checkpoint.common?.appearance) === "night",
     })?.then?.(() => {
       if (frame?.checkpoint) updateEvidence(frame.checkpoint);
     });

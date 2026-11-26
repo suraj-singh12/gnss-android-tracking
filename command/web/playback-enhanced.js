@@ -190,6 +190,25 @@ async function update(args) {
   state.missingSig = missingSig;
   state.missing = new Map();
   for (const k of missingKeys) state.missing.set(k, true);
+  // Recorded layer preferences (#96): the capture embeds the generated style,
+  // but runtime label/hillshade toggles are visibility state — apply exactly
+  // what the frame recorded, following the same id conventions as LIVE. The
+  // style loads asynchronously on a fresh instance, so the application is
+  // repeated once loading completes.
+  const prefs = enhanced.layers || {};
+  const applyPrefs = () => {
+    if (!state.map) return;
+    for (const layer of style.layers || []) {
+      if (layer.type === "symbol" && prefs.labels === false) {
+        try { state.map.setLayoutProperty(layer.id, "visibility", "none"); } catch {}
+      }
+      if (layer.id === "hillshade") {
+        try { state.map.setLayoutProperty(layer.id, "visibility", prefs.hillshade === false ? "none" : "visible"); } catch {}
+      }
+    }
+  };
+  applyPrefs();
+  state.map.once("load", applyPrefs);
   // Camera: the recorded production viewport through the identical transform.
   const z = Math.log2((viewport.scale * WORLD) / 512);
   const [lon, lat] = lonLat(viewport.cx, viewport.cy);
