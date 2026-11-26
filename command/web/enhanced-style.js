@@ -151,3 +151,20 @@ export function buildStyle(mapID, products, coverage) {
   }
   return style;
 }
+
+// viewportOverflowsCoverage(cx, cy, scale, w, h, coverage) — pure geometry.
+// The disclosure must reflect the whole visible viewport, not merely its
+// centre: any visible edge beyond the validated package coverage means part of
+// the background is genuinely absent. cx/cy are Web-Mercator metres, scale is
+// px per mercator metre, w/h the canvas CSS size. coverage is [w,s,e,n] lon/lat.
+// Overzoomed viewports are small and stay inside coverage — no false report.
+export function viewportOverflowsCoverage(cx, cy, scale, w, h, coverage) {
+  if (!Number.isFinite(cx) || !Number.isFinite(cy) || !(scale > 0) || !coverage) return false;
+  const R = 6378137;
+  const lonAt = (x) => (x / R) * (180 / Math.PI);
+  const latAt = (y) => (2 * Math.atan(Math.exp(y / R)) - Math.PI / 2) * (180 / Math.PI);
+  const west = lonAt(cx - w / 2 / scale), east = lonAt(cx + w / 2 / scale);
+  const north = latAt(cy + h / 2 / scale), south = latAt(cy - h / 2 / scale);
+  const [cw, cs, ce, cn] = coverage;
+  return west < cw || east > ce || south < cs || north > cn;
+}
