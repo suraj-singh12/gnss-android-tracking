@@ -222,6 +222,16 @@ async function ensureMap(doc, id) {
     state.gl = gl;
   }
   if (!state.map) {
+    // Tile identity is product-scoped (the tile URL carries the product),
+    // while MapLibre events carry the style source id. Resolve source ->
+    // product from the style's own tile templates once per activation so
+    // ledger keys are consistent across request, loaded and error paths.
+    state.sourceProducts = {};
+    const activeStyle = nightNow() ? state.styleNight : state.styleDay;
+    for (const [sid, s] of Object.entries(activeStyle?.sources || {})) {
+      const m = /\/tiles\/([a-z0-9-]+)\//i.exec((s.tiles || [""])[0] || "");
+      if (m) state.sourceProducts[sid] = m[1];
+    }
     state.map = new state.maplibre.Map({
       container: state.gl,
       style: nightNow() ? state.styleNight : state.styleDay,
@@ -255,7 +265,8 @@ async function ensureMap(doc, id) {
       // current view completed: clear matching inflight keys. Unconfirmed keys
       // remain honestly inflight.
       if (e.isSourceLoaded === true && e.sourceId) {
-        const prefix = e.sourceId + "/";
+        const product = state.sourceProducts?.[e.sourceId] || e.sourceId;
+        const prefix = product + "/";
         for (const key of state.inflight.keys())
           if (key.startsWith(prefix)) state.inflight.delete(key);
       }
@@ -268,7 +279,7 @@ async function ensureMap(doc, id) {
       const t = e?.tile;
       if (t?.tileID?.canonical && e?.sourceId) {
         const c = t.tileID.canonical;
-        const key = `${e.sourceId}/${c.z}/${c.x}/${c.y}`;
+        const key = `${state.sourceProducts?.[e.sourceId] || e.sourceId}/${c.z}/${c.x}/${c.y}`;
         state.inflight.delete(key);
         state.errored.set(key, performance.now());
         if (state.errored.size > 1024) state.errored.delete(state.errored.keys().next().value);
