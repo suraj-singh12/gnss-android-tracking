@@ -1188,6 +1188,10 @@ function useEnhancedMap(doc, source, id) {
   const products = Object.values(doc.products || {});
   if (!products.length || !products.some((p) => p.bounds))
     throw Error("Enhanced map descriptor incomplete; your current map is unchanged.");
+  if (!doc.products.vector && !doc.products.dem && !doc.products.landcover)
+    throw Error(
+      "Enhanced map carries no renderable cartography (numeric terrain grid only). The package remains stored and exportable; your current map is unchanged.",
+    );
   let coverage = null;
   for (const p of products) {
     if (!p.bounds) continue;
