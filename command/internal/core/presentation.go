@@ -1273,7 +1273,7 @@ func presentationBoundary(tx *sql.Tx, rec *Recording, proof *presentationRequest
 	}
 	rendered, e1 := time.Parse(time.RFC3339Nano, proof.Presented)
 	opportunity, e2 := time.Parse(time.RFC3339Nano, proof.Opportunity)
-	if e1 != nil || e2 != nil || rendered.After(opportunity) || opportunity.After(pressed) || pressed.Sub(opportunity) > 30*time.Second || proof.State.Version != 1 || proof.Revision <= l.Revision {
+	if e1 != nil || e2 != nil || rendered.After(opportunity) || opportunity.After(pressed) || pressed.Sub(opportunity) > 30*time.Second || (proof.State.Version != 1 && proof.State.Version != 2) || proof.Revision <= l.Revision {
 		return unverified("pre-action browser proof outside ordering or timing bounds")
 	}
 	b := []byte(marshal(proof.State))
