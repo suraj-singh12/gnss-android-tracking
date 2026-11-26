@@ -1190,6 +1190,15 @@ function useEnhancedMap(doc, source, id) {
     throw Error(
       "Enhanced offline map requires the controlled-review -enhanced-map launch option. The map is stored; export and deletion remain available. Your current map is unchanged.",
     );
+  // Interactive selection during a recording must not silently discard the
+  // live operational basemap: the recording gate hides the enhanced replacement,
+  // leaving a blank canvas for the rest of the interval. Restoration after a
+  // reload is unaffected — no basemap exists yet at that point, nothing is lost.
+  const rec = window.recordingLiveState?.()?.recording;
+  if ((rec?.active || rec?.status === "paused") && offlineMap && $("map-mode").value === "offline")
+    throw Error(
+      "Selecting an enhanced map during an active recording would discard the current operational basemap for the rest of the recording — recordings remain on the safe legacy path (#96). Stop the recording first; your current map is unchanged.",
+    );
   const products = Object.values(doc.products || {});
   if (!products.length || !products.some((p) => p.bounds))
     throw Error("Enhanced map descriptor incomplete; your current map is unchanged.");
