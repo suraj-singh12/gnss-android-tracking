@@ -52,14 +52,14 @@ function gated(url) {
     const [product, zs, xs, ys] = key.split("/");
     if (product !== k.product) continue;
     const mz = +zs, mx = +xs, my = +ys;
+    // Exact identity only. Parent/child suppression is incorrect here: a
+    // tile legitimately visible at capture must render, and fallback use of
+    // family tiles is capture-faithful — the capture-time renderer used the
+    // same fallback for the same absent tile, so it is evidence, not
+    // substitution. Substitution by subsequently available data is already
+    // prevented because the missing tile itself is gated and the instance
+    // rebuilds when the missing set changes.
     if (mz === k.z && mx === k.x && my === k.y) return true;
-    if (mz < k.z) {
-      const shift = k.z - mz;
-      if (Math.floor(k.x / 2 ** shift) === mx && Math.floor(k.y / 2 ** shift) === my) return true;
-    } else {
-      const shift = mz - k.z;
-      if (Math.floor(mx / 2 ** shift) === k.x && Math.floor(my / 2 ** shift) === k.y) return true;
-    }
   }
   return false;
 }
@@ -178,10 +178,16 @@ async function update(args) {
   if (check !== true) {
     if (!check) {
       state.revisionChecks.set(revisionKey, "pending");
+      const pendingArgs = args;
       fetch(`/local/enhanced-revision?id=${encodeURIComponent(enhanced.map_id)}`)
         .then(async (r) => {
           const ok = r.ok && (await r.json()).revision === enhanced.revision;
           state.revisionChecks.set(revisionKey, ok);
+          // The probe is asynchronous but the frame is not repainted on its
+          // own: re-run this update so a paused playback reconstructs as soon
+          // as validation completes rather than staying blank until the next
+          // operator action.
+          update(pendingArgs);
         })
         .catch(() => state.revisionChecks.set(revisionKey, false));
     }

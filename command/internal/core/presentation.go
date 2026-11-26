@@ -419,14 +419,20 @@ func (s *Store) presentationOperation(op string, r presentationRequest) (any, er
 			gapKind = "browser_unavailable"
 		}
 		gapFrom := l.Seen
+		displacedClosed := l.Closed
 		l = presentationLease{Token: id() + id(), Epoch: id(), Seen: now, GapFrom: gapFrom, GapKind: gapKind}
 		result = l
-		// Travel Back pins are ephemeral to the live browser session (#96):
-		// a successful claim means any prior browser's travel session is dead —
-		// closed explicitly or expired — so its pins release here, inside the
-		// same transaction, rather than blocking deletion until restart.
-		if _, e = tx.Exec(`DELETE FROM offline_map_pins WHERE kind='travel'`); e != nil {
-			return nil, e
+		// Travel Back pins are ephemeral to the live browser session (#96).
+		// A claim displacing an explicitly closed browser means its travel
+		// session ended with the page, so its pins release here inside the
+		// same transaction. A merely expired lease is different: the same
+		// browser may be mid-session with heartbeats paused for playback, and
+		// its pins must survive its own reclaim. Re-entry re-pins idempotently
+		// and restart sweeps the rest.
+		if displacedClosed {
+			if _, e = tx.Exec(`DELETE FROM offline_map_pins WHERE kind='travel'`); e != nil {
+				return nil, e
+			}
 		}
 	} else {
 		if !owner(l, r, now) {

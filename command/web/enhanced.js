@@ -501,7 +501,11 @@ Enhanced.captureState = function captureState() {
       const t = Math.PI * (1 - 2 * (y + 0.5) / n);
       return Math.atan(Math.sinh(t)) * 180 / Math.PI;
     };
-    for (const product of ["vector", "landcover", "dem"]) {
+    // Only products the map actually includes: enumerating absent products
+    // would fabricate evidence and exhaust the bounded budget, wrongly
+    // suppressing reconstruction of geography that was visible at capture.
+    const products = [...new Set(Object.values(state.sourceProducts || {}))];
+    for (const product of products.length ? products : ["vector"]) {
       for (let x = Math.max(0, x0); x <= Math.min(n - 1, x1); x++)
         for (let y = Math.max(0, y0); y <= Math.min(n - 1, y1); y++) {
           const lon = lonAtX(x), lat = latAtY(y);
