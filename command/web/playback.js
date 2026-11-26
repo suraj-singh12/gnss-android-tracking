@@ -549,13 +549,22 @@
     $("playback-sos").textContent = alerts.length
       ? `● Recording SOS · ${alerts.length} historical notification${alerts.length > 1 ? "s" : ""}`
       : "";
+    // The tag names what the frame actually recorded. Enhanced evidence
+    // (enhancedBasis, resolved above) is the truthful map claim for enhanced
+    // frames — calling them "Blank canvas" misrepresents the recording even
+    // when reconstruction is honestly suppressed (the evidence surface then
+    // carries the suppression disclosure).
     $("map-mode-label").textContent = travel
-      ? map.querySelector('[data-layer="offline-map"]')
-        ? "Offline geographic map · view snapshot"
-        : "Blank canvas"
-      : checkpoint.map_id
-        ? "Offline geographic map · recorded revision"
-        : "Blank canvas";
+      ? travelEnhanced?.map_id
+        ? "Enhanced offline map · view snapshot"
+        : map.querySelector('[data-layer="offline-map"]')
+          ? "Offline geographic map · view snapshot"
+          : "Blank canvas"
+      : enhancedBasis?.map_id
+        ? "Enhanced offline map · recorded revision"
+        : checkpoint.map_id
+          ? "Offline geographic map · recorded revision"
+          : "Blank canvas";
     updateEvidence(checkpoint);
     detail();
   }
