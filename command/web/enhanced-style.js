@@ -56,12 +56,12 @@ export function buildStyle(mapID, products, coverage) {
   const vp = products.vector, lp = products.landcover, dp = products.dem;
   const [w, s, e, n] = coverage;
   const extentRing = [[w, s], [e, s], [e, n], [w, n], [w, s]];
-  return {
+  const style = {
     version: 8,
     name: "GNSS enhanced standard",
     "font-faces": fontFaces(),
     sources: {
-      osm: { type: "vector", tiles: tiles("vector"), minzoom: vp.minzoom, maxzoom: vp.maxzoom, attribution: "© OpenStreetMap contributors" },
+      ...(vp ? { osm: { type: "vector", tiles: tiles("vector"), minzoom: vp.minzoom, maxzoom: vp.maxzoom, attribution: "© OpenStreetMap contributors" } } : {}),
       ...(lp ? { landcover: { type: "raster", tiles: tiles("landcover"), tileSize: 256, minzoom: lp.minzoom, maxzoom: lp.maxzoom, attribution: "ESA WorldCover 2021 (CC BY 4.0)" } } : {}),
       ...(dp ? { dem: { type: "raster-dem", tiles: tiles("dem"), tileSize: 256, encoding: "terrarium", minzoom: dp.minzoom, maxzoom: dp.maxzoom, attribution: "Copernicus DEM GLO-30 © DLR/Airbus, ESA/EU" } } : {}),
       extent: { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [extentRing] } } },
@@ -142,4 +142,12 @@ export function buildStyle(mapID, products, coverage) {
         paint: { "text-color": "#1f252b", "text-halo-color": HALO, "text-halo-width": 1.8 } },
     ],
   };
+  // A valid package may omit the vector product (missing layers are disclosed
+  // at import): raster cartography still renders honestly, vector-dependent
+  // layers are simply absent rather than aborting the whole activation.
+  if (!vp) {
+    delete style.sources.osm;
+    style.layers = style.layers.filter((l) => l.source !== "osm");
+  }
+  return style;
 }

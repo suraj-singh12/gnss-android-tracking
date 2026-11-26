@@ -87,6 +87,7 @@ const state = {
   booted: false,
   labelsOn: true,
   hillshadeOn: true,
+  failedIDs: new Set(),
 };
 
 function webglUsable() {
@@ -260,13 +261,17 @@ function repaintProduction() {
 }
 
 async function activate(doc, id) {
+  state.activeID = id; // claim up front: the rAF sync loop must not re-enter
   try {
     await ensureMap(doc, id);
+    state.failedIDs.delete(id);
+    Enhanced.failed = "";
     state.gl.hidden = false;
     Enhanced.active = true;
     repaintProduction();
   } catch (e) {
     deactivate();
+    state.failedIDs.add(id); // this map stays failed; other enhanced maps retry cleanly
     Enhanced.failed = (e && e.message) || "initialisation failed.";
     repaintProduction();
   }
@@ -281,7 +286,7 @@ function boot() {
     // shows only when an enhanced map is the active map and map mode is offline.
     const em = typeof enhancedMap !== "undefined" ? enhancedMap : null;
     const modeEl = document.getElementById("map-mode");
-    const shouldShow = !!em && state.capability && !Enhanced.failed && modeEl && modeEl.value === "offline";
+    const shouldShow = !!em && state.capability && !state.failedIDs.has(em.id) && modeEl && modeEl.value === "offline";
     if (shouldShow && (!Enhanced.active || state.activeID !== em.id)) activate(em.doc, em.id);
     else if (!shouldShow && Enhanced.active) deactivate();
     // Frame-coherent camera follow: x = (px - cx) * scale + w/2 and
