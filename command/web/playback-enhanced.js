@@ -19,6 +19,12 @@ const R = 6378137;
 const WORLD = 2 * Math.PI * R;
 
 const state = {
+  // gen invalidates every in-flight asynchronous continuation: any seek,
+  // frame change or playback exit increments it, and stale continuations
+  // bail before touching the instance or the DOM. Without this, an async
+  // import/probe settling late could reconstruct geography for a frame the
+  // operator has already left — stale evidence presented as current.
+  gen: 0,
   map: null,
   maplibre: null,
   gl: null,
@@ -76,6 +82,14 @@ function suppressionReason(av0) {
     return "Recorded tiles were still loading at capture; their availability cannot be established reliably, so cartographic reconstruction is suppressed — positions, tracks and operational evidence are unaffected.";
   if (av0.state === "failed")
     return "Recorded tile availability evidence is uncertain; cartographic reconstruction suppressed — positions, tracks and operational evidence are unaffected.";
+  // Unconfirmed settlement (#96): availability evidence is only complete once
+  // the capture renderer settled (painted, no tiles loading, no camera/style
+  // mutation inside the stability window). Before that, tiles in view may never
+  // have been requested at all — no evidence exists about them — so
+  // reconstruction would present fully loaded geography the capture never
+  // confirmed. Absent or ambiguous evidence degrades conservatively.
+  if (av0.settled !== true)
+    return "Recorded rendering settlement was unconfirmed at capture; cartographic reconstruction suppressed — positions, tracks and operational evidence are unaffected.";
   return "";
 }
 
@@ -116,6 +130,7 @@ function ensureContainer() {
 //   transform: [tx, ty, z] playback world transform; angle: world rotation
 // The same letterbox math the SVG viewBox performs is replicated exactly.
 async function update(args) {
+  const gen = ++state.gen;
   const { enhanced, viewport, width, height, transform, angle, night } = args;
   const tracks = document.getElementById("tracks");
   if (!tracks) return;
@@ -169,6 +184,10 @@ async function update(args) {
     PlaybackEnhanced.status = "Enhanced renderer unavailable; positions, tracks and operational evidence are unaffected.";
     return;
   }
+  // A seek, frame change or playback exit during the asynchronous import
+  // invalidates this continuation: the frame it was reconstructing is no
+  // longer the frame on screen.
+  if (gen !== state.gen) return;
   // Missing-revision honesty is verified cheaply per revision, cached: tile
   // serving itself 404s absent revisions, so probe one deterministic URL head
   // through the style's own source reference rather than inventing state.
@@ -193,8 +212,11 @@ async function update(args) {
     return;
   }
   if (check !== true) {
+    detach(true);
+    PlaybackEnhanced.status = "Validating recorded map revision…";
     if (!check) {
       state.revisionChecks.set(revisionKey, "pending");
+      const probeGen = state.gen;
       const pendingArgs = args;
       fetch(`/local/enhanced-revision?id=${encodeURIComponent(enhanced.map_id)}`)
         .then(async (r) => {
@@ -203,13 +225,13 @@ async function update(args) {
           // The probe is asynchronous but the frame is not repainted on its
           // own: re-run this update so a paused playback reconstructs as soon
           // as validation completes rather than staying blank until the next
-          // operator action.
-          update(pendingArgs);
+          // operator action — unless the operator has since seeked, changed
+          // frame or exited playback, in which case the re-run would display
+          // stale geography and the natural frame render owns reconstruction.
+          if (probeGen === state.gen) update(pendingArgs);
         })
         .catch(() => state.revisionChecks.set(revisionKey, false));
     }
-    detach(true);
-    PlaybackEnhanced.status = "Validating recorded map revision…";
     return;
   }
   // Rebuild when the recorded-missing set changes even within one revision:
@@ -280,7 +302,12 @@ async function update(args) {
     }
   };
   applyPrefs();
-  state.map.once("load", applyPrefs);
+  // The style loads asynchronously; the re-application must not fire for a
+  // frame the operator has left. Newer frames register their own listeners,
+  // so skipping a stale one never loses current evidence.
+  state.map.once("load", () => {
+    if (gen === state.gen) applyPrefs();
+  });
   // Camera: the recorded production viewport through the identical transform.
   const z = Math.log2((viewport.scale * WORLD) / 512);
   const [lon, lat] = lonLat(viewport.cx, viewport.cy);
@@ -313,6 +340,7 @@ async function update(args) {
 }
 
 function detach(keepInstance) {
+  state.gen++;
   if (state.gl) state.gl.hidden = true;
   PlaybackEnhanced.status = "";
   if (!keepInstance && state.map) {
