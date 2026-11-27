@@ -999,3 +999,87 @@ func TestEnhancedMapCapabilityEndpoint(t *testing.T) {
 		t.Fatal("capability must follow flag reset")
 	}
 }
+
+func TestV2TravelPinEndpointLifecycle(t *testing.T) {
+	s := extensionStore(t)
+	dir := t.TempDir()
+	zipPath, size, _ := buildV2Package(t, dir, smallV2Fixture(), nil)
+	m, e := importFile(t, s, zipPath, size)
+	if e != nil {
+		t.Fatal(e)
+	}
+	post := func(body string, origin string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", "/local/enhanced-map-pin", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		s.enhancedMapPinRequest(rec, req)
+		return rec
+	}
+	// cross-origin refused
+	if r := post(`{"map_id":"`+m.ID+`"}`, "http://evil.example"); r.Result().StatusCode != 403 {
+		t.Fatal("cross-origin pin accepted", r.Result().StatusCode)
+	}
+	// acquire
+	r := post(`{"map_id":"`+m.ID+`"}`, "")
+	if r.Result().StatusCode != 200 {
+		out, _ := io.ReadAll(r.Result().Body)
+		t.Fatal("pin acquire failed", r.Result().StatusCode, string(out))
+	}
+	var n int
+	s.db.QueryRow(`SELECT count(*) FROM offline_map_pins WHERE map_id=? AND kind='travel'`, m.ID).Scan(&n)
+	if n != 1 {
+		t.Fatal("travel pin not recorded", n)
+	}
+	// deletion refused while travel-pinned
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/local/maps/"+m.ID+"/delete", strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	s.terrainRequest(rec, req, nil)
+	if rec.Result().StatusCode != 409 {
+		t.Fatal("deletion not refused while travel-pinned", rec.Result().StatusCode)
+	}
+	// release is idempotent and deletion succeeds afterwards
+	for i := 0; i < 2; i++ {
+		if r := post(`{"map_id":"`+m.ID+`","release":true}`, ""); r.Result().StatusCode != 200 {
+			t.Fatal("pin release failed", r.Result().StatusCode)
+		}
+	}
+	s.db.QueryRow(`SELECT count(*) FROM offline_map_pins WHERE map_id=? AND kind='travel'`, m.ID).Scan(&n)
+	if n != 0 {
+		t.Fatal("travel pin survived release", n)
+	}
+	// unknown map acquire is an honest conflict, never a silent success
+	if r := post(`{"map_id":"no-such-map"}`, ""); r.Result().StatusCode != 409 {
+		t.Fatal("unknown map pin did not conflict", r.Result().StatusCode)
+	}
+}
+
+func TestV2StartupSweepClearsTravelPins(t *testing.T) {
+	s := extensionStore(t)
+	dir := t.TempDir()
+	zipPath, size, _ := buildV2Package(t, dir, smallV2Fixture(), nil)
+	m, e := importFile(t, s, zipPath, size)
+	if e != nil {
+		t.Fatal(e)
+	}
+	ctx := context.Background()
+	if _, e = s.pinMapRevision(ctx, m.ID, "travel"); e != nil {
+		t.Fatal(e)
+	}
+	// durable recording pins survive; ephemeral travel pins never do
+	if _, e = s.pinMapRevision(ctx, m.ID, "rec:test-recording"); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = s.db.Exec(`DELETE FROM offline_map_pins WHERE kind='travel'`); e != nil {
+		t.Fatal(e)
+	}
+	var travel, rec int
+	s.db.QueryRow(`SELECT count(*) FROM offline_map_pins WHERE kind='travel'`).Scan(&travel)
+	s.db.QueryRow(`SELECT count(*) FROM offline_map_pins WHERE kind='rec:test-recording'`).Scan(&rec)
+	if travel != 0 || rec != 1 {
+		t.Fatal("sweep semantics wrong", travel, rec)
+	}
+}

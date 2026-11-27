@@ -42,6 +42,11 @@ type displayState struct {
 	Parties       map[string]json.RawMessage `json:"parties"`
 	MapID         string                     `json:"map_id"`
 	Assets        []string                   `json:"assets"`
+	// Enhanced carries the immutable enhanced-map capture evidence (renderer,
+	// revision, style documents, layers and bounded availability) for frames
+	// recorded with the enhanced renderer active (#96). Opaque evidence: the
+	// server pins the referenced revision and otherwise preserves it verbatim.
+	Enhanced json.RawMessage `json:"enhanced,omitempty"`
 }
 type presentationRequest struct {
 	Reason      string       `json:"reason"`
@@ -73,6 +78,11 @@ func compressed(b []byte) []byte {
 	return out.Bytes()
 }
 func (s *Store) initPresentation() error {
+	// Ephemeral Travel Back pins never survive a restart (#96): sweep them
+	// deterministically at open. Durable recording/saved references persist.
+	if _, e := s.db.Exec(`DELETE FROM offline_map_pins WHERE kind='travel'`); e != nil {
+		return e
+	}
 	// An older browser may still hold responses across a Command upgrade. Preserve
 	// those pins until its explicit close; heartbeat expiry is not a closed page.
 	var hadLivePins int
@@ -409,8 +419,21 @@ func (s *Store) presentationOperation(op string, r presentationRequest) (any, er
 			gapKind = "browser_unavailable"
 		}
 		gapFrom := l.Seen
+		displacedClosed := l.Closed
 		l = presentationLease{Token: id() + id(), Epoch: id(), Seen: now, GapFrom: gapFrom, GapKind: gapKind}
 		result = l
+		// Travel Back pins are ephemeral to the live browser session (#96).
+		// A claim displacing an explicitly closed browser means its travel
+		// session ended with the page, so its pins release here inside the
+		// same transaction. A merely expired lease is different: the same
+		// browser may be mid-session with heartbeats paused for playback, and
+		// its pins must survive its own reclaim. Re-entry re-pins idempotently
+		// and restart sweeps the rest.
+		if displacedClosed {
+			if _, e = tx.Exec(`DELETE FROM offline_map_pins WHERE kind='travel'`); e != nil {
+				return nil, e
+			}
+		}
 	} else {
 		if !owner(l, r, now) {
 			return nil, errors.New("browser ownership expired or fenced; reacquire before capture")
@@ -449,7 +472,7 @@ func (s *Store) presentationOperation(op string, r presentationRequest) (any, er
 			if st.Recording == nil || !st.Recording.Active || st.Recording.Status == "stopped" {
 				return nil, ErrAction
 			}
-			if r.Revision <= 0 || r.State.Version != 1 || len(r.State.Common) == 0 {
+			if r.Revision <= 0 || (r.State.Version != 1 && r.State.Version != 2) || len(r.State.Common) == 0 {
 				return nil, errors.New("versioned applied display state required")
 			}
 			b := []byte(marshal(r.State))
@@ -533,6 +556,20 @@ func (s *Store) presentationOperation(op string, r presentationRequest) (any, er
 			}
 			if e = pinPresentationAssets(tx, st.Recording.ID, ordinal, r.State.MapID, r.State.Assets, r.State.AssetWarnings, now); e != nil {
 				return nil, e
+			}
+			// Pin the immutable enhanced revision this frame was captured against
+			// (#96): whole-revision, idempotent, durable for the recording's life.
+			// Deletion protection consults these pins inside its transaction.
+			if len(r.State.Enhanced) > 0 {
+				var enh struct {
+					MapID    string `json:"map_id"`
+					Revision string `json:"revision"`
+				}
+				if json.Unmarshal(r.State.Enhanced, &enh) == nil && enh.MapID != "" && enh.Revision != "" {
+					if _, e = tx.Exec(`INSERT OR IGNORE INTO offline_map_pins(map_id,revision,kind,created) VALUES(?,?,?,?)`, enh.MapID, enh.Revision, "rec:"+st.Recording.ID, now.UTC().Format(wireTime)); e != nil {
+						return nil, e
+					}
+				}
 			}
 			l.Revision = r.Revision
 			l.Seen = now
@@ -826,6 +863,19 @@ func sealRecording(tx snapshotSQL, st State, r presentationRequest, now time.Tim
 	metadata["map_fidelity_warning_events"] = assetWarnings
 	metadata["request_sha256"] = saveRequestHash(r)
 	metadata["supporting_projection"] = map[string]any{"policy": st.Policy, "raw_version": st.RawVersion, "projection_version": st.ProjectionVersion, "pending": st.ProjectionPending, "audit_only": true}
+	// Enhanced revision references freeze with the snapshot (#96): deletion
+	// protection must survive the unsaved recording's later discard.
+	if _, e = tx.Exec(`INSERT OR IGNORE INTO offline_map_pins(map_id,revision,kind,created) SELECT map_id,revision,?||?,created FROM offline_map_pins WHERE kind=?`, "saved:", sid, "rec:"+rec.ID); e != nil {
+		return nil, e
+	}
+	// Record whether the frozen evidence referenced any enhanced revision.
+	var enhRefs int
+	if e = tx.QueryRow(`SELECT COUNT(DISTINCT map_id) FROM offline_map_pins WHERE kind=?`, "saved:"+sid).Scan(&enhRefs); e != nil {
+		return nil, e
+	}
+	if enhRefs > 0 {
+		metadata["enhanced_map_references"] = enhRefs
+	}
 	if _, e = tx.Exec(`INSERT INTO saved_visibility_ready VALUES(?)`, sid); e != nil {
 		return nil, e
 	}
@@ -1236,7 +1286,7 @@ func presentationBoundary(tx *sql.Tx, rec *Recording, proof *presentationRequest
 	}
 	rendered, e1 := time.Parse(time.RFC3339Nano, proof.Presented)
 	opportunity, e2 := time.Parse(time.RFC3339Nano, proof.Opportunity)
-	if e1 != nil || e2 != nil || rendered.After(opportunity) || opportunity.After(pressed) || pressed.Sub(opportunity) > 30*time.Second || proof.State.Version != 1 || proof.Revision <= l.Revision {
+	if e1 != nil || e2 != nil || rendered.After(opportunity) || opportunity.After(pressed) || pressed.Sub(opportunity) > 30*time.Second || (proof.State.Version != 1 && proof.State.Version != 2) || proof.Revision <= l.Revision {
 		return unverified("pre-action browser proof outside ordering or timing bounds")
 	}
 	b := []byte(marshal(proof.State))

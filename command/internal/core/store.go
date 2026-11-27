@@ -1039,6 +1039,11 @@ func (s *Store) actionModeOwned(action, mode, token, epoch, operatorAt string, b
 				if _, err := tx.Exec("INSERT INTO retired VALUES(?,?)", r.ID, string(b)); err != nil {
 					return err
 				}
+				// Release the unsaved recording's enhanced revision pins (#96);
+				// frozen snapshots hold their own saved-kind copies.
+				if _, err := tx.Exec(`DELETE FROM offline_map_pins WHERE kind=?`, "rec:"+r.ID); err != nil {
+					return err
+				}
 			}
 			st.Recording = nil
 			st.Points = []Point{}

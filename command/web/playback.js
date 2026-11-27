@@ -38,6 +38,10 @@
     revision = 0;
   let follow = true,
     angle = 0,
+    anchorEnhanced,
+    travelEnhanced,
+    travelPinnedMap,
+    travelPinFailed,
     selected,
     filters = new Map(),
     epochs = {},
@@ -416,6 +420,7 @@
       $("playback-sos").hidden = true;
       $("playback-status").textContent =
         "Unverified presentation evidence · no recorded rendered state yet";
+      globalThis.PlaybackEnhanced?.update({ enhanced: null });
       detail();
       return;
     }
@@ -442,6 +447,33 @@
     for (const child of map.querySelectorAll("[data-layer]"))
       if (layers[child.dataset.layer] === false) child.remove();
     world.append(map);
+    // Enhanced reconstruction (#96): re-render the recorded cartography from
+    // the pinned revision beneath this frozen evidence, following the same
+    // basis frame the map geometry came from.
+    const enhancedBasis = travel ? travelEnhanced : follow ? checkpoint.enhanced : (anchorEnhanced ?? checkpoint.enhanced);
+    const enhancedViewport = travel
+      ? (travelMap?.viewport || travelBasis)
+      : (follow ? c.viewport : (anchor?.viewport || c.viewport));
+    globalThis.PlaybackEnhanced?.update({
+      enhanced: enhancedBasis,
+      viewport: enhancedViewport,
+      width: w,
+      height: h,
+      transform,
+      angle,
+      // Inspection consistency: the appearance follows the frame whose
+      // enhanced evidence is actually reconstructed — the anchor frame when
+      // its enhanced evidence is in effect, otherwise the advancing playback
+      // frame. Mixing one frame's style variant with another frame's evidence
+      // rebuilds the reconstruction into an appearance that evidence never had.
+      night: (travel
+        ? travelMap?.appearance
+        : follow
+          ? checkpoint.common?.appearance
+          : (anchorEnhanced ? anchor?.appearance : checkpoint.common?.appearance)) === "night",
+    })?.then?.(() => {
+      if (frame?.checkpoint) updateEvidence(frame.checkpoint);
+    });
     for (const [id, p] of Object.entries(checkpoint.parties)) {
       const card = label(
           "section",
@@ -526,13 +558,22 @@
     $("playback-sos").textContent = alerts.length
       ? `● Recording SOS · ${alerts.length} historical notification${alerts.length > 1 ? "s" : ""}`
       : "";
+    // The tag names what the frame actually recorded. Enhanced evidence
+    // (enhancedBasis, resolved above) is the truthful map claim for enhanced
+    // frames — calling them "Blank canvas" misrepresents the recording even
+    // when reconstruction is honestly suppressed (the evidence surface then
+    // carries the suppression disclosure).
     $("map-mode-label").textContent = travel
-      ? map.querySelector('[data-layer="offline-map"]')
-        ? "Offline geographic map · view snapshot"
-        : "Blank canvas"
-      : checkpoint.map_id
-        ? "Offline geographic map · recorded revision"
-        : "Blank canvas";
+      ? travelEnhanced?.map_id
+        ? "Enhanced offline map · view snapshot"
+        : map.querySelector('[data-layer="offline-map"]')
+          ? "Offline geographic map · view snapshot"
+          : "Blank canvas"
+      : enhancedBasis?.map_id
+        ? "Enhanced offline map · recorded revision"
+        : checkpoint.map_id
+          ? "Offline geographic map · recorded revision"
+          : "Blank canvas";
     updateEvidence(checkpoint);
     detail();
   }
@@ -549,7 +590,13 @@
         )
         .toFixed(
           1,
-        )} m · Unknown gaps preserved`;
+        )} m · Unknown gaps preserved` +
+        (travelPinFailed
+          ? " · Enhanced map revision could not be pinned; cartographic reconstruction unavailable — positions and operational evidence are unaffected."
+          : "") +
+        (globalThis.PlaybackEnhanced?.status
+          ? " · " + globalThis.PlaybackEnhanced.status
+          : "");
       return;
     }
     const trailing = session.metadata.trailing_unverified_interval;
@@ -585,6 +632,9 @@
       " · read-only evidence" +
       (checkpoint.asset_warnings?.length
         ? " · " + checkpoint.asset_warnings.join(" ")
+        : "") +
+      (globalThis.PlaybackEnhanced?.status
+        ? " · " + globalThis.PlaybackEnhanced.status
         : "");
   }
   let inspectorMap, anchor;
@@ -662,6 +712,7 @@
       if (!follow && (explicit || !anchor)) {
         anchor = next.checkpoint?.common;
         inspectorMap = anchor?.map_svg;
+        anchorEnhanced = next.checkpoint?.enhanced;
       }
       if (follow && next.checkpoint) {
         selected = next.checkpoint.common.selected_party;
@@ -747,6 +798,8 @@
     active = false;
     updateMode();
     travel = undefined;
+    travelEnhanced = undefined;
+    travelPinFailed = false;
     travelBasis = undefined;
     suspended = false;
     $("historical-return").hidden = true;
@@ -767,6 +820,17 @@
     document.querySelector("main").className = savedLayout;
     frame = undefined;
     session = undefined;
+    globalThis.PlaybackEnhanced?.detach();
+    // Release the Travel Back pin on exit (#96) — idempotent, best-effort;
+    // startup sweeps ephemeral pins regardless.
+    if (travelPinnedMap) {
+      fetch("/local/enhanced-map-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ map_id: travelPinnedMap, release: true }),
+      }).catch(() => {});
+      travelPinnedMap = undefined;
+    }
     window.dispatchEvent(new Event("resize"));
     window.restoreLiveDashboard();
   }
@@ -1289,7 +1353,7 @@
       : 1;
     const width = travelMap?.width || 1200,
       height = travelMap?.height || 700;
-    if (travelMap?.viewport && travelMap.map_svg)
+    if (travelMap?.viewport && (travelMap.map_svg || travelEnhanced))
       ({ cx, cy, scale } = travelMap.viewport);
     else if (travelBasis) ({ cx, cy, scale } = travelBasis);
     else travelBasis = { cx, cy, scale };
@@ -1374,10 +1438,47 @@
     busy = false;
     const oldWall = travel ? locationAt(position).wall : Date.parse(start);
     if (!active) {
-      travelMap = window.recordingAppliedState?.()?.common;
+      const appliedState = window.recordingAppliedState?.();
+      travelMap = appliedState?.common;
+      travelEnhanced = appliedState?.enhanced;
       travelBasis = undefined;
     }
     travel = next;
+    // Pin the applicable enhanced revision for the session duration (#96):
+    // backend-enforced, atomic against deletion, released on exit. Acquisition
+    // is confirmed before the reconstruction is used — an unpinned revision
+    // could be deleted mid-session — and failure degrades honestly to the
+    // overlay evidence with disclosure.
+    const enh = travelEnhanced;
+    if (enh?.map_id) {
+      let acquired = false;
+      try {
+        const r = await fetch("/local/enhanced-map-pin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ map_id: enh.map_id }),
+        });
+        acquired = r.ok;
+      } catch {}
+      if (request !== travelRequest) {
+        // Superseded by exit or re-entry while the pin call was in flight:
+        // release immediately so the race never leaks a reference.
+        if (acquired)
+          fetch("/local/enhanced-map-pin", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ map_id: enh.map_id, release: true }),
+          }).catch(() => {});
+        return;
+      }
+      if (acquired) {
+        travelPinnedMap = enh.map_id;
+        travelPinFailed = false;
+      } else {
+        travelEnhanced = undefined;
+        travelPinFailed = true;
+      }
+    }
     travel.styles = next.styles;
     travel.contacts = next.contacts;
     travel.receivedCount = next.retained_observation_count;

@@ -106,6 +106,11 @@ func (s *Store) libraryHTTP(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		_, err = tx.Exec(`INSERT INTO saved_library_revisions SELECT ?,COALESCE(MAX(revision),0)+1,?,?,? FROM saved_library_revisions WHERE id=?`, req.ID, metadata, deleted, s.Now().UTC().Format("2006-01-02T15:04:05.000000000Z"), req.ID)
 	}
+	if err == nil && deleted == 1 {
+		// Deleting the recording releases its enhanced revision pins (#96),
+		// after which map deletion protection no longer applies to it.
+		_, err = tx.Exec(`DELETE FROM offline_map_pins WHERE kind=?`, "saved:"+req.ID)
+	}
 	if err == nil {
 		err = tx.Commit()
 	}

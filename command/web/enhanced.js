@@ -89,6 +89,13 @@ const state = {
   hillshadeOn: true,
   failedIDs: new Set(),
   activating: false,
+  // Capture ledger (#96): bounded record of tile requests and outcomes.
+  // Inflight keys are exactly the tiles requested but not yet rendered — the
+  // only non-deterministic availability factor for immutable local packages.
+  inflight: new Map(),
+    failed: new Map(),    // HTTP-failure tile outcomes (response-status evidence)
+  errored: new Map(),
+  lastMutation: 0,
 };
 
 function webglUsable() {
@@ -143,16 +150,10 @@ function outsideCoverage() {
 // statusText contributes the enhanced layer's persistent honesty states to the
 // existing projection-status surface. Production draw code merges them; when no
 // enhanced state is active this returns "" and production text is untouched.
-function recordingGate() {
-  const rec = window.recordingLiveState?.()?.recording;
-  return !!(rec && (rec.active || rec.status === "paused"));
-}
 
 function statusText() {
   if (Enhanced.failed)
     return "Enhanced map unavailable: " + Enhanced.failed + " Legacy map experience active — positions, tracks and controls are unchanged.";
-  if (recordingGate() && !Enhanced.failed)
-    return "Enhanced map hidden while a recording is active — recordings remain on the safe legacy path until #96. Positions, tracks and controls are unchanged.";
   if (!Enhanced.active) return "";
   if (outsideCoverage())
     return "Enhanced map coverage incomplete here — positions, tracks and controls remain exact; background may be missing.";
@@ -221,6 +222,17 @@ async function ensureMap(doc, id) {
     canvas.insertBefore(gl, tracks);
     state.gl = gl;
   }
+  // Tile identity is product-scoped (the tile URL carries the product),
+  // while MapLibre events carry the style source id. Resolve source ->
+  // product from the style's own tile templates on EVERY activation: the map
+  // instance is reused across map switches, and a stale mapping would record
+  // evidence against the previous map's products.
+  state.sourceProducts = {};
+  const activeStyle = nightNow() ? state.styleNight : state.styleDay;
+  for (const [sid, s] of Object.entries(activeStyle?.sources || {})) {
+    const m = /\/tiles\/([a-z0-9-]+)\//i.exec((s.tiles || [""])[0] || "");
+    if (m) state.sourceProducts[sid] = m[1];
+  }
   if (!state.map) {
     state.map = new state.maplibre.Map({
       container: state.gl,
@@ -232,9 +244,48 @@ async function ensureMap(doc, id) {
       fadeDuration: 0,
       maxZoom: 24, // operator decision: overzoom permitted; operational zoom range unchanged
       renderWorldCopies: false, // flat, no world copies
+      transformRequest: (url, resourceType) => {
+        // Tile-request ledger (#96 capture evidence). Keys are deterministic
+        // per product; recording outcomes does not alter the request itself.
+        if (resourceType === "Tile") {
+          const key = tileKeyFromURL(url);
+          if (key) {
+            state.inflight.set(key, performance.now());
+            if (state.inflight.size > 4096) state.inflight.delete(state.inflight.keys().next().value);
+            state.lastMutation = performance.now();
+          }
+        }
+        return { url };
+      },
     });
     state.map.on("sourcedataloading", (e) => {
       if (e.isSourceLoaded !== true) state.tilesLoading = true;
+      state.lastMutation = performance.now();
+    });
+    state.map.on("sourcedata", (e) => {
+      // A source reporting loaded means its outstanding tile work for the
+      // current view completed: clear matching inflight keys. Unconfirmed keys
+      // remain honestly inflight.
+      if (e.isSourceLoaded === true && e.sourceId) {
+        const product = state.sourceProducts?.[e.sourceId] || e.sourceId;
+        const prefix = product + "/";
+        for (const key of state.inflight.keys())
+          if (key.startsWith(prefix)) state.inflight.delete(key);
+      }
+      state.lastMutation = performance.now();
+    });
+    state.map.on("error", (e) => {
+      // Tile-level failures are recorded honestly for capture. Best effort:
+      // the event does not always carry the tile coordinate, in which case the
+      // inflight key remains until the bounded ledger evicts it.
+      const t = e?.tile;
+      if (t?.tileID?.canonical && e?.sourceId) {
+        const c = t.tileID.canonical;
+        const key = `${state.sourceProducts?.[e.sourceId] || e.sourceId}/${c.z}/${c.x}/${c.y}`;
+        state.inflight.delete(key);
+        state.errored.set(key, performance.now());
+        if (state.errored.size > 1024) state.errored.delete(state.errored.keys().next().value);
+      }
     });
     state.map.on("idle", () => {
       state.tilesLoading = false;
@@ -312,7 +363,7 @@ function boot() {
     // shows only when an enhanced map is the active map and map mode is offline.
     const em = typeof enhancedMap !== "undefined" ? enhancedMap : null;
     const modeEl = document.getElementById("map-mode");
-    const shouldShow = !!em && state.capability && !state.failedIDs.has(em.id) && modeEl && modeEl.value === "offline" && !window.HistoricalPlayback?.active && !recordingGate();
+    const shouldShow = !!em && state.capability && !state.failedIDs.has(em.id) && modeEl && modeEl.value === "offline" && !window.HistoricalPlayback?.active;
     if (shouldShow && (!Enhanced.active || state.activeID !== em.id)) activate(em.doc, em.id);
     else if (!shouldShow && Enhanced.active) deactivate();
     // Frame-coherent camera follow: x = (px - cx) * scale + w/2 and
@@ -330,6 +381,7 @@ function boot() {
         const key = [z.toFixed(5), lon.toFixed(7), lat.toFixed(7), w, h].join(",");
         if (key !== lastKey) {
           lastKey = key;
+          state.lastMutation = performance.now();
           state.map.jumpTo({ center: [lon, lat], zoom: Math.max(0, Math.min(24, z)) });
         }
       }
@@ -338,6 +390,175 @@ function boot() {
   }
   requestAnimationFrame(sync);
 }
+
+// tileKeyFromURL parses the deterministic tile identity out of our own tile
+// URLs: /local/maps/{id}/tiles/{product}/{z}/{x}/{y}.
+function tileKeyFromURL(url) {
+  const m = /\/tiles\/([a-z0-9-]+)\/(\d+)\/(\d+)\/(\d+)(?:\.\w+)?(?:\?|$)/i.exec(url || "");
+  return m ? `${m[1]}/${+m[2]}/${+m[3]}/${+m[4]}` : "";
+}
+Enhanced.tileKeyFromURL = tileKeyFromURL;
+
+// Per-tile outcome evidence (#96): tile rendering success is never inferred
+// from source completion — vector 404s are empty loads in the renderer and
+// emit no error. The deterministic same-origin tile URLs make response
+// statuses authoritative, so exactly those responses are observed through a
+// fetch wrapper. The wrapper only inspects status and never alters the
+// request or response; non-tile traffic passes through untouched.
+if (!globalThis.__enhancedTileEvidenceInstalled) {
+  globalThis.__enhancedTileEvidenceInstalled = true;
+  const originalFetch = globalThis.fetch.bind(globalThis);
+  globalThis.fetch = async function enhancedTileEvidenceFetch(input, init) {
+    const response = await originalFetch(input, init);
+    try {
+      const url = typeof input === "string" ? input : input?.url;
+      const key = tileKeyFromURL(url || "");
+      if (key && state.inflight) {
+        state.inflight.delete(key);
+        if (!response.ok) {
+          state.failed.set(key, performance.now());
+          if (state.failed.size > 4096) state.failed.delete(state.failed.keys().next().value);
+          state.lastMutation = performance.now();
+        } else {
+          // A later success is authoritative recovery evidence: prior failure
+          // records for the same tile are cleared so playback never gates
+          // geography that was demonstrably visible at capture.
+          state.failed.delete(key);
+          state.errored.delete(key);
+        }
+      }
+    } catch { /* evidence bookkeeping never interferes with rendering */ }
+    return response;
+  };
+}
+
+// captureState is the recording evidence surface (#96): what the enhanced
+// renderer actually presented at the capture moment, honestly. Positions never
+// wait on this — it is read synchronously inside the existing capture pump.
+const MISSING_BOUND = 64;
+Enhanced.captureState = function captureState() {
+  if (!Enhanced.active || !state.map) return null;
+  const now = performance.now();
+  const missing = [];
+  let truncated = false;
+  const seen = new Set();
+  const consider = (key, kind) => {
+    if (seen.has(key + kind)) return;
+    if (missing.length >= MISSING_BOUND) { truncated = true; return; }
+    seen.add(key + kind);
+    const parts = key.split("/");
+    missing.push({ product: parts[0], z: +parts[1], x: +parts[2], y: +parts[3], kind });
+  };
+  // Visible-tile geometry shared by eviction and deterministic absence: the
+  // integer tile pyramid coordinates covering the current viewport.
+  const vp0 = currentViewport();
+  const tracks0 = document.getElementById("tracks");
+  const w0 = tracks0 ? tracks0.clientWidth : 0, h0 = tracks0 ? tracks0.clientHeight : 0;
+  const visibleKeys = new Set();
+  let coverageRect = null;
+  if (vp0 && Number.isFinite(vp0.cx) && w0 > 0) {
+    const R = 6378137, WORLD = 2 * Math.PI * R;
+    const z = Math.max(0, Math.min(14, Math.floor(Math.log2((vp0.scale * WORLD) / 512))));
+    const n = 2 ** z;
+    const xAt = (mx) => ((mx / R) * (180 / Math.PI) + 180) / 360 * n;
+    const yAt = (my) => {
+      const lat = (2 * Math.atan(Math.exp(my / R)) - Math.PI / 2) * (180 / Math.PI);
+      return (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n;
+    };
+    const x0 = Math.floor(xAt(vp0.cx - w0 / 2 / vp0.scale)), x1 = Math.floor(xAt(vp0.cx + w0 / 2 / vp0.scale));
+    const y0 = Math.floor(yAt(vp0.cy + h0 / 2 / vp0.scale)), y1 = Math.floor(yAt(vp0.cy - h0 / 2 / vp0.scale));
+    if ((x1 - x0 + 1) * (y1 - y0 + 1) <= 256) {
+      coverageRect = { z, x0, x1, y0, y1, n };
+      for (let x = Math.max(0, x0); x <= Math.min(n - 1, x1); x++)
+        for (let y = Math.max(0, y0); y <= Math.min(n - 1, y1); y++)
+          visibleKeys.add(`${z}/${x}/${y}`);
+    }
+  }
+  const inView = (key) => visibleKeys.has(key.split("/").slice(1).join("/"));
+  for (const [key, at] of state.inflight) {
+    // Evidence of tiles still inside the viewport never expires: the renderer
+    // caches empty outcomes and stops re-requesting, but the absence persists.
+    if (now - at > 30000 && !inView(key)) { state.inflight.delete(key); continue; }
+    consider(key, "loading");
+  }
+  for (const [key, at] of state.errored) {
+    if (now - at > 30000 && !inView(key)) { state.errored.delete(key); continue; }
+    consider(key, "error");
+  }
+  for (const [key, at] of state.failed) {
+    if (now - at > 30000 && !inView(key)) { state.failed.delete(key); continue; }
+    consider(key, "unavailable");
+  }
+  // Deterministic absence (#96): tile existence inside an immutable revision
+  // is fixed by the validated package coverage — tiles whose centre falls
+  // outside coverage are definitively absent at capture for every product,
+  // regardless of how the renderer reports their outcome. This evidence is
+  // computed from metadata, never inferred from source completion.
+  if (coverageRect && state.coverage) {
+    const [cw, cs, ce, cn] = state.coverage;
+    const { z, x0, x1, y0, y1, n } = coverageRect;
+    const lonAtX = (x) => (x + 0.5) / n * 360 - 180;
+    const latAtY = (y) => {
+      const t = Math.PI * (1 - 2 * (y + 0.5) / n);
+      return Math.atan(Math.sinh(t)) * 180 / Math.PI;
+    };
+    // Only products the map actually includes: enumerating absent products
+    // would fabricate evidence and exhaust the bounded budget, wrongly
+    // suppressing reconstruction of geography that was visible at capture.
+    const products = [...new Set(Object.values(state.sourceProducts || {}))];
+    for (const product of products.length ? products : ["vector"]) {
+      for (let x = Math.max(0, x0); x <= Math.min(n - 1, x1); x++)
+        for (let y = Math.max(0, y0); y <= Math.min(n - 1, y1); y++) {
+          const lon = lonAtX(x), lat = latAtY(y);
+          if (lon < cw || lon > ce || lat < cs || lat > cn)
+            consider(`${product}/${z}/${x}/${y}`, "unavailable");
+        }
+    }
+  }
+  const vp = currentViewport();
+  const tracks = document.getElementById("tracks");
+  const w = tracks ? tracks.clientWidth : 0, h = tracks ? tracks.clientHeight : 0;
+  const overflow = vp && state.coverage ? viewportOverflowsCoverage(vp.cx, vp.cy, vp.scale, w, h, state.coverage) : false;
+  // Settlement: loaded AND idle AND no camera/style/source mutation inside the
+  // stability window. Confirmed outcomes do not block settlement: an errored
+  // or deterministically absent tile IS a settled result — the capture showed
+  // its absence and playback gates it exactly. Only unconfirmed outcomes
+  // (kind "loading": requested but no response yet, or tiles never requested
+  // inside the mutation window) make completeness unknowable. Treating
+  // confirmed absences as unsettled would permanently suppress reconstruction
+  // of every frame straddling the coverage boundary — including the
+  // in-boundary cartography that was reliably visible.
+  // Never blocks capture — the flag is evidence, not a gate.
+  const settled = state.firstPainted && !state.tilesLoading && !missing.some((m) => m.kind === "loading") && now - state.lastMutation > 250;
+  const availState = Enhanced.failed
+    ? "failed"
+    : overflow
+      ? "coverage-incomplete"
+      : missing.some((m) => m.kind === "error" || m.kind === "unavailable")
+        ? "degraded"
+        : missing.length || state.tilesLoading
+          ? "loading"
+          : "ready";
+  const em = typeof enhancedMap !== "undefined" ? enhancedMap : null;
+  return {
+    renderer: "maplibre-gl",
+    // The vendored bundle does not re-export its version; the constant is
+    // pinned here beside the vendored artifact it describes (vendor/
+    // maplibre-gl.mjs — update both together).
+    renderer_version: state.maplibre?.version || "6.19.0",
+    map_id: em?.id || state.activeID,
+    revision: em?.doc?.revision || "",
+    style: { day: state.styleDay, night: state.styleNight },
+    layers: { labels: state.labelsOn, hillshade: state.hillshadeOn },
+    availability: {
+      state: availState,
+      settled,
+      missing,
+      truncated,
+      detail: statusText(),
+    },
+  };
+};
 
 // Capability discovery: the launch-time operator opt-in. Without it the module
 // never loads MapLibre, never activates and changes nothing.
