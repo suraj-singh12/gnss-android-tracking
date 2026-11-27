@@ -520,8 +520,16 @@ Enhanced.captureState = function captureState() {
   const w = tracks ? tracks.clientWidth : 0, h = tracks ? tracks.clientHeight : 0;
   const overflow = vp && state.coverage ? viewportOverflowsCoverage(vp.cx, vp.cy, vp.scale, w, h, state.coverage) : false;
   // Settlement: loaded AND idle AND no camera/style/source mutation inside the
-  // stability window. Never blocks capture — the flag is evidence, not a gate.
-  const settled = state.firstPainted && !state.tilesLoading && missing.length === 0 && now - state.lastMutation > 250;
+  // stability window. Confirmed outcomes do not block settlement: an errored
+  // or deterministically absent tile IS a settled result — the capture showed
+  // its absence and playback gates it exactly. Only unconfirmed outcomes
+  // (kind "loading": requested but no response yet, or tiles never requested
+  // inside the mutation window) make completeness unknowable. Treating
+  // confirmed absences as unsettled would permanently suppress reconstruction
+  // of every frame straddling the coverage boundary — including the
+  // in-boundary cartography that was reliably visible.
+  // Never blocks capture — the flag is evidence, not a gate.
+  const settled = state.firstPainted && !state.tilesLoading && !missing.some((m) => m.kind === "loading") && now - state.lastMutation > 250;
   const availState = Enhanced.failed
     ? "failed"
     : overflow
