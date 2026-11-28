@@ -161,14 +161,12 @@ def compile_repair(repo, envdir, out_bin, target, compiler=None):
              str(src), "/Fe:" + str(out_bin),
              "/link", f"/LIBPATH:{libdir}",
              pick("geos_c.lib"), pick("zlib.lib", "z.lib", "zdll.lib")])
-    elif target == "macos-arm64":
-        run([compiler or "clang++", "-O2", "-std=c++17", "-o", out_bin, src,
-             f"-I{inc}", f"-I{envdir/'include'}", f"-L{envdir/'lib'}",
-             "-lgeos_c", "-lz"])
     else:
-        run([compiler or "g++", "-O2", "-std=c++17", "-o", out_bin, src,
+        rpath = "@executable_path/../lib" if target == "macos-arm64" else "$ORIGIN/../lib"
+        run([compiler or ("clang++" if target == "macos-arm64" else "g++"),
+             "-O2", "-std=c++17", "-o", out_bin, src,
              f"-I{inc}", f"-I{envdir/'include'}", f"-L{envdir/'lib'}",
-             "-lgeos_c", "-lz", f"-Wl,-rpath,$ORIGIN/../lib"])
+             "-lgeos_c", "-lz", f"-Wl,-rpath,{rpath}"])
 
 
 def assemble(target, envdir, repair_bin, packdir, pkg_inventory):
