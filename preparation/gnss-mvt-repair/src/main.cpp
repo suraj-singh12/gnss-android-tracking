@@ -23,6 +23,14 @@
 
 #include <zlib.h>
 
+#ifdef _WIN32
+#include <process.h>
+static inline int gnss_pid() { return _getpid(); }
+#else
+#include <unistd.h>
+static inline int gnss_pid() { return static_cast<int>(::getpid()); }
+#endif
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -640,8 +648,10 @@ int run_repair(const fs::path& src, const fs::path& dst, const fs::path& report_
   // write into a staging sibling and publish atomically: an aborted run must
   // never leave partial output inside dst that blocks a retry after the
   // operator regenerates the tiles.
-  fs::path staging = dst_abs.parent_path() / (dst_abs.filename().string() + ".partial");
-  if (fs::exists(staging)) fs::remove_all(staging);
+  // unique per-process staging: a fixed name could collide with unrelated
+  // operator files, and deleting it would destroy them.
+  fs::path staging = dst_abs.parent_path() /
+      (dst_abs.filename().string() + ".partial-" + std::to_string(gnss_pid()));
   fs::create_directories(staging);
   auto t0 = std::chrono::steady_clock::now();
 
@@ -754,20 +764,23 @@ int run_repair(const fs::path& src, const fs::path& dst, const fs::path& report_
       << "  \"bytes_after\": " << bytes_after << ",\n"
       << "  \"wall_s\": " << round2(wall) << ",\n"
       << "  \"details\": [\n" << details.str() << "\n  ]\n}\n";
-  write_file(report_path, rep.str());
   std::printf("{\"tiles\": %llu, \"tiles_with_repairs\": %llu, \"features_repaired\": %llu, \"invalid_after\": %llu, \"bytes_before\": %llu, \"bytes_after\": %llu, \"wall_s\": %.2f}\n",
               (unsigned long long)tiles, (unsigned long long)tiles_with_repairs,
               (unsigned long long)features_repaired, (unsigned long long)verify.invalid,
               (unsigned long long)bytes_before, (unsigned long long)bytes_after, wall);
   // zero-invalid gate: nonzero invalid output is a hard failure
   if (verify.invalid != 0) {
+    write_file(report_path, rep.str());
     std::fprintf(stderr, "zero-invalid gate FAILED: %llu invalid polygon features after encoding\n",
                  (unsigned long long)verify.invalid);
     std::fprintf(stderr, "staging preserved for inspection: %s\n", staging.c_str());
     return 1;
   }
-  // publish atomically: dst is guaranteed empty at this point
+  // publish atomically: dst is guaranteed empty at this point. The report is
+  // written only afterwards so a report path inside the destination cannot
+  // make dst nonempty and defeat publication.
   fs::remove(dst_abs);
   fs::rename(staging, dst_abs);
+  write_file(report_path, rep.str());
   return 0;
 }
