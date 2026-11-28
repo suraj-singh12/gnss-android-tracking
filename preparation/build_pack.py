@@ -147,12 +147,20 @@ def compile_repair(repo, envdir, out_bin, target, compiler=None):
     src = repo / "preparation/gnss-mvt-repair/src/main.cpp"
     inc = repo / "preparation/third_party/protozero/include"
     if target == "windows-x64":
-        # MSVC on the CI runner; GEOS import lib from the conda env.
+        # MSVC on the CI runner; import libs resolved by presence because
+        # conda-forge naming has varied across releases.
+        libdir = envdir / "Library" / "lib"
+        def pick(*names):
+            for n in names:
+                if (libdir / n).exists():
+                    return n
+            raise SystemExit(f"missing import lib among {names} in {libdir}")
         cl = compiler or "cl.exe"
         run([cl, "/nologo", "/O2", "/std:c++17", "/EHsc",
              f"/I{inc}", f"/I{envdir/'Library'/'include'}",
              str(src), "/Fe:" + str(out_bin),
-             "/link", f"/LIBPATH:{envdir/'Library'/'lib'}", "geos_c.lib", "zlib.lib"])
+             "/link", f"/LIBPATH:{libdir}",
+             pick("geos_c.lib"), pick("zlib.lib", "z.lib", "zdll.lib")])
     elif target == "macos-arm64":
         run([compiler or "clang++", "-O2", "-std=c++17", "-o", out_bin, src,
              f"-I{inc}", f"-I{envdir/'include'}", f"-L{envdir/'lib'}",
