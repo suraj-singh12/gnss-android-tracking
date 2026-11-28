@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Issue #98 design proposal — automated offline map preparation (prototype, not production UI)</title>
+<style>
+:root {
+  font: 13px/1.42 -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  --ink: #24343a; --muted: #596970; --line: #dce5e1; --accent: #216f56;
+  --background: #eef2f0; --toolbar: #f5f8f6; --surface: #fff; --hover: #f5f8f6;
+  --selected: #e6f1eb; --control-line: #afc0ba; --panel: #fff; --soft: #f5f8f6;
+  --green: #216f56; --greenwash: #e6f1eb; --amber: #9b681d; --amberwash: #faf1df;
+  --amber-text: #7a5216; --red: #963f4b; --redwash: #f9eaec; --blue: #44788d;
+  --shadow: 0 20px 60px #142b3038;
+}
+body[data-appearance="night"] {
+  --ink: #e5eeee; --muted: #a7babe; --line: #34474d; --accent: #8cdbb7;
+  --background: #101c23; --toolbar: #15232a; --surface: #1b2a31; --hover: #15232a;
+  --selected: #253e34; --control-line: #4d6268; --panel: #1b2a31; --soft: #15232a;
+  --green: #8cdbb7; --greenwash: #253e34; --amber: #efd09c; --amberwash: #393020;
+  --amber-text: var(--amber); --red: #efb0ba; --redwash: #3f2b31; --blue: #97c6da;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #4a5a60; color: var(--ink); display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 18px 10px 40px; }
+body[data-appearance="night"] { background: #0a1418; }
+.scenario-bar { width: 920px; max-width: 100%; background: #fff; color: #24343a; border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; font-size: 13px; box-shadow: 0 4px 18px #0004; }
+.scenario-bar b { display: block; margin-bottom: 6px; }
+.scenario-bar .scenarios { display: flex; flex-wrap: wrap; gap: 6px; }
+.scenario-bar button { border: 1px solid #afc0ba; background: #f5f8f6; border-radius: 7px; padding: 5px 9px; font: inherit; font-size: 12.5px; cursor: pointer; }
+.scenario-bar button.active { background: #216f56; color: #fff; border-color: #216f56; font-weight: 650; }
+.scenario-bar label { margin-left: 10px; font-size: 12.5px; }
+dialog-shell { display: block; }
+.shell { width: 720px; max-width: 100%; background: var(--panel); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; border: 1px solid var(--line); }
+.dialog-heading { display: flex; align-items: flex-start; justify-content: space-between; padding: 16px 18px 10px; border-bottom: 1px solid var(--line); }
+.dialog-title h1 { font-size: 17px; margin: 0; font-weight: 750; }
+.dialog-sub { margin: 3px 0 0; color: var(--muted); font-size: 12.5px; }
+.xclose { border: 0; background: none; font-size: 16px; color: var(--muted); cursor: pointer; padding: 4px 8px; }
+.map-task-tabs { display: flex; gap: 7px; padding: 12px 18px 0; }
+.map-task-tabs button { flex: 1; border: 1px solid var(--line); background: var(--panel); border-radius: 9px; padding: 8px 6px; font: inherit; font-weight: 650; color: var(--ink); cursor: pointer; }
+.map-task-tabs button[aria-selected="true"] { background: var(--greenwash); border-color: var(--green); color: var(--green); }
+.body { padding: 14px 18px; max-height: 560px; overflow-y: auto; }
+.caption { font-weight: 700; font-size: 12.5px; margin: 14px 0 5px; }
+.caption:first-child { margin-top: 0; }
+.search-row { display: flex; gap: 8px; }
+.search-row input[type=text] { flex: 1; border: 1px solid var(--control-line); border-radius: 9px; padding: 7px 10px; font: inherit; background: var(--surface); color: var(--ink); }
+button { min-height: 35px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); color: var(--ink); padding: 7px 11px; font: inherit; font-weight: 650; cursor: pointer; }
+button.primary { color: #fff; background: #216f56; border-color: #216f56; }
+body[data-appearance="night"] button.primary { color: #10251c; background: #8cdbb7; border-color: #8cdbb7; }
+button:disabled { cursor: not-allowed; opacity: .38; filter: grayscale(.4); }
+.preview { border: 1px dashed var(--control-line); border-radius: 10px; background: var(--soft); height: 128px; margin: 10px 0 4px; position: relative; overflow: hidden; }
+.preview svg { width: 100%; height: 100%; display: block; }
+.coord-chip { position: absolute; left: 10px; bottom: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font-size: 12px; }
+.presets { display: flex; gap: 7px; margin: 4px 0 2px; }
+.presets button[aria-pressed="true"] { background: var(--greenwash); border-color: var(--green); color: var(--green); }
+.switchline { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 0; }
+.switchline small { display: block; color: var(--muted); }
+.switch { width: 38px; height: 22px; border-radius: 12px; background: var(--control-line); position: relative; border: 0; padding: 0; min-height: 0; flex: none; }
+.switch::after { content: ""; position: absolute; width: 16px; height: 16px; border-radius: 50%; background: #fff; top: 3px; left: 3px; transition: left .12s; }
+.switch[aria-checked="true"] { background: var(--green); }
+.switch[aria-checked="true"]::after { left: 19px; }
+.estimate { color: var(--muted); font-size: 12.5px; margin: 8px 0 0; }
+.estimate b { color: var(--ink); font-weight: 650; }
+.footer { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 18px; border-top: 1px solid var(--line); background: var(--toolbar); }
+.footer .right { display: flex; gap: 8px; }
+.note { background: var(--soft); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 10px 0; }
+.note.amber { background: var(--amberwash); border-color: #e2c895; }
+body[data-appearance="night"] .note.amber { border-color: #5a4a28; }
+.note.green { background: var(--greenwash); border-color: #b9d8c8; }
+body[data-appearance="night"] .note.green { border-color: #33523f; }
+.note.red { background: var(--redwash); border-color: #dcb8bf; }
+.note h3 { margin: 0 0 4px; font-size: 13.5px; }
+.note p { margin: 3px 0; }
+.muted { color: var(--muted); }
+details { margin: 8px 0; }
+summary { cursor: pointer; font-weight: 650; color: var(--accent); }
+.progress-stages { margin: 10px 0 4px; padding: 0; list-style: none; }
+.progress-stages li { display: flex; align-items: center; gap: 9px; padding: 5px 0; color: var(--muted); }
+.progress-stages li.active { color: var(--ink); font-weight: 650; }
+.progress-stages li.done { color: var(--ink); }
+.stage-dot { width: 17px; height: 17px; border-radius: 50%; border: 2px solid var(--control-line); flex: none; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; }
+li.done .stage-dot { background: var(--green); border-color: var(--green); color: #fff; }
+li.done .stage-dot::after { content: "✓"; color: #fff; }
+body[data-appearance="night"] li.done .stage-dot::after { color: #10251c; }
+li.active .stage-dot { border-color: var(--green); border-top-color: transparent; animation: spin 1s linear infinite; }
+li.failed .stage-dot { border-color: var(--red); background: var(--red); color: #fff; }
+li.failed .stage-dot::after { content: "✕"; color: #fff; }
+li.failed { color: var(--red); font-weight: 650; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.bar { height: 6px; background: var(--soft); border-radius: 4px; overflow: hidden; margin: 3px 0 0 26px; border: 1px solid var(--line); }
+.bar i { display: block; height: 100%; background: var(--green); }
+.hashline { font-family: ui-monospace, monospace; font-size: 11px; color: var(--muted); word-break: break-all; }
+.file-row { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+.file-row input { flex: 1; border: 1px solid var(--control-line); border-radius: 9px; padding: 7px 10px; font: inherit; background: var(--surface); color: var(--ink); }
+kbd { background: var(--soft); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font-size: 11px; }
+.map-entry { display: flex; align-items: center; justify-content: space-between; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; margin: 8px 0; }
+.map-entry .new { color: var(--green); font-weight: 700; font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; }
+</style>
+</head>
+<body data-appearance="day">
+<div class="scenario-bar">
+  <b>Issue #98 design prototype — simulated, not production UI. Pick a scenario:</b>
+  <div class="scenarios">
+    <button data-sc="firstuse">1 · First use — tools absent</button>
+    <button data-sc="packdl">2 · Tools downloading</button>
+    <button data-sc="normal">3 · Normal — ready to prepare</button>
+    <button data-sc="progress">4 · Preparation in progress</button>
+    <button data-sc="interrupted">5 · Interrupted download</button>
+    <button data-sc="lowdisk">6 · Failure — insufficient storage</button>
+    <button data-sc="partial">7 · Completed with coverage gaps</button>
+    <button data-sc="done">8 · Completed — map ready</button>
+  </div>
+  <label><input type="checkbox" id="nighttoggle"> Night mode</label>
+</div>
+
+<div class="shell">
+  <div class="dialog-heading">
+    <div class="dialog-title"><h1>Maps &amp; Layers</h1><p class="dialog-sub">Get a map, import an existing file or adjust what is displayed.</p></div>
+    <button class="xclose" aria-label="Close">✕</button>
+  </div>
+  <div class="map-task-tabs" role="tablist">
+    <button role="tab" aria-selected="true">Get a Map</button>
+    <button role="tab" aria-selected="false">Import</button>
+    <button role="tab" aria-selected="false">My Maps</button>
+    <button role="tab" aria-selected="false">Display</button>
+  </div>
+  <div class="body" id="body"></div>
+  <div class="footer">
+    <button>Close</button>
+    <div class="right" id="footer-actions"></div>
+  </div>
+</div>
+
+<script>
+const body = document.getElementById('body');
+const foot = document.getElementById('footer-actions');
+
+const previewSVG = `<svg viewBox="0 0 660 128" aria-label="Map area preview">
+  <rect width="660" height="128" fill="none"/>
+  <g stroke="#c8d4cf" stroke-width="1">${Array.from({length:12},(_,i)=>`<line x1="${i*60}" y1="0" x2="${i*60}" y2="128"/>`).join('')}${Array.from({length:4},(_,i)=>`<line x1="0" y1="${i*42}" x2="660" y2="${i*42}"/>`).join('')}</g>
+  <circle cx="330" cy="64" r="46" fill="#216f5614" stroke="#216f56" stroke-width="1.6" stroke-dasharray="5 4"/>
+  <circle cx="330" cy="64" r="2.6" fill="#216f56"/>
+</svg>`;
+
+function stages(list) {
+  return `<ul class="progress-stages">` + list.map(([label, state, extra]) =>
+    `<li class="${state}"><span class="stage-dot"></span><span>${label}${extra ? `<br><small class="muted">${extra}</small>` : ''}</span></li>${state==='active' && extra && extra.includes('%') ? `<div class="bar"><i style="width:${extra.match(/(\d+)%/)[1]}%"></i></div>` : ''}`
+  ).join('') + `</ul>`;
+}
+
+const scenarios = {
+firstuse: {
+  body: `
+    <p class="caption">Location</p>
+    <div class="search-row"><input type="text" placeholder="Place or latitude, longitude" value="Arinsal, Andorra"><button class="primary">Search</button></div>
+    <div class="preview">${previewSVG}<span class="coord-chip">42.5728, 1.4832 · 20 km radius</span></div>
+    <p class="caption">Coverage radius</p>
+    <div class="presets"><button>1 km</button><button>5 km</button><button>10 km</button><button aria-pressed="true">20 km</button><button>Custom</button></div>
+    <div class="note amber">
+      <h3>One-time map preparation setup required</h3>
+      <p>Preparing a high-quality offline map on this computer needs the <b>GNSS preparation tools</b> (one download, about <b>64 MB</b>). They are verified automatically against the official GNSS build fingerprint before use — nothing to install, no internet needed afterwards.</p>
+      <p class="muted">Viewing and importing existing maps works without them.</p>
+    </div>
+    <details><summary>Alternative · import tools from a file instead</summary>
+      <p class="muted">On a computer without internet, copy the official tools file (<kbd>gnss-prep-pack-linux-x64.tar.gz</kbd>) from the GNSS release and its published fingerprint, then:</p>
+      <div class="file-row"><input placeholder="Choose gnss-prep-pack file…" readonly><button>Choose file…</button></div>
+    </details>
+  `,
+  foot: `<button disabled>Download map</button><button class="primary" onclick="go('packdl')">Download tools · 64 MB</button>`
+},
+packdl: {
+  body: `
+    <p class="caption">Map preparation setup</p>
+    ${stages([
+      ['Downloading preparation tools', 'active', '31 of 64 MB · 48%'],
+      ['Verifying integrity against the official fingerprint', ''],
+      ['Preparation tools ready', ''],
+    ])}
+    <p class="muted" style="margin:8px 0 0">One-time step. Your map download starts automatically afterwards.</p>
+    <details><summary>Technical details</summary>
+      <p class="muted">Source: official GNSS release, this computer's platform (linux-x64). Verification compares the exact received bytes with the fingerprint shipped inside this Command — a modified download can never pass.</p>
+      <p class="hashline">sha256 e8f61c9e3924ed556cac1e4a753b875ec01d4f1a66bcb469dcaf44d02b4a7ad9</p>
+    </details>
+  `,
+  foot: `<button>Cancel setup</button><button disabled>Downloading…</button>`
+},
+normal: {
+  body: `
+    <p class="caption">Location</p>
+    <div class="search-row"><input type="text" placeholder="Place or latitude, longitude" value="Arinsal, Andorra"><button class="primary">Search</button></div>
+    <div class="preview">${previewSVG}<span class="coord-chip">42.5728, 1.4832 · 20 km radius</span></div>
+    <p class="caption">Coverage radius</p>
+    <div class="presets"><button>1 km</button><button>5 km</button><button>10 km</button><button aria-pressed="true">20 km</button><button>Custom</button></div>
+    <div class="switchline"><span><b>Include terrain &amp; elevation data</b><small>Hillshade, elevation readout and land cover where source data exists.</small></span><button class="switch" role="switch" aria-checked="true" onclick="this.setAttribute('aria-checked',this.getAttribute('aria-checked')==='true'?'false':'true')"></button></div>
+    <p class="estimate">Estimated download <b>about 85 MB</b> · map storage <b>about 240 MB</b> · usually <b>10–25 minutes</b> on this computer. Previously downloaded data in this area is reused, not downloaded again.</p>
+    <details><summary>Details · sources, coverage and resource limits</summary>
+      <p class="muted">OpenStreetMap regional extract (Geofabrik, covering Andorra/Spain region), elevation from AWS Open Terrain Tiles, land cover from ESA WorldCover where available. Transfer pauses and asks before exceeding the approved amount. Processing is isolated: tracking, recording and SOS are never interrupted.</p>
+    </details>
+  `,
+  foot: `<button disabled>Download map</button><button class="primary" onclick="go('progress')">Download map · about 85 MB</button>`
+},
+progress: {
+  body: `
+    <p class="caption">Preparing your map · Arinsal 20 km</p>
+    ${stages([
+      ['Downloading geographical data', 'done', 'Finished · 71 MB received, reused 14 MB from cache'],
+      ['Processing map features', 'active', 'Roads, buildings, water and places · about 60%'],
+      ['Preparing terrain & elevation', ''],
+      ['Checking map quality', ''],
+    ])}
+    <p class="muted" style="margin:8px 0 0">You can close this window — preparation continues. Tracking, recording and SOS are not affected.</p>
+    <details><summary>Technical details · current stage</summary>
+      <p class="muted">Geometry validation and repair with zero-invalid gate; 59,432 features classified so far. Native preparation tools v1.0.0, pinned input revisions.</p>
+    </details>
+  `,
+  foot: `<button onclick="go('interrupted')">Stop preparation</button><button disabled>Preparing…</button>`
+},
+interrupted: {
+  body: `
+    <p class="caption">Preparing your map · Arinsal 20 km</p>
+    <div class="note amber">
+      <h3>Preparation interrupted</h3>
+      <p>The download stopped at <b>41 of 85 MB</b> — network unreachable or stopped by operator. Everything received so far is kept; nothing incomplete is used.</p>
+    </div>
+    ${stages([
+      ['Downloading geographical data', 'active', 'Interrupted at 41 of 85 MB · 48%'],
+      ['Processing map features', ''],
+      ['Preparing terrain & elevation', ''],
+      ['Checking map quality', ''],
+    ])}
+    <p class="muted">Resume continues where it stopped — already received data is not downloaded again. Discarding removes the partial download; your existing maps are unaffected.</p>
+  `,
+  foot: `<button class="danger">Discard partial download</button><button class="primary" onclick="go('progress')">Resume download</button>`
+},
+lowdisk: {
+  body: `
+    <p class="caption">Preparing your map · Arinsal 20 km</p>
+    <div class="note red">
+      <h3>Not enough storage to finish this map</h3>
+      <p>The map needs about <b>240 MB</b> of free storage; only <b>118 MB</b> remains. Preparation stopped before touching any existing map. Free some storage, then resume — the 71 MB already downloaded is kept and reused.</p>
+    </div>
+    ${stages([
+      ['Downloading geographical data', 'done', 'Finished · 71 MB received'],
+      ['Processing map features', 'failed', 'Stopped · insufficient storage'],
+      ['Preparing terrain & elevation', ''],
+      ['Checking map quality', ''],
+    ])}
+    <details><summary>Technical details</summary><p class="muted">Admission check: reserve 3 GB free-space rule for regional processing; measured free 118 MB at stage entry. No partial output published; staging cleaned.</p></details>
+  `,
+  foot: `<button class="danger">Discard partial download</button><button class="primary" onclick="go('progress')">Resume after freeing storage</button>`
+},
+partial: {
+  body: `
+    <p class="caption">Preparing your map · Arinsal 20 km</p>
+    <div class="note green">
+      <h3>Map ready — with known coverage gaps</h3>
+      <p><b>Arinsal · 20 km</b> was added to your offline maps in 14 minutes.</p>
+    </div>
+    <div class="note amber">
+      <h3>Coverage disclosure — read before relying on this map</h3>
+      <p><b>Land cover is not available</b> for part of the northern area (ESA WorldCover source gap); those areas show terrain and features without land-cover colouring. <b>Elevation data is complete.</b> Vector coverage is complete for the requested area.</p>
+      <p class="muted">Nothing was substituted or guessed: missing products are absent, exactly as they will appear in the field, in recordings and in playback.</p>
+    </div>
+    ${stages([
+      ['Downloading geographical data', 'done', '85 MB received'],
+      ['Processing map features', 'done', '61,204 features · geometry verified, 0 invalid'],
+      ['Preparing terrain & elevation', 'done', 'Elevation complete · land cover partial'],
+      ['Checking map quality', 'done', 'Passed'],
+    ])}
+  `,
+  foot: `<button>Keep in library</button><button class="primary" onclick="go('done')">Use this map now</button>`
+},
+done: {
+  body: `
+    <p class="caption">Your offline maps</p>
+    <div class="map-entry"><span><b>Arinsal · 20 km</b> <span class="new">· new</span><br><small class="muted">Enhanced offline map · ready entirely offline · prepared today, 14 min · 238 MB</small></span><button class="primary">In use</button></div>
+    <div class="map-entry"><span><b>Home valley · 5 km</b><br><small class="muted">Legacy map · downloaded 12 Nov</small></span><button>Use</button></div>
+    <div class="note green"><p><b>Arinsal · 20 km</b> is now the active map. It works entirely offline — viewing, recording, playback and Travel Back included. Preparation tools remain installed for future maps; no internet is needed again for this area.</p></div>
+  `,
+  foot: `<button>Close</button><button class="primary">Done</button>`
+}
+};
+
+function go(name) {
+  body.innerHTML = scenarios[name].body;
+  foot.innerHTML = scenarios[name].foot;
+  for (const b of document.querySelectorAll('.scenario-bar button[data-sc]')) b.classList.toggle('active', b.dataset.sc === name);
+  location.hash = name;
+}
+for (const b of document.querySelectorAll('.scenario-bar button[data-sc]')) b.onclick = () => go(b.dataset.sc);
+document.getElementById('nighttoggle').onchange = (e) => document.body.dataset.appearance = e.target.checked ? 'night' : 'day';
+go(location.hash.slice(1) in scenarios ? location.hash.slice(1) : 'firstuse');
+</script>
+</body>
+</html>
