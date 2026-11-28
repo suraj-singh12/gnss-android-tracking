@@ -109,6 +109,7 @@ struct Value {
 using Ring = std::vector<std::pair<int32_t, int32_t>>;
 
 struct Feature {
+  std::string geom_raw;  // original packed geometry — passthrough unless repaired
   uint64_t id = 0;
   bool has_id = false;
   uint32_t geom_type = 0; // 1 point, 2 linestring, 3 polygon
@@ -347,16 +348,23 @@ struct VerifyCounter {
 // -------------------------------------------------------------- io utils ----
 
 std::string read_file(const fs::path& p) {
+  // failures are fatal: silently skipping a tile would produce incomplete
+  // output that could pass superficial inspection
   std::ifstream f(p, std::ios::binary);
+  if (!f) throw std::runtime_error("cannot read " + p.string());
   std::ostringstream ss;
   ss << f.rdbuf();
+  if (f.bad()) throw std::runtime_error("read error " + p.string());
   return ss.str();
 }
 
 void write_file(const fs::path& p, const std::string& data) {
   if (!p.parent_path().empty()) fs::create_directories(p.parent_path());
   std::ofstream f(p, std::ios::binary | std::ios::trunc);
+  if (!f) throw std::runtime_error("cannot write " + p.string());
   f.write(data.data(), static_cast<std::streamsize>(data.size()));
+  f.flush();
+  if (!f) throw std::runtime_error("write error " + p.string());
 }
 
 std::string json_escape(const std::string& s) {
@@ -480,6 +488,7 @@ std::vector<Layer> decode_tile(const std::string& data) {
         if (tags[t] < keys.size() && keys[tags[t]] == "class" && tags[t + 1] < values.size())
           feat.klass = values[tags[t + 1]].s;
       }
+      feat.geom_raw = geom_packed;
       if (!geom_packed.empty()) feat.rings = decode_geometry(geom_packed);
       layer.features.push_back(std::move(feat));
     }
@@ -523,7 +532,11 @@ std::string encode_tile(std::vector<Layer>& layers) {
       }
       fw.add_bytes(2, packed);
       fw.add_enum(3, static_cast<int32_t>(feat.geom_type));
-      std::string geom = encode_geometry(feat.rings);
+      // untouched features keep their exact original geometry bytes — only
+      // repaired polygons are re-encoded. Re-encoding points/lines through the
+      // polygon-oriented ring model would corrupt them (points dropped,
+      // lines falsely closed).
+      std::string geom = feat.changed ? encode_geometry(feat.rings) : feat.geom_raw;
       fw.add_bytes(4, geom);
       feat_blobs.push_back(fb);
     }
@@ -588,8 +601,26 @@ int run_verify(const fs::path& dir, VerifyCounter& total) {
 int run_repair(const fs::path& src, const fs::path& dst, const fs::path& report_path) {
   GeosInit init;
   GEOSContextHandle_t ctx = GEOS_init_r();
-  if (fs::exists(dst)) fs::remove_all(dst);
-  fs::create_directories(dst);
+  // never destroy operator data: refuse overlapping or pre-existing output
+  // instead of silently deleting it. The previous behavior removed dst before
+  // even validating src — with dst == src that erased the original tiles.
+  fs::path src_abs = fs::weakly_canonical(src);
+  fs::path dst_abs = fs::weakly_canonical(dst);
+  if (src_abs == dst_abs)
+    throw std::runtime_error("output directory must differ from input");
+  auto nested = [](const fs::path& a, const fs::path& b) {
+    auto ai = a.begin(), bi = b.begin();
+    for (; ai != a.end() && bi != b.end(); ++ai, ++bi)
+      if (*ai != *bi) return false;
+    return ai == a.end();
+  };
+  if (nested(dst_abs, src_abs) || nested(src_abs, dst_abs))
+    throw std::runtime_error("output and input directories must not contain each other");
+  if (!fs::is_directory(src_abs))
+    throw std::runtime_error("input directory does not exist: " + src.string());
+  if (fs::exists(dst_abs) && !fs::is_empty(dst_abs))
+    throw std::runtime_error("output directory exists and is not empty: " + dst.string());
+  fs::create_directories(dst_abs);
   auto t0 = std::chrono::steady_clock::now();
 
   uint64_t tiles = 0, tiles_with_repairs = 0, features_repaired = 0;
@@ -597,8 +628,14 @@ int run_repair(const fs::path& src, const fs::path& dst, const fs::path& report_
   std::ostringstream details;
 
   std::vector<fs::path> files;
-  for (auto& e : fs::recursive_directory_iterator(src))
-    if (e.path().extension() == ".pbf") files.push_back(e.path());
+  for (auto& e : fs::recursive_directory_iterator(src)) {
+    if (!e.is_regular_file()) continue;
+    if (e.path().extension() == ".pbf") { files.push_back(e.path()); continue; }
+    // non-tile files (GDAL metadata.json declaring bounds/zoom/layers) are
+    // copied verbatim — dropping them silently strips the tileset contract.
+    fs::path rel0 = fs::relative(e.path(), src);
+    write_file(dst / rel0, read_file(e.path()));
+  }
   std::sort(files.begin(), files.end());
 
   bool first_detail = true;
