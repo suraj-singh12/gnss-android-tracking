@@ -490,7 +490,9 @@ func admitPrepPackArchive(src io.Reader, archiveSize int64, staging string) erro
 		// the tar end-of-archive marker arrives before the gzip trailer:
 	// drain the decompressor to EOF so a corrupt gzip checksum is a rejection,
 	// not silent acceptance.
-	if _, err := io.Copy(io.Discard, gz); err != nil {
+	// bounded: trailing garbage after the tar end marker is never legitimate
+	// beyond padding, so expansion work stays inside a small fixed budget.
+	if _, err := io.Copy(io.Discard, io.LimitReader(gz, 1<<20)); err != nil {
 		return errors.New("corrupt gzip archive")
 	}
 	return nil

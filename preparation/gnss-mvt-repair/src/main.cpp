@@ -354,7 +354,7 @@ std::string read_file(const fs::path& p) {
   if (!f) throw std::runtime_error("cannot read " + p.string());
   std::ostringstream ss;
   ss << f.rdbuf();
-  if (f.bad()) throw std::runtime_error("read error " + p.string());
+  if (f.bad() || ss.fail()) throw std::runtime_error("read error " + p.string());
   return ss.str();
 }
 
@@ -604,8 +604,18 @@ int run_repair(const fs::path& src, const fs::path& dst, const fs::path& report_
   // never destroy operator data: refuse overlapping or pre-existing output
   // instead of silently deleting it. The previous behavior removed dst before
   // even validating src — with dst == src that erased the original tiles.
-  fs::path src_abs = fs::weakly_canonical(src);
-  fs::path dst_abs = fs::weakly_canonical(dst);
+  // weakly_canonical does not reliably absolutize a not-yet-existing
+  // relative output on all standard libraries, which blinded this guard to
+  // `src=. dst=fixed` — absolute()+lexically_normal is exact for nesting.
+  // trailing slashes survive normalization as an empty final element and
+  // would silently defeat the prefix comparison — strip them lexically.
+  auto normalize_abs = [](const fs::path& p) {
+    std::string s = fs::absolute(p).lexically_normal().generic_string();
+    while (s.size() > 1 && s.back() == '/') s.pop_back();
+    return fs::path(s);
+  };
+  fs::path src_abs = normalize_abs(src);
+  fs::path dst_abs = normalize_abs(dst);
   if (src_abs == dst_abs)
     throw std::runtime_error("output directory must differ from input");
   auto nested = [](const fs::path& a, const fs::path& b) {
