@@ -352,10 +352,9 @@ std::string read_file(const fs::path& p) {
   // output that could pass superficial inspection
   std::ifstream f(p, std::ios::binary);
   if (!f) throw std::runtime_error("cannot read " + p.string());
-  std::ostringstream ss;
-  ss << f.rdbuf();
-  if (f.bad() || ss.fail()) throw std::runtime_error("read error " + p.string());
-  return ss.str();
+  std::string data((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  if (f.bad()) throw std::runtime_error("read error " + p.string());
+  return data;
 }
 
 void write_file(const fs::path& p, const std::string& data) {
@@ -609,13 +608,23 @@ int run_repair(const fs::path& src, const fs::path& dst, const fs::path& report_
   // `src=. dst=fixed` — absolute()+lexically_normal is exact for nesting.
   // trailing slashes survive normalization as an empty final element and
   // would silently defeat the prefix comparison — strip them lexically.
-  auto normalize_abs = [](const fs::path& p) {
-    std::string s = fs::absolute(p).lexically_normal().generic_string();
+  // canonicalize existing directories so symlinks and '..' resolve exactly
+  // as the kernel will resolve the writes — lexical normalization can check
+  // a different directory than the one files land in. dst is created empty
+  // first; creation is harmless even if admission then fails.
+  fs::create_directories(dst);
+  auto canonical_abs = [](const fs::path& p) {
+    std::error_code ec;
+    fs::path c = fs::canonical(p, ec);
+    if (ec) return fs::path();
+    std::string s = c.generic_string();
     while (s.size() > 1 && s.back() == '/') s.pop_back();
     return fs::path(s);
   };
-  fs::path src_abs = normalize_abs(src);
-  fs::path dst_abs = normalize_abs(dst);
+  fs::path src_abs = canonical_abs(src);
+  fs::path dst_abs = canonical_abs(dst);
+  if (src_abs.empty() || dst_abs.empty())
+    throw std::runtime_error("cannot resolve input/output directories");
   if (src_abs == dst_abs)
     throw std::runtime_error("output directory must differ from input");
   auto nested = [](const fs::path& a, const fs::path& b) {
@@ -626,11 +635,8 @@ int run_repair(const fs::path& src, const fs::path& dst, const fs::path& report_
   };
   if (nested(dst_abs, src_abs) || nested(src_abs, dst_abs))
     throw std::runtime_error("output and input directories must not contain each other");
-  if (!fs::is_directory(src_abs))
-    throw std::runtime_error("input directory does not exist: " + src.string());
-  if (fs::exists(dst_abs) && !fs::is_empty(dst_abs))
+  if (!fs::is_empty(dst_abs))
     throw std::runtime_error("output directory exists and is not empty: " + dst.string());
-  fs::create_directories(dst_abs);
   auto t0 = std::chrono::steady_clock::now();
 
   uint64_t tiles = 0, tiles_with_repairs = 0, features_repaired = 0;
@@ -643,14 +649,17 @@ int run_repair(const fs::path& src, const fs::path& dst, const fs::path& report_
     if (e.path().extension() == ".pbf") { files.push_back(e.path()); continue; }
     // non-tile files (GDAL metadata.json declaring bounds/zoom/layers) are
     // copied verbatim — dropping them silently strips the tileset contract.
-    fs::path rel0 = fs::relative(e.path(), src);
+    // lexically_relative, never fs::relative: the latter canonicalizes and
+    // resolves symlinks, so a symlinked companion inside the input makes rel
+    // escape the output tree (a link to /etc/passwd yields ../../etc/passwd).
+    fs::path rel0 = e.path().lexically_relative(src);
     write_file(dst / rel0, read_file(e.path()));
   }
   std::sort(files.begin(), files.end());
 
   bool first_detail = true;
   for (const auto& p : files) {
-    fs::path rel = fs::relative(p, src);
+    fs::path rel = p.lexically_relative(src);
     std::string raw = read_file(p);
     bytes_before += raw.size();
     std::string data = is_gzip(raw) ? gunzip(raw) : raw;
