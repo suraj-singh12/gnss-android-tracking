@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -66,6 +67,20 @@ func openPackStore(t *testing.T) *Store {
 	}
 	t.Cleanup(func() { s.Close() })
 	return s
+}
+
+// sha256hex is the independently supplied digest an operator would have
+// obtained from the official build for exactly these archive bytes.
+func sha256hex(b []byte) string {
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
+}
+
+// importOK imports archive bytes with their correct independent digest.
+func importOK(t *testing.T, s *Store, archive []byte) error {
+	t.Helper()
+	_, err := s.importPrepPack(t.Context(), bytes.NewReader(archive), 0, sha256hex(archive))
+	return err
 }
 
 func TestPrepPackValidationHonest(t *testing.T) {
@@ -132,8 +147,10 @@ func TestPrepPackImportSelectAndFallback(t *testing.T) {
 		return buf.Bytes()
 	}
 
-	// corrupt archive: rejection preserves the empty prior state
-	if _, err := s.importPrepPack(t.Context(), bytes.NewReader(buildArchive("9.9.9", true)), 0); err == nil {
+	// corrupt archive: rejection preserves the empty prior state. The digest
+	// is correct for the bytes — authentication passes, validation must fail.
+	corruptArchive := buildArchive("9.9.9", true)
+	if err := importOK(t, s, corruptArchive); err == nil {
 		t.Fatal("corrupt pack archive admitted")
 	}
 	if packs := s.scanPrepPacks(); len(packs) != 0 {
@@ -141,10 +158,10 @@ func TestPrepPackImportSelectAndFallback(t *testing.T) {
 	}
 
 	// two valid versions: newest becomes active
-	if _, err := s.importPrepPack(t.Context(), bytes.NewReader(buildArchive("1.0.0", false)), 0); err != nil {
+	if err := importOK(t, s, buildArchive("1.0.0", false)); err != nil {
 		t.Fatalf("valid import rejected: %v", err)
 	}
-	if _, err := s.importPrepPack(t.Context(), bytes.NewReader(buildArchive("1.1.0", false)), 0); err != nil {
+	if err := importOK(t, s, buildArchive("1.1.0", false)); err != nil {
 		t.Fatalf("valid import rejected: %v", err)
 	}
 	packs := s.scanPrepPacks()
@@ -213,7 +230,7 @@ func TestPrepPackArchiveSlipRejected(t *testing.T) {
 	_, _ = tw.Write(payload)
 	_ = tw.Close()
 	_ = gz.Close()
-	if _, err := s.importPrepPack(t.Context(), bytes.NewReader(buf.Bytes()), 0); err == nil {
+	if err := importOK(t, s, buf.Bytes()); err == nil {
 		t.Fatal("zip-slip archive admitted")
 	}
 	// nothing may have escaped into the data home
@@ -234,6 +251,112 @@ func TestVersionLessOrdering(t *testing.T) {
 	}
 	if versionLess("1.0.0", "1.0.0") {
 		t.Error("equal versions must not compare less")
+	}
+}
+
+// TestPrepPackImportDigestAuthentication pins the archive-authentication
+// contract: an independently supplied whole-archive sha256 is mandatory, and
+// only exact byte equality with that digest admits an archive to extraction.
+// The critical case is the coherent substitution attack — a modified
+// executable shipped with a coherently rewritten internal manifest passes
+// every validation check, so the independent digest is the only barrier.
+func TestPrepPackImportDigestAuthentication(t *testing.T) {
+	buildArchive := func(version string, mutate bool) []byte {
+		var buf bytes.Buffer
+		gz := gzip.NewWriter(&buf)
+		tw := tar.NewWriter(gz)
+		tmp := t.TempDir()
+		pack := filepath.Join(tmp, "pack")
+		writeFakePack(t, pack, prepPackTarget(), version)
+		if mutate {
+			// the attacker modifies an executable AND rewrites the manifest
+			// with the matching new hash: internally self-consistent.
+			binp := filepath.Join(pack, "bin", "gnss-mvt-repair")
+			if prepPackTarget() == "windows-x64" {
+				binp += ".exe"
+			}
+			evil := []byte("#!/bin/evil\n")
+			_ = os.WriteFile(binp, evil, 0700)
+			manifestPath := filepath.Join(pack, "manifest.json")
+			raw, _ := os.ReadFile(manifestPath)
+			var m map[string]any
+			_ = json.Unmarshal(raw, &m)
+			files := m["files"].(map[string]any)
+			sum := sha256.Sum256(evil)
+			key := "bin/gnss-mvt-repair"
+			if prepPackTarget() == "windows-x64" {
+				key += ".exe"
+			}
+			files[key] = hex.EncodeToString(sum[:])
+			out, _ := json.Marshal(m)
+			_ = os.WriteFile(manifestPath, out, 0600)
+		}
+		_ = filepath.Walk(pack, func(p string, fi os.FileInfo, err error) error {
+			if err != nil || fi.IsDir() {
+				return nil
+			}
+			rel, _ := filepath.Rel(pack, p)
+			raw, _ := os.ReadFile(p)
+			_ = tw.WriteHeader(&tar.Header{Name: "pack/" + filepath.ToSlash(rel), Mode: int64(fi.Mode()), Size: int64(len(raw))})
+			_, _ = tw.Write(raw)
+			return nil
+		})
+		_ = tw.Close()
+		_ = gz.Close()
+		return buf.Bytes()
+	}
+	genuine := buildArchive("1.0.0", false)
+	// the attack uses a distinct version so its admission in case 6 is a real
+	// extraction and validation, not the already-present identity shortcut.
+	attack := buildArchive("1.0.1", true)
+	if sha256hex(genuine) == sha256hex(attack) {
+		t.Fatal("test construction flaw: archives must differ")
+	}
+
+	// 1. missing digest: rejected before anything is read
+	s := openPackStore(t)
+	if _, err := s.importPrepPack(t.Context(), bytes.NewReader(genuine), 0, ""); err == nil {
+		t.Fatal("missing digest admitted")
+	}
+	// 2. malformed digests: wrong length, non-hex characters
+	for _, bad := range []string{"abcd", strings.Repeat("g", 64), strings.Repeat("a", 63), strings.Repeat("a", 65)} {
+		if _, err := s.importPrepPack(t.Context(), bytes.NewReader(genuine), 0, bad); err == nil {
+			t.Fatalf("malformed digest %q admitted", bad)
+		}
+	}
+	// 3. well-formed but incorrect digest: genuine archive rejected, state untouched
+	wrong := strings.Repeat("0", 64)
+	if wrong == sha256hex(genuine) {
+		wrong = strings.Repeat("1", 64)
+	}
+	if _, err := s.importPrepPack(t.Context(), bytes.NewReader(genuine), 0, wrong); err == nil {
+		t.Fatal("incorrect digest admitted")
+	} else if got := err.Error(); !bytes.Contains([]byte(got), []byte("digest mismatch")) {
+		t.Fatalf("mismatch not honestly disclosed: %v", err)
+	}
+	if packs := s.scanPrepPacks(); len(packs) != 0 {
+		t.Fatal("rejected import disturbed pack state")
+	}
+	// 4. the substitution attack: coherently-rewritten internal manifest,
+	// presented with the genuine archive's digest — must be rejected even
+	// though the archive would pass every validation check on its own
+	if _, err := s.importPrepPack(t.Context(), bytes.NewReader(attack), 0, sha256hex(genuine)); err == nil {
+		t.Fatal("coherently-rewritten substitute archive admitted under genuine digest")
+	}
+	if packs := s.scanPrepPacks(); len(packs) != 0 {
+		t.Fatal("attack import disturbed pack state")
+	}
+	// 5. correct digest: the genuine archive imports cleanly
+	if _, err := s.importPrepPack(t.Context(), bytes.NewReader(genuine), 0, sha256hex(genuine)); err != nil {
+		t.Fatalf("correctly authenticated genuine archive rejected: %v", err)
+	}
+	if packs := s.scanPrepPacks(); len(packs) != 1 {
+		t.Fatalf("authenticated import not published: %d packs", len(packs))
+	}
+	// 6. and the attack archive with its OWN correct digest is admitted —
+	// proving the independent digest, not internal consistency, is the anchor
+	if _, err := s.importPrepPack(t.Context(), bytes.NewReader(attack), 0, sha256hex(attack)); err != nil {
+		t.Fatalf("self-consistent archive with correct independent digest rejected: %v", err)
 	}
 }
 
@@ -260,7 +383,7 @@ func TestPrepPackImportWrongTargetRejected(t *testing.T) {
 	})
 	_ = tw.Close()
 	_ = gz.Close()
-	if _, err := s.importPrepPack(t.Context(), bytes.NewReader(buf.Bytes()), 0); err == nil {
+	if err := importOK(t, s, buf.Bytes()); err == nil {
 		t.Fatal("foreign-target pack admitted")
 	} else if got := fmt.Sprint(err); !bytes.Contains([]byte(got), []byte("rejected")) {
 		t.Fatalf("rejection not honest: %v", err)

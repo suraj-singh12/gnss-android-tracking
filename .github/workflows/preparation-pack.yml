@@ -42,7 +42,7 @@ jobs:
           cd "$RUNNER_TEMP"
           mv pack "gnss-prep-pack-linux-x64"
           tar czf "$GITHUB_WORKSPACE/gnss-prep-pack-linux-x64.tar.gz" "gnss-prep-pack-linux-x64"
-          sha256sum "$GITHUB_WORKSPACE/gnss-prep-pack-linux-x64.tar.gz"
+          sha256sum "$GITHUB_WORKSPACE/gnss-prep-pack-linux-x64.tar.gz" | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
           name: gnss-prep-pack-linux-x64
@@ -73,7 +73,9 @@ jobs:
           Set-Location "$env:RUNNER_TEMP"
           Rename-Item pack "gnss-prep-pack-windows-x64"
           Compress-Archive -Path "gnss-prep-pack-windows-x64" -DestinationPath "$env:GITHUB_WORKSPACE\gnss-prep-pack-windows-x64.zip"
-          (Get-FileHash "$env:GITHUB_WORKSPACE\gnss-prep-pack-windows-x64.zip" -Algorithm SHA256).Hash
+          $h = (Get-FileHash "$env:GITHUB_WORKSPACE\gnss-prep-pack-windows-x64.zip" -Algorithm SHA256).Hash
+          $h
+          "$h  gnss-prep-pack-windows-x64.zip" | Out-File -FilePath "$env:GITHUB_STEP_SUMMARY" -Append -Encoding utf8
       - uses: actions/upload-artifact@v4
         with:
           name: gnss-prep-pack-windows-x64
@@ -97,7 +99,7 @@ jobs:
           cd "$RUNNER_TEMP"
           mv pack "gnss-prep-pack-macos-arm64"
           tar czf "$GITHUB_WORKSPACE/gnss-prep-pack-macos-arm64.tar.gz" "gnss-prep-pack-macos-arm64"
-          shasum -a 256 "$GITHUB_WORKSPACE/gnss-prep-pack-macos-arm64.tar.gz"
+          shasum -a 256 "$GITHUB_WORKSPACE/gnss-prep-pack-macos-arm64.tar.gz" | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
           name: gnss-prep-pack-macos-arm64

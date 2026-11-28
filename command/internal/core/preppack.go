@@ -6,13 +6,19 @@ package core
 // selection and last-valid fallback live here; no operator toolchain, PATH
 // configuration or network access is ever involved at runtime.
 //
-// Trust model: a pack is admitted only after every file matches the sha256
-// pinned in its own manifest AND the manifest itself satisfies the format,
-// target and compatibility contract. Corrupt or incompatible packs are
-// rejected preserving the prior state exactly. The manifest is self-consistent
-// evidence, not authentication of origin — operator-controlled offline import
-// is the trust root for this review-only scope, exactly like Format 1/2 map
-// package imports.
+// Trust model: externally imported archives are authenticated by an
+// independently supplied whole-archive sha256 digest (obtained by the
+// operator from the official GitHub build, never from the archive itself)
+// verified against the exact received bytes before extraction begins. Only
+// then is the extracted content validated: every file must match the sha256
+// pinned in the manifest AND the manifest must satisfy the format, target
+// and compatibility contract. Corrupt, mismatched or incompatible packs are
+// rejected preserving the prior state exactly. The digest authenticates the
+// exact artifact the official build produced; it is not cryptographic
+// publisher signing, which remains future hardening should packs ever be
+// redistributed beyond operator-controlled offline import. Any future
+// automatic acquisition must likewise anchor on an independently trusted
+// digest, never one carried inside the archive.
 
 import (
 	"archive/tar"
@@ -506,11 +512,31 @@ func admitPrepPackArchive(src io.Reader, archiveSize int64, staging string) erro
 	return errors.New("unrecognized archive format — expected .tar.gz or .zip")
 }
 
-// importPrepPack stages, validates and atomically publishes one pack archive.
-// The archive may carry the pack beneath a single top-level directory or at
-// its root. Corrupt or incompatible input preserves the prior state exactly:
-// nothing is published, no selection changes.
-func (s *Store) importPrepPack(ctx context.Context, src io.Reader, size int64) (prepPackInfo, error) {
+// validSHA256Hex reports whether s is a canonical 64-character lowercase
+// hexadecimal sha256 digest.
+func validSHA256Hex(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for _, c := range s {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// importPrepPack authenticates, stages, validates and atomically publishes
+// one pack archive. expectedHex is the independently supplied whole-archive
+// sha256 the operator obtained from the official GitHub build — it is
+// verified against the exact received bytes before any extraction begins, so
+// a substituted archive can never reach the validator even if its internal
+// manifest was coherently rewritten. Corrupt or incompatible input preserves
+// the prior state exactly: nothing is published, no selection changes.
+func (s *Store) importPrepPack(ctx context.Context, src io.Reader, size int64, expectedHex string) (prepPackInfo, error) {
+	if !validSHA256Hex(expectedHex) {
+		return prepPackInfo{}, errors.New("pack rejected: an independently obtained expected archive sha256 is required (64 lowercase hex characters) — see preparation/README.md")
+	}
 	root := s.prepPackRoot()
 	if err := os.MkdirAll(root, 0700); err != nil {
 		return prepPackInfo{}, err
@@ -520,14 +546,50 @@ func (s *Store) importPrepPack(ctx context.Context, src io.Reader, size int64) (
 		return prepPackInfo{}, err
 	}
 	defer os.RemoveAll(staging)
-	if err := admitPrepPackArchive(src, size, staging); err != nil {
-		return prepPackInfo{}, fmt.Errorf("pack rejected: %v", err)
+	// spool the bounded body to disk while hashing: the whole-archive digest
+	// must cover the exact received bytes and must be compared before any
+	// extraction. The bound is enforced here too, not only at the HTTP edge.
+	spoolPath := filepath.Join(staging, ".incoming")
+	sf, err := os.OpenFile(spoolPath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
+	if err != nil {
+		return prepPackInfo{}, err
 	}
-	// locate the pack root: manifest at staging root or beneath exactly one
+	h := sha256.New()
+	n, copyErr := io.Copy(io.MultiWriter(sf, h), io.LimitReader(src, prepPackMaxArchive+1))
+	closeErr := sf.Close()
+	if copyErr != nil {
+		return prepPackInfo{}, copyErr
+	}
+	if closeErr != nil {
+		return prepPackInfo{}, closeErr
+	}
+	if n > prepPackMaxArchive {
+		return prepPackInfo{}, errors.New("pack rejected: archive exceeds bounded admission size")
+	}
+	actual := hex.EncodeToString(h.Sum(nil))
+	if actual != expectedHex {
+		return prepPackInfo{}, fmt.Errorf("pack rejected: archive digest mismatch — the received bytes hash to sha256 %s, not the independently supplied %s; the archive is corrupt, truncated, substituted or not the official build", actual, expectedHex)
+	}
+	// authenticated: extraction may begin. The spool lives beside — never
+	// inside — the extraction root so layout detection sees only pack content.
+	extract := filepath.Join(staging, "x")
+	if err := os.Mkdir(extract, 0700); err != nil {
+		return prepPackInfo{}, err
+	}
+	af, err := os.Open(spoolPath)
+	if err != nil {
+		return prepPackInfo{}, err
+	}
+	admitErr := admitPrepPackArchive(af, n, extract)
+	af.Close()
+	if admitErr != nil {
+		return prepPackInfo{}, fmt.Errorf("pack rejected: %v", admitErr)
+	}
+	// locate the pack root: manifest at extraction root or beneath exactly one
 	// top-level directory.
-	packDir := staging
-	if _, err := os.Stat(filepath.Join(staging, "manifest.json")); err != nil {
-		entries, _ := os.ReadDir(staging)
+	packDir := extract
+	if _, err := os.Stat(filepath.Join(extract, "manifest.json")); err != nil {
+		entries, _ := os.ReadDir(extract)
 		var dirs []os.DirEntry
 		for _, e := range entries {
 			if e.IsDir() {
@@ -537,7 +599,7 @@ func (s *Store) importPrepPack(ctx context.Context, src io.Reader, size int64) (
 		if len(dirs) != 1 {
 			return prepPackInfo{}, errors.New("pack rejected: manifest.json not found at archive root or single top-level directory")
 		}
-		packDir = filepath.Join(staging, dirs[0].Name())
+		packDir = filepath.Join(extract, dirs[0].Name())
 	}
 	m, err := validatePrepPack(packDir)
 	if err != nil {
@@ -619,13 +681,22 @@ func (s *Store) prepPackHTTP(w http.ResponseWriter, r *http.Request) bool {
 			failure(w, 413, "too_large", fmt.Errorf("archive exceeds bounded admission size"))
 			return true
 		}
+		expected := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("expected_sha256")))
+		if expected == "" {
+			failure(w, 400, "invalid_request", errors.New("missing expected_sha256 query parameter — supply the archive sha256 published with the official GitHub build"))
+			return true
+		}
+		if !validSHA256Hex(expected) {
+			failure(w, 400, "invalid_request", errors.New("malformed expected_sha256 — exactly 64 hexadecimal characters"))
+			return true
+		}
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 		defer cancel()
 		// unknown or lying Content-Length must not mean unbounded: the body
 		// is hard-capped at the admission limit plus one byte so oversize is
 		// detected rather than silently truncated.
 		body := io.LimitReader(r.Body, prepPackMaxArchive+1)
-		info, err := s.importPrepPack(ctx, body, size)
+		info, err := s.importPrepPack(ctx, body, size, expected)
 		if err != nil {
 			failure(w, 422, "pack_rejected", err)
 			return true

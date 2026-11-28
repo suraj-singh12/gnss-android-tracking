@@ -348,7 +348,11 @@ Windows x64, Linux x64): pinned GDAL/PROJ/Osmium runtimes plus the project-built
 operator installs nothing: no Python/Node/Conda/WSL/compiler/PATH setup. Command
 detects, validates (per-file sha256), offline-imports and version-selects packs
 with last-valid fallback; corrupt or foreign-target packs are rejected
-preserving prior state. Viewing and importing maps never require the pack.
+preserving prior state. External import is authenticated by a mandatory,
+independently supplied whole-archive sha256 verified against the exact received
+bytes before extraction begins — never a digest carried inside the archive —
+so a substitute archive with a coherently rewritten manifest cannot be admitted.
+Viewing and importing maps never require the pack.
 See `preparation/README.md`.
 an `offline_maps` library table to the existing Command SQLite file. The PR #17
 extension adds an associated `offline_terrain` table in that same file: bounded
