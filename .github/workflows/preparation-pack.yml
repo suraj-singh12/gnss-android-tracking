@@ -1,0 +1,107 @@
+name: preparation-pack
+# Builds the optional native preparation pack (issue #97) on each target's own
+# platform — no cross-compilation — and runs the offline native smoke test on
+# the same runner. Artifacts are the candidate packs referenced in the PR.
+on:
+  push:
+    branches: ['devX/issue-97-native-preparation-pack']
+    paths: ['preparation/**', '.github/workflows/preparation-pack.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-x64:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pack (native Linux x64)
+        run: python3 preparation/build_pack.py --target linux-x64 --workdir "$RUNNER_TEMP/packbuild" --out "$RUNNER_TEMP/pack"
+      - name: Relocate to spaced path and smoke test
+        run: |
+          mkdir -p "$RUNNER_TEMP/Relocation Test"
+          cp -r "$RUNNER_TEMP/pack" "$RUNNER_TEMP/Relocation Test/pack with spaces"
+          python3 preparation/smoke_pack.py --pack "$RUNNER_TEMP/Relocation Test/pack with spaces" --workdir "$RUNNER_TEMP/smoke"
+      - name: Andorra pipeline evidence (tiling + repair zero-invalid)
+        run: |
+          set -e
+          P="$RUNNER_TEMP/Relocation Test/pack with spaces"
+          export GDAL_DATA="$P/share/gdal" PROJ_DATA="$P/share/proj" PROJ_NETWORK=OFF
+          zcat .github/qualification-fixtures/issue-93/fixture-andorra.gpkg.gz > "$RUNNER_TEMP/fixture.gpkg"
+          LAYERS=$(python3 -c "import json; print(' '.join(json.load(open('.github/qualification-fixtures/issue-93/gdal-layers.json'))))")
+          CONF=$(cat .github/qualification-fixtures/issue-93/gdal-conf.json)
+          "$P/bin/ogr2ogr" -f MVT "$RUNNER_TEMP/andorra-xyz" "$RUNNER_TEMP/fixture.gpkg" -dsco FORMAT=DIRECTORY -dsco MINZOOM=6 -dsco MAXZOOM=14 -dsco COMPRESS=YES -dsco SIMPLIFICATION=4 -dsco "CONF=$CONF" $LAYERS
+          echo "tiles: $(find "$RUNNER_TEMP/andorra-xyz" -name '*.pbf' | wc -l)"
+          "$P/bin/gnss-mvt-repair" "$RUNNER_TEMP/andorra-xyz" "$RUNNER_TEMP/andorra-fixed" "$RUNNER_TEMP/repair-report.json"
+          cat "$RUNNER_TEMP/repair-report.json" | head -8
+      - name: Archive candidate pack
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP"
+          mv pack "gnss-prep-pack-linux-x64"
+          tar czf "$GITHUB_WORKSPACE/gnss-prep-pack-linux-x64.tar.gz" "gnss-prep-pack-linux-x64"
+          sha256sum "$GITHUB_WORKSPACE/gnss-prep-pack-linux-x64.tar.gz" | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gnss-prep-pack-linux-x64
+          path: gnss-prep-pack-linux-x64.tar.gz
+          retention-days: 30
+
+  windows-x64:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Build pack (native Windows x64)
+        shell: pwsh
+        run: |
+          python preparation\build_pack.py --target windows-x64 --workdir "$env:RUNNER_TEMP\packbuild" --out "$env:RUNNER_TEMP\pack"
+          if ($LASTEXITCODE) { throw 'build failed' }
+      - name: Relocate to spaced path and smoke test
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\Relocation Test" | Out-Null
+          Copy-Item -Recurse "$env:RUNNER_TEMP\pack" "$env:RUNNER_TEMP\Relocation Test\pack with spaces"
+          python preparation\smoke_pack.py --pack "$env:RUNNER_TEMP\Relocation Test\pack with spaces" --workdir "$env:RUNNER_TEMP\smoke"
+          if ($LASTEXITCODE) { throw 'smoke failed' }
+      - name: Archive candidate pack
+        shell: pwsh
+        run: |
+          Set-Location "$env:RUNNER_TEMP"
+          Rename-Item pack "gnss-prep-pack-windows-x64"
+          Compress-Archive -Path "gnss-prep-pack-windows-x64" -DestinationPath "$env:GITHUB_WORKSPACE\gnss-prep-pack-windows-x64.zip"
+          $h = (Get-FileHash "$env:GITHUB_WORKSPACE\gnss-prep-pack-windows-x64.zip" -Algorithm SHA256).Hash
+          $h
+          "$h  gnss-prep-pack-windows-x64.zip" | Out-File -FilePath "$env:GITHUB_STEP_SUMMARY" -Append -Encoding utf8
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gnss-prep-pack-windows-x64
+          path: gnss-prep-pack-windows-x64.zip
+          retention-days: 30
+
+  macos-arm64:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pack (native macOS ARM64)
+        run: python3 preparation/build_pack.py --target macos-arm64 --workdir "$RUNNER_TEMP/packbuild" --out "$RUNNER_TEMP/pack"
+      - name: Relocate to spaced path and smoke test
+        run: |
+          mkdir -p "$RUNNER_TEMP/Relocation Test"
+          cp -r "$RUNNER_TEMP/pack" "$RUNNER_TEMP/Relocation Test/pack with spaces"
+          python3 preparation/smoke_pack.py --pack "$RUNNER_TEMP/Relocation Test/pack with spaces" --workdir "$RUNNER_TEMP/smoke"
+      - name: Archive candidate pack
+        run: |
+          cd "$RUNNER_TEMP"
+          mv pack "gnss-prep-pack-macos-arm64"
+          tar czf "$GITHUB_WORKSPACE/gnss-prep-pack-macos-arm64.tar.gz" "gnss-prep-pack-macos-arm64"
+          shasum -a 256 "$GITHUB_WORKSPACE/gnss-prep-pack-macos-arm64.tar.gz" | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gnss-prep-pack-macos-arm64
+          path: gnss-prep-pack-macos-arm64.tar.gz
+          retention-days: 30
