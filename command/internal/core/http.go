@@ -107,6 +107,9 @@ func (s *Store) LocalHandler(assets http.Handler) http.Handler {
 			respond(w, 200, map[string]bool{"enabled": s.enhancedMapEnabled()})
 			return
 		}
+		if s.prepPackHTTP(w, r) {
+			return
+		}
 		switch r.URL.Path {
 		case "/local/live", "/local/state", "/local/history":
 			var done func()

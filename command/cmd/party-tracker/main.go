@@ -38,6 +38,12 @@ func run() error {
 	}
 	defer store.Close()
 	store.SetEnhancedMapEnabled(*enhancedMap)
+	// Optional native preparation pack detection (#97): absence disables only
+	// enhanced preparation; map viewing/import and every operational path are
+	// unaffected. Corrupt or foreign-target packs are reported, never fatal.
+	if active := store.ActivePrepPackSummary(); active != "" {
+		log.Printf("preparation pack: %s", active)
+	}
 	phone, err := net.Listen("tcp", *ingest)
 	if err != nil {
 		return err
