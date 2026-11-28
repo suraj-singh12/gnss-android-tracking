@@ -637,6 +637,12 @@ int run_repair(const fs::path& src, const fs::path& dst, const fs::path& report_
     throw std::runtime_error("output and input directories must not contain each other");
   if (!fs::is_empty(dst_abs))
     throw std::runtime_error("output directory exists and is not empty: " + dst.string());
+  // write into a staging sibling and publish atomically: an aborted run must
+  // never leave partial output inside dst that blocks a retry after the
+  // operator regenerates the tiles.
+  fs::path staging = dst_abs.parent_path() / (dst_abs.filename().string() + ".partial");
+  if (fs::exists(staging)) fs::remove_all(staging);
+  fs::create_directories(staging);
   auto t0 = std::chrono::steady_clock::now();
 
   uint64_t tiles = 0, tiles_with_repairs = 0, features_repaired = 0;
@@ -653,7 +659,7 @@ int run_repair(const fs::path& src, const fs::path& dst, const fs::path& report_
     // resolves symlinks, so a symlinked companion inside the input makes rel
     // escape the output tree (a link to /etc/passwd yields ../../etc/passwd).
     fs::path rel0 = e.path().lexically_relative(src);
-    write_file(dst / rel0, read_file(e.path()));
+    write_file(staging / rel0, read_file(e.path()));
   }
   std::sort(files.begin(), files.end());
 
@@ -723,7 +729,7 @@ int run_repair(const fs::path& src, const fs::path& dst, const fs::path& report_
       std::string encoded = encode_tile(layers);
       body = gzip_deterministic(encoded);
     }
-    write_file(dst / rel, body);
+    write_file(staging / rel, body);
     bytes_after += body.size();
     tiles++;
   }
@@ -732,7 +738,7 @@ int run_repair(const fs::path& src, const fs::path& dst, const fs::path& report_
   // post-encode verification: the gate is on the final encoded geometry,
   // not the pre-encode repair — decode the output independently and count.
   VerifyCounter verify;
-  run_verify(dst, verify);
+  run_verify(staging, verify);
 
   auto t1 = std::chrono::steady_clock::now();
   double wall = std::chrono::duration<double>(t1 - t0).count();
@@ -757,7 +763,11 @@ int run_repair(const fs::path& src, const fs::path& dst, const fs::path& report_
   if (verify.invalid != 0) {
     std::fprintf(stderr, "zero-invalid gate FAILED: %llu invalid polygon features after encoding\n",
                  (unsigned long long)verify.invalid);
+    std::fprintf(stderr, "staging preserved for inspection: %s\n", staging.c_str());
     return 1;
   }
+  // publish atomically: dst is guaranteed empty at this point
+  fs::remove(dst_abs);
+  fs::rename(staging, dst_abs);
   return 0;
 }
