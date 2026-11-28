@@ -650,8 +650,13 @@ int run_repair(const fs::path& src, const fs::path& dst, const fs::path& report_
   // operator regenerates the tiles.
   // unique per-process staging: a fixed name could collide with unrelated
   // operator files, and deleting it would destroy them.
+  // pid + high-resolution clock: pid reuse after a crash must never recycle
+  // a failed run's stale tiles into a new publication.
+  auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+      std::chrono::steady_clock::now().time_since_epoch()).count();
   fs::path staging = dst_abs.parent_path() /
-      (dst_abs.filename().string() + ".partial-" + std::to_string(gnss_pid()));
+      (dst_abs.filename().string() + ".partial-" + std::to_string(gnss_pid()) +
+       "-" + std::to_string(now_ns));
   fs::create_directories(staging);
   auto t0 = std::chrono::steady_clock::now();
 
