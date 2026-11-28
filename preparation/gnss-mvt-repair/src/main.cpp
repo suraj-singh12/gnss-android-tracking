@@ -661,6 +661,11 @@ int run_repair(const fs::path& src, const fs::path& dst, const fs::path& report_
   for (const auto& p : files) {
     fs::path rel = p.lexically_relative(src);
     std::string raw = read_file(p);
+    // GDAL never writes empty tiles: a zero-byte .pbf is truncated output
+    // from interrupted tiling, and silently copying it would manufacture a
+    // clean-looking but incomplete tileset that passes the geometry gate.
+    if (raw.empty())
+      throw std::runtime_error("empty tile file (truncated tiling?): " + p.string());
     bytes_before += raw.size();
     std::string data = is_gzip(raw) ? gunzip(raw) : raw;
     std::vector<Layer> layers = decode_tile(data);
