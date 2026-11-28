@@ -220,6 +220,10 @@ func (s *Store) scanPrepPacks() []prepPackInfo {
 					state.Reason = "recorded selection missing or corrupt; fell back to newest valid pack"
 				}
 			}
+			// a fallback is automatic resolution, not an operator selection:
+			// transferring the pin would freeze the fallback forever and
+			// ignore newer valid imports.
+			state.Pinned = false
 		} else {
 			selected = ""
 		}
@@ -483,7 +487,13 @@ func admitPrepPackArchive(src io.Reader, archiveSize int64, staging string) erro
 				return fmt.Errorf("unsupported archive entry type for %s", name)
 			}
 		}
-		return nil
+		// the tar end-of-archive marker arrives before the gzip trailer:
+	// drain the decompressor to EOF so a corrupt gzip checksum is a rejection,
+	// not silent acceptance.
+	if _, err := io.Copy(io.Discard, gz); err != nil {
+		return errors.New("corrupt gzip archive")
+	}
+	return nil
 	}
 	return errors.New("unrecognized archive format — expected .tar.gz or .zip")
 }
@@ -524,6 +534,17 @@ func (s *Store) importPrepPack(ctx context.Context, src io.Reader, size int64) (
 	m, err := validatePrepPack(packDir)
 	if err != nil {
 		return prepPackInfo{}, fmt.Errorf("pack rejected: %v", err)
+	}
+	// the version comes from the archive itself — it must never influence
+	// the filesystem layout beyond a strict safe charset, or a malicious
+	// manifest could redirect publication outside the pack store.
+	for _, c := range m.Version {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '.' || c == '-' || c == '_') {
+			return prepPackInfo{}, fmt.Errorf("pack rejected: unsafe version %q", m.Version)
+		}
+	}
+	if len(m.Version) == 0 || len(m.Version) > 64 || strings.HasPrefix(m.Version, ".") {
+		return prepPackInfo{}, fmt.Errorf("pack rejected: unsafe version %q", m.Version)
 	}
 	sha := sha256.Sum256([]byte(m.Target + "/" + m.Version))
 	name := fmt.Sprintf("gnss-prep-pack-%s-%s-%s", m.Target, m.Version, hex.EncodeToString(sha[:])[:8])
@@ -592,7 +613,11 @@ func (s *Store) prepPackHTTP(w http.ResponseWriter, r *http.Request) bool {
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 		defer cancel()
-		info, err := s.importPrepPack(ctx, r.Body, size)
+		// unknown or lying Content-Length must not mean unbounded: the body
+		// is hard-capped at the admission limit plus one byte so oversize is
+		// detected rather than silently truncated.
+		body := io.LimitReader(r.Body, prepPackMaxArchive+1)
+		info, err := s.importPrepPack(ctx, body, size)
 		if err != nil {
 			failure(w, 422, "pack_rejected", err)
 			return true
